@@ -427,6 +427,15 @@ function Play({
   const [menu, setMenu] = useState(false);
   const [bullpen, setBullpen] = useState(false);
   const [muted, setMute] = useState(isMuted());
+  // 터치 화면에서만 스윙 · 번트 버튼 · 이동 패드 (PC 는 단축키: Space · B · 방향키)
+  const [touch, setTouch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(any-pointer: coarse)");
+    const on = () => setTouch(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
   const down = useRef(false);
   const overDone = useRef(false);
   useEffect(() => {
@@ -606,7 +615,7 @@ function Play({
                     <span className="block text-[11px] font-normal opacity-80">{ui.spName} · K</span>
                   </Btn>
                 )}
-                {ui.mode !== "derby" && (
+                {touch && ui.mode !== "derby" && (
                   <button
                     type="button"
                     disabled={!(ui.phase === "ready" || ui.phase === "windup")}
@@ -618,14 +627,14 @@ function Play({
                     <span className="font-['Nanum_Gothic'] text-[11px] font-normal opacity-60">B</span>
                   </button>
                 )}
-                <RoundBtn
+                {touch && <RoundBtn
                   img="/baseball/ui/swing.webp"
                   imgDown="/baseball/ui/swing-down.webp"
                   label="스윙"
                   sub="Space · 화면 터치"
                   disabled={!ui.canSwing}
                   onClick={() => m?.pressSwing()}
-                />
+                />}
               </>
             )}
             {!ui.userBat && (
@@ -662,7 +671,7 @@ function Play({
           </div>
 
           {/* 타자 이동 패드 (터치) — 투구 전에 끌어서 타자 · 컨택존 옮기기 */}
-          {ui.userBat && !["field", "result", "change"].includes(ui.phase) && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
+          {touch && ui.userBat && !["field", "result", "change"].includes(ui.phase) && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
 
           {/* 아래: 메뉴 · 빨리감기 (필드 화면에선 홈플레이트를 안 가리게 오른쪽 위로) */}
           {ui.fieldPlaying && (

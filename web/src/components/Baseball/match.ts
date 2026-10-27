@@ -662,7 +662,11 @@ export class Match {
       this.pitAnimT = -MISTAKE_TELL;
     }
     // 타자는 내가 치든 CPU 가 치든 와인드업에 맞춰 레그킥
-    if (this.swingStart < 0 && !this.buntArmed && !this.freeSwing) this.playBat(BAT_LOAD);
+    if (this.swingStart < 0 && !this.buntArmed && !this.freeSwing) {
+      this.playBat(BAT_LOAD);
+      // 실투로 0.5초 쉬면 레그킥 시계도 같이 늦춤 (안 그러면 타자만 먼저 다리 들고 내딛어 버림)
+      if (this.mistakeNext) this.batAnimT = -MISTAKE_TELL;
+    }
   }
 
   private release() {
@@ -1830,7 +1834,7 @@ export class Match {
     ctx.globalAlpha = 1;
 
     // 투구 정보 · 타이밍
-    if (this.pitchInfo && (this.phase === "flight" || this.phase === "call" || this.phase === "contact" || this.phase === "result")) {
+    if (this.pitchInfo && (this.phase === "call" || this.phase === "contact" || this.phase === "result")) {
       ctx.font = '700 15px "JetBrains Mono", monospace';
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(0,0,0,0.55)";
@@ -1994,7 +1998,7 @@ export class Match {
     ctx.globalAlpha = 1;
 
     // 투구 정보 (구속 · 구종)
-    if (this.pitchInfo && (this.phase === "flight" || this.phase === "call" || this.phase === "contact" || this.phase === "result")) {
+    if (this.pitchInfo && (this.phase === "call" || this.phase === "contact" || this.phase === "result")) {
       ctx.font = '700 15px "JetBrains Mono", monospace';
       ctx.textAlign = "left";
       const w = ctx.measureText(this.pitchInfo).width + 16;
@@ -2810,25 +2814,25 @@ export class Match {
     ctx.moveTo(x + 196, y + 10);
     ctx.lineTo(x + 196, y + h - 10);
     ctx.stroke();
+    // 회차: 한 줄 (1회초) — 위에 초 ▲ / 말 ▼
     const cx = x + 232;
     ctx.fillStyle = "#ffcf4a";
     ctx.beginPath();
     if (s.top) {
-      ctx.moveTo(cx - 22, y + 30);
-      ctx.lineTo(cx - 14, y + 18);
-      ctx.lineTo(cx - 6, y + 30);
+      ctx.moveTo(cx - 7, y + 28);
+      ctx.lineTo(cx, y + 18);
+      ctx.lineTo(cx + 7, y + 28);
     } else {
-      ctx.moveTo(cx - 22, y + 58);
-      ctx.lineTo(cx - 14, y + 70);
-      ctx.lineTo(cx - 6, y + 58);
+      ctx.moveTo(cx - 7, y + 18);
+      ctx.lineTo(cx, y + 28);
+      ctx.lineTo(cx + 7, y + 18);
     }
     ctx.fill();
     ctx.fillStyle = "#fff";
     ctx.textAlign = "center";
-    ctx.font = '24px "Black Han Sans", sans-serif';
-    ctx.fillText(`${s.inning}회`, cx + 10, y + 36);
-    ctx.font = '20px "Black Han Sans", sans-serif';
-    ctx.fillText(s.top ? "초" : "말", cx + 10, y + 66);
+    const inn = `${s.inning}회${s.top ? "초" : "말"}`;
+    ctx.font = `${inn.length > 3 ? 19 : 22}px "Black Han Sans", sans-serif`;
+    ctx.fillText(inn, cx, y + 58);
     ctx.textAlign = "left";
   }
 
@@ -3117,8 +3121,9 @@ export class Match {
     const bs = this.s.sides[this.paBatter ? this.paSide : batSide(this.s)];
     const order = this.paBatter ? this.paOrder : bs.order;
     const ln = bs.bat[order];
-    const x = 12, w = 292, h = 132;
-    // 투수 시점(내가 던질 때)은 왼쪽 아래가 투수 다리(레그킥) 자리라 점수판 밑으로
+    const w = 292, h = 132;
+    // 타석 시점: 타자가 서 있는 쪽 (좌타는 오른쪽) · 투수 시점(내가 던질 때)은 왼쪽 아래가 투수 다리(레그킥) 자리라 점수판 밑으로
+    const x = this.userBat && b.bats === "L" ? DW - 12 - w : 12;
     const y = this.userBat ? DH - 12 - h : 102;
     const hero = b.special ? charById(b.special) : null;
     const accent = hero ? hero.color : "#ff8a3d";
@@ -3184,7 +3189,8 @@ export class Match {
     const p = this.pitcherNow;
     const fsd = this.s.sides[fieldSide(this.s)];
     const w = 292, h = 132;
-    const x = DW - 12 - w;
+    // 좌타자 타석이면 타자 카드가 오른쪽이라 투수 카드는 왼쪽
+    const x = this.userBat && this.shownBatter.bats === "L" ? 12 : DW - 12 - w;
     const y = DH - 12 - h;
     const hero = p.special ? charById(p.special) : null;
     const accent = hero ? hero.color : "#3d8bff";
