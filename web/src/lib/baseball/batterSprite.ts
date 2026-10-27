@@ -133,15 +133,17 @@ const SWING: [string, number][] = [
 /** 투수 와인드업에 맞춘 로드 → 레그킥 → 착지 (착지 자세로 기다림) */
 const LOAD: [string, number][] = [["load1", 0.07], ["load2", 0.13], ["kick1", 0.19], ["kick2", 0.25], ["plant1", 0.31], ["plant", 99]];
 /**
- * 새 그림 레그킥 줄 칸 (0 = 대기 1칸 … 6 = 최고점) — 와인드업(릴리스 0.74초) 직전에 다리를 들어 최고점으로 공을 기다림.
+ * 새 그림 레그킥 줄 칸 (0 = 대기 1칸 … 6 = 최고점) — 공 놓기 0.1초 전에 다리를 들기 시작해 최고점으로 공을 기다림.
  * 내릴 때는 든 순서를 거꾸로 빠르게: 스윙이면 임팩트(0.07초) 전에 착지(STRIDE), 안 치고 보내면 공이 홈에 오기 0.1초 전에
  * match 가 시계를 KICK_STEP_T 로 넘겨 내림.
  */
 export const KICK_STEP_T = 5;
+/** 들기 시작 = 공 놓기(PITCH_RELEASE_T 0.74초) 0.1초 전 */
+const LIFT_AT = 0.64;
 const LIFT_DT = [0.07, 0.07, 0.06, 0.06, 0.06]; // 1~5칸 머무는 시간 (들기 = 0.32초)
 const KICK: [number, number][] = (() => {
-  const out: [number, number][] = [[0, 0.34]];
-  let t = 0.34;
+  const out: [number, number][] = [[0, LIFT_AT]];
+  let t = LIFT_AT;
   LIFT_DT.forEach((d, i) => out.push([i + 1, (t += d)]));
   out.push([6, KICK_STEP_T]);
   for (let c = 5, u = KICK_STEP_T; c >= 0; c--) out.push([c, c === 0 ? 99 : (u += 0.03)]);
