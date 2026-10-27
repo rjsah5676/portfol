@@ -9,7 +9,7 @@
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { timingLabel, timingWindow } from "@/lib/baseball/contact";
-import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher } from "@/lib/baseball/data";
+import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
 import { advanceToMyPA, botHook, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_RIG_RELEASE_T, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
@@ -62,6 +62,8 @@ export interface MatchCfg {
    * 안타 1점 · 홈런 2점, need 점이면 승리. magic = 마구를 던지는 공 순서 (0부터). 볼(안 친 것)은 다시 던짐.
    */
   bond?: { char: CharId; pitches: number; need: number; magic: readonly number[]; batter: Batter; title: string };
+  /** 정해진 두 팀으로 (구단 · 온라인 대결) — 없으면 기본 팀 vs 아무 팀. mine = 사용자 팀 */
+  teams?: { mine: Team; cpu: Team };
   seed?: number;
 }
 
@@ -261,8 +263,8 @@ export class Match {
     const others = TEAM_DEFS.slice(1);
     const cpuDef = this.rng.pick(others);
     // 마선수 없음 — 캐릭터는 인연(대결)에서만 던지고 침
-    let myTeam = makeTeam(mine, this.rng);
-    const cpuTeam = makeTeam(cpuDef, this.rng);
+    let myTeam = cfg.teams?.mine ?? makeTeam(mine, this.rng);
+    const cpuTeam = cfg.teams?.cpu ?? makeTeam(cpuDef, this.rng);
     if (cfg.bond) {
       const b = cfg.bond.batter;
       myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ ...b })) };
