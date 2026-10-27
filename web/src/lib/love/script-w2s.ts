@@ -20,6 +20,7 @@ export const W2S: Scenes = {
   // ================= 8일차 — 우산 값 =================
   s2_d8: [
     { t: "day", day: 8, slot: "낮" },
+    { t: "outfit", who: "sera", id: "casual" },
     { t: "bgm", id: "daily" },
     { t: "bg", id: "room" },
     N("월요일. 어젯밤 분홍 우산 아래로 들어간 다음 날."),
@@ -84,6 +85,7 @@ export const W2S: Scenes = {
   ],
   s2_d8_n: [
     { t: "day", day: 8, slot: "밤 근무" },
+    { t: "outfit", who: "sera", id: "default" },
     { t: "bg", id: "pub" },
     { t: "bgm", id: "sera_pink" },
     { t: "show", who: "amy", pos: "c", dist: 0 },
@@ -102,6 +104,7 @@ export const W2S: Scenes = {
   // ================= 9일차 — 안 가르쳐 주는 수업 =================
   s2_d9: [
     { t: "day", day: 9, slot: "낮" },
+    { t: "outfit", who: "sera", id: "casual" },
     { t: "bgm", id: "daily" },
     { t: "bg", id: "room" },
     N("화요일. 오늘 밤은 세라가 '수업'을 해 달라고 했다. 마감 후, 빈 펍에서."),
@@ -109,6 +112,7 @@ export const W2S: Scenes = {
   ],
   s2_d9_n: [
     { t: "day", day: 9, slot: "마감 후" },
+    { t: "outfit", who: "sera", id: "default" },
     { t: "bgm", id: "night" },
     { t: "bg", id: "pub" },
     { t: "when", cond: { v: "s2Other", op: ">=", n: 1 }, to: "s2_d9_saw" },
@@ -239,7 +243,8 @@ export const W2S: Scenes = {
 
   // ================= 10일차 — 사람 사진이 없는 방 =================
   s2_d10: [
-    { t: "day", day: 10, slot: "낮" },
+    { t: "day", day: 10, slot: "저녁" },
+    { t: "outfit", who: "sera", id: "casual" },
     { t: "bgm", id: "daily" },
     { t: "bg", id: "room" },
     {
@@ -315,6 +320,7 @@ export const W2S: Scenes = {
   ],
   s2_d10_n: [
     { t: "day", day: 10, slot: "밤 근무" },
+    { t: "outfit", who: "sera", id: "default" },
     { t: "bgm", id: "sera_pink" },
     { t: "bg", id: "pub" },
     N("늦은 출근. 손에서 아직 세제 냄새가 난다. 마지막 판, 세라가 앉았다."),
@@ -348,12 +354,13 @@ export const W2S: Scenes = {
 
   // ================= 11일차 — 묻지 않는 질문 =================
   s2_d11: [
-    { t: "day", day: 11, slot: "낮" },
+    { t: "day", day: 11, slot: "출근 전" },
+    { t: "outfit", who: "sera", id: "casual" },
     { t: "bgm", id: "sera" },
     { t: "bg", id: "hangang" },
-    N("목요일 오후, 한강. 세라가 \"걷고 싶어요\" 한 줄만 보냈고, 나는 나왔다."),
+    N("목요일 저녁, 출근 두 시간 전. 한강. 세라가 \"걷고 싶어요\" 한 줄만 보냈고, 나는 나왔다."),
     { t: "show", who: "sera", pos: "c", dist: 0 },
-    S("낮에 걷는 거 좋다. 밤엔 맨날 앉아만 있으니까.", "smile"),
+    S("이렇게 걷는 거 좋다. 밤엔 맨날 앉아만 있으니까.", "smile"),
     N("한참 말없이 걸었다. 강바람이 그녀의 땋은 머리를 자꾸 풀었다."),
     S("딜러님. 혹시 3년 전에……", "smile"),
     N("말이 거기서 끊겼다. 그녀는 입을 닫고, 다시 웃었다. 무언가를 삼키는 얼굴로."),
@@ -390,6 +397,7 @@ export const W2S: Scenes = {
     S("밤에 봐요. 마지막 판에.", "smile"),
     { t: "hide" },
     { t: "day", day: 11, slot: "밤 근무" },
+    { t: "outfit", who: "sera", id: "default" },
     { t: "bg", id: "pub" },
     { t: "bgm", id: "sera_pink" },
     N("그날 밤 세라는 마지막 판에 오지 않았다. 처음이었다."),
@@ -410,6 +418,7 @@ export const W2S: Scenes = {
   // ================= 12일차 — 언니들의 경고 =================
   s2_d12: [
     { t: "day", day: 12, slot: "낮" },
+    { t: "outfit", who: "sera", id: "casual" },
     { t: "bgm", id: "daily" },
     { t: "bg", id: "room" },
     N("금요일. 세라를 만난 지 열이틀. 공책 단서는 여전히 없다. 대신 세라에 대해 아는 게 하나씩 늘었다."),
@@ -417,6 +426,7 @@ export const W2S: Scenes = {
   ],
   s2_d12_n: [
     { t: "day", day: 12, slot: "밤 근무" },
+    { t: "outfit", who: "sera", id: "default" },
     { t: "bgm", id: "pub" },
     { t: "bg", id: "pub" },
     N("밤 열 시. 휴식 시간에 바 카운터로 가니, 에이미와 연서가 나란히 앉아 있었다. 드문 조합이다."),
@@ -462,6 +472,7 @@ export const W2S: Scenes = {
   // ================= 13일차 — 다 잃고 웃는 사람 =================
   s2_d13: [
     { t: "day", day: 13, slot: "밤 근무" },
+    { t: "outfit", who: "sera", id: "default" },
     { t: "bgm", id: "pub" },
     { t: "bg", id: "pub" },
     N("토요일 밤. 세라는 마지막 판이 아니라 오픈부터 왔다. 그리고 큰 테이블에 앉았다."),
@@ -511,13 +522,17 @@ export const W2S: Scenes = {
   // ================= 14일차 — 3년치 핸드 노트 (중간점) =================
   s2_d14: [
     { t: "day", day: 14, slot: "마감 후" },
+    { t: "outfit", who: "sera", id: "default" },
     { t: "bgm", id: "confide" },
-    { t: "bg", id: "pub" },
-    N("일요일 새벽 한 시. 마감한 펍, 조명 하나만 켜 둔 테이블. 세라가 가방에서 두꺼운 가죽 노트를 꺼냈다."),
+    { t: "bg", id: "sera_room" },
+    N("일요일 새벽 한 시. 마감하고 나오니 세라가 기다리고 있었다. \"보여 줄 게 있어요. 우리 집에서요.\" 분홍 소파, 트로피 진열장. 세라가 가방에서 두꺼운 가죽 노트를 꺼냈다."),
     { t: "show", who: "sera", pos: "c", dist: 1 },
     S("3년 동안 친 판을 전부 적었어요. 핸드 하나도 안 빼고.", "smile"),
+    { t: "hide" },
+    { t: "cg", id: "s_note", look: true },
     N("손때가 탄 노트. 페이지마다 작은 글씨로 핸드 기록이 빼곡하다. 날짜, 장소, 상대, 카드, 그리고 매번 같은 메모. 「접지 않음」."),
     S("첫 장은 딜러님이 봐요.", "smile"),
+    { t: "cg", id: null },
     { t: "sfx", id: "paper" },
     { t: "bg", id: "vip" },
     { t: "memory", text: "세라의 노트 · 첫 장" },
@@ -525,7 +540,8 @@ export const W2S: Scenes = {
     N("손 그림. 왼손. 손가락 두 개가 펠트를 두드리는 모양. 빨간 펜으로 몇 번이고 동그라미가 쳐져 있다."),
     N("그 아래 한 줄. 「이 사람이 접으라고 했다. 그래서 살았다. 다음엔, 이 사람이 접으라고 할 때까지 안 접는다.」"),
     { t: "memory", off: true },
-    { t: "bg", id: "pub" },
+    { t: "bg", id: "sera_room" },
+    { t: "show", who: "sera", pos: "c", dist: 1 },
     { t: "sfx", id: "heart" },
     TH("…검은 머리 여자애. 스무 살. 테이블 끝. 내가 왼손으로 두 번 두드린, 그 판에서 유일하게 살아 나간 사람."),
     TH("세라였다."),

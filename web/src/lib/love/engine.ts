@@ -96,6 +96,7 @@ export type Block =
   | { k: "phone"; step: Extract<Step, { t: "phone" }> }
   | { k: "free"; prompt: string; opts: Opt[]; big?: boolean }
   | { k: "title"; text: string; sub?: string }
+  | { k: "look" }
   | { k: "montage"; shots: Shot[]; caption?: string }
   | { k: "recall"; who: "amy" | "yeonseo" | "both"; caps: string[] }
   | { k: "day"; d: number; slot: string }
@@ -257,6 +258,10 @@ export function run(s0: GState): GState {
         s.disp.cgcam = st.id ? (st.cam ?? null) : null;
         s.disp.cgfx = null;
         if (st.id) s.fx = [...s.fx, "heart"];
+        if (st.id && st.look) {
+          s.block = { k: "look" };
+          return s;
+        }
         break;
       case "cgv":
         if (s.disp.cg) {

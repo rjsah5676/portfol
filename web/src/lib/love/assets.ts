@@ -74,6 +74,12 @@ export const OUTFITS: Partial<Record<CharKey, Partial<Record<Outfit, StandSet>>>
     swim: { base: `${B}/char/amy-swim-base.webp`, faces: faces("amy-swim", ["smile", "pout", "blush", "smug"]) },
     home: { base: `${B}/char/amy-home-base.webp`, faces: faces("amy-home", ["surprise", "blush", "pout", "sad", "smile", "smug"]) },
   },
+  sera: {
+    casual: {
+      base: `${B}/char/sera-casual-base.webp`,
+      faces: faces("sera-casual", ["smile", "laugh", "smug", "pout", "surprise", "blush", "sad", "cry", "cold", "angry", "empty", "heart"]),
+    },
+  },
   yeonseo: {
     knit: { base: `${B}/char/yeonseo-knit-base.webp`, faces: faces("yeonseo-knit", ["away", "blush", "smile", "sad", "surprise"]) },
     bare: { base: `${B}/char/yeonseo-bare-base.webp`, faces: faces("yeonseo-bare", ["away", "smile", "blush", "sad", "laugh", "cry", "cold", "surprise", "angry"]) },
@@ -105,7 +111,8 @@ export const BG: Record<BgId, string | null> = {
   waterpark: `${B}/bg/waterpark.webp`,
   market_day: `${B}/bg/market_day.webp`,
   /** 세라 집 — 전용 배경(bg-sera-room) 오기 전까지 오피스텔 그림 임시 */
-  sera_room: `${B}/bg/officetel.webp`,
+  sera_room: `${B}/bg/sera-room.webp`,
+  pub_pink: `${B}/bg/pub-pink.webp`,
   black: null,
 };
 /**
@@ -172,6 +179,7 @@ export const BG_FALLBACK: Record<BgId, string> = {
   room_night: "linear-gradient(180deg,#1a1f3a,#0c0e18)",
   officetel: "linear-gradient(180deg,#2c3038,#121418)",
   sera_room: "linear-gradient(180deg,#3a2232,#140a12)",
+  pub_pink: "linear-gradient(180deg,#4a1a3a,#12060e)",
   karaoke: "linear-gradient(180deg,#3a1450,#12061c)",
   pocha: "linear-gradient(180deg,#4a2a12,#140a04)",
   hangang: "linear-gradient(180deg,#1a2440,#05070f)",
@@ -242,7 +250,9 @@ export const CG: Record<
   },
   y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", vars: { blush: `${B}/cg/y-door-blush.webp` } },
   // ---- v4 세라 ----
+  s_open: { src: `${B}/cg/s-open.webp`, title: "저 이거예요", who: "sera", tight: true },
   s_keypad: { src: `${B}/cg/s-keypad.webp`, title: "보지도 않고 네 자리", who: "sera" },
+  s_note: { src: `${B}/cg/s-note.webp`, title: "첫 장은 딜러님이 봐요", who: "sera", tight: true },
   y_win: { src: `${B}/cg/y-win.webp`, title: "제일 맛있는 물", who: "yeonseo", video: `${B}/cg/y-win.mp4`, vars: { smile: `${B}/cg/y-win-smile.webp`, water: `${B}/cg/y-win-water.webp` } },
 };
 /** CG 히로인 표시 (갤러리 · CG 제목 무늬와 색) */
@@ -278,7 +288,9 @@ export const CG_ORDER: CgId[] = (
   "y_win",
   "end_yeon_good",
   "end_yeon_true",
+  "s_open",
   "s_keypad",
+  "s_note",
   "end_grand",
   ] as CgId[]
 ).filter((id) => !CG[id].pending);
@@ -312,6 +324,7 @@ export const NAME: Record<Who, string> = {
 export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "amy": [0.3724, 0.4849, 0.105, 0.1305],
   "sera": [0.3459, 0.5158, 0.108, 0.128],
+  "sera-casual": [0.3446, 0.5156, 0.1151, 0.1285],
   "amy-store": [0.3377, 0.4689, 0.1211, 0.0965],
   "amy-tshirt": [0.2839, 0.5035, 0.1168, 0.0977],
   "boss": [0.3403, 0.414, 0.0859, 0.1257],

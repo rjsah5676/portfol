@@ -45,7 +45,7 @@ export type Face =
 export type Pos = "l" | "c" | "r";
 /** 스탠딩 의상: 에이미 tshirt(내 티셔츠) · 연서 knit(오피스텔 안경 니트) · bare(장갑 벗은 근무복) */
 /** store = 편의점 조끼(안에 연회색 큰 티) · down = 머리 푼 티셔츠 · swim = 수영복 · knitbare = 니트 맨손 · summer = 여름 원피스 */
-export type Outfit = "default" | "tshirt" | "knit" | "bare" | "store" | "down" | "swim" | "knitbare" | "summer" | "summerbare" | "home" | "dress";
+export type Outfit = "default" | "tshirt" | "knit" | "bare" | "store" | "down" | "swim" | "knitbare" | "summer" | "summerbare" | "home" | "dress" | "casual";
 /** 거리 3단계: 0 평소(허벅지까지) · 1 상반신 · 2 얼굴 클로즈업 */
 export type Dist = 0 | 1 | 2;
 export type BgId =
@@ -73,11 +73,14 @@ export type BgId =
   /** 비 그친 오후 재래시장 (동네 한 바퀴 · 박하사탕) — 그림 없으면 market 으로 */
   | "market_day"
   | "sera_room"
+  | "pub_pink"
   | "black";
 /** 이벤트 CG (핵심 장면 한 장 그림 — 스탠딩 대신 화면 전체) */
 export type CgId =
   // v4 세라
   | "s_keypad"
+  | "s_open"
+  | "s_note"
   // 1~2주차
   | "y_closet"
   | "y_umbrella"
@@ -341,8 +344,9 @@ export type Step =
   | { t: "dist"; who: CharKey; dist: Dist }
   /** 말하지 않는 캐릭터의 표정만 바꿈 (주인공 말에 연서가 붉어지는 등) */
   | { t: "face"; who: CharKey; face: Face }
-  /** 이벤트 CG 켜기 (null = 끄고 스탠딩으로). v = 처음부터 보여 줄 차분, cam = 처음 카메라 */
-  | { t: "cg"; id: CgId | null; v?: string; cam?: CgCam }
+  /** 이벤트 CG 켜기 (null = 끄고 스탠딩으로). v = 처음부터 보여 줄 차분, cam = 처음 카메라,
+   *  look = 대사창 없이 그림만 잠깐 (아래쪽에 중요한 게 있는 CG — 카드 · 노트) · 클릭하거나 3.2초 뒤 넘어감 */
+  | { t: "cg"; id: CgId | null; v?: string; cam?: CgCam; look?: boolean }
   /** 켜져 있는 CG 의 차분만 바꿈 (번쩍임 없이 크로스페이드 · null = 원본) — 대사 흐름 따라 표정 바꾸기 */
   | { t: "cgv"; v: string | null; slow?: boolean }
   /** CG 연출: pulse = 심장 박동(화면이 미세하게 뛰고 두근 소리) · mono = 흑백(시간이 멈춘 순간, 서술은 화면 가운데). 아무것도 없으면 끔 */

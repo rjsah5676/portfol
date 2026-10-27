@@ -761,7 +761,7 @@ export default function LoveApp() {
       markSeen();
       play("click");
       setS(next(s));
-    } else if (b.k === "day" || b.k === "title") {
+    } else if (b.k === "day" || b.k === "title" || b.k === "look") {
       setS(next(s));
     } else if (b.k === "montage" || b.k === "recall") {
       play("click");
@@ -778,8 +778,8 @@ export default function LoveApp() {
 
   // 날짜 · 제목 카드는 잠깐 보여 주고 자동으로 넘어감
   useEffect(() => {
-    if (block?.k !== "day" && block?.k !== "title") return;
-    const id = window.setTimeout(advance, skip ? 200 : block.k === "day" ? 1500 : 2300);
+    if (block?.k !== "day" && block?.k !== "title" && block?.k !== "look") return;
+    const id = window.setTimeout(advance, skip ? 200 : block.k === "day" ? 1500 : block.k === "look" ? 3200 : 2300);
     return () => window.clearTimeout(id);
   }, [block, advance, skip]);
 
