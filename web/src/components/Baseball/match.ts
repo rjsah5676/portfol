@@ -20,7 +20,7 @@ import {
   stamina01, staminaMax, userBatting, type GameState, type PAResult,
 } from "@/lib/baseball/game";
 import { PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
-import { HOME_POS, predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
+import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
@@ -44,12 +44,10 @@ const MISTAKE_TELL = 0.5;
 const TRAIL_SEC = 0.13;
 const TRAIL_N = 18;
 /** 타석 화면 수비수 그림 (GPT — 투수 그림체 · 정면) · 실제 원근 대비 키 배율 (투수 그림과 비슷하게) */
-const FIELDER = {
-  ifReady: "/baseball/sprites/fielder-if-ready.webp",
-  ifStand: "/baseball/sprites/fielder-if-stand.webp",
-  ofReady: "/baseball/sprites/fielder-of-ready.webp",
-  ofStand: "/baseball/sprites/fielder-of-stand.webp",
-} as const;
+const FIELDER = { inf: "/baseball/sprites/fielder-if-ready.webp", of: "/baseball/sprites/fielder-of-ready.webp" } as const;
+/** 타석 화면에 그리는 수비 자리 (m, HOME_POS 순서) — 실제 수비 위치처럼 조금씩 어긋나게: 1루수 베이스 쪽 · 유격수 깊게 · 3루수 얕게 · 외야 살짝 우중간 */
+const FIELDER_SPOT: [number, number][] = [[0, 18.4], [0, -1.6], [18.5, 28.5], [10.5, 40.5], [-16, 24.5], [-8, 42], [-29, 76], [2.5, 95], [33.5, 82]];
+const FIELDER_H = [1, 1, 1.03, 0.97, 1, 0.98, 1.02, 1, 0.99];
 const FIELDER_BOOST = 1.8;
 /** 특수능력 발동 연출 길이 · 시간이 흐르는 화면 */
 const BOOST_DUR = 2.8;
@@ -2668,17 +2666,15 @@ export class Match {
    * 와인드업 · 투구 중엔 준비 자세(무릎 굽힘), 그 밖엔 서 있음. 왼쪽 수비수는 좌우 뒤집어 다양하게
    */
   private drawFielders(ctx: CanvasRenderingContext2D) {
-    const ready = this.phase === "windup" || this.phase === "flight" || this.phase === "contact";
-    const order = [6, 7, 8, 3, 5, 2, 4].sort((a, b) => HOME_POS[b][1] - HOME_POS[a][1]);
+    // 늘 준비 자세로 가만히 (서 있다 공 던질 때 확 숙이던 것) · 자리는 실제처럼 조금씩 어긋나게 (좌우 대칭 줄맞춤 위화감)
+    const order = [6, 7, 8, 3, 5, 2, 4].sort((a, b) => FIELDER_SPOT[a][1] - FIELDER_SPOT[b][1]).reverse();
     for (const i of order) {
-      const [fx, fz] = HOME_POS[i];
+      const [fx, fz] = FIELDER_SPOT[i];
       const g = proj(fx, 0, fz);
-      const outfield = i >= 6;
-      const src = outfield ? (ready ? FIELDER.ofReady : FIELDER.ofStand) : ready ? FIELDER.ifReady : FIELDER.ifStand;
-      const im = img(src);
+      const im = img(i >= 6 ? FIELDER.of : FIELDER.inf);
       if (!im.complete || !im.naturalWidth) continue;
-      // 서 있는 그림 키(528px) = 1.75m 로 맞춤
-      const k = (g.s * 1.75 * FIELDER_BOOST) / 528;
+      // 서 있는 그림 키(528px) = 1.75m 로 맞춤 · 사람마다 키 조금씩
+      const k = (g.s * 1.75 * FIELDER_BOOST * FIELDER_H[i]) / 528;
       const w = im.naturalWidth * k;
       const h = im.naturalHeight * k;
       ctx.fillStyle = "rgba(0,0,0,0.3)";
