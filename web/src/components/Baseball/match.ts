@@ -1047,6 +1047,8 @@ export class Match {
     if (this.impact && (this.impact.t += dt) > 0.22) this.impact = null;
     // 리그 애니
     this.batAnimT += dt;
+    // 안 치고 보내면 판정(볼 · 스트라이크)이 난 뒤에야 레그킥을 내림 — 공이 날아오는 동안은 최고점으로 버팀
+    if (this.batAnim === BAT_LOAD && this.batAnimT < KICK_STEP_T && this.phase !== "windup" && this.phase !== "flight") this.batAnimT = KICK_STEP_T;
     if (this.batFrom) {
       this.batFrom.t += dt;
       this.batFrom.k = Math.min(1, this.batFrom.k + dt / 0.08);
@@ -1091,8 +1093,6 @@ export class Match {
       case "flight": {
         const p = this.pitch!;
         this.tf += dt;
-        // 안 치고 보내면 공이 홈에 오기 0.1초 전에 레그킥 최고점에서 내딛음
-        if (this.userBat && this.batAnim === BAT_LOAD && this.batAnimT < KICK_STEP_T && this.tf >= p.dur - 0.1) this.batAnimT = KICK_STEP_T;
         // CPU 스윙 시작
         if (!this.userBat && this.decision?.swing && this.swingStart >= 0 && this.tf >= this.swingStart && this.batAnim !== BAT_SWING) {
           this.playBat(BAT_SWING);
