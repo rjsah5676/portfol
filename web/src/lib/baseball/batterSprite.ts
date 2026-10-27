@@ -54,6 +54,7 @@ function sheet() {
   return img && img.complete && img.naturalWidth ? img : null;
 }
 export function preloadBatter(): Promise<void> {
+  stillImg();
   sheet();
   return new Promise((res) => {
     if (!img || (img.complete && img.naturalWidth)) return res();
@@ -186,7 +187,33 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  * 그리기. (x, y) = 리그 원점(골반) 자리, sc = 리그 배율 (drawRig 와 같은 값) → 발은 FOOT_Y 아래.
  * 그림이 아직 없으면 false (부르는 쪽이 코드 리그로 그림).
  */
+/**
+ * 새 타자 그림 시험 중 (지피티 통짜 그림, 대기 자세 1장) — 있으면 모든 프레임을 이걸로 그림.
+ * 스윙 · 스윙 후 그림이 오면 프레임 표로 바꿀 것.
+ */
+const STILL = { src: "/baseball/sprites/batter-stance.webp", ax: 102, ay: 591, scale: 0.295 };
+let still: HTMLImageElement | null = null;
+function stillImg() {
+  if (!still && typeof Image !== "undefined") {
+    still = new Image();
+    still.src = STILL.src;
+  }
+  return still && still.complete && still.naturalWidth ? still : null;
+}
+
 export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: SpriteLook, x: number, y: number, sc: number, flip = false, trail = 0): boolean {
+  const st = stillImg();
+  if (st) {
+    const s = sc * STILL.scale;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.translate(x, y + FOOT_Y * sc);
+    ctx.scale(flip ? -s : s, s);
+    ctx.drawImage(st, -STILL.ax, -STILL.ay);
+    ctx.restore();
+    return true;
+  }
   const im = sheet();
   if (!im) return false;
   const f = FRAMES[frame] ?? FRAMES[0];
