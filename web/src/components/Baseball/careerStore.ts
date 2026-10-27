@@ -11,9 +11,21 @@ import { makeRng } from "@/lib/baseball/rng";
 const KEY = "pxb:career:v3";
 const HOF = "pxb:hof:v1";
 
+/** 예전 저장의 포르테(→ 바이올렛으로 교체) 이름 바꾸기 */
+const FORTE: [RegExp, string][] = [
+  [/"forte"/g, '"violet"'],
+  [/b_forte_tick/g, "b_violet_blind"],
+  [/b_forte_music/g, "b_violet_stage"],
+  [/b_forte_rewind/g, "b_violet_stretch"],
+  [/b_forte_top/g, "b_violet_spin"],
+  [/d_soy_forte/g, "d_soy_violet"],
+  [/d_forte_lily/g, "d_violet_lily"],
+];
+const mig = (t: string | null) => (t ? FORTE.reduce((a, [r, v]) => a.replace(r, v), t) : t);
+
 export function loadCareer(): Career | null {
   try {
-    const c = JSON.parse(localStorage.getItem(KEY) ?? "null");
+    const c = JSON.parse(mig(localStorage.getItem(KEY)) ?? "null");
     return c && c.v === 3 ? normalize(c as Career) : null;
   } catch {
     return null;
@@ -41,7 +53,7 @@ export function saveCareer(c: Career | null) {
 
 export function loadHof(): HofEntry[] {
   try {
-    const h = JSON.parse(localStorage.getItem(HOF) ?? "[]");
+    const h = JSON.parse(mig(localStorage.getItem(HOF)) ?? "[]");
     return Array.isArray(h) ? h : [];
   } catch {
     return [];
@@ -139,7 +151,7 @@ const BXP = "pxb:bondxp:v1";
 export const BOND_LV = { per: 120, max: 6, aff: 5 } as const;
 export function loadBondXp(): Partial<Record<CharId, number>> {
   try {
-    const v = JSON.parse(localStorage.getItem(BXP) ?? "{}");
+    const v = JSON.parse(mig(localStorage.getItem(BXP)) ?? "{}");
     return v && typeof v === "object" ? v : {};
   } catch {
     return {};

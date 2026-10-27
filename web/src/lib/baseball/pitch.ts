@@ -197,12 +197,9 @@ function applySpecial(p: Pitch, id: CharId, s: number, rng: Rng) {
       p.kmh = 168;
       p.tl = timeline([{ du: 0.62, kmh: 128, tag: "split" }, { hold: 0.12, tag: "merge" }, { du: 0.38, kmh: 168 }], s);
       break;
-    case "forte":
-      p.kmh = 165;
-      p.tl = timeline(
-        [{ du: 0.72, kmh: 145 }, { to: 0.3, sec: 0.42, tag: "rewind" }, { hold: 0.14, tag: "tick" }, { du: 0.7, kmh: 165 }],
-        s
-      );
+    case "violet":
+      p.kmh = 166;
+      p.tl = timeline([{ du: 0.74, kmh: 138, tag: "hoop" }, { du: 0.26, kmh: 166 }], s);
       break;
   }
   if (p.tl) p.dur = p.tl.dur;
@@ -223,6 +220,8 @@ export interface BallView {
   tagK?: number;
   /** 가짜 공 (이그나) */
   ghosts?: { x: number; y: number; z: number; a: number }[];
+  /** 바이올렛 후프 (공이 지나갈 자리) */
+  hoop?: { x: number; y: number; z: number; a: number; spin: number };
 }
 
 function basePos(p: Pitch, u: number) {
@@ -345,8 +344,17 @@ export function pitchAt(p: Pitch, t: number): BallView {
       }
       break;
     }
-    case "forte":
+    case "violet": {
+      // 후프 통과구: 한쪽으로 비켜 오다가 후프(u 0.74)를 지나는 순간 반대쪽으로 꺾여 들어옴
+      const side = p.seed < 0.5 ? 1 : -1;
+      const pass = smooth(0.7, 0.78, u);
+      const after = -0.22 * side * (1 - smooth(0.8, 1, u));
+      v.x += 0.34 * side * (1 - pass) + after * pass;
+      v.y += 0.08 * Math.sin(u * Math.PI);
+      const hb = basePos(p, 0.74);
+      v.hoop = { x: hb.x, y: hb.y, z: hb.z, a: smooth(0.06, 0.2, u) * (1 - smooth(0.78, 0.86, u)), spin: t * 7 + p.seed * 6 };
       break;
+    }
   }
   return v;
 }

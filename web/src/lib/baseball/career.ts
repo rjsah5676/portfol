@@ -207,19 +207,19 @@ export const SKILLS = {
   b_ivan_body: { name: "강철 육체", desc: "부상 확률 -35%", val: 3, tag: "grit", boon: "ivan", noPick: true, fx: { injury: -0.35 } },
   b_ivan_drill: { name: "지옥 훈련", desc: "근력 · 수비 훈련 효율 +12%", val: 3, tag: "power", boon: "ivan", noPick: true, fx: { train: { power: 0.12, def: 0.12 } } },
   b_ivan_log: { name: "통나무 스쿼트", desc: "경기 수비 +35 · 훈련 체력 소모 -10%", val: 3, tag: "def", boon: "ivan", noPick: true, fx: { add: { def: 35 }, stam: 0.1 } },
-  b_forte_tick: { name: "째깍 타이밍", desc: "경기 맞히기 +35", val: 3, tag: "contact", boon: "forte", noPick: true, fx: { add: { hit: 35 } } },
-  b_forte_music: { name: "오르골 휴식", desc: "휴식 회복 +25% · 컨디션이 덜 떨어짐", val: 3, tag: "grit", boon: "forte", noPick: true, fx: { rest: 0.25, calm: true } },
-  b_forte_rewind: { name: "되감기 재활", desc: "부상 기간 -35%", val: 3, tag: "grit", boon: "forte", noPick: true, fx: { injuryDur: -0.35 } },
-  b_forte_top: { name: "태엽 팽이", desc: "경기 주루 +35", val: 3, tag: "speed", boon: "forte", noPick: true, fx: { add: { run: 35 } } },
+  b_violet_stretch: { name: "체조 스트레칭", desc: "부상 확률 -30% · 주루 훈련 효율 +10%", val: 3, tag: "grit", boon: "violet", noPick: true, fx: { injury: -0.3, train: { run: 0.1 } } },
+  b_violet_spin: { name: "피루엣 밸런스", desc: "경기 주루 +40", val: 3, tag: "speed", boon: "violet", noPick: true, fx: { add: { run: 40 } } },
+  b_violet_blind: { name: "안 보고 받기", desc: "2스트라이크 맞히기 +50", val: 3, tag: "contact", boon: "violet", noPick: true, fx: { sit: { twoK: 50 } } },
+  b_violet_stage: { name: "무대 체질", desc: "7회부터 맞히기 · 파워 +40 · 인기도 +20%", val: 3, tag: "clutch", boon: "violet", noPick: true, fx: { sit: { late: 40 }, fame: 0.2 } },
   // ── 듀오 축복 (두 사람 축복을 하나씩 가지면 둘 중 누구를 만나도 3장에 섞여 나옴) ──
   d_kai_zena: { name: "질풍번개", desc: "경기 주루 +60 · 수비 +30", val: 7, tag: "speed", boon: ["kai", "zena"], noPick: true, fx: { add: { run: 60, def: 30 } } },
   d_igna_ivan: { name: "용광로", desc: "경기 파워 +50 · 득점권 파워 +40", val: 7, tag: "power", boon: ["igna", "ivan"], noPick: true, fx: { add: { power: 50 }, sit: { rispPow: 40 } } },
-  d_soy_forte: { name: "정확한 시간표", desc: "경기 맞히기 +45 · 2스트라이크 맞히기 +40", val: 7, tag: "contact", boon: ["soyoung", "forte"], noPick: true, fx: { add: { hit: 45 }, sit: { twoK: 40 } } },
+  d_soy_violet: { name: "채찍과 후프", desc: "경기 맞히기 +45 · 2스트라이크 맞히기 +40", val: 7, tag: "contact", boon: ["soyoung", "violet"], noPick: true, fx: { add: { hit: 45 }, sit: { twoK: 40 } } },
   d_lily_mei: { name: "비 오는 날 만두", desc: "부상 확률 -40% · 모든 훈련 +5%", val: 7, tag: "grit", boon: ["lily", "mei"], noPick: true, fx: { injury: -0.4, train: { all: 0.05 } } },
   d_kai_igna: { name: "불바람", desc: "7회부터 맞히기 · 파워 +50 · 경기 파워 +20", val: 7, tag: "clutch", boon: ["kai", "igna"], noPick: true, fx: { sit: { late: 50 }, add: { power: 20 } } },
   d_zena_soy: { name: "번개 채찍", desc: "경기 맞히기 +30 · 득점권 맞히기 +45", val: 7, tag: "contact", boon: ["zena", "soyoung"], noPick: true, fx: { add: { hit: 30 }, sit: { rispHit: 45 } } },
   d_ivan_mei: { name: "강유상제", desc: "경기 파워 +40 · 수비 +40", val: 7, tag: "power", boon: ["ivan", "mei"], noPick: true, fx: { add: { power: 40, def: 40 } } },
-  d_forte_lily: { name: "오르골 비", desc: "휴식 회복 +30% · 호감 +25% · 슬럼프 무시", val: 7, tag: "luck", boon: ["forte", "lily"], noPick: true, fx: { rest: 0.3, aff: 0.25, slump: -1 } },
+  d_violet_lily: { name: "무지개 후프", desc: "휴식 회복 +30% · 호감 +25% · 슬럼프 무시", val: 7, tag: "luck", boon: ["violet", "lily"], noPick: true, fx: { rest: 0.3, aff: 0.25, slump: -1 } },
   // 양날
   glass: { name: "유리 몸 천재", desc: "모든 훈련 +18% / 부상 확률 +60%", val: 2, risk: true, fx: { train: { all: 0.18 }, injury: 0.6 } },
   gambler: { name: "도박꾼", desc: "자금 +60% / 슬럼프 2배", val: 2, risk: true, fx: { money: 0.6, slump: 1 } },
@@ -390,9 +390,9 @@ export const BONDS: Record<CharId, Bond> = {
     stat: "def", place: "딤섬 가게 뒷마당", pick: ["태극권 수련", "만두 빚기"],
     lines: ["찜기를 든 메이.", "\"힘을 빼. 공도 그래.\"", "\"빈틈은 늘 있어.\"", "\"태극 스윙. 수비 사이로 쏙.\""],
   },
-  forte: {
-    stat: "hit", place: "시계탑 아래", pick: ["타이밍 연습", "시계 소리 듣기"],
-    lines: ["째깍째깍. 포르테가 시계탑 위에 앉아 있다.", "\"타이밍이란 시간을 아는 거야.\"", "\"0.01초가 보이기 시작하면 다 맞혀.\"", "\"되감기 스윙. 한 번은 다시 칠 수 있어.\""],
+  violet: {
+    stat: "run", place: "밤의 실내 연습장", pick: ["후프 피하며 스텝 훈련", "매트에서 스트레칭"],
+    lines: ["천장까지 올라간 후프가 빙글빙글 떨어진다… 바이올렛이다.", "\"발끝까지 쓰는 거야. 달릴 때도.\"", "\"한 바퀴 돌아도 중심은 그대로. 이 감각 기억해.\"", "\"피루엣 스윙. 박자가 어긋나도 돌면서 다시 맞춰.\""],
   },
 };
 

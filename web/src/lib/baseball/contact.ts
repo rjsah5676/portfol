@@ -52,7 +52,9 @@ export const timingWindow = (hit: number, bunt: boolean, special: boolean) =>
 export function swing(o: SwingIn, rng: Rng): SwingResult {
   const sp = o.special;
   const W = timingWindow(o.hit, o.bunt, !!sp);
-  const r = Math.abs(o.e) / W;
+  // 바이올렛 피루엣: 한 바퀴 돌며 박자를 다시 맞춤 → 타이밍 오차 절반
+  const e = sp === "violet" ? o.e * 0.5 : o.e;
+  const r = Math.abs(e) / W;
   const qt = r >= 1 ? 0 : 1 - Math.pow(r, 1.6);
   // 존 밖 거리
   const dx = Math.max(0, Math.abs(o.at.x) - (ZONE.x + 0.09));
@@ -85,7 +87,7 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   if (c < 0.3 && rng.chance(0.72 - c)) return { kind: "foul", e: o.e, c, tip: c < 0.18 };
 
   const side = o.bats === "R" ? 1 : -1;
-  let spray = (o.e / W) * 58 * side + o.at.x * 38 + rng.gauss() * (3 + 9 * (1 - c));
+  let spray = (e / W) * 58 * side + o.at.x * 38 + rng.gauss() * (3 + 9 * (1 - c));
   // 높이: 높은 공일수록 뜸
   const base = 6 + (o.at.y - 0.8) * 42 + rng.gauss() * 20;
   // 정타: 힘센 타자일수록 띄워서 담장 쪽 (힘 500 → 23° · 1000 → 29°)
@@ -125,6 +127,10 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
       ev += 3;
       break;
     }
+    case "violet":
+      la = clamp(lerp(la, 15, 0.55), 6, 24);
+      ev += 3;
+      break;
     default:
       if (sp) ev += 2;
   }

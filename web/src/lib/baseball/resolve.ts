@@ -1,6 +1,6 @@
 /**
  * 공 하나 처리: 투구 + (스윙) → 볼 · 스트라이크 · 파울 · 인플레이(수비 시뮬) → 경기 상태 반영.
- * 화면과 시뮬이 같이 씀. evaluate(계산만) → commit(반영) 두 단계라 포르테 「되감기 스윙」처럼 결과를 보고 무를 수 있음.
+ * 화면과 시뮬이 같이 씀. evaluate(계산만) → commit(반영) 두 단계라 결과를 보고 무를 수 있음.
  */
 import { swing, type SwingResult } from "./contact";
 import type { GameState, PAResult } from "./game";
@@ -23,7 +23,7 @@ export interface Outcome {
   at: { x: number; y: number };
   sw?: SwingResult;
   field?: FieldOut;
-  /** 포르테 되감기로 무를 수 있는 나쁜 결과 */
+  /** 나쁜 결과 (헛스윙 · 아웃) */
   bad: boolean;
 }
 

@@ -53,7 +53,7 @@ export interface MatchCfg {
 
 export type Phase =
   | "intro" | "mission" | "ready" | "aim" | "gauge" | "cutin" | "windup" | "flight" | "contact"
-  | "call" | "field" | "result" | "change" | "rewind" | "over";
+  | "call" | "field" | "result" | "change" | "over";
 
 export interface UiState {
   phase: Phase;
@@ -176,7 +176,6 @@ export class Match {
   useBallSp = false;
   cpuUseSp = false;
   contactShown = false;
-  rewindUsed = false;
   batTilt = 0;
   timingText = "";
   timingColor = "#fff";
@@ -431,7 +430,6 @@ export class Match {
     this.useBallSp = false;
     this.cpuUseSp = false;
     this.contactShown = false;
-    this.rewindUsed = false;
     this.timingText = "";
     this.pitchInfo = "";
     this.batAnim = BAT_IDLE;
@@ -802,8 +800,8 @@ export class Match {
       case "kai":
         sfx.wind();
         break;
-      case "forte":
-        sfx.tick();
+      case "violet":
+        sfx.wind();
         break;
       case "mei":
         sfx.wind();
@@ -816,14 +814,6 @@ export class Match {
   /** 공이 지나간 뒤: 볼 · 스트라이크 · 파울 · 인플레이 */
   private afterPitch() {
     const o = this.outcome!;
-    const fortRewind = this.userBat && this.decision?.special === "forte" && o.bad && !this.rewindUsed;
-    if (fortRewind) {
-      this.rewindUsed = true;
-      this.setPhase("rewind");
-      sfx.tick();
-      this.setBanner("되감기!", "포르테의 시간 — 그 공을 한 번 더", charById("forte").color, 1.0);
-      return;
-    }
     if (o.call === "bip" && o.field) {
       const f = o.field;
       this.frames = f.frames;
@@ -1010,7 +1000,7 @@ export class Match {
   update(dtRaw: number) {
     if (this.paused) return;
     // 배속: 타이밍이 걸린 구간(준비 · 와인드업 · 공 · 컨택 · 조준 · 게이지)은 그대로
-    const timed = this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "contact" || this.phase === "rewind" || this.phase === "aim" || this.phase === "gauge";
+    const timed = this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "contact" || this.phase === "aim" || this.phase === "gauge";
     let dt = Math.min(dtRaw, 1 / 20) * (timed ? 1 : this.cfg.speed ?? 1);
     // 히트스톱: 공 · 배트 · 진행만 멈추고 흔들림 · 플래시 · 파티클은 계속
     if (this.hitStop > 0) {
@@ -1104,7 +1094,8 @@ export class Match {
         }
         if (p.special === "lily" && Math.abs(this.tf - (p.tl?.segs[0].t1 ?? 0)) < dt) sfx.pop();
         if (p.special === "zena" && Math.floor(this.tf * 9) !== Math.floor((this.tf - dt) * 9) && this.tf < p.dur * 0.85) sfx.zap();
-        if (p.special === "forte" && Math.floor(this.tf * 8) !== Math.floor((this.tf - dt) * 8)) sfx.tick();
+        // 바이올렛: 후프 통과 순간 「퐁」
+        if (p.special === "violet" && p.tl && Math.abs(this.tf - p.tl.segs[0].t1) < dt) sfx.pop();
         // 맞는 순간
         const hitT = this.swingStart + SWING_HIT_T;
         // 헛스윙: 바람 빠지는 소리 + 살짝 흔들림 (몸이 돌아가는 힘)
@@ -1159,19 +1150,6 @@ export class Match {
       }
       case "contact":
         if (this.pt > 0.42) this.afterPitch();
-        break;
-      case "rewind":
-        if (this.pt > 0.95) {
-          // 같은 공 다시
-          this.outcome = null;
-          this.decision = null;
-          this.swingStart = -1;
-          this.contactShown = false;
-          this.spArmed = true;
-          this.batAnim = BAT_IDLE;
-          this.tf = 0;
-          this.setPhase("flight");
-        }
         break;
       case "field":
         this.updateField(dt);
@@ -1416,7 +1394,7 @@ export class Match {
     }
 
     // 공
-    const ballBefore = p && (this.phase === "flight" || this.phase === "rewind");
+    const ballBefore = p && this.phase === "flight";
     if (ballBefore && p) this.drawPitchBall(ctx, p, hand);
     if (this.phase === "windup" && this.pitAnimT > 0.2) {
       // 손에 든 공
@@ -1535,15 +1513,6 @@ export class Match {
       ctx.globalAlpha = 1;
     }
     if (this.phase === "gauge" || (this.phase === "aim" && !this.userBat)) this.drawGauge(ctx);
-    if (this.phase === "rewind") {
-      ctx.fillStyle = `rgba(247,168,200,${0.25 + 0.15 * Math.sin(this.pt * 20)})`;
-      ctx.fillRect(0, 0, DW, DH);
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(512, 288, 70, -Math.PI / 2, -Math.PI / 2 - this.pt * Math.PI * 4, true);
-      ctx.stroke();
-    }
   }
 
   private drawPitchBall(ctx: CanvasRenderingContext2D, p: Pitch, hand: { x: number; y: number }) {
@@ -1601,6 +1570,30 @@ export class Match {
         else this.drawFireBall(ctx, a.x, a.y, Math.max(6, 0.08 * a.s), false);
       }
       ctx.globalAlpha = 1;
+    }
+    // 바이올렛 후프: 빙글 도는 고리 (공이 지나갈 자리)
+    if (v.hoop && v.hoop.a > 0.01) {
+      const h = toScreen(v.hoop.x, v.hoop.y, v.hoop.z, 0.74);
+      const R = Math.max(16, 0.45 * h.s);
+      ctx.save();
+      ctx.globalAlpha = v.hoop.a;
+      ctx.translate(h.x, h.y);
+      ctx.rotate(Math.sin(v.hoop.spin * 0.5) * 0.4);
+      const sq = 0.35 + 0.65 * Math.abs(Math.cos(v.hoop.spin));
+      ctx.lineWidth = Math.max(3, R * 0.12);
+      ctx.strokeStyle = "#1c1726";
+      ctx.beginPath();
+      ctx.ellipse(0, 0, R * sq, R, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = Math.max(2, R * 0.08);
+      ctx.strokeStyle = "#B58CFF";
+      ctx.setLineDash([R * 0.35, R * 0.18]);
+      ctx.lineDashOffset = -v.hoop.spin * R * 0.4;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, R * sq, R, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
     }
     const b = toScreen(v.x, v.y, v.z, v.u);
     const r = Math.max(5.4, BALLR_PX(b.s));
@@ -1702,15 +1695,11 @@ export class Match {
         this.drawBall(ctx, b.x, b.y, r * 1.1);
         ctx.shadowBlur = 0;
         break;
-      case "forte":
+      case "violet":
+        ctx.shadowColor = "#B58CFF";
+        ctx.shadowBlur = 12;
         this.drawBall(ctx, b.x, b.y, r);
-        if (v.tag === "rewind" || v.tag === "tick") {
-          ctx.strokeStyle = "#F7A8C8";
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.arc(b.x, b.y, r * 3, -Math.PI / 2, -Math.PI / 2 - (v.tagK ?? 0) * Math.PI * 2, true);
-          ctx.stroke();
-        }
+        ctx.shadowBlur = 0;
         break;
       case "soyoung":
         ctx.shadowColor = "#FF5FB4";

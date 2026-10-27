@@ -7,7 +7,7 @@
  */
 import type { PitchKind } from "./pitch";
 
-export type CharId = "kai" | "igna" | "soyoung" | "lily" | "zena" | "gunmo" | "ivan" | "forte" | "mei";
+export type CharId = "kai" | "igna" | "soyoung" | "lily" | "zena" | "gunmo" | "ivan" | "violet" | "mei";
 
 export interface SpecialChar {
   id: CharId;
@@ -103,15 +103,15 @@ export const CHARS: SpecialChar[] = [
     pit: { control: 640, velo: 165, brk: 600, stamina: 420, rep: ["FB", "SL", "FK", "SK"] },
   },
   {
-    id: "forte",
-    name: "포르테",
-    color: "#F7A8C8",
-    ball: { name: "되감기 볼", hint: "오다가 째깍째깍 되감김 — 두 번째로 올 때가 진짜" },
-    swing: { name: "되감기 스윙", desc: "헛치거나 아웃이면 시간을 되감아 그 공을 다시 침 (1번)" },
+    id: "violet",
+    name: "바이올렛",
+    color: "#B58CFF",
+    ball: { name: "후프 통과구", hint: "빙글 도는 후프를 통과하면 반대쪽으로 꺾여 들어와요 — 들어오던 쪽 말고 반대편" },
+    swing: { name: "피루엣 스윙", desc: "한 바퀴 돌며 박자를 다시 맞춤 — 타이밍 오차가 절반 · 라이너" },
     bats: "L",
     throws: "L",
-    bat: { hit: 840, power: 620, run: 800, def: 720 },
-    pit: { control: 840, velo: 142, brk: 820, stamina: 320, rep: ["FB", "CB", "CH", "SL"] },
+    bat: { hit: 820, power: 600, run: 900, def: 820 },
+    pit: { control: 820, velo: 141, brk: 900, stamina: 300, rep: ["FB", "CB", "CH", "SL"] },
   },
   {
     id: "mei",
@@ -129,10 +129,12 @@ export const CHARS: SpecialChar[] = [
 export const charById = (id: CharId) => CHARS.find((c) => c.id === id)!;
 
 /** 야구 전용 그림이 생긴 캐릭터 (public/baseball/char/<id>.webp · <id>-face.webp) — 나머지는 격투게임 그림 재사용 */
-const BB_ART = new Set<string>(["kai"]);
+const BB_ART = new Set<string>(["kai", "igna", "soyoung", "lily", "zena", "ivan", "mei", "violet"]);
+/** 야구 전용 컷인 띠 (public/baseball/char/<id>-cutin.webp, 1200×500) */
+const BB_CUTIN = new Set<string>(["violet"]);
 export const artUrl = (id: string) => (BB_ART.has(id) ? `/baseball/char/${id}.webp` : `/fight/art/${id}.webp`);
 export const faceUrl = (id: string) => (BB_ART.has(id) ? `/baseball/char/${id}-face.webp` : `/fight/art/${id}-face.webp`);
-export const cutinUrl = (id: CharId) => `/fight/cutin/${id}.webp`;
+export const cutinUrl = (id: CharId) => (BB_CUTIN.has(id) ? `/baseball/char/${id}-cutin.webp` : `/fight/cutin/${id}.webp`);
 
 export interface Batter {
   name: string;
