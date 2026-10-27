@@ -17,7 +17,7 @@
  * 난수는 (시드, 턴 번호)로 정해서 새로고침해도 결과가 같음.
  */
 import type { Diff } from "./ai";
-import { charById, type Batter, type CharId } from "./data";
+import { charById, type Batter, type Boost, type CharId } from "./data";
 import type { BatLine } from "./game";
 import { clamp, makeRng, type Rng } from "./rng";
 import { DEFAULT_LOOK, type Look } from "./look";
@@ -827,9 +827,26 @@ export function careerBatter(c: Career): Batter {
     season: { avg: c.line.ab ? c.line.h / c.line.ab : 0, hr: c.line.hr, rbi: c.line.rbi },
     learned: c.learned,
     sit: fx.sit,
+    boosts: gameBoosts(c),
     look: c.look,
     grow: true,
   };
+}
+
+/** 경기 능력치를 올려 주는 특수능력만 (축복 레벨 배율 적용) — 타석 연출용 */
+export function gameBoosts(c: Pick<Career, "skills"> & { blv?: Partial<Record<SkillId, number>> }): Boost[] {
+  const out: Boost[] = [];
+  for (const id of c.skills) {
+    const x = skill(id).fx as Fx;
+    const m = lvMul(c, id);
+    const add: NonNullable<Boost["add"]> = {};
+    for (const k of STAT_KEYS) if (x.add?.[k]) add[k] = Math.round(x.add[k]! * m);
+    const sit: NonNullable<Boost["sit"]> = {};
+    if (x.sit) for (const [k, v] of Object.entries(x.sit) as [keyof NonNullable<Boost["sit"]>, number][]) if (v) sit[k] = Math.round(v * m);
+    const hasAdd = Object.keys(add).length > 0, hasSit = Object.keys(sit).length > 0;
+    if (hasAdd || hasSit) out.push({ name: skill(id).name, ...(hasAdd ? { add } : {}), ...(hasSit ? { sit } : {}) });
+  }
+  return out;
 }
 
 /* ─────────────── 진행 ─────────────── */

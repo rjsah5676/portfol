@@ -251,6 +251,7 @@ export const sfx = {
   },
   missionOk: () => play("mission_ok", 0.5) || [784, 988, 1175, 1568].forEach((f, i) => tone("square", f, f, 0.12, 0.08, i * 0.08)),
   missionNg: () => play("mission_ng", 0.5) || [400, 300].forEach((f, i) => tone("triangle", f, f * 0.9, 0.2, 0.1, i * 0.18)),
+  boost: () => [523, 659, 784, 1047].forEach((f, i) => tone("triangle", f, f * 1.03, 0.1, 0.06, i * 0.06)),
   pop: () => {
     if (play("pop", 0.5, vary())) return;
     tone("sine", 600, 1800, 0.08, 0.25);

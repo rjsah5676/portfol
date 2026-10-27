@@ -51,6 +51,9 @@ const FIELDER = {
   ofStand: "/baseball/sprites/fielder-of-stand.webp",
 } as const;
 const FIELDER_BOOST = 1.8;
+/** 특수능력 발동 연출 길이 · 시간이 흐르는 화면 */
+const BOOST_DUR = 2.8;
+const BOOST_PHASES: Phase[] = ["ready", "windup", "flight", "contact", "call"];
 /** HUD · 이펙트 그림 (GPT 이미지 → public/baseball/ui) */
 const UI = {
   profile: "/baseball/ui/profile.webp",
@@ -232,6 +235,9 @@ export class Match {
   timingT = 0;
   /** 그림 이펙트 (맞는 순간 섬광 · 충격파 링) */
   fxs: { src: string; x: number; y: number; t: number; dur: number; size: number; grow: number; rot: number }[] = [];
+  /** 타석에 들어설 때 (또 2스트라이크 · 득점권 · 7회 이후처럼 상황이 맞을 때) 경기 능력치 특수능력 발동 연출 */
+  boostFx: { t: number; items: { name: string; text: string }[]; bonus: { hit: number; power: number; run: number }; head: string } | null = null;
+  private lastStrikes = 0;
   timingColor = "#fff";
   pitchInfo = "";
   lastCall = "";
@@ -517,6 +523,9 @@ export class Match {
     this.cpuCz = undefined;
     this.hbpHit = false;
     this.updateSkins();
+    this.lastStrikes = 0;
+    this.boostFx = null;
+    if (this.userBat) this.showBoosts("all");
     const m = this.cfg.mode !== "derby" ? s.mission ?? maybeMission(s, this.rng) : null;
     if (m) {
       s.mission = m;
@@ -1241,6 +1250,13 @@ export class Match {
     this.timingT += dt;
     for (const f of this.fxs) f.t += dt;
     this.fxs = this.fxs.filter((f) => f.t < f.dur);
+    // 특수능력 발동: 타석 화면에서만 시간이 흐름 (미션 안내 · 인트로 동안은 기다림)
+    if (this.boostFx && BOOST_PHASES.includes(this.phase)) {
+      if (this.boostFx.t < 0 && this.boostFx.t + dt >= 0) sfx.boost();
+      if ((this.boostFx.t += dt) > BOOST_DUR) this.boostFx = null;
+    }
+    if (this.userBat && this.s.strikes >= 2 && this.lastStrikes < 2) this.showBoosts("twoK");
+    this.lastStrikes = this.s.strikes;
     // 컨택존 · 타자 옮기기 (투구 전만, 초당 0.65m — 끝에서 끝까지 1초 남짓)
     if (this.userBat && (this.phase === "ready" || this.phase === "windup") && (this.czVel.x || this.czVel.y)) {
       this.cz = {
@@ -2657,6 +2673,7 @@ export class Match {
     this.countBoard(ctx);
     this.batterCard(ctx);
     this.pitcherCard(ctx);
+    if (this.userBat && BOOST_PHASES.includes(this.phase)) this.drawBoosts(ctx);
     // 미션 진행 중
     if (s.mission && this.phase !== "mission") {
       ctx.font = '700 13px "Nanum Gothic", sans-serif';
@@ -2872,7 +2889,7 @@ export class Match {
   }
 
   /** 능력치 막대 (목업: 이름 · 그라데이션 막대 · 숫자) */
-  private statBar(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, v: number, col: string, w = 96, shown?: string) {
+  private statBar(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, v: number, col: string, w = 96, shown?: string, bonus = 0, glow = 0) {
     ctx.fillStyle = "rgba(255,255,255,0.75)";
     ctx.font = '800 11px "Nanum Gothic", sans-serif';
     ctx.fillText(label, x, y + 9);
@@ -2891,11 +2908,37 @@ export class Match {
       ctx.roundRect(bx, y + 1, Math.max(6, w * k), 9, 4);
       ctx.fill();
     }
-    ctx.fillStyle = "#fff";
+    // 특수능력으로 오른 몫: 막대 끝을 금색으로 (발동 연출 동안 반짝)
+    if (bonus > 0 && glow > 0) {
+      const kb = clamp(bonus / 1000, 0, k);
+      ctx.save();
+      ctx.globalAlpha = glow;
+      ctx.fillStyle = "#ffd65a";
+      ctx.shadowColor = "#ffcf3a";
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.roundRect(bx + w * (k - kb), y + 1, Math.max(4, w * kb), 9, 3);
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = bonus > 0 && glow > 0.5 ? "#ffe07a" : "#fff";
     ctx.font = '800 12px "JetBrains Mono", monospace';
     ctx.textAlign = "right";
     ctx.fillText(shown ?? String(v), bx + w + 34, y + 10);
     ctx.textAlign = "left";
+    // 오른 만큼 (+95) — 막대 빈 칸에
+    if (bonus && glow > 0 && k < 0.78) {
+      ctx.save();
+      ctx.globalAlpha = glow;
+      ctx.font = '800 10px "JetBrains Mono", monospace';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      const bt = `${bonus > 0 ? "+" : ""}${bonus}`;
+      ctx.strokeText(bt, bx + w * k + 5, y + 9.5);
+      ctx.fillStyle = bonus > 0 ? "#ffd65a" : "#ff7a7a";
+      ctx.fillText(bt, bx + w * k + 5, y + 9.5);
+      ctx.restore();
+    }
   }
 
   /** 얼굴 칸: 캐릭터면 얼굴 그림 · 아니면 빈 프로필 */
@@ -2918,6 +2961,155 @@ export class Match {
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 8);
     ctx.stroke();
+  }
+
+  /** 지금 상황에 켜진 경기 능력치 특수능력 — all: 타석 들어설 때 (늘 붙는 것 + 지금 맞는 상황), twoK: 2스트라이크 된 순간 */
+  private showBoosts(when: "all" | "twoK") {
+    const b = this.shownBatter;
+    if (!b.boosts?.length || this.cfg.mode === "derby") return;
+    const s = this.s;
+    const risp = s.bases[1] !== null || s.bases[2] !== null;
+    const late = s.inning >= 7;
+    const items: { name: string; text: string }[] = [];
+    const bonus = { hit: 0, power: 0, run: 0 };
+    const parts: string[] = [];
+    const add = (k: keyof typeof bonus, v: number | undefined, label: string) => {
+      if (!v) return;
+      bonus[k] += v;
+      parts.push(`${label} ${v > 0 ? "+" : ""}${v}`);
+    };
+    for (const x of b.boosts) {
+      parts.length = 0;
+      if (when === "all") {
+        add("hit", x.add?.hit, "타격");
+        add("power", x.add?.power, "파워");
+        add("run", x.add?.run, "주루");
+        if (risp) {
+          add("hit", x.sit?.rispHit, "득점권 타격");
+          add("power", x.sit?.rispPow, "득점권 파워");
+        }
+        if (late && x.sit?.late) {
+          bonus.hit += x.sit.late;
+          bonus.power += x.sit.late;
+          parts.push(`7회~ 타격 · 파워 +${x.sit.late}`);
+        }
+      }
+      add("hit", x.sit?.twoK, "2스트라이크 타격");
+      if (when === "all" && s.strikes < 2 && x.sit?.twoK) {
+        // 아직 2스트라이크 아님 — 그때 따로 발동
+        bonus.hit -= x.sit.twoK;
+        parts.pop();
+      }
+      if (parts.length) items.push({ name: x.name, text: parts.join(" · ") });
+    }
+    if (!items.length) return;
+    // 2스트라이크 발동은 이미 떠 있는 것에 이어 붙임
+    if (when === "twoK" && this.boostFx) {
+      this.boostFx.items.push(...items);
+      this.boostFx.bonus.hit += bonus.hit;
+      this.boostFx.t = Math.min(this.boostFx.t, 0.6);
+      sfx.boost();
+      return;
+    }
+    this.boostFx = { t: when === "all" ? -0.35 : 0, items, bonus, head: when === "all" ? "특수능력 발동!" : "끈질긴 승부 — 발동!" };
+    if (when === "twoK") sfx.boost();
+  }
+
+  /** 특수능력 발동 연출 — 점수판 아래로 카드가 하나씩 미끄러져 들어옴 */
+  private drawBoosts(ctx: CanvasRenderingContext2D) {
+    const f = this.boostFx;
+    if (!f || f.t < 0) return;
+    const t = f.t;
+    const out = smooth(BOOST_DUR - 0.45, BOOST_DUR, t);
+    const shown = f.items.slice(0, 4);
+    const x0 = 12, y0 = 104;
+    ctx.save();
+    ctx.globalAlpha = 1 - out;
+    // 머리글: 번쩍
+    const hp = Math.min(1, t / 0.16);
+    const hs = 1 + (1 - hp) * 0.5;
+    ctx.save();
+    ctx.translate(x0 + 4, y0 + 12);
+    ctx.scale(hs, hs);
+    ctx.font = '17px "Black Han Sans", sans-serif';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(40,20,0,0.85)";
+    ctx.strokeText(`▲ ${f.head}`, 0, 0);
+    const hg = ctx.createLinearGradient(0, -14, 0, 2);
+    hg.addColorStop(0, "#fff6c2");
+    hg.addColorStop(1, "#ffb625");
+    ctx.fillStyle = hg;
+    ctx.fillText(`▲ ${f.head}`, 0, 0);
+    ctx.restore();
+    shown.forEach((it, i) => {
+      const lt = t - 0.12 - i * 0.11;
+      if (lt < 0) return;
+      // 왼쪽 밖에서 쑥 (살짝 넘쳤다 돌아옴)
+      const e = Math.min(1, lt / 0.26);
+      const back = 1 + 2.2 * Math.pow(e - 1, 3) + 1.2 * Math.pow(e - 1, 2);
+      const w = 252, h = 38;
+      const x = x0 - (1 - back) * (w + 20);
+      const y = y0 + 22 + i * (h + 6);
+      const g = ctx.createLinearGradient(x, y, x + w, y);
+      g.addColorStop(0, "rgba(120,62,0,0.94)");
+      g.addColorStop(0.55, "rgba(46,30,10,0.9)");
+      g.addColorStop(1, "rgba(20,24,46,0.82)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 8);
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "rgba(255,206,84,0.95)";
+      ctx.stroke();
+      // 빛 지나감
+      const sw = lt - 0.18;
+      if (sw > 0 && sw < 0.45) {
+        const sx = x - 60 + (sw / 0.45) * (w + 120);
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 8);
+        ctx.clip();
+        const lg = ctx.createLinearGradient(sx - 40, 0, sx + 40, 0);
+        lg.addColorStop(0, "rgba(255,255,255,0)");
+        lg.addColorStop(0.5, "rgba(255,248,210,0.55)");
+        lg.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = lg;
+        ctx.fillRect(sx - 40, y, 80, h);
+        ctx.restore();
+      }
+      // 위 화살표 동그라미
+      ctx.fillStyle = "#ffcf3a";
+      ctx.beginPath();
+      ctx.arc(x + 19, y + h / 2, 12, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#5a2d00";
+      ctx.beginPath();
+      ctx.moveTo(x + 19, y + h / 2 - 7);
+      ctx.lineTo(x + 26, y + h / 2 + 2);
+      ctx.lineTo(x + 22, y + h / 2 + 2);
+      ctx.lineTo(x + 22, y + h / 2 + 7);
+      ctx.lineTo(x + 16, y + h / 2 + 7);
+      ctx.lineTo(x + 16, y + h / 2 + 2);
+      ctx.lineTo(x + 12, y + h / 2 + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#fff3cf";
+      ctx.font = '15px "Black Han Sans", sans-serif';
+      ctx.fillText(it.name, x + 38, y + 17);
+      ctx.fillStyle = "#8ff0a4";
+      ctx.font = '800 11px "Nanum Gothic", sans-serif';
+      ctx.fillText(it.text, x + 38, y + 31);
+    });
+    if (f.items.length > shown.length) {
+      const lt = t - 0.12 - shown.length * 0.11;
+      if (lt > 0) {
+        ctx.fillStyle = "rgba(255,226,140,0.9)";
+        ctx.font = '800 11px "Nanum Gothic", sans-serif';
+        ctx.fillText(`외 ${f.items.length - shown.length}개`, x0 + 6, y0 + 22 + shown.length * 44 + 12);
+      }
+    }
+    ctx.restore();
   }
 
   private batterCard(ctx: CanvasRenderingContext2D) {
@@ -2959,9 +3151,25 @@ export class Match {
     ctx.font = '800 11.5px "JetBrains Mono", monospace';
     ctx.fillText(`시즌 ${se.avg.toFixed(3).replace(/^0/, "")} · ${se.hr}HR · ${se.rbi}타점`, tx, y + 67);
     // 능력치
-    this.statBar(ctx, tx, y + 76, "타격", b.hit, "#5fe07f", 120);
-    this.statBar(ctx, tx, y + 93, "파워", b.power, "#ff5a5a", 120);
-    this.statBar(ctx, tx, y + 110, "주루", b.run, "#4fb3ff", 120);
+    const bf = this.boostFx && this.boostFx.t >= 0 && b === this.shownBatter ? this.boostFx : null;
+    const bon = bf?.bonus;
+    const glow = bf ? 1 - smooth(BOOST_DUR - 0.45, BOOST_DUR, bf.t) : 0;
+    this.statBar(ctx, tx, y + 76, "타격", b.hit, "#5fe07f", 120, undefined, bon?.hit, glow);
+    this.statBar(ctx, tx, y + 93, "파워", b.power, "#ff5a5a", 120, undefined, bon?.power, glow);
+    this.statBar(ctx, tx, y + 110, "주루", b.run, "#4fb3ff", 120, undefined, bon?.run, glow);
+    if (bf && glow > 0) {
+      // 카드 테두리 금빛 맥박
+      ctx.save();
+      ctx.globalAlpha = glow * (0.55 + 0.45 * Math.sin(bf.t * 9));
+      ctx.shadowColor = "#ffcf3a";
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#ffd65a";
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, 10);
+      ctx.stroke();
+      ctx.restore();
+    }
     const learned = !hero && b.learned ? charById(b.learned) : null;
     if ((hero || learned) && this.cfg.mode !== "derby") {
       const left = this.s.sides[batSide(this.s)].swingLeft;

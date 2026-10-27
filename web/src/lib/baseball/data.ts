@@ -155,6 +155,14 @@ export interface Batter {
   grow?: boolean;
   /** 이번 시즌 기록 (육성 선수는 진짜 기록 — 없으면 seasonOf 가 능력치로 만들어 냄) */
   season?: SeasonLine;
+  /** 경기 능력치를 올려 주는 특수능력 (육성) — 타석에 들어설 때 보여 줌. add 는 이미 hit · power · run 에 들어가 있음 */
+  boosts?: Boost[];
+}
+
+export interface Boost {
+  name: string;
+  add?: { hit?: number; power?: number; run?: number };
+  sit?: { rispHit?: number; rispPow?: number; twoK?: number; late?: number };
 }
 
 export interface SeasonLine {
