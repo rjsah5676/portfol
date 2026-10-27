@@ -11,7 +11,7 @@ import data from "@/data/baseball/batter-v3.json";
 import idleData from "@/data/baseball/batter-idle.json";
 import loadData from "@/data/baseball/batter-load.json";
 import swingData from "@/data/baseball/batter-swing.json";
-import { BAT_BUNT, BAT_LOAD, BAT_SWING } from "./figures";
+import { BAT_BUNT, BAT_LOAD, BAT_SWING, PITCH_RELEASE_T } from "./figures";
 import type { Anim } from "./rig";
 
 const SRC = "/baseball/sprites/batter-v3.png";
@@ -142,8 +142,8 @@ const LOAD: [string, number][] = [["load1", 0.07], ["load2", 0.13], ["kick1", 0.
 export const KICK_STEP_T = 5;
 /** 레그킥 최고점에서 버티는 구간 안의 아무 시각 (빈 스윙 끝나고 공이 날아오는 중이면 여기로 돌아옴) */
 export const KICK_HOLD_T = 2;
-/** 들기 시작 = 공 놓기(PITCH_RELEASE_T 0.74초) 0.1초 전 */
-const LIFT_AT = 0.64;
+/** 들기 시작 = 공 놓기(PITCH_RELEASE_T) 0.1초 전 */
+const LIFT_AT = PITCH_RELEASE_T - 0.1;
 /** 대기 → 최고점 (공 놓은 뒤 보통 스윙 시작 즈음까지 — 빠른 공이면 거의 다 든 자리에서 스윙으로) */
 const LIFT_TOTAL = 0.5;
 /** 안 치고 보낼 때 내리는 데 걸리는 시간 */

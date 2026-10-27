@@ -12,7 +12,7 @@ import { timingLabel, timingWindow } from "@/lib/baseball/contact";
 import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher } from "@/lib/baseball/data";
 import { advanceToMyPA, botHook, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
-  BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
+  BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_RIG_RELEASE_T, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
   SKIN_TONES, SWING_HIT_T, baseSkin,
 } from "@/lib/baseball/figures";
 import {
@@ -1335,7 +1335,7 @@ export class Match {
     // 투수판(높이 0.25m) 위 · 크기는 구장 그림 목업 기준 (키 ≈ 135px)
     const mp = proj(0, 0.25, 18.4);
     const pitcherScale = 0.9;
-    const pps = pose(PITCHER_RIG, this.pitAnim, this.pitAnimT);
+    const pps = pose(PITCHER_RIG, this.pitAnim, this.pitAnim === PIT_THROW ? (this.pitAnimT * PIT_RIG_RELEASE_T) / PITCH_RELEASE_T : this.pitAnimT);
     const pFlip = this.pitcherNow.throws === "L";
     // 투수 그림 (지피티 세트 자세 1장, 발 = 투수판) — 없으면 코드 리그
     const pim = img(PITCHER_STILL.src);
@@ -1360,7 +1360,7 @@ export class Match {
       ctx.restore();
     } else drawRig(ctx, PITCHER_RIG, pps, this.pitSkin, this.pitColors, mp.x, mp.y - 56 * pitcherScale, pitcherScale, pFlip);
     // 손 위치 (공 놓는 점)
-    const relPs = pose(PITCHER_RIG, PIT_THROW, PITCH_RELEASE_T);
+    const relPs = pose(PITCHER_RIG, PIT_THROW, PIT_RIG_RELEASE_T);
     const [hx, hy] = boneTip(PITCHER_RIG, relPs, "handT", 1);
     const hand =
       throwSprite && PITCHER_THROW.hand
@@ -1446,7 +1446,7 @@ export class Match {
     if (ballBefore && p) this.drawPitchBall(ctx, p, hand);
     if (this.phase === "windup" && this.pitAnimT > 0.2 && !img(PITCHER_THROW.src).naturalWidth) {
       // 손에 든 공 (코드 리그일 때만 — 투구 줄 그림엔 공이 그려져 있음)
-      const ps = pose(PITCHER_RIG, this.pitAnim, this.pitAnimT);
+      const ps = pose(PITCHER_RIG, this.pitAnim, (this.pitAnimT * PIT_RIG_RELEASE_T) / PITCH_RELEASE_T);
       const [ax, ay] = boneTip(PITCHER_RIG, ps, "handT", 1);
       ctx.fillStyle = "#fff";
       ctx.beginPath();

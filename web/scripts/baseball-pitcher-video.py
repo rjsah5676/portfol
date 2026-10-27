@@ -5,8 +5,8 @@
   → 모든 칸 같은 배율 · 같은 기준점 (카메라 고정)
 - 공 놓은 뒤 화면에 남는 공(흰 동그라미)은 지움 — 게임이 놓는 순간부터 공을 따로 그림
 - 칸은 캔버스의 CELL 배율로 줄여 담음 (게임에서 투수 키 ≈ 115px 라 크게 둘 필요 없음)
-- 시간표 (게임 와인드업 시계, 공 놓기 = PITCH_RELEASE_T 0.74초):
-    시작 → 다리 최고점 0.30초 → 디딤발 착지 0.60초 → 공 놓기 0.74초 (착지 → 놓기 0.14초 = 프로 실측 범위)
+- 시간표 (게임 와인드업 시계, 공 놓기 = PITCH_RELEASE_T 1.1초):
+    시작 → 다리 최고점 0.45초 → 디딤발 착지 0.95초 → 공 놓기 1.10초 (착지 → 놓기 0.15초 = 팔 코킹 + 가속)
     놓기 → 팔로스루 끝 0.35초, 처음엔 빠르고 점점 느리게
 """
 import json, sys, subprocess, tempfile, glob
@@ -19,7 +19,7 @@ STEP = int(sys.argv[4]) if len(sys.argv) > 4 else 2
 F0, F_BAL, F_FC, F_REL, F_END = EV
 GX, GY = 512, 880
 CELL = 0.4
-T_BAL, T_FC, T_REL, T_FOLLOW = 0.30, 0.60, 0.74, 0.35
+T_BAL, T_FC, T_REL, T_FOLLOW = 0.45, 0.95, 1.10, 0.35
 
 s = open("scripts/baseball-char-art.py").read()
 ns = {"np": np, "Image": Image, "ndimage": ndimage}

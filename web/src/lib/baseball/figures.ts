@@ -176,8 +176,15 @@ export const PIT_IDLE: Anim = {
   },
 };
 
-/** 투구: 0 ~ 0.55 와인드업(다리 들기) · 0.55 ~ 0.8 팔 휘두름 · RELEASE_T 에 공 놓음 */
-export const PITCH_RELEASE_T = 0.74;
+/**
+ * 와인드업 시작(첫 움직임) → 공 놓기. 실제 세트 포지션 투구는 레그킥이면 첫 움직임 → 포수 미트(time to plate) 1.4~1.8초,
+ * 슬라이드 스텝 1.0초대 — 공이 날아가는 0.4초 남짓을 빼면 놓기까지 약 1.0~1.4초. 보통 레그킥 쪽인 1.1초.
+ * 투구 줄(pitcher-throw)은 다리 최고점 0.45 · 디딤발 착지 0.95 · 놓기 1.10 (착지 → 놓기 0.15초 = 팔 코킹 + 가속)
+ */
+export const PITCH_RELEASE_T = 1.1;
+/** 코드 리그 투구 애니(PIT_THROW, 그림 없을 때만)는 0.74초에 놓도록 짜여 있음 — 그릴 땐 시간을 이 비율로 줄여서 씀 */
+export const PIT_RIG_RELEASE_T = 0.74;
+/** 코드 리그 투구: 0 ~ 0.55 와인드업(다리 들기) · 0.55 ~ 0.8 팔 휘두름 · 0.74 에 공 놓음 */
 export const PIT_THROW: Anim = {
   dur: 1.1,
   loop: false,
