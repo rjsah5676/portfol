@@ -35,7 +35,12 @@ export const HOME_POS: [number, number][] = [
 ];
 export const POS_NAME = ["투수", "포수", "1루수", "2루수", "3루수", "유격수", "좌익수", "중견수", "우익수"];
 
-/** 외야수 기본 달리기 (m/s, 수비 500 이면 +0.8) — 얕은 뜬공 · 빗맞은 라이너가 다 안타가 되지 않게 */
+/**
+ * 수비수 실력 — 수비 능력치를 빼서 모두 같은 값 (예전 일반 팀 평균 520).
+ * 아래 달리기 · 송구 · 반응 · 다이빙 식은 이 값으로만 돌아감
+ */
+const FIELD_DEF = 520;
+/** 외야수 기본 달리기 (m/s, 여기에 수비 실력 몫 +0.83) — 얕은 뜬공 · 빗맞은 라이너가 다 안타가 되지 않게 */
 const OF_SPEED = 6.4;
 /** 주자 달리기 (m/s): 주루 300 → 7.36 · 500 → 7.8 · 900 → 8.68 (주루가 2 · 3루타 · 내야안타에 잘 드러나게) */
 export const runSpeed = (run: number) => 6.7 + (run / 1000) * 2.2;
@@ -56,8 +61,6 @@ export interface FieldIn {
   bases: (FieldRunner | null)[];
   batter: { id: number; run: number };
   outs: number;
-  /** 수비수 9명 수비 능력치 */
-  def: number[];
 }
 
 export interface Frame {
@@ -290,7 +293,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   const reactAdd = sp === "kai" ? 0.45 : 0;
 
   const F: Fielder[] = HOME_POS.map(([x, y], i) => {
-    const d = inp.def[i] ?? 500;
+    const d = FIELD_DEF;
     return {
       x, y,
       speed: (i === 1 ? 5.4 : i === 0 ? 5.8 : i >= 6 ? OF_SPEED : 5.9) + (d / 1000) * 1.6,
@@ -381,7 +384,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
       }
       if (best >= 0) break;
     }
-    if (best >= 0 && rng.chance(0.18 + ((inp.def[best] ?? 500) / 1000) * 0.3)) {
+    if (best >= 0 && rng.chance(0.18 + (FIELD_DEF / 1000) * 0.3)) {
       if (chaser !== best) F[chaser].role = "idle";
       chaser = best;
       chaseIdx = bestIdx;
@@ -731,7 +734,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
           fielder = chaser;
           ballHolder = chaser;
           // 포구 → 송구 준비: 수비가 좋을수록 빠르고, 공을 빼는 데 흔들림이 있음 (발 빠른 타자의 내야안타가 「확률」로 나오게)
-          f.readyAt = t + (p.air ? 0.45 : chaser >= 6 ? 0.75 : 0.3 + (1 - (inp.def[chaser] ?? 500) / 1000) * 0.12 + Math.abs(rng.gauss()) * 0.12);
+          f.readyAt = t + (p.air ? 0.45 : chaser >= 6 ? 0.75 : 0.3 + (1 - FIELD_DEF / 1000) * 0.12 + Math.abs(rng.gauss()) * 0.12);
           if (p.air) {
             caught = true;
             if (diveCatch) events.push({ t, kind: "dive", x: f.x, y: f.y, text: "필살수비!" });

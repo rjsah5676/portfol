@@ -2656,7 +2656,7 @@ export class Match {
     const today = this.cfg.mode === "derby" ? "" : ` · 오늘 ${ln.ab}타수 ${ln.h}안타`;
     const learned = !hero && b.learned ? charById(b.learned) : null;
     ctx.fillText(`${order + 1}번 ${b.bats === "L" ? "좌타" : "우타"}${today}`, tx, y + 42);
-    this.statBar(ctx, tx, y + 50, "히트", b.hit, "#7dff9a");
+    this.statBar(ctx, tx, y + 50, "타격", b.hit, "#7dff9a");
     this.statBar(ctx, tx, y + 64, "파워", b.power, "#ff7a5c");
     this.statBar(ctx, tx, y + 78, "주루", b.run, "#7ad7ff");
     if ((hero || learned) && this.cfg.mode !== "derby") {

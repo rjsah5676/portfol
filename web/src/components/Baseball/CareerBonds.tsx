@@ -627,7 +627,7 @@ export function DeckStep({
                 {on && (
                   <div className="mt-1">
                     <div className="text-[10.5px] text-white/55">
-                      시작 능력치 +{(["hit", "power", "run", "def"] as StatKey[]).map((k) => legacyBonus(h.stats[k])).join("/")}
+                      시작 능력치 +{(["hit", "power", "run"] as StatKey[]).map((k) => legacyBonus(h.stats[k])).join("/")}
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-1">
                       {sk.length ? (
@@ -716,7 +716,7 @@ const GUIDE: [string, string][] = [
   ["인연", "덱 3명이 지도에 ❗ 로 나와요. 만남마다 이야기 → 축복 → 대결 → … → 필살 전수 대결. 대답이 그 사람답다면 「이해」가 쌓여 특별한 답 · 축복 Lv2 시작이 열려요."],
   ["특수능력 · 세트 · 양날", "시즌 끝 · S 평가 · 퀴즈쇼에서 3장 중 1장. 같은 태그 3장이면 세트 효과. 주황 테두리 = 좋은 점과 나쁜 점이 같이 있는 양날 카드."],
   ["경기", "직접 · 하이라이트(찬스 타석만) · 자동. 잘 칠수록 경기 평가(S ~ D)가 높아져 성장 배율이 커져요. 경기 중에도 「남은 타석」 방식을 바꿀 수 있어요 (다음 타석부터)."],
-  ["코치진", "타격 · 근력 · 주루 · 수비 코치는 그 훈련과 그 능력치 한계를, 치어리더는 휴식 회복을 올려 줘요. 지금은 모두 C(기본)."],
+  ["코치진", "타격 · 근력 · 주루 코치는 그 훈련과 그 능력치 한계를, 치어리더는 휴식 회복을 올려 줘요. 지금은 모두 C(기본)."],
   ["은퇴 · 다음 선수", "7년차부터 은퇴를 고를 수 있어요. 은퇴하면 명예의 전당 · 인연 레벨이 쌓이고, 다음 선수에게 「선배의 유산」(특수능력 1개 + 능력치 조금)을 물려줄 수 있어요."],
 ];
 export function GuideModal({ onClose }: { onClose: () => void }) {

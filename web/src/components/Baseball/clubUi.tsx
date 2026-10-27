@@ -163,10 +163,9 @@ export function CardView({
         <div className="mt-auto flex flex-col gap-[3px] px-1.5 pb-1.5">
           {card.kind === "bat" && (
             <>
-              <Bar label="맞히" v={card.hit} color="#7ad7ff" />
+              <Bar label="타격" v={card.hit} color="#7ad7ff" />
               <Bar label="파워" v={card.power} color="#ff7a5c" />
               <Bar label="주루" v={card.run} color="#7dff9a" />
-              <Bar label="수비" v={card.def} color="#ffd23f" />
             </>
           )}
           {card.kind === "pit" && (

@@ -34,7 +34,7 @@ import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 
 type View = "home" | "create" | "hub" | "hof";
 
-const STAT_COLOR: Record<StatKey, string> = { hit: "#7dff9a", power: "#ff7a5c", run: "#7ad7ff", def: "#ffd23f" };
+const STAT_COLOR: Record<StatKey, string> = { hit: "#7dff9a", power: "#ff7a5c", run: "#7ad7ff" };
 const TONE_COLOR: Record<TurnOut["tone"], string> = { great: "#ffd23f", ok: "#ffffff", fail: "#9aa3c7", injury: "#ff5a5a", event: "#7ad7ff", awaken: "#ff7ae0" };
 const NAMES = ["김픽셀", "이도트", "박비트", "최렌더", "정버퍼", "강루프", "조캐시", "윤커밋", "장스택", "한패치", "오클릭", "서해시"];
 const MODE_NAME: Record<PlayMode, string> = { direct: "직접 출전", highlight: "하이라이트", auto: "자동 진행" };
@@ -1431,7 +1431,7 @@ function RetireAskModal({ c, onAnswer }: { c: Career; onAnswer: (yes: boolean) =
         {age(c)}세 · 종합 {ovr} ({gradeOf(ovr).g}) · 통산 {c.total.g}경기 {c.total.hr}홈런
       </div>
       <div className="mt-2 text-[13px] text-white/60">
-        여기서 은퇴할 수 있어요. 한 해 더 뛰면 기록은 쌓이지만, 8년차부터는 노쇠로 주루 · 수비부터 조금씩 떨어져요. 은퇴 종합은 은퇴하는 순간 능력치로 정해져요.
+        여기서 은퇴할 수 있어요. 한 해 더 뛰면 기록은 쌓이지만, 8년차부터는 노쇠로 주루부터 조금씩 떨어져요. 은퇴 종합은 은퇴하는 순간 능력치로 정해져요.
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Btn className={`${font.title} py-3 text-xl`} color="#ffd23f" onClick={() => onAnswer(true)}>
@@ -1880,7 +1880,7 @@ function Hof({ list, onBack }: { list: HofEntry[]; onBack: () => void }) {
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-[#11152a] text-[11px] text-white/50">
             <tr>
-              {["#", "등급", "종합", "이름", "타입", "별명", "맞히기", "파워", "주루", "수비", "통산", ""].map((h, i) => (
+              {["#", "등급", "종합", "이름", "타입", "별명", "타격", "파워", "주루", "통산", ""].map((h, i) => (
                 <th key={i} className="px-2 py-2 text-left font-normal">
                   {h}
                 </th>
@@ -1914,7 +1914,7 @@ function Hof({ list, onBack }: { list: HofEntry[]; onBack: () => void }) {
             })}
             {!list.length && (
               <tr>
-                <td colSpan={12} className="py-10 text-center text-white/45">
+                <td colSpan={11} className="py-10 text-center text-white/45">
                   아직 은퇴한 선수가 없어요. 선수를 끝까지 키우면 여기에 올라가요.
                 </td>
               </tr>

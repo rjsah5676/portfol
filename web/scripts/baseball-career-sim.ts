@@ -197,7 +197,7 @@ function main() {
   console.log("타입", by((r) => r.c.type));
   console.log("세트 수", by((r) => r.c.skills.filter((s) => s.startsWith("set_")).length));
   const avgOf = (f: (c: Career) => number) => (base.reduce((a, r) => a + f(r.c), 0) / N).toFixed(1);
-  console.log(`평균 스탯 hit ${avgOf((c) => c.stats.hit)} pow ${avgOf((c) => c.stats.power)} run ${avgOf((c) => c.stats.run)} def ${avgOf((c) => c.stats.def)} · 특수능력 ${avgOf((c) => c.skills.length)} · 필살 ${avgOf((c) => (c.learned ? 1 : 0))} · 인기도 ${avgOf((c) => c.fame)}`);
+  console.log(`평균 스탯 hit ${avgOf((c) => c.stats.hit)} pow ${avgOf((c) => c.stats.power)} run ${avgOf((c) => c.stats.run)} · 특수능력 ${avgOf((c) => c.skills.length)} · 필살 ${avgOf((c) => (c.learned ? 1 : 0))} · 인기도 ${avgOf((c) => c.fame)}`);
   console.log(`통산 평균 타율 ${(base.reduce((a, r) => a + r.c.total.h / Math.max(1, r.c.total.ab), 0) / N).toFixed(3)}  HR ${avgOf((c) => c.total.hr)}  경기 ${avgOf((c) => c.total.g)}  신뢰 ${avgOf((c) => c.trust)}`);
   console.log(`자금: 쓴 돈 ${(base.reduce((a, r) => a + r.spent, 0) / N).toFixed(0)} · 남은 돈 ${avgOf((c) => c.money)} · 장비 단계 합 ${avgOf((c) => Object.values(c.gear).reduce((a, b) => a + (b ?? 0), 0))}`);
 

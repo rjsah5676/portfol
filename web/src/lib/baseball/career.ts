@@ -23,16 +23,17 @@ import { clamp, makeRng, type Rng } from "./rng";
 import { DEFAULT_LOOK, type Look } from "./look";
 import { BOND_IDS, BOONS, DUOS, EPILOGUE, ROLE, SPECIAL_DAY, STORY, isBond, type BondId, type Choice, type Role } from "./bonds";
 
-export type StatKey = "hit" | "power" | "run" | "def";
+export type StatKey = "hit" | "power" | "run";
 export type Stats = Record<StatKey, number>;
-export const STAT_KEYS: StatKey[] = ["hit", "power", "run", "def"];
-export const STAT_NAME: Record<StatKey, string> = { hit: "맞히기", power: "파워", run: "주루", def: "수비" };
+export const STAT_KEYS: StatKey[] = ["hit", "power", "run"];
+/** 수비 능력치는 뺌 (예전 저장의 stats.def 는 남아 있어도 안 씀) */
+export const STAT_NAME: Record<StatKey, string> = { hit: "타격", power: "파워", run: "주루" };
 
 /* ─────────────── 선수 타입 · 재능 ─────────────── */
 
 /**
  * 새 선수: 수비 위치 (포수 · 내야수 · 외야수 — 능력치 영향 없음) + 타입 셋 중 하나
- *   교타자 (맞히기 ↑ 파워 ↓) · 거포 (맞히기 ↓ 파워 ↑) · 만능 (고르게) — 교타자 · 거포는 같은 크기로 맞바꿈
+ *   교타자 (타격 ↑ 파워 ↓) · 거포 (타격 ↓ 파워 ↑) · 만능 (고르게) — 교타자 · 거포는 같은 크기로 맞바꿈
  * 준족 · 수비형은 예전 저장 · 명예의 전당 표시용으로만 남김
  */
 export type BatType = "contact" | "power" | "speed" | "defense" | "all";
@@ -43,15 +44,15 @@ export const PICK_POS: { pos: FieldPos; name: string }[] = [
   { pos: "SS", name: "내야수" },
   { pos: "CF", name: "외야수" },
 ];
-const EVEN = { apt: { hit: 1.0, power: 1.0, run: 1.0, def: 1.0 }, start: { hit: 125, power: 115, run: 125, def: 125 } };
+const EVEN = { apt: { hit: 1.0, power: 1.0, run: 1.0 }, start: { hit: 125, power: 115, run: 125 } };
 /** 육성 경기 난이도는 중급 하나 */
 export const CAREER_DIFF = 1;
 export const TYPES: Record<BatType, { name: string; desc: string; pos: string; apt: Stats; start: Stats }> = {
   // 교타자 · 거포 성장 비율은 육성 시뮬로 맞춤 (타입별 종합 평균이 비슷하게 — 홈런이 경기 평가를 많이 올려서 거포 쪽 성장은 작게)
-  contact: { name: "교타자", desc: "맞히기 ↑ · 파워 ↓", pos: "2B", apt: { hit: 1.35, power: 0.82, run: 1.0, def: 1.0 }, start: { hit: 150, power: 90, run: 125, def: 125 } },
-  power: { name: "거포", desc: "파워 ↑ · 맞히기 ↓", pos: "1B", apt: { hit: 0.78, power: 1.08, run: 1.0, def: 1.0 }, start: { hit: 100, power: 130, run: 125, def: 125 } },
-  speed: { name: "준족", desc: "주루 · 수비가 잘 자람", pos: "CF", apt: { hit: 1.12, power: 0.88, run: 1.5, def: 1.18 }, start: { hit: 125, power: 75, run: 180, def: 125 } },
-  defense: { name: "수비형", desc: "수비가 잘 자람", pos: "SS", apt: { hit: 1.02, power: 0.88, run: 1.08, def: 1.4 }, start: { hit: 115, power: 85, run: 125, def: 180 } },
+  contact: { name: "교타자", desc: "타격 ↑ · 파워 ↓", pos: "2B", apt: { hit: 1.35, power: 0.82, run: 1.0 }, start: { hit: 150, power: 90, run: 125 } },
+  power: { name: "거포", desc: "파워 ↑ · 타격 ↓", pos: "1B", apt: { hit: 0.78, power: 1.08, run: 1.0 }, start: { hit: 100, power: 130, run: 125 } },
+  speed: { name: "준족", desc: "주루가 잘 자람", pos: "CF", apt: { hit: 1.12, power: 0.88, run: 1.5 }, start: { hit: 125, power: 75, run: 180 } },
+  defense: { name: "수비형", desc: "(예전 타입)", pos: "SS", apt: { hit: 1.02, power: 0.88, run: 1.08 }, start: { hit: 115, power: 85, run: 125 } },
   all: { name: "만능", desc: "고르게 자람", pos: "3B", ...EVEN },
 };
 
@@ -88,15 +89,14 @@ const AGE_GROW = [1.0, 1.05, 1.12, 1.12, 1.12, 1.06, 1.0, 0.88, 0.76, 0.64];
 
 /* ─────────────── 훈련 ─────────────── */
 
-export type TrainKey = "hit" | "power" | "run" | "def" | "special";
+export type TrainKey = "hit" | "power" | "run" | "special";
 export const TRAINS: Record<TrainKey, { name: string; desc: string; cost: number; gain: Partial<Stats> }> = {
-  hit: { name: "타격 훈련", desc: "맞히기 ↑ (파워 조금)", cost: 18, gain: { hit: 1, power: 0.18 } },
-  power: { name: "근력 훈련", desc: "파워 ↑ (맞히기 조금)", cost: 22, gain: { power: 1, hit: 0.15 } },
-  run: { name: "주루 훈련", desc: "주루 ↑ (수비 조금)", cost: 19, gain: { run: 1, def: 0.22 } },
-  def: { name: "수비 훈련", desc: "수비 ↑ (주루 조금)", cost: 16, gain: { def: 1, run: 0.2 } },
+  hit: { name: "타격 훈련", desc: "타격 ↑ (파워 조금)", cost: 18, gain: { hit: 1, power: 0.18 } },
+  power: { name: "근력 훈련", desc: "파워 ↑ (타격 조금)", cost: 22, gain: { power: 1, hit: 0.15 } },
+  run: { name: "주루 훈련", desc: "주루 ↑", cost: 19, gain: { run: 1 } },
   special: { name: "필살타법 훈련", desc: "필살 레벨 ↑ (경기당 횟수 · 종합) — 배운 뒤에만", cost: 26, gain: { hit: 0.25, power: 0.25 } },
 };
-export const TRAIN_KEYS: TrainKey[] = ["hit", "power", "run", "def", "special"];
+export const TRAIN_KEYS: TrainKey[] = ["hit", "power", "run", "special"];
 /** 훈련 한 번 기본 성장 (재능 · 타입 · 컨디션 · 높을수록 덜 오름 반영 전) */
 export const BASE_GAIN = 1.38;
 /** 밸런스 손잡이 (시뮬에서 바꿔 보기) */
@@ -109,14 +109,14 @@ export const SP_EVERY = 3;
 
 export const COND_NAME = ["최악", "나쁨", "보통", "좋음", "최고"] as const;
 const COND_TRAIN = [0.72, 0.86, 1, 1.12, 1.25];
-/** 경기 컨디션: 맞히기 · 파워 배율 */
+/** 경기 컨디션: 타격 · 파워 배율 */
 export const COND_GAME = [0.88, 0.94, 1, 1.04, 1.08];
 
 /* ─────────────── 특수능력 (태그 · 세트 · 양날) ─────────────── */
 
-export type Tag = "clutch" | "contact" | "power" | "speed" | "def" | "grit" | "luck";
-export const TAG_NAME: Record<Tag, string> = { clutch: "찬스", contact: "컨택", power: "파워", speed: "스피드", def: "수비", grit: "근성", luck: "행운" };
-export const TAG_COLOR: Record<Tag, string> = { clutch: "#ff7a5c", contact: "#7dff9a", power: "#ff5a5a", speed: "#7ad7ff", def: "#ffd23f", grit: "#c9a2ff", luck: "#ff7ae0" };
+export type Tag = "clutch" | "contact" | "power" | "speed" | "grit" | "luck";
+export const TAG_NAME: Record<Tag, string> = { clutch: "찬스", contact: "컨택", power: "파워", speed: "스피드", grit: "근성", luck: "행운" };
+export const TAG_COLOR: Record<Tag, string> = { clutch: "#ff7a5c", contact: "#7dff9a", power: "#ff5a5a", speed: "#7ad7ff", grit: "#c9a2ff", luck: "#ff7ae0" };
 
 /** 특수능력이 주는 효과 (합쳐서 씀) */
 export interface Fx {
@@ -170,11 +170,11 @@ export interface Skill {
 
 export const SKILLS = {
   // 찬스
-  clutch: { name: "찬스 강함", desc: "득점권에서 맞히기 +70", val: 2, tag: "clutch", fx: { sit: { rispHit: 70 } } },
+  clutch: { name: "찬스 강함", desc: "득점권에서 타격 +70", val: 2, tag: "clutch", fx: { sit: { rispHit: 70 } } },
   solver: { name: "해결사", desc: "득점권에서 파워 +70", val: 2, tag: "clutch", fx: { sit: { rispPow: 70 } } },
-  gamer: { name: "승부사", desc: "7회부터 맞히기 · 파워 +45", val: 2, tag: "clutch", fx: { sit: { late: 45 } } },
+  gamer: { name: "승부사", desc: "7회부터 타격 · 파워 +45", val: 2, tag: "clutch", fx: { sit: { late: 45 } } },
   // 컨택
-  precise: { name: "정교함", desc: "경기 맞히기 +40", val: 2, tag: "contact", fx: { add: { hit: 40 } } },
+  precise: { name: "정교함", desc: "경기 타격 +40", val: 2, tag: "contact", fx: { add: { hit: 40 } } },
   study: { name: "타격 연구", desc: "타격 훈련 효율 +18%", val: 2, tag: "contact", fx: { train: { hit: 0.18 } } },
   // 파워
   fullswing: { name: "풀스윙", desc: "경기 파워 +45", val: 2, tag: "power", fx: { add: { power: 45 } } },
@@ -183,11 +183,11 @@ export const SKILLS = {
   // 스피드
   track: { name: "육상부 출신", desc: "주루 훈련 효율 +18%", val: 2, tag: "speed", fx: { train: { run: 0.18 } } },
   dash: { name: "스타트 대시", desc: "경기 주루 +45", val: 2, tag: "speed", fx: { add: { run: 45 } } },
-  // 수비
-  glovework: { name: "수비 달인", desc: "수비 훈련 효율 +18%", val: 2, tag: "def", fx: { train: { def: 0.18 } } },
-  arm: { name: "강견", desc: "경기 수비 +45", val: 2, tag: "def", fx: { add: { def: 45 } } },
+  // (예전 수비 능력 2장 — id 그대로 두고 주루 · 파워 쪽으로 바꿈)
+  glovework: { name: "주루 센스", desc: "경기 주루 +25 · 주루 훈련 효율 +8%", val: 2, tag: "speed", fx: { add: { run: 25 }, train: { run: 0.08 } } },
+  arm: { name: "강한 손목", desc: "경기 파워 +25 · 타격 +20", val: 2, tag: "power", fx: { add: { power: 25, hit: 20 } } },
   // 근성
-  grit: { name: "끈질김", desc: "2스트라이크에서 맞히기 +70", val: 2, tag: "grit", fx: { sit: { twoK: 70 } } },
+  grit: { name: "끈질김", desc: "2스트라이크에서 타격 +70", val: 2, tag: "grit", fx: { sit: { twoK: 70 } } },
   iron: { name: "강철 몸", desc: "부상 확률 -40%", val: 2, tag: "grit", fx: { injury: -0.4 } },
   bounce: { name: "오뚝이", desc: "부상 기간 -40%", val: 2, tag: "grit", fx: { injuryDur: -0.4 } },
   // 행운
@@ -196,8 +196,8 @@ export const SKILLS = {
   biz: { name: "사업 수완", desc: "수당 · 연봉 자금 +30%", val: 2, tag: "luck", fx: { money: 0.3 } },
   // ── 인연 축복 (만남 2 · 6번째 · 대결 승리 · 특별한 날에 그 사람 축복 3장 중 1장, 겹치면 레벨 업) ──
   b_kai_wind: { name: "질풍의 발", desc: "경기 주루 +40", val: 3, tag: "speed", boon: "kai", noPick: true, fx: { add: { run: 40 } } },
-  b_kai_dash: { name: "선제 돌격", desc: "7회부터 맞히기 · 파워 +35", val: 3, tag: "clutch", boon: "kai", noPick: true, fx: { sit: { late: 35 } } },
-  b_kai_read: { name: "바람 읽기", desc: "경기 맞히기 +30", val: 3, tag: "contact", boon: "kai", noPick: true, fx: { add: { hit: 30 } } },
+  b_kai_dash: { name: "선제 돌격", desc: "7회부터 타격 · 파워 +35", val: 3, tag: "clutch", boon: "kai", noPick: true, fx: { sit: { late: 35 } } },
+  b_kai_read: { name: "바람 읽기", desc: "경기 타격 +30", val: 3, tag: "contact", boon: "kai", noPick: true, fx: { add: { hit: 30 } } },
   b_kai_rest: { name: "새벽 강변 러닝", desc: "휴식 회복 +25% · 훈련 체력 소모 -10%", val: 3, tag: "grit", boon: "kai", noPick: true, fx: { rest: 0.25, stam: 0.1 } },
   b_igna_swing: { name: "업화의 힘", desc: "경기 파워 +45", val: 3, tag: "power", boon: "igna", noPick: true, fx: { add: { power: 45 } } },
   b_igna_forge: { name: "단련의 불꽃", desc: "근력 훈련 효율 +15%", val: 3, tag: "power", boon: "igna", noPick: true, fx: { train: { power: 0.15 } } },
@@ -205,52 +205,51 @@ export const SKILLS = {
   b_igna_heat: { name: "뜨거운 심장", desc: "훈련 실패 확률 -6%p", val: 3, tag: "grit", boon: "igna", noPick: true, fx: { fail: 0.06 } },
   b_soy_fix: { name: "자세 교정", desc: "타격 훈련 효율 +15%", val: 3, tag: "contact", boon: "soyoung", noPick: true, fx: { train: { hit: 0.15 } } },
   b_soy_class: { name: "특별 수업", desc: "모든 훈련 효율 +5%", val: 3, tag: "luck", boon: "soyoung", noPick: true, fx: { train: { all: 0.05 } } },
-  b_soy_watch: { name: "끝까지 보기", desc: "2스트라이크에서 맞히기 +70", val: 3, tag: "grit", boon: "soyoung", noPick: true, fx: { sit: { twoK: 70 } } },
+  b_soy_watch: { name: "끝까지 보기", desc: "2스트라이크에서 타격 +70", val: 3, tag: "grit", boon: "soyoung", noPick: true, fx: { sit: { twoK: 70 } } },
   b_soy_sticker: { name: "칭찬 스티커", desc: "훈련 대성공 +5%", val: 3, tag: "luck", boon: "soyoung", noPick: true, fx: { great: 0.05 } },
   b_lily_shade: { name: "우산 그늘", desc: "부상 확률 -30%", val: 3, tag: "grit", boon: "lily", noPick: true, fx: { injury: -0.3 } },
   b_lily_drop: { name: "물방울 마사지", desc: "휴식 회복 +30%", val: 3, tag: "grit", boon: "lily", noPick: true, fx: { rest: 0.3 } },
   b_lily_float: { name: "둥실 타구", desc: "경기 파워 +30", val: 3, tag: "power", boon: "lily", noPick: true, fx: { add: { power: 30 } } },
   b_lily_candy: { name: "사탕 응원", desc: "컨디션이 덜 떨어짐 · 슬럼프 무시", val: 3, tag: "luck", boon: "lily", noPick: true, fx: { calm: true, slump: -1 } },
-  b_zena_reflex: { name: "번개 반사", desc: "경기 수비 +45", val: 3, tag: "def", boon: "zena", noPick: true, fx: { add: { def: 45 } } },
+  b_zena_reflex: { name: "번개 반사", desc: "경기 타격 +40", val: 3, tag: "contact", boon: "zena", noPick: true, fx: { add: { hit: 40 } } },
   b_zena_step: { name: "번개 스텝", desc: "주루 훈련 효율 +15%", val: 3, tag: "speed", boon: "zena", noPick: true, fx: { train: { run: 0.15 } } },
-  b_zena_zap: { name: "찌릿한 한 방", desc: "득점권에서 맞히기 +55", val: 3, tag: "clutch", boon: "zena", noPick: true, fx: { sit: { rispHit: 55 } } },
+  b_zena_zap: { name: "찌릿한 한 방", desc: "득점권에서 타격 +55", val: 3, tag: "clutch", boon: "zena", noPick: true, fx: { sit: { rispHit: 55 } } },
   b_zena_prank: { name: "장난 기운", desc: "인기도 +40% · 호감 +15%", val: 3, tag: "luck", boon: "zena", noPick: true, fx: { fame: 0.4, aff: 0.15 } },
-  b_mei_steam: { name: "찜기 단련", desc: "수비 훈련 효율 +15%", val: 3, tag: "def", boon: "mei", noPick: true, fx: { train: { def: 0.15 } } },
-  b_mei_palm: { name: "태극 수비", desc: "경기 수비 +40", val: 3, tag: "def", boon: "mei", noPick: true, fx: { add: { def: 40 } } },
+  b_mei_steam: { name: "찜기 단련", desc: "타격 훈련 효율 +15%", val: 3, tag: "contact", boon: "mei", noPick: true, fx: { train: { hit: 0.15 } } },
+  b_mei_palm: { name: "태극 타법", desc: "경기 타격 +25 · 파워 +20", val: 3, tag: "contact", boon: "mei", noPick: true, fx: { add: { hit: 25, power: 20 } } },
   b_mei_bun: { name: "왕만두 도시락", desc: "휴식 회복 +30% · 경기 경험치 +8%", val: 3, tag: "luck", boon: "mei", noPick: true, fx: { rest: 0.3, gameXp: 0.08 } },
-  b_mei_gap: { name: "빈틈 읽기", desc: "경기 맞히기 +35", val: 3, tag: "contact", boon: "mei", noPick: true, fx: { add: { hit: 35 } } },
+  b_mei_gap: { name: "빈틈 읽기", desc: "경기 타격 +35", val: 3, tag: "contact", boon: "mei", noPick: true, fx: { add: { hit: 35 } } },
   b_ivan_fist: { name: "철곰 정권", desc: "득점권에서 파워 +80", val: 3, tag: "clutch", boon: "ivan", noPick: true, fx: { sit: { rispPow: 80 } } },
   b_ivan_body: { name: "강철 육체", desc: "부상 확률 -35%", val: 3, tag: "grit", boon: "ivan", noPick: true, fx: { injury: -0.35 } },
-  b_ivan_drill: { name: "지옥 훈련", desc: "근력 · 수비 훈련 효율 +12%", val: 3, tag: "power", boon: "ivan", noPick: true, fx: { train: { power: 0.12, def: 0.12 } } },
-  b_ivan_log: { name: "통나무 스쿼트", desc: "경기 수비 +35 · 훈련 체력 소모 -10%", val: 3, tag: "def", boon: "ivan", noPick: true, fx: { add: { def: 35 }, stam: 0.1 } },
+  b_ivan_drill: { name: "지옥 훈련", desc: "근력 · 주루 훈련 효율 +12%", val: 3, tag: "power", boon: "ivan", noPick: true, fx: { train: { power: 0.12, run: 0.12 } } },
+  b_ivan_log: { name: "통나무 스쿼트", desc: "경기 파워 +30 · 훈련 체력 소모 -10%", val: 3, tag: "power", boon: "ivan", noPick: true, fx: { add: { power: 30 }, stam: 0.1 } },
   b_violet_stretch: { name: "체조 스트레칭", desc: "부상 확률 -30% · 주루 훈련 효율 +10%", val: 3, tag: "grit", boon: "violet", noPick: true, fx: { injury: -0.3, train: { run: 0.1 } } },
   b_violet_spin: { name: "피루엣 밸런스", desc: "경기 주루 +40", val: 3, tag: "speed", boon: "violet", noPick: true, fx: { add: { run: 40 } } },
-  b_violet_blind: { name: "안 보고 받기", desc: "2스트라이크 맞히기 +50", val: 3, tag: "contact", boon: "violet", noPick: true, fx: { sit: { twoK: 50 } } },
-  b_violet_stage: { name: "무대 체질", desc: "7회부터 맞히기 · 파워 +40 · 인기도 +20%", val: 3, tag: "clutch", boon: "violet", noPick: true, fx: { sit: { late: 40 }, fame: 0.2 } },
+  b_violet_blind: { name: "안 보고 받기", desc: "2스트라이크 타격 +50", val: 3, tag: "contact", boon: "violet", noPick: true, fx: { sit: { twoK: 50 } } },
+  b_violet_stage: { name: "무대 체질", desc: "7회부터 타격 · 파워 +40 · 인기도 +20%", val: 3, tag: "clutch", boon: "violet", noPick: true, fx: { sit: { late: 40 }, fame: 0.2 } },
   // ── 듀오 축복 (두 사람 축복을 하나씩 가지면 둘 중 누구를 만나도 3장에 섞여 나옴) ──
-  d_kai_zena: { name: "질풍번개", desc: "경기 주루 +60 · 수비 +30", val: 7, tag: "speed", boon: ["kai", "zena"], noPick: true, fx: { add: { run: 60, def: 30 } } },
+  d_kai_zena: { name: "질풍번개", desc: "경기 주루 +60 · 타격 +30", val: 7, tag: "speed", boon: ["kai", "zena"], noPick: true, fx: { add: { run: 60, hit: 30 } } },
   d_igna_ivan: { name: "용광로", desc: "경기 파워 +50 · 득점권 파워 +40", val: 7, tag: "power", boon: ["igna", "ivan"], noPick: true, fx: { add: { power: 50 }, sit: { rispPow: 40 } } },
-  d_soy_violet: { name: "채찍과 후프", desc: "경기 맞히기 +45 · 2스트라이크 맞히기 +40", val: 7, tag: "contact", boon: ["soyoung", "violet"], noPick: true, fx: { add: { hit: 45 }, sit: { twoK: 40 } } },
+  d_soy_violet: { name: "채찍과 후프", desc: "경기 타격 +45 · 2스트라이크 타격 +40", val: 7, tag: "contact", boon: ["soyoung", "violet"], noPick: true, fx: { add: { hit: 45 }, sit: { twoK: 40 } } },
   d_lily_mei: { name: "비 오는 날 만두", desc: "부상 확률 -40% · 모든 훈련 +5%", val: 7, tag: "grit", boon: ["lily", "mei"], noPick: true, fx: { injury: -0.4, train: { all: 0.05 } } },
-  d_kai_igna: { name: "불바람", desc: "7회부터 맞히기 · 파워 +50 · 경기 파워 +20", val: 7, tag: "clutch", boon: ["kai", "igna"], noPick: true, fx: { sit: { late: 50 }, add: { power: 20 } } },
-  d_zena_soy: { name: "번개 채찍", desc: "경기 맞히기 +30 · 득점권 맞히기 +45", val: 7, tag: "contact", boon: ["zena", "soyoung"], noPick: true, fx: { add: { hit: 30 }, sit: { rispHit: 45 } } },
-  d_ivan_mei: { name: "강유상제", desc: "경기 파워 +40 · 수비 +40", val: 7, tag: "power", boon: ["ivan", "mei"], noPick: true, fx: { add: { power: 40, def: 40 } } },
+  d_kai_igna: { name: "불바람", desc: "7회부터 타격 · 파워 +50 · 경기 파워 +20", val: 7, tag: "clutch", boon: ["kai", "igna"], noPick: true, fx: { sit: { late: 50 }, add: { power: 20 } } },
+  d_zena_soy: { name: "번개 채찍", desc: "경기 타격 +30 · 득점권 타격 +45", val: 7, tag: "contact", boon: ["zena", "soyoung"], noPick: true, fx: { add: { hit: 30 }, sit: { rispHit: 45 } } },
+  d_ivan_mei: { name: "강유상제", desc: "경기 파워 +40 · 타격 +40", val: 7, tag: "power", boon: ["ivan", "mei"], noPick: true, fx: { add: { power: 40, hit: 40 } } },
   d_violet_lily: { name: "무지개 후프", desc: "휴식 회복 +30% · 호감 +25% · 슬럼프 무시", val: 7, tag: "luck", boon: ["violet", "lily"], noPick: true, fx: { rest: 0.3, aff: 0.25, slump: -1 } },
   // 양날
   glass: { name: "유리 몸 천재", desc: "모든 훈련 +18% / 부상 확률 +60%", val: 2, risk: true, fx: { train: { all: 0.18 }, injury: 0.6 } },
   gambler: { name: "도박꾼", desc: "자금 +60% / 슬럼프 2배", val: 2, risk: true, fx: { money: 0.6, slump: 1 } },
-  allin: { name: "한방주의", desc: "경기 파워 +80 / 경기 맞히기 -50", val: 2, risk: true, fx: { add: { power: 80, hit: -50 } } },
+  allin: { name: "한방주의", desc: "경기 파워 +80 / 경기 타격 -50", val: 2, risk: true, fx: { add: { power: 80, hit: -50 } } },
   cram: { name: "실전파", desc: "경기 경험치 +30% / 훈련 -15%", val: 2, risk: true, fx: { gameXp: 0.3, train: { all: -0.15 } } },
   showoff: { name: "관종", desc: "인기도 +80% / 감독 신뢰 깎임 2배", val: 2, risk: true, fx: { fame: 0.8, trust: 1 } },
   // 나쁜 것 (이벤트)
-  clutchBad: { name: "찬스 약함", desc: "득점권에서 맞히기 -60", val: -6, bad: true, noPick: true, fx: { sit: { rispHit: -60 } } },
+  clutchBad: { name: "찬스 약함", desc: "득점권에서 타격 -60", val: -6, bad: true, noPick: true, fx: { sit: { rispHit: -60 } } },
   fragile: { name: "부상 체질", desc: "부상 확률 +50%", val: -6, bad: true, noPick: true, fx: { injury: 0.5 } },
   // 세트 (같은 태그 3장)
-  set_clutch: { name: "클러치 히터", desc: "찬스 세트: 득점권 맞히기 · 파워 +60", val: 6, set: "clutch", noPick: true, fx: { sit: { rispHit: 60, rispPow: 60 } } },
-  set_contact: { name: "타격 기계", desc: "컨택 세트: 경기 맞히기 +60", val: 6, set: "contact", noPick: true, fx: { add: { hit: 60 } } },
+  set_clutch: { name: "클러치 히터", desc: "찬스 세트: 득점권 타격 · 파워 +60", val: 6, set: "clutch", noPick: true, fx: { sit: { rispHit: 60, rispPow: 60 } } },
+  set_contact: { name: "타격 기계", desc: "컨택 세트: 경기 타격 +60", val: 6, set: "contact", noPick: true, fx: { add: { hit: 60 } } },
   set_power: { name: "거포 각성", desc: "파워 세트: 경기 파워 +60 · 홈런 경험치 +40%", val: 6, set: "power", noPick: true, fx: { add: { power: 60 }, hrXp: 0.4 } },
   set_speed: { name: "바람의 아들", desc: "스피드 세트: 경기 주루 +80", val: 6, set: "speed", noPick: true, fx: { add: { run: 80 } } },
-  set_def: { name: "골든 글러브", desc: "수비 세트: 경기 수비 +80 · 감독 신뢰 깎임 절반", val: 6, set: "def", noPick: true, fx: { add: { def: 80 }, trust: -0.5 } },
   set_grit: { name: "불굴", desc: "근성 세트: 컨디션 최악 없음 · 부상 기간 절반", val: 6, set: "grit", noPick: true, fx: { condFloor: true, injuryDur: -0.5 } },
   set_luck: { name: "럭키 가이", desc: "행운 세트: 각성 확률 3배 · 대성공 +5%", val: 6, set: "luck", noPick: true, fx: { awaken: 2, great: 0.05 } },
 } satisfies Record<string, Skill>;
@@ -280,9 +279,9 @@ const lvMul = (c: { blv?: Partial<Record<SkillId, number>> }, id: SkillId) => (s
 /** 특수능력 효과 합 (축복은 레벨 배율) */
 export function fxOf(c: Pick<Career, "skills"> & { blv?: Partial<Record<SkillId, number>> }) {
   const f = {
-    add: { hit: 0, power: 0, run: 0, def: 0 } as Stats,
+    add: { hit: 0, power: 0, run: 0 } as Stats,
     sit: {} as NonNullable<Batter["sit"]>,
-    train: { hit: 0, power: 0, run: 0, def: 0, special: 0, all: 0 } as Record<TrainKey | "all", number>,
+    train: { hit: 0, power: 0, run: 0, special: 0, all: 0 } as Record<TrainKey | "all", number>,
     injury: 0, injuryDur: 0, great: 0, gameXp: 0, hrXp: 0, money: 0, fame: 0, awaken: 0, slump: 0, trust: 0, condFloor: false, calm: false,
     aff: 0, rest: 0, fail: 0, stam: 0,
   };
@@ -387,7 +386,7 @@ export const BONDS: Record<CharId, Bond> = {
     lines: ["채찍 소리가 난다. 소영이 공을 하나씩 쳐낸다.", "\"공은 끝까지 봐야지~\"", "\"손목이 채찍처럼! 2스트라이크 무서울 거 없어.\"", "\"채찍 스윙! 어디로 오든 닿을걸?\""],
   },
   lily: {
-    stat: "def", place: "비 오는 산책로", pick: ["우산 들고 수비 연습", "같이 비 구경"],
+    stat: "power", place: "비 오는 산책로", pick: ["우산 들고 스윙 연습", "같이 비 구경"],
     lines: ["우산을 쓴 릴리가 빗속에 서 있다.", "\"서두르지 않아도 돼. 둥실둥실~\"", "\"마음이 고요하면 공도 천천히 보여.\"", "\"우산 스윙… 타구가 오래오래 날 거야.\""],
   },
   zena: {
@@ -403,7 +402,7 @@ export const BONDS: Record<CharId, Bond> = {
     lines: ["거대한 그림자. 이반이 통나무를 들고 있다.", "\"힘. 힘이 전부다.\"", "\"찬스에서 곰처럼. 한 방이면 된다.\"", "\"철곰 스윙. 맞으면 끝이다.\""],
   },
   mei: {
-    stat: "def", place: "딤섬 가게 뒷마당", pick: ["태극권 수련", "만두 빚기"],
+    stat: "hit", place: "딤섬 가게 뒷마당", pick: ["태극권 수련", "만두 빚기"],
     lines: ["찜기를 든 메이.", "\"힘을 빼. 공도 그래.\"", "\"빈틈은 늘 있어.\"", "\"태극 스윙. 수비 사이로 쏙.\""],
   },
   violet: {
@@ -443,13 +442,12 @@ export const CONSUMABLES: Record<ConsumableId, { name: string; desc: string; pri
 };
 export const CONSUMABLE_IDS = Object.keys(CONSUMABLES) as ConsumableId[];
 
-/** 장비 4종 × 3단계 — 그 훈련 효율 + 경기 능력치. 단계마다 인기도 조건 */
-export type GearId = "bat" | "dumbbell" | "spike" | "glove";
+/** 장비 3종 × 3단계 — 그 훈련 효율 + 경기 능력치. 단계마다 인기도 조건 (글러브는 수비 능력치와 함께 뺌) */
+export type GearId = "bat" | "dumbbell" | "spike";
 export const GEAR: Record<GearId, { name: string; stat: StatKey; train: TrainKey; tiers: [string, string, string] }> = {
   bat: { name: "배트", stat: "hit", train: "hit", tiers: ["알루미늄 배트", "카본 배트", "명장의 배트"] },
   dumbbell: { name: "웨이트 장비", stat: "power", train: "power", tiers: ["아령 세트", "파워 랙", "개인 웨이트룸"] },
   spike: { name: "스파이크", stat: "run", train: "run", tiers: ["러닝 스파이크", "경량 스파이크", "맞춤 스파이크"] },
-  glove: { name: "글러브", stat: "def", train: "def", tiers: ["연습 글러브", "프로 글러브", "명품 글러브"] },
 };
 export const GEAR_IDS = Object.keys(GEAR) as GearId[];
 export const GEAR_TIER = [
@@ -462,7 +460,7 @@ export const GEAR_TIER = [
  * 결과 몫 GP ~10%, 그리고 「코치 전부 < 인연」 이어야 함 (훈련 보너스가 인연을 못 이기게) — 시뮬로 확인.
  */
 
-export type GpId = "hitCoach" | "powCoach" | "runCoach" | "defCoach" | "cheer";
+export type GpId = "hitCoach" | "powCoach" | "runCoach" | "cheer";
 /** 코치 등급 (지금은 전부 C · 뽑기가 붙으면 등급별로 뽑힘) */
 export type CoachGrade = "C" | "B" | "A" | "S";
 /** train = 그 훈련 효율 · limit = 그 능력치 한계 끌어올림 · rest = 치어리더 회복. C = 기본(효과 없음) */
@@ -475,10 +473,9 @@ export const COACH_GRADE: Record<CoachGrade, { train: number; limit: number; res
 const coachDesc = (g: CoachGrade, train: string, stat: string) =>
   COACH_GRADE[g].train ? `${train} +${Math.round(COACH_GRADE[g].train * 100)}% · ${stat} 한계 +${Math.round(COACH_GRADE[g].limit * 100)}%` : `기본 — 등급이 오르면 ${train} · ${stat} 한계 ↑`;
 export const GP_BOOSTS: Record<GpId, { name: string; desc: (g: CoachGrade) => string; price: number; train?: TrainKey }> = {
-  hitCoach: { name: "타격 코치", desc: (g) => coachDesc(g, "타격 훈련", "맞히기"), price: 250, train: "hit" },
+  hitCoach: { name: "타격 코치", desc: (g) => coachDesc(g, "타격 훈련", "타격"), price: 250, train: "hit" },
   powCoach: { name: "근력 코치", desc: (g) => coachDesc(g, "근력 훈련", "파워"), price: 250, train: "power" },
   runCoach: { name: "주루 코치", desc: (g) => coachDesc(g, "주루 훈련", "주루"), price: 250, train: "run" },
-  defCoach: { name: "수비 코치", desc: (g) => coachDesc(g, "수비 훈련", "수비"), price: 250, train: "def" },
   cheer: { name: "치어리더", desc: (g) => (COACH_GRADE[g].rest ? `휴식 · 개인정비 회복 +${Math.round(COACH_GRADE[g].rest * 100)}%` : "기본 — 등급이 오르면 휴식 회복 ↑"), price: 200 },
 };
 /** 이 판 코치 등급 (육성 모드엔 코치를 안 씀 — gp 가 비어 있음. 시뮬은 TUNE.coach 로 바꿔 봄) */
@@ -682,7 +679,7 @@ export function newCareer(o: NewCareerOpts): Career {
     fame: 0,
     money: 1000,
     salary: 3000,
-    tCount: { hit: 0, power: 0, run: 0, def: 0, special: 0 },
+    tCount: { hit: 0, power: 0, run: 0, special: 0 },
     gear: {},
     bag: {},
     usedItem: false,
@@ -737,7 +734,7 @@ export const spUses = (c: Career) => (c.learned ? 2 + spLv(c) : 0);
 
 export function ovrOf(c: Pick<Career, "stats" | "skills" | "learned" | "spXp"> & { blv?: Partial<Record<SkillId, number>> }) {
   const s = c.stats;
-  let v = (s.hit + s.power + s.run + s.def) / 4;
+  let v = (s.hit + s.power + s.run) / 3;
   for (const id of c.skills) v += skill(id).val * lvMul(c, id);
   if (c.learned) v += LEARNED_VAL + (Math.min(5, 1 + Math.floor((c.spXp ?? 0) / SP_EVERY)) - 1) * SP_LV_VAL;
   return Math.round(clamp(v, 0, 999));
@@ -813,7 +810,7 @@ export const posOf = (c: Pick<Career, "pos" | "type">) => c.pos ?? TYPES[c.type]
 export function careerBatter(c: Career): Batter {
   const f = COND_GAME[c.cond] * (c.stamina < 20 ? 0.9 : 1);
   const fx = fxOf(c);
-  const gear = { hit: 0, power: 0, run: 0, def: 0 } as Stats;
+  const gear = { hit: 0, power: 0, run: 0 } as Stats;
   for (const id of GEAR_IDS) {
     const t = c.gear[id];
     if (t) gear[GEAR[id].stat] += GEAR_TIER[t - 1].game;
@@ -827,7 +824,6 @@ export function careerBatter(c: Career): Batter {
     hit: v("hit", f),
     power: v("power", f),
     run: v("run", 1),
-    def: v("def", 1),
     learned: c.learned,
     sit: fx.sit,
     look: c.look,
@@ -1382,7 +1378,7 @@ export function finishBattle(c: Career, pts: number, auto = false): TurnOut {
   return { title: `${ch.name}와 대결 — 승리!`, tone: "great", lines, delta: diffOf(c, a), char: id, aff, extra };
 }
 
-/** 대결 자동 (봇 · 「자동으로」) — 맞히기 · 파워 · 실력(σ)으로 공마다 안타/홈런 확률 */
+/** 대결 자동 (봇 · 「자동으로」) — 타격 · 파워 · 실력(σ)으로 공마다 안타/홈런 확률 */
 export function autoBattle(c: Career, rng: Rng, sigma = 0.075): number {
   const bt = c.battle;
   if (!bt) return 0;
@@ -1724,7 +1720,6 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
       hit: singles * 7 + l.d2 * 6 + l.d3 * 5 + l.hr * 4 + l.bb * 3 + (l.ab - l.h) * 0.5 + 1.5,
       power: l.d2 * 5 + l.hr * 11 * (1 + fx.hrXp) + 1.5,
       run: l.d3 * 8 + l.d2 * 3 + l.r * 3.5 + l.bb * 1.5 + 4,
-      def: 6,
     };
     // 경기 평가 — 잘 칠수록 성장 배율이 커짐 (직접 친 실력이 크게 남게)
     grade = gameGrade(l, g.missions, c.type);
@@ -1844,13 +1839,13 @@ export function endSeason(c: Career): SeasonSummary {
     talentReveal = TALENTS[c.talent].g;
     lines.push(`스카우트 평가: 숨은 재능 ${talentReveal}급`);
   }
-  // 노쇠 (8년차부터): 발 · 수비가 먼저
+  // 노쇠 (8년차부터): 발이 먼저
   let decline: Partial<Stats> | undefined;
   if (c.season >= 8) {
     decline = {};
     const y = c.season - 7;
     for (const k of STAT_KEYS) {
-      const rate = (k === "run" || k === "def" ? 0.025 : 0.01) * y;
+      const rate = (k === "run" ? 0.025 : 0.01) * y;
       const before = c.stats[k];
       c.stats[k] *= 1 - rate;
       decline[k] = Math.round(c.stats[k]) - Math.round(before);
@@ -1903,7 +1898,6 @@ export function retireCard(c: Career) {
   if (t.rbi >= 400) nick.push("해결사");
   if (t.h >= 1000) nick.push("천 안타의 사나이");
   if (c.stats.run >= 800) nick.push("바람의 아들");
-  if (c.stats.def >= 800) nick.push("수비의 신");
   for (const id of c.skills) if (skill(id).set) nick.push(skill(id).name);
   if (c.awakened) nick.push("각성자");
   if (c.learned) nick.push(`${charById(c.learned).name}의 제자`);
@@ -2003,7 +1997,7 @@ export function botTurn(c: Career, pol: Policy, rng: Rng): Action | null {
 /** 봇 상점: 주력 장비 먼저 올리고, 체력 모자라면 드링크 */
 export function botShop(c: Career) {
   const best = [...STAT_KEYS].sort((a, b) => TYPES[c.type].apt[b] - TYPES[c.type].apt[a]);
-  const gearFor: Record<StatKey, GearId> = { hit: "bat", power: "dumbbell", run: "spike", def: "glove" };
+  const gearFor: Record<StatKey, GearId> = { hit: "bat", power: "dumbbell", run: "spike" };
   for (const k of best.slice(0, 2)) {
     const n = gearNext(c, gearFor[k]);
     if (n && !n.why && c.money - n.price > 400) buyGear(c, gearFor[k]);

@@ -2,7 +2,7 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { CAREER_DIFF, applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
 import { CHARS, type CharId } from "@/lib/baseball/data";
 import { DEFAULT_LOOK } from "@/lib/baseball/look";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
@@ -40,6 +40,8 @@ function normalize(c: Career): Career {
   c.aff ??= {};
   c.blv ??= {};
   c.battle ??= null;
+  // 없어진 특수능력 (수비 세트 「골든 글러브」 등) 은 지움
+  c.skills = (c.skills ?? []).filter((id) => id in SKILLS);
   // 육성 모드 코치는 뺌
   c.gp = [];
   // 육성 난이도는 중급 하나로 통일

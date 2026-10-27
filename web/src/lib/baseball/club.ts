@@ -2,7 +2,7 @@
  * 구단 (구단 관리 · 온라인 대전) — 카드 · 등급 · 종합(OVR) · 타선 → 경기 팀.
  *
  * 종합(OVR, 0~1000)
- *   타자: 맞히기 32% · 파워 28% · 수비 22% · 주루 18%
+ *   타자: 타격 41% · 파워 36% · 주루 23% (수비 능력치는 뺌 — 예전 32 · 28 · 18 비율 그대로 합 100%로)
  *   투수: 제구 34% · 변화 34% · 구속 22% (120~165km/h → 0~1000) · 체력 10%
  * 등급: C < 300 · B 300~499 · A 500~699 · S 700~849 · SS 850+
  * 처음 구단은 전부 C (종합 200~299). 육성 모드에서 은퇴한 선수(명예의 전당)는 카드로 자동 등록.
@@ -22,14 +22,14 @@ export const GRADE_MIN: Record<Grade, number> = { C: 0, B: 300, A: 500, S: 700, 
 export const GRADE_COLOR: Record<Grade, string> = { C: "#9aa3b8", B: "#4fb3ff", A: "#b46bff", S: "#ffcf3a", SS: "#ff4d8d" };
 export const gradeOf = (ovr: number): Grade => (ovr >= 850 ? "SS" : ovr >= 700 ? "S" : ovr >= 500 ? "A" : ovr >= 300 ? "B" : "C");
 
-const W_BAT = { hit: 0.32, power: 0.28, def: 0.22, run: 0.18 } as const;
+const W_BAT = { hit: 0.41, power: 0.36, run: 0.23 } as const;
 const W_PIT = { control: 0.34, brk: 0.34, velo: 0.22, stamina: 0.1 } as const;
 /** 구속 → 0~1000 */
 export const veloN = (kmh: number) => clamp(((kmh - 120) / 45) * 1000, 0, 1000);
 /** 구속 능력치(0~1000) → km/h (veloN 의 반대) */
 export const veloKmh = (n: number) => Math.round(120 + (n / 1000) * 45);
-export const batOvr = (b: { hit: number; power: number; run: number; def: number }) =>
-  Math.round(b.hit * W_BAT.hit + b.power * W_BAT.power + b.def * W_BAT.def + b.run * W_BAT.run);
+export const batOvr = (b: { hit: number; power: number; run: number }) =>
+  Math.round(b.hit * W_BAT.hit + b.power * W_BAT.power + b.run * W_BAT.run);
 export const pitOvr = (p: { control: number; brk: number; velo: number; stamina: number }) =>
   Math.round(p.control * W_PIT.control + p.brk * W_PIT.brk + veloN(p.velo) * W_PIT.velo + p.stamina * W_PIT.stamina);
 
@@ -49,7 +49,6 @@ export interface BatCard {
   hit: number;
   power: number;
   run: number;
-  def: number;
   look?: Look;
   /** 명예의 전당 출신 (육성 모드 은퇴 선수) */
   hof?: { nick: string; seasons: number; hr: number; avg: number };
@@ -72,8 +71,8 @@ export interface PitCard {
  * - 코치: 맡은 능력치를 경기 출전 선수 전원에게 (등급마다 C +1 · B +2 · A +3 · S +4 · SS +5)
  * - 치어리더: 아직 효과 없음 (자리 · 카드만, 쓰임새는 나중에)
  */
-export type BuffStat = "hit" | "power" | "run" | "def" | "control" | "brk" | "velo";
-export const BUFF_NAME: Record<BuffStat, string> = { hit: "맞히기", power: "파워", run: "주루", def: "수비", control: "제구", brk: "변화", velo: "구속" };
+export type BuffStat = "hit" | "power" | "run" | "control" | "brk" | "velo";
+export const BUFF_NAME: Record<BuffStat, string> = { hit: "타격", power: "파워", run: "주루", control: "제구", brk: "변화", velo: "구속" };
 export interface StaffCard {
   kind: "coach" | "cheer";
   id: string;
@@ -84,18 +83,17 @@ export interface StaffCard {
   /** 코치: 경기 보너스 능력치 (치어리더는 빈 배열) */
   buff: BuffStat[];
 }
-/** 처음 코치 (타자 3 · 투수 3, 투수 쪽 체력 코치는 없음) · 치어리더 3 — 모두 C 등급 */
+/** 처음 코치 (타자 2 · 투수 3 — 수비 능력치를 빼서 수비 코치 없음, 투수 쪽 체력 코치도 없음) · 치어리더 3 — 모두 C 등급 */
 export const COACH_DEFS: [name: string, title: string, buff: BuffStat][] = [
   ["김타격", "타격 코치", "hit"],
   ["김주루", "주루 코치", "run"],
-  ["김수비", "수비 코치", "def"],
   ["김구속", "구속 코치", "velo"],
   ["김제구", "제구 코치", "control"],
   ["김변화", "변화 코치", "brk"],
 ];
 export const CHEER_NAMES = ["김하나", "김두나", "김세나"];
 /** 지금 코치 · 치어리더 규칙 판 (바뀌면 저장된 구단의 스태프를 새로 깔아 줌) */
-export const STAFF_V = 3;
+export const STAFF_V = 4;
 export function defaultStaff(id: (p: string) => string): { coaches: StaffCard[]; cheers: StaffCard[] } {
   return {
     coaches: COACH_DEFS.map(([name, title, buff]) => ({ kind: "coach", id: id("s"), name, title, grade: "C", buff: [buff] })),
@@ -129,7 +127,7 @@ export const buffOf = (c: StaffCard) => (c.kind === "coach" ? GRADE_BUFF[c.grade
 
 export const LINEUP_POS = ["CF", "2B", "RF", "1B", "3B", "LF", "C", "SS", "DH"];
 export const POS_NAME: Record<string, string> = { C: "포수", "1B": "1루수", "2B": "2루수", "3B": "3루수", SS: "유격수", LF: "좌익수", CF: "중견수", RF: "우익수", DH: "지명타자", P: "투수" };
-export const SLOTS = { lineup: 9, bench: 4, rotation: 5, bullpen: 5, closer: 1, coach: 6, cheer: 3 } as const;
+export const SLOTS = { lineup: 9, bench: 4, rotation: 5, bullpen: 5, closer: 1, coach: 5, cheer: 3 } as const;
 export type Area = keyof typeof SLOTS;
 export const AREA_KIND: Record<Area, CardKind> = { lineup: "bat", bench: "bat", rotation: "pit", bullpen: "pit", closer: "pit", coach: "coach", cheer: "cheer" };
 
@@ -182,12 +180,12 @@ function namer(rng: Rng) {
 }
 
 /** 종합이 정확히 target 이 되도록 타자 능력치 맞추기 (모양 tilt + 흔들림) */
-export function genBatStats(rng: Rng, target: number, tilt: Partial<Record<"hit" | "power" | "run" | "def", number>> = {}) {
-  const st = { hit: 0, power: 0, run: 0, def: 0 };
-  for (const k of ["hit", "power", "run", "def"] as const) st[k] = target + (tilt[k] ?? 0) + Math.round(rng.gauss() * 25);
+export function genBatStats(rng: Rng, target: number, tilt: Partial<Record<"hit" | "power" | "run", number>> = {}) {
+  const st = { hit: 0, power: 0, run: 0 };
+  for (const k of ["hit", "power", "run"] as const) st[k] = target + (tilt[k] ?? 0) + Math.round(rng.gauss() * 25);
   // 가중치 합 = 1 → 전부 같은 만큼 옮기면 종합도 그만큼
   const d = target - batOvr(st);
-  for (const k of ["hit", "power", "run", "def"] as const) st[k] = clamp(Math.round(st[k] + d), 1, 999);
+  for (const k of ["hit", "power", "run"] as const) st[k] = clamp(Math.round(st[k] + d), 1, 999);
   for (let i = 0; i < 40 && batOvr(st) !== target; i++) st.hit = clamp(st.hit + (batOvr(st) < target ? 1 : -1), 1, 999);
   return st;
 }
@@ -214,17 +212,17 @@ export function genPitStats(rng: Rng, target: number, role: Pitcher["role"]) {
   return st;
 }
 
-/** 타순 모양: 1·2번 맞히기 · 발, 3~5번 힘, 포수 · 유격수 수비 */
-const BAT_TILT: Record<string, Partial<Record<"hit" | "power" | "run" | "def", number>>> = {
-  CF: { hit: 30, power: -40, run: 60, def: 20 },
-  "2B": { hit: 40, power: -30, run: 20, def: 10 },
-  RF: { hit: 10, power: 30, run: 0, def: 0 },
-  "1B": { hit: 0, power: 60, run: -50, def: -10 },
-  "3B": { hit: 0, power: 40, run: -20, def: 10 },
-  LF: { hit: 10, power: 20, run: 0, def: -10 },
-  C: { hit: -20, power: 0, run: -50, def: 60 },
-  SS: { hit: 0, power: -40, run: 30, def: 60 },
-  DH: { hit: 20, power: 60, run: -60, def: -80 },
+/** 타순 모양: 1·2번 타격 · 발, 3~5번 힘 */
+const BAT_TILT: Record<string, Partial<Record<"hit" | "power" | "run", number>>> = {
+  CF: { hit: 30, power: -40, run: 60 },
+  "2B": { hit: 40, power: -30, run: 20 },
+  RF: { hit: 10, power: 30, run: 0 },
+  "1B": { hit: 0, power: 60, run: -50 },
+  "3B": { hit: 0, power: 40, run: -20 },
+  LF: { hit: 10, power: 20, run: 0 },
+  C: { hit: -20, power: 0, run: -50 },
+  SS: { hit: 0, power: -40, run: 30 },
+  DH: { hit: 20, power: 60, run: -60 },
 };
 
 /** 새 구단 (전부 C 등급, 종합 200~299) */
@@ -297,7 +295,6 @@ export function hofCard(e: HofEntry): BatCard {
     hit: e.stats.hit,
     power: e.stats.power,
     run: e.stats.run,
-    def: e.stats.def,
     look: e.look,
     hof: { nick: e.nick, seasons: e.seasons, hr: e.hr, avg: e.avg },
   };
@@ -372,7 +369,7 @@ const ovrs = (club: Club, ids: (string | null)[]) => ids.map((id) => cardById(cl
 
 /** 코치 · 치어리더 보너스 합 */
 export function staffBuffs(club: Club): Record<BuffStat, number> {
-  const out: Record<BuffStat, number> = { hit: 0, power: 0, run: 0, def: 0, control: 0, brk: 0, velo: 0 };
+  const out: Record<BuffStat, number> = { hit: 0, power: 0, run: 0, control: 0, brk: 0, velo: 0 };
   for (const id of [...club.slots.coach, ...club.slots.cheer]) {
     const c = cardById(club, id);
     if (c && isStaff(c)) for (const b of c.buff) out[b] += buffOf(c);
@@ -397,7 +394,7 @@ export function buildTeam(club: Club): Team {
   const up = (v: number, k: BuffStat) => clamp(v + bf[k], 1, 999);
   const batters: Batter[] = club.slots.lineup.map((id, i) => {
     const c = cardById(club, id) as BatCard;
-    return { name: c.name, num: c.num, pos: club.lpos[i], bats: c.bats, hit: up(c.hit, "hit"), power: up(c.power, "power"), run: up(c.run, "run"), def: up(c.def, "def"), look: c.look };
+    return { name: c.name, num: c.num, pos: club.lpos[i], bats: c.bats, hit: up(c.hit, "hit"), power: up(c.power, "power"), run: up(c.run, "run"), look: c.look };
   });
   const pit = (c: Card | undefined, role: Pitcher["role"]): Pitcher | null =>
     c && c.kind === "pit" ? { name: c.name, num: c.num, role, throws: c.throws, control: up(c.control, "control"), velo: up(c.velo, "velo"), brk: up(c.brk, "brk"), stamina: c.stamina, rep: c.rep } : null;

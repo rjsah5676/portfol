@@ -4,7 +4,7 @@
  */
 import { swing, type SwingResult } from "./contact";
 import type { GameState, PAResult } from "./game";
-import { STAMINA_COST, applyPlay, batSide, batter, callPitch, drainStamina, fieldSide, pitchThrown } from "./game";
+import { STAMINA_COST, applyPlay, batSide, batter, callPitch, drainStamina, pitchThrown } from "./game";
 import { simulatePlay, type FieldOut } from "./play";
 import { inZone, plateCross, type Pitch } from "./pitch";
 import type { Rng } from "./rng";
@@ -72,21 +72,13 @@ function judge(s: GameState, p: Pitch, d: SwingDecision | null, rng: Rng, cz?: {
   const sw = swing({ pitch: p, at, e: d.e, bats: b.bats, hit, power, bunt: d.bunt, special: d.special, cz: d.cz }, rng);
   if (sw.kind === "whiff") return { call: "swingMiss", at, sw, bad: true };
   if (sw.kind === "foul") return { call: "foul", at, sw, bad: false };
-  const fs = s.sides[fieldSide(s)];
   const bs = s.sides[batSide(s)];
-  const def = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => {
-    if (i === 0) return 500;
-    const pos = ["", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"][i];
-    const pl = fs.team.batters.find((x) => x.pos === pos) ?? fs.team.batters[i];
-    return pl.def;
-  });
   const field = simulatePlay(
     {
       ball: sw.ball,
       bases: s.bases.map((id, k) => (id === null ? null : { id, base: k + 1, run: playStat(bs.team.batters[id], bs.team.batters[id].run) })),
       batter: { id: bs.order, run: playStat(b, b.run) },
       outs: s.outs,
-      def,
     },
     rng
   );

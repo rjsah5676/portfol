@@ -2,7 +2,7 @@
  * 선수 · 팀 · 마선수(픽셀파이트 캐릭터) 데이터.
  *
  * 능력치는 0 ~ 1000 (게임빌 프로야구처럼 일반 선수 300~650, 마선수 700~950).
- *   타자: hit(맞히기 · 타이밍 창) · power(타구 속도) · run(주루) · def(수비 · 송구)
+ *   타자: hit(타격 · 타이밍 창) · power(타구 속도) · run(주루) — 수비 능력치는 없음 (수비수는 모두 같은 실력)
  *   투수: control(제구) · velo(직구 최고 구속 km/h) · brk(변화) · stamina(체력 → 던질 수 있는 공 수)
  */
 import type { PitchKind } from "./pitch";
@@ -19,7 +19,7 @@ export interface SpecialChar {
   swing: { name: string; desc: string };
   bats: "R" | "L";
   throws: "R" | "L";
-  bat: { hit: number; power: number; run: number; def: number };
+  bat: { hit: number; power: number; run: number };
   pit: { control: number; velo: number; brk: number; stamina: number; rep: PitchKind[] };
 }
 
@@ -33,7 +33,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "질풍 스윙", desc: "총알 같은 직선 타구 · 수비가 반응을 못 함" },
     bats: "R",
     throws: "R",
-    bat: { hit: 820, power: 760, run: 880, def: 780 },
+    bat: { hit: 820, power: 760, run: 880 },
     pit: { control: 700, velo: 158, brk: 650, stamina: 380, rep: ["FB", "SL", "CT", "FK"] },
   },
   {
@@ -44,7 +44,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "업화 스윙", desc: "불타는 타구 — 처음 잡으려는 수비는 화상으로 놓침" },
     bats: "L",
     throws: "R",
-    bat: { hit: 720, power: 900, run: 650, def: 620 },
+    bat: { hit: 720, power: 900, run: 650 },
     pit: { control: 760, velo: 154, brk: 880, stamina: 360, rep: ["FB", "SL", "CB", "CH"] },
   },
   {
@@ -55,7 +55,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "채찍 스윙", desc: "어디로 온 공이든 닿음 (볼도 침) · 이상적인 각도" },
     bats: "R",
     throws: "R",
-    bat: { hit: 900, power: 640, run: 700, def: 820 },
+    bat: { hit: 900, power: 640, run: 700 },
     pit: { control: 880, velo: 146, brk: 900, stamina: 330, rep: ["FB", "CB", "CH", "SK"] },
   },
   {
@@ -66,7 +66,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "우산 스윙", desc: "타구가 우산처럼 둥실 — 오래 떠서 멀리 감" },
     bats: "L",
     throws: "L",
-    bat: { hit: 760, power: 600, run: 820, def: 700 },
+    bat: { hit: 760, power: 600, run: 820 },
     pit: { control: 820, velo: 138, brk: 860, stamina: 300, rep: ["FB", "CB", "CH", "FK"] },
   },
   {
@@ -77,7 +77,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "번개 스윙", desc: "번개가 떨어져 수비 전원 감전 (2초간 느려짐)" },
     bats: "R",
     throws: "L",
-    bat: { hit: 800, power: 780, run: 860, def: 760 },
+    bat: { hit: 800, power: 780, run: 860 },
     pit: { control: 780, velo: 152, brk: 900, stamina: 350, rep: ["FB", "SL", "FK", "CT"] },
   },
   {
@@ -88,7 +88,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "Ctrl+A 스윙", desc: "선택 박스로 수비 전원 일시정지 (1.5초)" },
     bats: "L",
     throws: "R",
-    bat: { hit: 780, power: 700, run: 600, def: 650 },
+    bat: { hit: 780, power: 700, run: 600 },
     pit: { control: 900, velo: 148, brk: 760, stamina: 340, rep: ["FB", "CH", "CT", "SK"] },
   },
   {
@@ -99,7 +99,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "철곰 스윙", desc: "제대로 맞으면 무조건 담장 너머" },
     bats: "R",
     throws: "R",
-    bat: { hit: 640, power: 980, run: 480, def: 600 },
+    bat: { hit: 640, power: 980, run: 480 },
     pit: { control: 640, velo: 165, brk: 600, stamina: 420, rep: ["FB", "SL", "FK", "SK"] },
   },
   {
@@ -110,7 +110,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "피루엣 스윙", desc: "한 바퀴 돌며 박자를 다시 맞춤 — 타이밍 오차가 절반 · 라이너" },
     bats: "L",
     throws: "L",
-    bat: { hit: 820, power: 600, run: 900, def: 820 },
+    bat: { hit: 820, power: 600, run: 900 },
     pit: { control: 820, velo: 141, brk: 900, stamina: 300, rep: ["FB", "CB", "CH", "SL"] },
   },
   {
@@ -121,7 +121,7 @@ export const CHARS: SpecialChar[] = [
     swing: { name: "태극 스윙", desc: "S자로 휘는 라이너 — 수비 사이 빈틈으로 쏙" },
     bats: "L",
     throws: "R",
-    bat: { hit: 860, power: 640, run: 820, def: 840 },
+    bat: { hit: 860, power: 640, run: 820 },
     pit: { control: 860, velo: 140, brk: 880, stamina: 330, rep: ["FB", "CB", "CH", "SL"] },
   },
 ];
@@ -144,11 +144,10 @@ export interface Batter {
   hit: number;
   power: number;
   run: number;
-  def: number;
   special?: CharId;
   /** 육성 선수가 픽셀파이트 캐릭터에게 배운 필살타법 (겉모습은 그대로, 필살만) */
   learned?: CharId;
-  /** 상황 특수능력 (육성): 득점권 맞히기 · 파워, 2스트라이크 맞히기 */
+  /** 상황 특수능력 (육성): 득점권 타격 · 파워, 2스트라이크 타격 */
   sit?: { rispHit?: number; rispPow?: number; twoK?: number; late?: number };
   /** 육성 선수 외형 (헤어 · 얼굴 · 피부 · 배트 · 유니폼) */
   look?: { hair: number; face: number; skin: number; bat: number; uni: number };
@@ -262,7 +261,7 @@ export function makeTeam(def: TeamDef, rng: () => number, sp?: { bat: CharId; pi
       }
     }
   };
-  // 타순 성향: 1·2번 맞히기 · 발, 3~5번 힘, 하위 타순 약함
+  // 타순 성향: 1·2번 타격 · 발, 3~5번 힘, 하위 타순 약함
   const shape = [
     { hit: 560, power: 380, run: 640 },
     { hit: 540, power: 420, run: 560 },
@@ -282,7 +281,6 @@ export function makeTeam(def: TeamDef, rng: () => number, sp?: { bat: CharId; pi
     hit: st(s.hit + def.bat, 50),
     power: st(s.power + def.bat, 60),
     run: st(s.run, 60),
-    def: st(520, 80),
   }));
   // 마타자는 4번 (sp 를 줄 때만 — 지금 경기엔 마선수 없음, 캐릭터는 인연 대결에서만)
   if (sp) {
