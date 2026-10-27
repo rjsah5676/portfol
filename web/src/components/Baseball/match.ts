@@ -59,8 +59,6 @@ const UI = {
   profile: "/baseball/ui/profile.webp",
   burst: "/baseball/ui/burst.webp",
   ring: "/baseball/ui/ring.webp",
-  perfect: "/baseball/ui/perfect.webp",
-  good: "/baseball/ui/good.webp",
   homerun: "/baseball/ui/homerun.webp",
 } as const;
 const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 503, scale: 0.1956 };
@@ -1839,42 +1837,29 @@ export class Match {
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       const w = ctx.measureText(this.pitchInfo).width + 16;
-      ctx.fillRect(z1.x + 22, z0.y - 2, w, 24);
+      // 타자 반대쪽 (좌타면 존 왼쪽)
+      const ix = this.shownBatter.bats === "L" ? z0.x - 22 - w : z1.x + 22;
+      ctx.fillRect(ix, z0.y - 2, w, 24);
       ctx.fillStyle = "#fff";
-      ctx.fillText(this.pitchInfo, z1.x + 30, z0.y + 15);
+      ctx.fillText(this.pitchInfo, ix + 8, z0.y + 15);
     }
-    if (this.timingText && this.userBat && (this.phase === "flight" || this.phase === "contact" || this.phase === "call")) {
-      const logo = this.timingText === "PERFECT" ? UI.perfect : this.timingText === "GOOD" ? UI.good : null;
-      const lim = logo ? img(logo) : null;
-      if (lim && lim.complete && lim.naturalWidth) {
-        // 튀어나옴: 1.7배 → 0.92 → 1 (0.18초), 살짝 위로 떠오름
-        const t = this.timingT;
-        const pop = t < 0.1 ? 1.7 - (t / 0.1) * 0.78 : t < 0.18 ? 0.92 + ((t - 0.1) / 0.08) * 0.08 : 1;
-        const w = (logo === UI.perfect ? 230 : 170) * pop;
-        const h = w * (lim.naturalHeight / lim.naturalWidth);
-        ctx.save();
-        ctx.globalAlpha = Math.min(1, t / 0.05);
-        ctx.drawImage(lim, 512 - w / 2, 215 - h / 2 - Math.min(t, 0.6) * 12, w, h);
-        ctx.restore();
-      } else {
-        ctx.font = '26px "Black Han Sans", sans-serif';
-        ctx.textAlign = "center";
-        ctx.lineWidth = 5;
-        ctx.strokeStyle = "rgba(0,0,0,0.7)";
-        ctx.strokeText(this.timingText, 512, 296);
-        ctx.fillStyle = this.timingColor;
-        ctx.fillText(this.timingText, 512, 296);
-      }
+    // PERFECT · GOOD 은 안 띄움 (잘 맞혀도 아웃이면 기분만 나쁨) — 빠름 · 늦음만
+    if (this.timingText && this.timingText !== "PERFECT" && this.timingText !== "GOOD" && this.userBat && (this.phase === "flight" || this.phase === "contact" || this.phase === "call")) {
+      ctx.font = '26px "Black Han Sans", sans-serif';
+      ctx.textAlign = "center";
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.strokeText(this.timingText, 512, 296);
+      ctx.fillStyle = this.timingColor;
+      ctx.fillText(this.timingText, 512, 296);
       ctx.textAlign = "center";
       ctx.fillStyle = this.timingColor;
       // 얼마나 빨랐나 늦었나 (ms)
-      if (this.timingText !== "PERFECT") {
-        const ms = `${this.timingMs > 0 ? "늦음 +" : "빠름 "}${this.timingMs}ms`;
-        ctx.font = '700 14px "JetBrains Mono", monospace';
-        ctx.lineWidth = 4;
-        ctx.strokeText(ms, 512, lim ? 272 : 318);
-        ctx.fillText(ms, 512, lim ? 272 : 318);
-      }
+      const ms = `${this.timingMs > 0 ? "늦음 +" : "빠름 "}${this.timingMs}ms`;
+      ctx.font = '700 14px "JetBrains Mono", monospace';
+      ctx.lineWidth = 4;
+      ctx.strokeText(ms, 512, 318);
+      ctx.fillText(ms, 512, 318);
     }
     if (this.batInfo && this.userBat) {
       const a = 1 - smooth(1.3, 1.8, this.batInfo.t);
