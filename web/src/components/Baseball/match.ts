@@ -3118,7 +3118,8 @@ export class Match {
     const order = this.paBatter ? this.paOrder : bs.order;
     const ln = bs.bat[order];
     const x = 12, w = 292, h = 132;
-    const y = DH - 12 - h;
+    // 투수 시점(내가 던질 때)은 왼쪽 아래가 투수 다리(레그킥) 자리라 점수판 밑으로
+    const y = this.userBat ? DH - 12 - h : 102;
     const hero = b.special ? charById(b.special) : null;
     const accent = hero ? hero.color : "#ff8a3d";
     this.panel(ctx, x, y, w, h, hero ? hero.color : "rgba(255,138,61,0.7)");
