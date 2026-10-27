@@ -3,7 +3,7 @@
  * 화면(직접 출전) · 자동 진행 · 밸런스 시뮬이 같이 씀.
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, humanSwing, SPEED_SCALE, type Diff } from "./ai";
-import { CHARS, TEAM_DEFS, makeTeam, swingOf, type Batter, type CharId, type Team } from "./data";
+import { TEAM_DEFS, makeTeam, swingOf, type Batter, type CharId, type Team } from "./data";
 import {
   batSide, batter as curBatter, callPitch, cpuManage, fieldSide, maybeMission, newGame, nextHalf, pitchThrown, pitcher as curPitcher,
   stamina01, applyPlay, type BatLine, type GameState, type PAResult,
@@ -35,16 +35,11 @@ export const slotName = (i: number) => `${i + 1}번`;
 /** 시즌마다 같은 동료 · 매주 다른 상대 (시드로 고정) */
 export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number): CareerSetup {
   const rTeam = makeRng((seed ^ (season * 0x9e37)) >>> 0);
-  const ids = CHARS.map((c) => c.id);
-  const mateBat = ids[(seed + season) % ids.length];
-  const matePit = ids[(seed + season * 3 + 1) % ids.length];
-  const my = makeTeam(TEAM_DEFS[0], rTeam, { bat: mateBat, pit: matePit === mateBat ? ids[(ids.indexOf(mateBat) + 1) % ids.length] : matePit });
+  // 마선수 없음 — 캐릭터는 인연에서만
+  const my = makeTeam(TEAM_DEFS[0], rTeam);
   const rOpp = makeRng((seed * 31 + season * 977 + week * 131) >>> 0);
   const def = TEAM_DEFS[1 + (week % 3)];
-  const left = ids.filter((id) => id !== mateBat);
-  const ob = rOpp.pick(left);
-  const op = rOpp.pick(left.filter((i) => i !== ob));
-  const opp = makeTeam(def, rOpp, { bat: ob, pit: op });
+  const opp = makeTeam(def, rOpp);
   // 내 수비 위치 선수를 빼고 내 자리에 넣기
   const rest = my.batters.filter((b) => b.special || b.pos !== me.pos);
   while (rest.length > 8) {

@@ -2,7 +2,7 @@
  * 야구 로딩 화면(GameLoader)에 넘길 할 일 — M1 은 격투게임 그림(얼굴 · 컷인)과 글꼴만.
  * 새 그림 · 소리를 넣으면 여기에도 추가할 것.
  */
-import { CHARS, cutinUrl, faceUrl } from "@/lib/baseball/data";
+import { CHARS, artUrl, cutinUrl, faceUrl } from "@/lib/baseball/data";
 import { keyed, type LoadTask } from "@/lib/preload";
 
 const FONTS = ['16px "Black Han Sans"', '16px "Jua"', '700 16px "JetBrains Mono"', '800 16px "JetBrains Mono"', '700 16px "Nanum Gothic"', '800 16px "Nanum Gothic"'];
@@ -15,7 +15,7 @@ const fontsTask = keyed("baseball:fonts", () =>
 
 export function baseballTasks(): LoadTask[] {
   const t: LoadTask[] = [];
-  for (const c of CHARS) t.push(faceUrl(c.id), cutinUrl(c.id), `/fight/art/${c.id}.webp`);
+  for (const c of CHARS) t.push(faceUrl(c.id), cutinUrl(c.id), artUrl(c.id));
   t.push(fontsTask);
   return t;
 }

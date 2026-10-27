@@ -2,10 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
-import { CHARS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
 import { DH, DW, useStage } from "./Stage";
 import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match";
-import { isMuted, setMuted, sfx } from "./sfx";
+import { isMuted, setMuted } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 import CareerMode from "./Career";
 import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
@@ -17,37 +16,12 @@ import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./career
 
 type Screen = "title" | "setup" | "derby" | "howto" | "play" | "career";
 
-function CharCard({ id, sel, onPick, mode }: { id: CharId; sel: boolean; onPick: () => void; mode: "bat" | "pit" }) {
-  const c = charById(id);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        sfx.ui();
-        onPick();
-      }}
-      className="group relative flex w-[104px] cursor-pointer flex-col items-center overflow-hidden rounded-xl border-2 bg-[#11152a] pb-1.5 transition-transform hover:-translate-y-0.5"
-      style={{ borderColor: sel ? c.color : "rgba(255,255,255,0.1)", boxShadow: sel ? `0 0 16px ${c.color}99` : undefined }}
-      title={mode === "bat" ? `${c.swing.name} — ${c.swing.desc}` : `${c.ball.name} — ${c.ball.hint}`}
-    >
-      <img src={faceUrl(id)} alt={c.name} className="h-[82px] w-full object-cover object-top" draggable={false} />
-      <span className={`${font.title} mt-1 text-[15px]`} style={{ color: c.color }}>
-        {c.name}
-      </span>
-      <span className="px-1 text-center text-[10.5px] leading-tight text-white/70">{mode === "bat" ? c.swing.name : c.ball.name}</span>
-    </button>
-  );
-}
-
 export default function BaseballApp() {
   const [screen, setScreen] = useState<Screen>("title");
   const [save, setSave] = useState<Save>({ pt: 0, derbyBest: 0, games: 0, wins: 0 });
   const [diff, setDiff] = useState<Diff>(0);
   const [innings, setInnings] = useState(3);
   const [home, setHome] = useState(true);
-  const [myBat, setMyBat] = useState<CharId>("kai");
-  const [myPit, setMyPit] = useState<CharId>("lily");
-  const [derbyChar, setDerbyChar] = useState<CharId>("ivan");
   const [cfg, setCfg] = useState<MatchCfg | null>(null);
   const [run, setRun] = useState(0);
   useEffect(() => {
@@ -95,7 +69,7 @@ export default function BaseballApp() {
                 <div className={`${font.title} text-[64px] leading-none tracking-wide`} style={{ color: ACCENT, textShadow: "0 5px 0 #000, 0 0 30px rgba(255,138,61,0.5)" }}>
                   픽셀 프로야구
                 </div>
-                <div className="mt-2 text-[14px] text-white/60">타이밍 한 방, 마구 한 방 — 픽셀파이트 마선수들이 뛰는 야구</div>
+                <div className="mt-2 text-[14px] text-white/60">타이밍 한 방 — 친구들과 같이 크는 야구</div>
               </div>
               <Btn className={`${font.title} w-[432px] py-4 text-[28px]`} onClick={() => setScreen("career")}>
                 육성 모드
@@ -155,31 +129,8 @@ export default function BaseballApp() {
               <p className="text-[12px] text-white/50">
                 {diff === 0 ? "초급: 공이 느리고, 공이 들어올 자리가 처음부터 보임 (이글아이)" : diff === 1 ? "중급: 보통 속도 · 공이 반쯤 왔을 때 들어올 자리가 보임" : "고급: 빠름 · 표시 없음 · 봇이 잘 치고 잘 던짐"}
               </p>
-              <div>
-                <div className="mb-1.5 text-[13px] font-bold text-white/80">
-                  마타자 <span className="font-normal text-white/45">— 4번 타자 · 필살타법 (경기당 3번)</span>
-                </div>
-                <div className="flex gap-2">
-                  {CHARS.map((c) => (
-                    <CharCard key={c.id} id={c.id} mode="bat" sel={myBat === c.id} onPick={() => setMyBat(c.id)} />
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="mb-1.5 text-[13px] font-bold text-white/80">
-                  마투수 <span className="font-normal text-white/45">— 불펜 · 마구 (경기당 3번 · 언제든 교체로 등판)</span>
-                </div>
-                <div className="flex gap-2">
-                  {CHARS.map((c) => (
-                    <CharCard key={c.id} id={c.id} mode="pit" sel={myPit === c.id} onPick={() => setMyPit(c.id)} />
-                  ))}
-                </div>
-              </div>
-              <div className="mt-auto flex items-center justify-between">
-                <span className="text-[12px] text-white/55">
-                  {charById(myBat).name}: {charById(myBat).swing.desc} · {charById(myPit).name}: {charById(myPit).ball.hint}
-                </span>
-                <Btn className={`${font.title} px-10 py-2.5 text-xl`} onClick={() => start({ mode: "game", diff, innings, userHome: home, myBat, myPit })}>
+              <div className="mt-auto flex items-center justify-end">
+                <Btn className={`${font.title} px-10 py-2.5 text-xl`} onClick={() => start({ mode: "game", diff, innings, userHome: home })}>
                   PLAY BALL
                 </Btn>
               </div>
@@ -199,7 +150,7 @@ export default function BaseballApp() {
               <p className="text-[13px] leading-relaxed text-white/70">
                 홈런이 아니면 전부 아웃 (스트라이크를 그냥 보내도 아웃) · 아웃 10개까지 비거리 합계.
                 <br />
-                500m 마다 <b className="text-white">마투수가 난입</b>해서 마구를 2개 던져요. 가운데 담장 너머 <b className="text-[#ffd23f]">GOLD 보드</b>를 넘기면 +300m.
+                가운데 담장 너머 <b className="text-[#ffd23f]">GOLD 보드</b>를 넘기면 +300m.
               </p>
               <Row label="봇 난이도(공 속도)">
                 {([0, 1, 2] as Diff[]).map((d) => (
@@ -208,16 +159,8 @@ export default function BaseballApp() {
                   </Btn>
                 ))}
               </Row>
-              <div>
-                <div className="mb-1.5 text-[13px] font-bold text-white/80">타자 (필살타법은 매 타석 쓸 수 있어요)</div>
-                <div className="flex gap-2">
-                  {CHARS.map((c) => (
-                    <CharCard key={c.id} id={c.id} mode="bat" sel={derbyChar === c.id} onPick={() => setDerbyChar(c.id)} />
-                  ))}
-                </div>
-              </div>
               <div className="mt-auto flex justify-end">
-                <Btn className={`${font.title} px-10 py-2.5 text-xl`} color="#ffd23f" onClick={() => start({ mode: "derby", diff, innings: 1, userHome: true, myBat: derbyChar, myPit: "lily", derbyChar })}>
+                <Btn className={`${font.title} px-10 py-2.5 text-xl`} color="#ffd23f" onClick={() => start({ mode: "derby", diff, innings: 1, userHome: true })}>
                   시작
                 </Btn>
               </div>
@@ -240,20 +183,20 @@ export default function BaseballApp() {
                   <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> 또는 <b>화면 아무 데나 터치</b>.</p>
                   <p>빠르면 당겨 치고(우타 → 왼쪽), 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
                   <p>존 밖 공(볼)은 휘두르면 빗맞아요 — 참으면 볼넷.</p>
-                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 (마타자만, 투구 전에)</p>
+                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 (인연에서 배운 선수만, 투구 전에)</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#7ad7ff]`}>투구</div>
                   <p>① 구종 <Key>1</Key>~<Key>4</Key> ② 코스: 존을 누르거나 끌기 · <Key>←↑↓→</Key></p>
                   <p>③ <Key>Space</Key>/던지기 → 게이지가 오르내림 → 다시 눌러 멈추기.</p>
                   <p><b className="text-[#ffd23f]">MAX</b> 근처면 빠르고 날카로운 공, 너무 낮으면 <b className="text-[#ff7a7a]">실투</b>(한가운데로 밋밋).</p>
-                  <p>지치면 게이지가 빨라져요 → <b>교체</b> 버튼 · 마투수면 <Key>M</Key> 마구.</p>
+                  <p>지치면 게이지가 빨라져요 → <b>교체</b> 버튼.</p>
                 </div>
                 <div className="col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#FF8A3D]`}>그 밖에</div>
                   <p>수비 · 주루는 자동 (물리로 판정 — 타구 속도 · 각도 · 수비 위치 · 주자 발). 필드 화면은 터치하면 빨리감기.</p>
-                  <p>돌발미션: 감독 · 주장 · 선배가 갑자기 미션을 줘요. 성공하면 코인 + 마구/필살 1번 더.</p>
-                  <p>마구는 궤적이 정해져 있어요 — 컷인에 나오는 힌트대로 치면 칠 수 있어요.</p>
+                  <p>돌발미션: 감독 · 주장 · 선배가 갑자기 미션을 줘요. 성공하면 보상.</p>
+                  <p>인연 대결의 마구는 궤적이 정해져 있어요 — 컷인에 나오는 힌트대로 치면 칠 수 있어요.</p>
                 </div>
               </div>
             </div>

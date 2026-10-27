@@ -23,7 +23,7 @@ export interface SpecialChar {
   pit: { control: number; velo: number; brk: number; stamina: number; rep: PitchKind[] };
 }
 
-/** 픽셀파이트 8명 — 마투수로 쓰면 마구, 마타자로 쓰면 필살타법 */
+/** 픽셀파이트 캐릭터 — 인연 대결에서 마구를 던지고, 인연 보상으로 필살타법을 전수 */
 export const CHARS: SpecialChar[] = [
   {
     id: "kai",
@@ -128,8 +128,10 @@ export const CHARS: SpecialChar[] = [
 
 export const charById = (id: CharId) => CHARS.find((c) => c.id === id)!;
 
-/** 격투게임 그림 재사용 (에셋 없이 시작하는 M1 — 컷인 · 얼굴만) */
-export const faceUrl = (id: CharId) => `/fight/art/${id}-face.webp`;
+/** 야구 전용 그림이 생긴 캐릭터 (public/baseball/char/<id>.webp · <id>-face.webp) — 나머지는 격투게임 그림 재사용 */
+const BB_ART = new Set<string>(["kai"]);
+export const artUrl = (id: string) => (BB_ART.has(id) ? `/baseball/char/${id}.webp` : `/fight/art/${id}.webp`);
+export const faceUrl = (id: string) => (BB_ART.has(id) ? `/baseball/char/${id}-face.webp` : `/fight/art/${id}-face.webp`);
 export const cutinUrl = (id: CharId) => `/fight/cutin/${id}.webp`;
 
 export interface Batter {
@@ -203,7 +205,7 @@ export const TEAM_DEFS: TeamDef[] = [
 ];
 
 /** 이름 · 능력치가 들어간 팀 만들기 (시드가 같으면 같은 팀) */
-export function makeTeam(def: TeamDef, rng: () => number, sp: { bat: CharId; pit: CharId }): Team {
+export function makeTeam(def: TeamDef, rng: () => number, sp?: { bat: CharId; pit: CharId }): Team {
   const used = new Set<string>();
   const name = () => {
     for (;;) {
@@ -247,10 +249,11 @@ export function makeTeam(def: TeamDef, rng: () => number, sp: { bat: CharId; pit
     run: st(s.run, 60),
     def: st(520, 80),
   }));
-  // 마타자는 4번
-  const sb = charById(sp.bat);
-  batters[3] = { name: sb.name, num: num(), pos: "마", bats: sb.bats, ...sb.bat, special: sb.id };
-  const sk = charById(sp.pit);
+  // 마타자는 4번 (sp 를 줄 때만 — 지금 경기엔 마선수 없음, 캐릭터는 인연 대결에서만)
+  if (sp) {
+    const sb = charById(sp.bat);
+    batters[3] = { name: sb.name, num: num(), pos: "마", bats: sb.bats, ...sb.bat, special: sb.id };
+  }
   const reps: Pitcher["rep"][] = [
     ["FB", "SL", "CB", "CH"],
     ["FB", "SK", "SL", "FK"],
@@ -273,7 +276,13 @@ export function makeTeam(def: TeamDef, rng: () => number, sp: { bat: CharId; pit
       control: st(500 + def.pit, 50), velo: st(145, 3), brk: st(540 + def.pit, 60), stamina: st(360, 40),
       rep: reps[Math.floor(rng() * reps.length)],
     },
-    { name: sk.name, num: num(), role: "CL", throws: sk.throws, ...sk.pit, special: sk.id },
+    sp
+      ? { name: charById(sp.pit).name, num: num(), role: "CL", throws: charById(sp.pit).throws, ...charById(sp.pit).pit, special: sp.pit }
+      : {
+          name: name(), num: num(), role: "CL", throws: rng() < 0.3 ? "L" : "R",
+          control: st(560 + def.pit, 50), velo: st(151, 3), brk: st(600 + def.pit, 60), stamina: st(300, 30),
+          rep: reps[Math.floor(rng() * reps.length)],
+        },
   ];
   return { id: def.id, name: def.name, short: def.short, color: def.color, dark: def.dark, batters, pitchers };
 }

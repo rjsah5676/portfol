@@ -133,8 +133,6 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
       diff: c.diff,
       innings: 1,
       userHome: true,
-      myBat: "kai",
-      myPit: "lily",
       speed,
       bond: { char: bt.char, pitches: bt.pitches, need: bt.need, magic: bt.magic, batter: careerBatter(c), title: `${ch.name}와 ${bt.kind === "final" ? "필살 전수 대결" : "대결"}` },
     });
@@ -188,7 +186,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     const n = clone(c);
     n.inGame = true;
     commit(n);
-    onPlay({ mode: "career", diff: c.diff, innings: 9, userHome: true, myBat: "kai", myPit: "lily", career: setupOf(n), highlight: mode === "highlight", speed });
+    onPlay({ mode: "career", diff: c.diff, innings: 9, userHome: true, career: setupOf(n), highlight: mode === "highlight", speed });
   };
   /** 자동: 이번 경기만 / 이번 주 남은 경기 전부 (부상 결장 포함) */
   const autoWeek = (all: boolean) => {
@@ -951,7 +949,6 @@ function SideStatus({ c }: { c: Career }) {
   const COND = ["#ff5a5a", "#ff9a7a", "#fff", "#7dff9a", "#ffd23f"];
   const season = c.phase === "season";
   const st = season ? setupOfSafe(c) : null;
-  const ace = st?.opp.pitchers.find((pp) => pp.special);
   const race = season && c.line.g >= 3 ? awardRace(c)[0] : null;
   return (
     <div className="flex w-[172px] shrink-0 flex-col gap-1.5">
@@ -978,12 +975,6 @@ function SideStatus({ c }: { c: Career }) {
           <div className="truncate font-bold">
             vs <span style={{ color: st.opp.color }}>{st.opp.name}</span>
           </div>
-          {ace?.special && (
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <img src={faceUrl(ace.special)} alt="" className="h-[26px] w-[24px] rounded object-cover object-top" style={{ outline: `1.5px solid ${charById(ace.special).color}` }} />
-              <span className="truncate text-[11px] text-white/65">마투수 {ace.name}</span>
-            </div>
-          )}
           <div className="mt-0.5 text-[11.5px]">
             나: <b className="text-[#ffd23f]">{slotName(st.myIdx)} 타자</b>
           </div>
@@ -1232,8 +1223,8 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
 function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career; mode: PlayMode; onMode: (m: PlayMode) => void; onPlay: () => void; onAutoWeek: () => void; onSitOut: () => void }) {
   const st = setupOfSafe(c);
   const opp = st.opp;
-  const oppHero = opp.batters.find((b) => b.special);
-  const oppAce = opp.pitchers.find((pp) => pp.special);
+  const oppHero = opp.batters[3];
+  const oppAce = opp.pitchers.find((pp) => pp.role === "SP");
   const tired = c.stamina < 20;
   return (
     <div className="flex flex-1 flex-col gap-2 rounded-2xl border-2 border-[#FF8A3D]/50 bg-black/35 p-3">
@@ -1259,13 +1250,10 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
           </div>
         </div>
         <div className="flex flex-1 items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-1.5">
-          {[oppHero?.special, oppAce?.special].map((id, i) =>
-            id ? <img key={i} src={faceUrl(id)} alt="" className="h-[42px] w-[38px] rounded-md object-cover object-top" style={{ outline: `2px solid ${charById(id).color}` }} /> : null
-          )}
           <div className="text-[12px] leading-snug text-white/70">
-            상대 마타자 <b style={{ color: oppHero?.special ? charById(oppHero.special).color : undefined }}>{oppHero?.name}</b>
+            상대 4번 <b style={{ color: opp.color }}>{oppHero?.name}</b>
             <br />
-            마무리 마투수 <b style={{ color: oppAce?.special ? charById(oppAce.special).color : undefined }}>{oppAce?.name}</b> — {oppAce?.special ? charById(oppAce.special).ball.name : ""}
+            선발 <b style={{ color: opp.color }}>{oppAce?.name}</b> — {oppAce?.velo}km/h
           </div>
         </div>
       </div>

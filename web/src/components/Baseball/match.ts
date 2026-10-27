@@ -5,11 +5,11 @@
  *   준비(돌발미션) → [사용자 투수] 구종 · 코스 → 게이지 → (마구면 컷인) → 와인드업 → 공 → 스윙/판정
  *                    [사용자 타자] (필살 · 번트 준비) → 와인드업 → 공 → 스윙 타이밍 → 판정
  *   → 인플레이면 필드 화면(수비 · 주루 재생) → 결과 문구 → 다음 타자 · 공수 교대 · 경기 끝
- * 홈런더비: 같은 타석 화면, 아웃 10개까지 비거리 합 (500m 마다 마투수 난입 · 골든 보드)
+ * 홈런더비: 같은 타석 화면, 아웃 10개까지 비거리 합 (골든 보드)
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { timingLabel, timingWindow } from "@/lib/baseball/contact";
-import { BP_PITCHER, CHARS, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher } from "@/lib/baseball/data";
+import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher } from "@/lib/baseball/data";
 import { advanceToMyPA, botHook, mySide, newCareerGame, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
@@ -37,11 +37,6 @@ export interface MatchCfg {
   diff: Diff;
   innings: number;
   userHome: boolean;
-  /** 내 팀 마타자 · 마투수 */
-  myBat: CharId;
-  myPit: CharId;
-  /** 홈런더비 타자 */
-  derbyChar?: CharId;
   /** 육성 경기: 팀 · 내 타순 (내 타석만 직접, 나머지는 빠르게) */
   career?: CareerSetup;
   /** 하이라이트: 내 타석도 찬스 · 돌발미션 · 7회부터 접전일 때만 직접 (나머지는 봇이 침) */
@@ -237,7 +232,7 @@ export class Match {
   myPAs: MyPA[] = [];
   private rbiBefore = 0;
 
-  derby = { outs: 0, dist: 0, hr: 0, nextBoss: 500, boss: null as CharId | null, bossLeft: 0, longest: 0 };
+  derby = { outs: 0, dist: 0, hr: 0, boss: null as CharId | null, bossLeft: 0, longest: 0 };
   /** 인연 대결: 던진 공 · 점수 · 볼 수 · 공마다 결과 */
   bondSt = { idx: 0, pts: 0, balls: 0, marks: [] as ("hit" | "hr" | "out" | null)[] };
 
@@ -250,11 +245,9 @@ export class Match {
     const mine = TEAM_DEFS[0];
     const others = TEAM_DEFS.slice(1);
     const cpuDef = this.rng.pick(others);
-    const left = CHARS.filter((c) => c.id !== cfg.myBat && c.id !== cfg.myPit);
-    const cpuBat = this.rng.pick(left).id;
-    const cpuPit = this.rng.pick(left.filter((c) => c.id !== cpuBat)).id;
-    let myTeam = makeTeam(mine, this.rng, { bat: cfg.myBat, pit: cfg.myPit });
-    const cpuTeam = makeTeam(cpuDef, this.rng, { bat: cpuBat, pit: cpuPit });
+    // 마선수 없음 — 캐릭터는 인연(대결)에서만 던지고 침
+    let myTeam = makeTeam(mine, this.rng);
+    const cpuTeam = makeTeam(cpuDef, this.rng);
     if (cfg.bond) {
       const b = cfg.bond.batter;
       myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ ...b })) };
@@ -262,8 +255,9 @@ export class Match {
       this.derby.bossLeft = 999;
       this.bondSt.marks = Array.from({ length: cfg.bond.pitches }, () => null);
     } else if (cfg.mode === "derby") {
-      const ch = charById(cfg.derbyChar ?? cfg.myBat);
-      myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ name: ch.name, num: 1, pos: "마", bats: ch.bats, ...ch.bat, special: ch.id })) };
+      // 4번 타자가 계속 침
+      const slugger = myTeam.batters[3];
+      myTeam = { ...myTeam, batters: myTeam.batters.map(() => ({ ...slugger })) };
     }
     this.s = cfg.career ? newCareerGame(cfg.career) : newGame({
       innings: cfg.innings,
@@ -925,13 +919,6 @@ export class Match {
     if (d.boss) {
       d.bossLeft--;
       if (d.bossLeft <= 0) d.boss = null;
-    }
-    if (!d.boss && d.dist >= d.nextBoss && d.outs < 10) {
-      d.boss = this.rng.pick(CHARS).id;
-      d.bossLeft = 2;
-      d.nextBoss += 500;
-      const c = charById(d.boss);
-      text += ` · 마투수 ${c.name} 난입!`;
     }
     this.setBanner(text, `아웃 ${d.outs}/10 · 합계 ${d.dist}m`, color, 1.3, true);
     this.setPhase("result");
@@ -2101,13 +2088,6 @@ export class Match {
         ctx.beginPath();
         ctx.arc(DW - 244 + i * 23.5, 35, 8, 0, Math.PI * 2);
         ctx.fill();
-      }
-      if (d.boss) {
-        const c = charById(d.boss);
-        this.panel(ctx, DW - 262, 64, 250, 40);
-        ctx.fillStyle = c.color;
-        ctx.font = '16px "Black Han Sans", sans-serif';
-        ctx.fillText(`마투수 ${c.name} 난입! (${d.bossLeft}구)`, DW - 248, 90);
       }
       this.batterCard(ctx);
       return;

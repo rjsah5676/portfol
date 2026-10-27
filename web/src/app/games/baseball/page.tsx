@@ -14,7 +14,7 @@ export default function BaseballPage() {
           title="픽셀 프로야구"
           en="PIXEL 프로야구 · 웹 야구게임 · 프로토"
           accent="#FF8A3D"
-          desc="타이밍 한 방, 마구 한 방 — 픽셀파이트 마선수들이 뛰는 야구"
+          desc="타이밍 한 방 — 친구들과 같이 크는 야구"
           tags={["야구게임", "웹게임", "홈런더비"]}
         />
         <Stage>

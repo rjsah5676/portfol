@@ -276,7 +276,7 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
     }
     if (done !== null) {
       s.mission = null;
-      res.mission = { ok: done, text: done ? `미션 성공! +${m.pt} 코인 · 마구/필살 +1` : "미션 실패…" };
+      res.mission = { ok: done, text: done ? `미션 성공! +${m.pt} 코인` : "미션 실패…" };
       if (done) {
         s.pt += m.pt;
         const us = s.sides[s.opts.userHome ? 1 : 0];

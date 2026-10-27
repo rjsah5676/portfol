@@ -12,12 +12,12 @@ import {
   type BatType, type Career, type HofEntry, type SkillId, type StatKey, type TurnOut,
 } from "@/lib/baseball/career";
 import { BONDS } from "@/lib/baseball/career";
-import { charById, faceUrl, type CharId } from "@/lib/baseball/data";
+import { artUrl, charById, faceUrl, type CharId } from "@/lib/baseball/data";
 import { makeRng } from "@/lib/baseball/rng";
 import { ACCENT, Btn, Modal, font } from "./ui";
 import { sfx } from "./sfx";
 
-export const artUrl = (id: string) => `/fight/art/${id}.webp`;
+export { artUrl };
 const ROLE_COLOR = { friend: "#7ad7ff", sister: "#7dff9a", crush: "#ff7ae0" } as const;
 const BEAT_ICON = { talk: "💬", boon: "✨", mini: "⚾", final: "🔥" } as const;
 
