@@ -16,23 +16,37 @@ export const DH = 576;
 // → 홈 뒤 2.3m · 눈높이 0.47m · 수평선 58%. 예전(bat-dusk): F 2471 · Dc 8.62 · camH 1.094 · Y0 181.4
 export const CAM = { F: 688.7, Dc: 2.268, camH: 0.472, Y0: 331.7, cx: 512 };
 /**
- * 존 내림 (px): 타자 그림을 원래 크기(실제 비율보다 작게)로 두면서 존이 타자 가슴 ~ 무릎에 오게,
- * 홈 쪽(z ≤ 0)에서 이만큼 아래로 그리고 투수판(z 18.44)으로 갈수록 0 — 투수는 그림의 투수판 위에 그대로.
- * 높이 0(땅)은 안 내림 → 그림자 · 땅에 튄 공은 그림 땅에 맞고, 땅 ~ 존 아래 끝 사이만 눌림 (마구마구도 존을 홈에 바짝 붙여 그림)
+ * 존 내림: 타자 그림을 원래 크기(실제 비율보다 작게)로 두면서 존이 타자 가슴 ~ 무릎에 오게, 공 · 존은 「더 높은 카메라」로 봄.
+ *   - 높이 0.43m(존 아래 끝) 위의 것: 눈높이 CAM_V 카메라 (구장 그림 카메라 0.47m 보다 높음 → 존이 홈플레이트 쪽으로 내려옴)
+ *   - 땅(높이 0): 구장 그림 카메라 그대로 (그림자 · 땅에 튄 공이 그림 바닥에 맞게), 그 사이는 섞음
+ *   - 수평선 위치를 투수판 쪽으로 갈수록 맞춰서 투수판(z 18.44)에선 두 카메라가 같은 자리 → 투수는 그림의 투수판 위에 그대로
+ * 원근이 그대로라 공이 가라앉았다 뜨지 않고 내려오기만 함 (예전엔 z 에 비례해 화면 px 를 내려서 언더핸드처럼 떴음)
  */
-export const ZONE_DROP = 64;
-const dropAt = (y: number, z: number) => ZONE_DROP * clamp01(1 - z / 18.44) * clamp01(y / 0.43);
+export const ZONE_DROP = 58;
+const CAM_V = 0.709;
+const S0 = CAM.F / CAM.Dc;
+const S_RUB = CAM.F / (18.44 + CAM.Dc);
+const DY_A = ZONE_DROP - (CAM_V - CAM.camH) * S0;
+const DY_B = -(DY_A + (CAM_V - CAM.camH) * S_RUB) / 18.44;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+/** 높이 y · 거리 z 에서 공 · 존 카메라가 구장 카메라보다 아래로 그리는 px */
+/** 눈높이보다 높은 공이 홈 가까이서 위로 솟아 보이는 걸 이만큼 누름 (0 = 원근 그대로) — 높은 공도 내려오면서 들어오게 */
+const RISE_DAMP = 0.4;
+const dropAt = (y: number, z: number, s: number) => {
+  if (z >= 18.44) return 0;
+  const ss = Math.min(s, S0);
+  return (DY_A + DY_B * Math.max(0, z) + (CAM_V - CAM.camH) * ss) * clamp01(y / 0.43) + RISE_DAMP * Math.max(0, y - CAM_V) * (ss - S_RUB);
+};
 export function proj(x: number, y: number, z: number) {
   const s = CAM.F / (z + CAM.Dc);
-  return { x: CAM.cx + x * s, y: CAM.Y0 - (y - CAM.camH) * s + dropAt(y, z), s };
+  return { x: CAM.cx + x * s, y: CAM.Y0 - (y - CAM.camH) * s + dropAt(y, z, s), s };
 }
 export const MOUND = proj(0, 0, 18.4);
 /** 홈플레이트 면(z 0)의 화면 좌표 → 월드 (x, 높이) — proj 의 존 내림까지 되돌림 */
 export function unprojPlate(sx: number, sy: number) {
   const s = CAM.F / CAM.Dc;
   let y = CAM.camH - (sy - CAM.Y0) / s;
-  for (let i = 0; i < 4; i++) y = CAM.camH - (sy - CAM.Y0 - ZONE_DROP * clamp01(y / 0.43)) / s;
+  for (let i = 0; i < 6; i++) y = CAM.camH - (sy - CAM.Y0 - dropAt(y, 0, s)) / s;
   return { x: (sx - CAM.cx) / s, y };
 }
 

@@ -1895,7 +1895,8 @@ export class Match {
     const off = { x: hand.x - p0.x, y: hand.y - p0.y };
     const toScreen = (x: number, y: number, z: number, u: number) => {
       const s = pj(x, y, Math.max(z, -1.5));
-      const k = 1 - smooth(0, 0.15, u);
+      // 투수 그림 손 ↔ 공 놓는 점 차이는 비행 70% 동안 천천히 줄임 (빨리 줄이면 공이 손에서 툭 떨어졌다 다시 떠 보임)
+      const k = 1 - smooth(0, 0.7, u);
       return { x: s.x + off.x * k, y: s.y + off.y * k, s: s.s };
     };
     // 지나간 공 (헛스윙 · 볼) 은 미트까지만 · 몸에 맞은 공은 거기서 끝
