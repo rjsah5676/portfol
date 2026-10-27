@@ -860,9 +860,11 @@ export class Match {
   private batterPos() {
     const lefty = this.shownBatter.bats === "L";
     // 구장 그림의 왼쪽 · 오른쪽 타석 가운데에 발이 오게 + 사용자 타자는 컨택존을 옮긴 만큼 같이 움직임 (화면 px 그대로)
+    // 위로 옮길 땐 타자가 화면 위(= 투수 쪽 앞)로 떠 보여서 20%만 — 좌우 · 아래는 그대로
     const S0 = proj(0, 0, 0).s;
+    const dy = this.cz.y - ZONE.mid;
     const ox = this.userBat ? this.cz.x * S0 : 0;
-    const oy = this.userBat ? -(this.cz.y - ZONE.mid) * S0 : 0;
+    const oy = this.userBat ? -dy * S0 * (dy > 0 ? 0.2 : 1) : 0;
     return { x: (lefty ? 684 : 340) + ox, y: 394 + oy, sc: 2.25, lefty };
   }
 

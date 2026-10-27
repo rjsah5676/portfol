@@ -56,10 +56,10 @@ export function contactZone(hit: number) {
   return { hw: (ZONE.x + BALL_R) * k, hh: ((ZONE.y1 - ZONE.y0) / 2 + BALL_R) * k };
 }
 /**
- * 컨택존 가운데가 움직일 수 있는 범위 (과하지 않게) — 좌우 ±0.2m · 위아래 ±0.17m.
- * 제일 좁은 존(히트 0, 반폭 0.08m)도 끝까지 옮기면 존 구석(0.25m)에 닿는 정도. 타자 그림은 화면에서 좌우 57px · 위아래 49px 까지
+ * 컨택존 가운데가 움직일 수 있는 범위 (과하지 않게) — 좌우 ±0.14m · 위아래 ±0.12m (처음 범위의 70%).
+ * 타자 그림은 화면에서 좌우 40px · 아래 34px 까지 (위로는 거의 안 움직임 — match.batterPos)
  */
-export const CZ_RANGE = { x: 0.2, y0: ZONE.mid - 0.17, y1: ZONE.mid + 0.17 };
+export const CZ_RANGE = { x: 0.14, y0: ZONE.mid - 0.12, y1: ZONE.mid + 0.12 };
 /**
  * 컨택존 배율: 존 가운데 1.08 → 존 끝 0.96 (잘 노리면 덤), 밖으로 멀어질수록 줄어 최저 0.4
  * (존 밖이라고 무조건 헛스윙 · 아웃은 아님 — 타이밍이 좋으면 빗맞은 안타 · 파울은 나옴)
