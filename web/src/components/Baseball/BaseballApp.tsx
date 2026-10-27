@@ -8,13 +8,22 @@ import { isMuted, setMuted } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 import CareerMode from "./Career";
 import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
+import { CLUB_DEFS, clubDefById } from "@/lib/baseball/data";
+import { buildTeam, findGhosts, ghostTeam, gradeOf, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
+import { makeRng } from "@/lib/baseball/rng";
+import { createClub, loadClub, recordOnline, saveClub } from "./clubStore";
+import ClubScreen from "./Club";
+import { Emblem, GradeChip } from "./clubUi";
+import Online from "./Online";
+import Shop from "./Shop";
+import TeamPick from "./TeamPick";
 
 /*
  * 픽셀 프로야구 — 메뉴 · 경기 화면(캔버스) · 조작 버튼.
  * 경기 로직 · 그리기는 match.ts, 규칙은 lib/baseball.
  */
 
-type Screen = "title" | "setup" | "derby" | "howto" | "play" | "career";
+type Screen = "title" | "setup" | "derby" | "howto" | "play" | "career" | "pick" | "club" | "online" | "shop";
 
 export default function BaseballApp() {
   const [screen, setScreen] = useState<Screen>("title");
@@ -24,15 +33,50 @@ export default function BaseballApp() {
   const [home, setHome] = useState(true);
   const [cfg, setCfg] = useState<MatchCfg | null>(null);
   const [run, setRun] = useState(0);
+  /** 내 구단 (없으면 첫 방문 → 구단 고르기) */
+  const [club, setClub] = useState<Club | null>(null);
+  const [ghosts, setGhosts] = useState<Ghost[] | null>(null);
+  /** 지금 경기의 온라인 상대 (없으면 연습 · 더비) */
+  const [foe, setFoe] = useState<Ghost | null>(null);
+  const [overNote, setOverNote] = useState<string | null>(null);
+  const first = useRef(true);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장값
     setSave(loadSave());
+    const c = loadClub();
+    setClub(c);
+    if (first.current) {
+      first.current = false;
+      if (!c) setScreen("pick");
+    }
   }, [screen]);
 
   const start = (c: MatchCfg) => {
     setCfg({ speed: loadSpeed(), ...c });
     setRun((n) => n + 1);
     setScreen("play");
+  };
+  const changeClub = (c: Club) => {
+    saveClub(c);
+    setClub(c);
+  };
+  /** 온라인(기록) 대전 시작 — 구단은 저장된 최신으로 */
+  const playOnline = (g: Ghost, inn: number, userHome: boolean) => {
+    const c = loadClub();
+    if (!c) return;
+    setFoe(g);
+    setOverNote(null);
+    start({ mode: "game", diff: g.tier as Diff, innings: inn, userHome, teams: { mine: buildTeam(c), cpu: g.team } });
+  };
+  /** 연습 경기: 구단이 있으면 우리 팀 = 내 구단, 상대 = 비슷한 전력 AI 구단 */
+  const playPractice = () => {
+    setFoe(null);
+    setOverNote(null);
+    const c = loadClub();
+    if (!c) return start({ mode: "game", diff, innings, userHome: home });
+    const rng = makeRng();
+    const def = rng.pick(CLUB_DEFS.filter((d) => d.id !== c.teamId));
+    start({ mode: "game", diff, innings, userHome: home, teams: { mine: buildTeam(c), cpu: ghostTeam(def, teamRating(c), rng) } });
   };
 
   return (
@@ -41,8 +85,20 @@ export default function BaseballApp() {
         <Play
           key={run}
           cfg={cfg}
-          onExit={() => setScreen(cfg.career || cfg.bond ? "career" : "title")}
-          onAgain={() => start({ ...cfg, seed: undefined })}
+          onExit={() => setScreen(cfg.career || cfg.bond ? "career" : foe ? "online" : "title")}
+          onAgain={() => (foe ? playOnline(foe, cfg.innings, cfg.userHome) : cfg.teams ? playPractice() : start({ ...cfg, seed: undefined }))}
+          note={overNote}
+          onOver={
+            foe
+              ? (win, score) => {
+                  const d = recordOnline(foe, win, score);
+                  const c = loadClub();
+                  setOverNote(`대전 점수 ${d >= 0 ? `+${d}` : d} → ${c?.record.rating ?? "-"} · ${c ? `${c.record.w}승 ${c.record.l}패` : ""}`);
+                  // 로비로 돌아가면 새 상대 3팀
+                  setGhosts(c ? findGhosts(c) : null);
+                }
+              : undefined
+          }
           onCareerDone={(mm) => {
             if (cfg.bond) {
               finishBond(mm.bondSt.pts);
@@ -61,26 +117,78 @@ export default function BaseballApp() {
         />
       ) : screen === "career" ? (
         <CareerMode onExit={() => setScreen("title")} onPlay={start} />
+      ) : screen === "club" && club ? (
+        <MenuBg>
+          <ClubScreen club={club} coin={save.pt} onChange={changeClub} onBack={() => setScreen("title")} />
+        </MenuBg>
+      ) : screen === "online" && club ? (
+        <MenuBg>
+          <Online club={club} coin={save.pt} ghosts={ghosts} setGhosts={setGhosts} onPlay={playOnline} onBack={() => setScreen("title")} onManage={() => setScreen("club")} />
+        </MenuBg>
       ) : (
         <MenuBg>
+          {screen === "pick" && (
+            <TeamPick
+              onPick={(id) => {
+                setClub(createClub(id));
+                setScreen("title");
+              }}
+              onLater={() => setScreen("title")}
+            />
+          )}
+
+          {screen === "shop" && <Shop coin={save.pt} onBack={() => setScreen("title")} />}
+
           {screen === "title" && (
-            <div className="flex h-full flex-col items-center justify-center gap-5">
+            <div className="flex h-full flex-col items-center justify-center gap-4">
+              {/* 내 구단 (오른쪽 위) */}
+              {club ? (
+                <button
+                  type="button"
+                  onClick={() => setScreen("club")}
+                  className="absolute top-4 right-4 flex cursor-pointer items-center gap-2 rounded-xl border border-white/15 bg-black/35 py-1.5 pr-3 pl-1.5 text-left hover:border-white/40"
+                >
+                  <Emblem def={clubDefById(club.teamId)} size={36} />
+                  <span>
+                    <span className={`${font.title} block text-[15px] leading-tight`}>{clubDefById(club.teamId).name}</span>
+                    <span className="flex items-center gap-1 text-[11px] text-white/60">
+                      팀 평점 <GradeChip g={gradeOf(teamRating(club))} /> <b className="font-mono text-white/85">{teamRating(club)}</b>
+                    </span>
+                  </span>
+                </button>
+              ) : (
+                <Btn className="absolute top-4 right-4 px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => setScreen("pick")}>
+                  내 구단 고르기
+                </Btn>
+              )}
               <div className="text-center">
-                <div className={`${font.title} text-[64px] leading-none tracking-wide`} style={{ color: ACCENT, textShadow: "0 5px 0 #000, 0 0 30px rgba(255,138,61,0.5)" }}>
+                <div className={`${font.title} text-[60px] leading-none tracking-wide`} style={{ color: ACCENT, textShadow: "0 5px 0 #000, 0 0 30px rgba(255,138,61,0.5)" }}>
                   픽셀 프로야구
                 </div>
                 <div className="mt-2 text-[14px] text-white/60">타이밍 한 방 — 친구들과 같이 크는 야구</div>
               </div>
-              <Btn className={`${font.title} w-[432px] py-4 text-[28px]`} onClick={() => setScreen("career")}>
-                육성 모드
-                <span className="block font-['Nanum_Gothic'] text-[12px] font-normal opacity-80">나만의 선수를 5시즌 키워서 명예의 전당으로</span>
-              </Btn>
               <div className="flex gap-3">
-                <Btn className={`${font.title} w-[210px] py-4 text-2xl`} color="#7ad7ff" onClick={() => setScreen("setup")}>
+                <Btn className={`${font.title} w-[330px] py-3.5 text-[28px]`} onClick={() => setScreen("career")}>
+                  육성 모드
+                  <span className="block font-['Nanum_Gothic'] text-[12px] font-normal opacity-80">나만의 선수를 키워서 명예의 전당으로</span>
+                </Btn>
+                <Btn className={`${font.title} w-[330px] py-3.5 text-[28px]`} color="#7dff9a" onClick={() => setScreen(club ? "online" : "pick")}>
+                  온라인 대전
+                  <span className="block font-['Nanum_Gothic'] text-[12px] font-normal opacity-80">내 구단으로 다른 구단과 한판 (알파)</span>
+                </Btn>
+              </div>
+              <div className="flex gap-3">
+                <Btn className={`${font.title} w-[159px] py-3 text-[21px]`} color="#ff8ad1" onClick={() => setScreen(club ? "club" : "pick")}>
+                  구단 관리
+                </Btn>
+                <Btn className={`${font.title} w-[159px] py-3 text-[21px]`} color="#7ad7ff" onClick={() => setScreen("setup")}>
                   연습 경기
                 </Btn>
-                <Btn className={`${font.title} w-[210px] py-4 text-2xl`} color="#ffd23f" onClick={() => setScreen("derby")}>
+                <Btn className={`${font.title} w-[159px] py-3 text-[21px]`} color="#ffd23f" onClick={() => setScreen("derby")}>
                   홈런 더비
+                </Btn>
+                <Btn className={`${font.title} w-[159px] py-3 text-[21px]`} color="#b46bff" onClick={() => setScreen("shop")}>
+                  상점
                 </Btn>
               </div>
               <Btn className="w-[160px] py-2 text-sm" color="#7ad7ff" onClick={() => setScreen("howto")}>
@@ -88,6 +196,7 @@ export default function BaseballApp() {
               </Btn>
               <div className="font-mono text-[13px] text-white/50">
                 코인 {save.pt.toLocaleString()} · {save.games}경기 {save.wins}승 · 더비 최고 {save.derbyBest.toLocaleString()}m
+                {club && ` · 대전 ${club.record.w}승 ${club.record.l}패 (${club.record.rating}점)`}
               </div>
             </div>
           )}
@@ -117,7 +226,7 @@ export default function BaseballApp() {
                     </Btn>
                   ))}
                 </Row>
-                <Row label="우리 팀">
+                <Row label="홈 / 원정">
                   <Btn active={!home} className="px-4 py-1.5 text-sm" onClick={() => setHome(false)}>
                     원정 (먼저 공격)
                   </Btn>
@@ -129,8 +238,23 @@ export default function BaseballApp() {
               <p className="text-[12px] text-white/50">
                 {diff === 0 ? "초급: 공이 느리고, 공이 들어올 자리가 처음부터 보임 (이글아이)" : diff === 1 ? "중급: 보통 속도 · 공이 반쯤 왔을 때 들어올 자리가 보임" : "고급: 빠름 · 표시 없음 · 봇이 잘 치고 잘 던짐"}
               </p>
+              {club ? (
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                  <Emblem def={clubDefById(club.teamId)} size={44} />
+                  <div className="text-[13px] leading-relaxed text-white/75">
+                    우리 팀 = 내 구단 <b style={{ color: clubDefById(club.teamId).color }}>{clubDefById(club.teamId).name}</b> (팀 평점 {teamRating(club)}) · 지금 타선 · 선발 그대로
+                    <br />
+                    상대 = 비슷한 전력의 AI 구단 · 연습 경기는 대전 점수에 안 들어가요
+                  </div>
+                  <Btn className="ml-auto px-3 py-1.5 text-[13px]" color="#ff8ad1" onClick={() => setScreen("club")}>
+                    구단 관리
+                  </Btn>
+                </div>
+              ) : (
+                <p className="text-[12px] text-white/45">내 구단을 고르면 우리 팀이 내 구단 선수들로 바뀌어요</p>
+              )}
               <div className="mt-auto flex items-center justify-end">
-                <Btn className={`${font.title} px-10 py-2.5 text-xl`} onClick={() => start({ mode: "game", diff, innings, userHome: home })}>
+                <Btn className={`${font.title} px-10 py-2.5 text-xl`} onClick={playPractice}>
                   PLAY BALL
                 </Btn>
               </div>
@@ -221,7 +345,23 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 }
 
 // ───────────── 경기 화면 ─────────────
-function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: () => void; onAgain: () => void; onCareerDone: (m: Match) => void }) {
+function Play({
+  cfg,
+  onExit,
+  onAgain,
+  onCareerDone,
+  onOver,
+  note,
+}: {
+  cfg: MatchCfg;
+  onExit: () => void;
+  onAgain: () => void;
+  onCareerDone: (m: Match) => void;
+  /** 경기 끝 (한 번) — 온라인 대전 기록 */
+  onOver?: (win: boolean | null, score: string) => void;
+  /** 결과 창에 덧붙일 줄 */
+  note?: string | null;
+}) {
   const { k, fs, canFs, toggleFs } = useStage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const matchRef = useRef<Match | null>(null);
@@ -231,6 +371,12 @@ function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: (
   const [bullpen, setBullpen] = useState(false);
   const [muted, setMute] = useState(isMuted());
   const down = useRef(false);
+  const overDone = useRef(false);
+  useEffect(() => {
+    if (!ui?.over || overDone.current || !m) return;
+    overDone.current = true;
+    onOver?.(ui.over.win, `${ui.over.score[0]}:${ui.over.score[1]}`);
+  }, [ui?.over, m, onOver]);
 
   useEffect(() => {
     const m = new Match(cfg, setUi);
@@ -581,6 +727,7 @@ function Play({ cfg, onExit, onAgain, onCareerDone }: { cfg: MatchCfg; onExit: (
           ) : (
           <>
           <div className="mt-2 text-[15px] text-[#ffd23f]">+{ui.over.pt} 코인</div>
+          {note && <div className="mt-1 text-[14px] font-bold text-[#7dff9a]">{note}</div>}
           <div className="mt-4 flex justify-center gap-3">
             <Btn className="px-6 py-2.5 text-lg" onClick={onAgain}>
               다시 하기

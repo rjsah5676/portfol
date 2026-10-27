@@ -1907,6 +1907,9 @@ export interface HofEntry {
   /** 파트너 (은퇴 에필로그) */
   partner?: CharId;
   look?: Look;
+  /** 구단 카드로 넘길 때 (예전 저장엔 없음) */
+  bats?: "R" | "L";
+  num?: number;
 }
 /** 계승할 수 있는 특수능력인가 */
 export const inheritable = (id: SkillId) => !skill(id).set && !skill(id).bad && !skill(id).boon;
@@ -1914,7 +1917,7 @@ export function hofEntry(c: Career): HofEntry {
   const r = retireCard(c);
   const st = {} as Stats;
   for (const k of STAT_KEYS) st[k] = Math.round(c.stats[k]);
-  return { id: c.id, name: c.name, type: c.type, ovr: r.ovr, grade: r.grade.g, nick: r.nick[0], stats: st, hr: c.total.hr, avg: avg(c.total), seasons: c.seasons.length, at: Date.now(), gp: c.gp.length, skills: c.skills.filter(inheritable), partner: r.partner, look: c.look };
+  return { id: c.id, name: c.name, type: c.type, ovr: r.ovr, grade: r.grade.g, nick: r.nick[0], stats: st, hr: c.total.hr, avg: avg(c.total), seasons: c.seasons.length, at: Date.now(), gp: c.gp.length, skills: c.skills.filter(inheritable), partner: r.partner, look: c.look, bats: c.bats, num: c.num };
 }
 
 /* ─────────────── 봇 육성 (자동 진행 · 밸런스 시뮬) ─────────────── */

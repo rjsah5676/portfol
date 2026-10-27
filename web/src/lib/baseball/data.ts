@@ -180,8 +180,8 @@ export interface Team {
   pitchers: Pitcher[];
 }
 
-const FAMILY = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍"];
-const GIVEN = [
+export const FAMILY = ["김", "이", "박", "최", "정", "강", "조", "윤", "장", "임", "한", "오", "서", "신", "권", "황", "안", "송", "류", "홍"];
+export const GIVEN = [
   "도윤", "서준", "하준", "민재", "지호", "준우", "현우", "건우", "우진", "시우", "태윤", "승민",
   "재원", "동현", "성훈", "영호", "진혁", "상철", "대호", "병규", "용택", "광수", "치국", "민철",
 ];
@@ -205,6 +205,29 @@ export const TEAM_DEFS: TeamDef[] = [
   { id: "bg", name: "버그 바이퍼스", short: "BGV", color: "#3DDC84", dark: "#0f3f25", bat: -10, pit: 25 },
   { id: "lg", name: "렉 드래곤즈", short: "LAG", color: "#FF4D6D", dark: "#4a0f1c", bat: 10, pit: 10 },
 ];
+
+/** 구단 (구단 관리 · 온라인 대전) — 첫 방문에 하나 골라 내 구단으로. 엠블럼은 그림 없이 CSS 도형 + 이니셜 */
+export interface ClubDef extends TeamDef {
+  /** 엠블럼 도형 · 이니셜 */
+  shape: "circle" | "shield" | "diamond" | "hex" | "square";
+  mono: string;
+  /** 한 줄 소개 */
+  flavor: string;
+}
+
+export const CLUB_DEFS: ClubDef[] = [
+  { id: "c_meteor", name: "한강 메테오스", short: "HMT", color: "#4C8DFF", dark: "#10234d", bat: 0, pit: 0, shape: "circle", mono: "HM", flavor: "한강 위로 떨어지는 유성처럼 — 한 방에 끝낸다" },
+  { id: "c_kraken", name: "남해 크라켄즈", short: "NKR", color: "#E8455A", dark: "#4a0f1a", bat: 0, pit: 0, shape: "shield", mono: "NK", flavor: "깊은 바다에서 올라온 끈질긴 촉수 야구" },
+  { id: "c_mammoth", name: "백두 매머드즈", short: "BDM", color: "#8AB4D8", dark: "#1d3347", bat: 0, pit: 0, shape: "hex", mono: "BM", flavor: "눈보라도 못 막는 육중한 중심 타선" },
+  { id: "c_comet", name: "은하 코메츠", short: "EHC", color: "#9B7BFF", dark: "#25184d", bat: 0, pit: 0, shape: "diamond", mono: "EC", flavor: "꼬리가 긴 변화구 — 별똥별 마운드" },
+  { id: "c_robot", name: "강철 로보츠", short: "GCR", color: "#B8C2D6", dark: "#2a2f3a", bat: 0, pit: 0, shape: "square", mono: "GR", flavor: "오차 0mm, 기계처럼 정확한 수비" },
+  { id: "c_phoenix", name: "노을 피닉스", short: "NUP", color: "#FF7A2F", dark: "#4d1d08", bat: 0, pit: 0, shape: "shield", mono: "NP", flavor: "지고 있어도 9회에 다시 타오른다" },
+  { id: "c_hwarang", name: "서라벌 화랑즈", short: "SHR", color: "#E0B13A", dark: "#45340a", bat: 0, pit: 0, shape: "circle", mono: "SH", flavor: "천 년 고도의 품격 — 예의 바른 강속구" },
+  { id: "c_wind", name: "제주 윈드러너즈", short: "JWR", color: "#33D6C0", dark: "#0b3d37", bat: 0, pit: 0, shape: "diamond", mono: "JW", flavor: "바람을 타고 달린다 — 리그 최고의 발" },
+  { id: "c_wolf", name: "달빛 울프팩", short: "DWP", color: "#6B7BFF", dark: "#161a4a", bat: 0, pit: 0, shape: "hex", mono: "DW", flavor: "밤 경기만 되면 무리 지어 몰아친다" },
+  { id: "c_dokkaebi", name: "도깨비 방망이즈", short: "DKB", color: "#46D97A", dark: "#0f3d22", bat: 0, pit: 0, shape: "square", mono: "DK", flavor: "뚝딱 치면 안타 나와라 — 장난꾸러기 타선" },
+];
+export const clubDefById = (id: string) => CLUB_DEFS.find((d) => d.id === id) ?? CLUB_DEFS[0];
 
 /** 이름 · 능력치가 들어간 팀 만들기 (시드가 같으면 같은 팀) */
 export function makeTeam(def: TeamDef, rng: () => number, sp?: { bat: CharId; pit: CharId }): Team {
