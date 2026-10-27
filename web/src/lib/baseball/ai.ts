@@ -13,7 +13,8 @@ export type Diff = 0 | 1 | 2;
 export const DIFF_NAME = ["초급", "중급", "고급"] as const;
 
 /** 공 속도 배율 (높을수록 빠름 — 화면 km/h 는 그대로) */
-export const SPEED_SCALE: Record<Diff, number> = { 0: 0.6, 1: 0.72, 2: 0.84 };
+/** 공 속도 배율 — 중급 = 실제 속도 (140km 직구가 손 떠나 홈까지 약 0.44초, 마구마구 직구와 비슷). 예전 0.6 · 0.72 · 0.84 */
+export const SPEED_SCALE: Record<Diff, number> = { 0: 0.83, 1: 1.0, 2: 1.17 };
 
 export interface PitchPlan {
   kind: PitchKind;

@@ -11,13 +11,30 @@ export const DW = 1024;
 export const DH = 576;
 
 // ───────────── 타석 원근 ─────────────
-// 구장 그림(bat-dusk)에 맞춘 값: 홈플레이트 앞면(폭 0.43m) · 투수판(폭 0.61m, 높이 0.25m) 위치를 그림에서 재서 풀었음
-export const CAM = { F: 2471, Dc: 8.62, camH: 1.094, Y0: 181.4, cx: 512 };
+// 구장 그림(bat-low, 낮은 정면 시점 — 컴투스 · 마구마구 구도)에 맞춘 값:
+// 홈플레이트 앞면 · 모서리 · 끝, 투수판, 외야 펜스 아래 끝을 그림에서 재서 최소제곱으로 풀었음 (scripts 없이 일회성)
+// → 홈 뒤 2.3m · 눈높이 0.47m · 수평선 58%. 예전(bat-dusk): F 2471 · Dc 8.62 · camH 1.094 · Y0 181.4
+export const CAM = { F: 688.7, Dc: 2.268, camH: 0.472, Y0: 331.7, cx: 512 };
+/**
+ * 존 내림 (px): 타자 그림을 원래 크기(실제 비율보다 작게)로 두면서 존이 타자 가슴 ~ 무릎에 오게,
+ * 홈 쪽(z ≤ 0)에서 이만큼 아래로 그리고 투수판(z 18.44)으로 갈수록 0 — 투수는 그림의 투수판 위에 그대로.
+ * 높이 0(땅)은 안 내림 → 그림자 · 땅에 튄 공은 그림 땅에 맞고, 땅 ~ 존 아래 끝 사이만 눌림 (마구마구도 존을 홈에 바짝 붙여 그림)
+ */
+export const ZONE_DROP = 64;
+const dropAt = (y: number, z: number) => ZONE_DROP * clamp01(1 - z / 18.44) * clamp01(y / 0.43);
+const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 export function proj(x: number, y: number, z: number) {
   const s = CAM.F / (z + CAM.Dc);
-  return { x: CAM.cx + x * s, y: CAM.Y0 - (y - CAM.camH) * s, s };
+  return { x: CAM.cx + x * s, y: CAM.Y0 - (y - CAM.camH) * s + dropAt(y, z), s };
 }
 export const MOUND = proj(0, 0, 18.4);
+/** 홈플레이트 면(z 0)의 화면 좌표 → 월드 (x, 높이) — proj 의 존 내림까지 되돌림 */
+export function unprojPlate(sx: number, sy: number) {
+  const s = CAM.F / CAM.Dc;
+  let y = CAM.camH - (sy - CAM.Y0) / s;
+  for (let i = 0; i < 4; i++) y = CAM.camH - (sy - CAM.Y0 - ZONE_DROP * clamp01(y / 0.43)) / s;
+  return { x: (sx - CAM.cx) / s, y };
+}
 
 // ───────────── 필드 ─────────────
 export const FV = { S: 3.95, ox: 512, oy: 552, k: 0.84, kh: 0.9 };
@@ -50,7 +67,7 @@ function crowd(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number
 }
 
 /** 구장 그림 (지피티 · 저녁) — 있으면 코드로 그린 배경 대신 이걸 씀 */
-export const STADIUM_SRC = "/baseball/stadium/bat-dusk.webp";
+export const STADIUM_SRC = "/baseball/stadium/bat-low.webp";
 let stadium: HTMLImageElement | null = null;
 function stadiumImg() {
   if (!stadium && typeof Image !== "undefined") {

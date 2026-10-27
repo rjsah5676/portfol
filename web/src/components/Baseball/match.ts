@@ -31,11 +31,12 @@ import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
-import { CAM, DH, DW, battingBg, drawFieldFrame, fieldBg, fproj, proj } from "./view";
+import { DH, DW, battingBg, drawFieldFrame, fieldBg, fproj, proj, unprojPlate } from "./view";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
 
 /** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
-const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 503, scale: 0.229 };
+// scale: 낮은 정면 시점 구장(bat-low)의 투수판 크기에 맞춤 (예전 0.229 → 0.16, 키 ≈ 화면 14%)
+const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 503, scale: 0.16 };
 /**
  * 투구 줄 (그록 영상 → scripts/baseball-pitcher-video.py): 세트 → 다리 들기 → 내딛기 → 공 놓기(PITCH_RELEASE_T) → 팔로스루.
  * 영상 캔버스 = 세트 그림 × 520/506 × 1.1 이라 캔버스 1px = PITCHER_STILL.scale / 1.1304 게임 px, 줄 칸은 캔버스 × cell.
@@ -749,9 +750,7 @@ export class Match {
     let y: number;
     if (this.pitcherView) ({ x, y } = pvUnproj(this.pvCamNow(), sx, sy));
     else {
-      const s = proj(0, 0, 0).s;
-      x = (sx - CAM.cx) / s;
-      y = CAM.camH - (sy - CAM.Y0) / s;
+      ({ x, y } = unprojPlate(sx, sy));
     }
     if (Math.abs(x) > 0.55 || y < 0.15 || y > 1.5) return false;
     this.target = { x: clamp(x, -0.5, 0.5), y: clamp(y, 0.2, 1.45) };
@@ -1488,7 +1487,7 @@ export class Match {
     // 투수
     // 투수판(높이 0.25m) 위 · 크기는 구장 그림 목업 기준 (키 ≈ 135px)
     const mp = proj(0, 0.25, 18.4);
-    const pitcherScale = 0.9;
+    const pitcherScale = 0.63;
     const pps = pose(PITCHER_RIG, this.pitAnim, this.pitAnim === PIT_THROW ? (this.pitAnimT * PIT_RIG_RELEASE_T) / PITCH_RELEASE_T : this.pitAnimT);
     const pFlip = this.pitcherNow.throws === "L";
     // 투수 그림 (지피티 세트 자세 1장, 발 = 투수판) — 없으면 코드 리그
