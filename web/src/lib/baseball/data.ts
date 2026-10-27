@@ -153,6 +153,28 @@ export interface Batter {
   look?: { hair: number; face: number; skin: number; bat: number; uni: number };
   /** 육성 선수: 다 같이 낮은 능력치에서 시작하니 경기에선 편차를 줄여 씀 (playStat) */
   grow?: boolean;
+  /** 이번 시즌 기록 (육성 선수는 진짜 기록 — 없으면 seasonOf 가 능력치로 만들어 냄) */
+  season?: SeasonLine;
+}
+
+export interface SeasonLine {
+  avg: number;
+  hr: number;
+  rbi: number;
+}
+/**
+ * 타석 화면 「시즌 기록」: 육성 선수는 진짜 시즌 기록, 그 밖의 선수(구단 카드 · 상대 팀)는 아직 시즌 기록을 안 쌓아서
+ * 능력치 + 이름으로 늘 같은 값을 만들어 보여 줌 (타격 → 타율, 파워 → 홈런, 둘 다 → 타점)
+ */
+export function seasonOf(b: Batter): SeasonLine {
+  if (b.season) return b.season;
+  let h = 7;
+  for (const ch of b.name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const j = (k: number) => (((h >>> k) & 1023) / 1023 - 0.5) * 2;
+  const avg = Math.max(0.18, Math.min(0.39, 0.205 + (b.hit / 1000) * 0.13 + j(0) * 0.018));
+  const hr = Math.max(0, Math.round(Math.pow(b.power / 1000, 2) * 42 + j(10) * 3));
+  const rbi = Math.max(hr, Math.round(hr * 2.3 + avg * 140 + j(20) * 8));
+  return { avg, hr, rbi };
 }
 
 /**

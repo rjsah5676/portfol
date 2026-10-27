@@ -824,6 +824,7 @@ export function careerBatter(c: Career): Batter {
     hit: v("hit", f),
     power: v("power", f),
     run: v("run", 1),
+    season: { avg: c.line.ab ? c.line.h / c.line.ab : 0, hr: c.line.hr, rbi: c.line.rbi },
     learned: c.learned,
     sit: fx.sit,
     look: c.look,

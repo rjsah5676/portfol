@@ -9,7 +9,7 @@
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { CZ_RANGE, contactZone, timingLabel, timingWindow } from "@/lib/baseball/contact";
-import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
+import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, seasonOf, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
 import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_RIG_RELEASE_T, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
@@ -20,7 +20,7 @@ import {
   stamina01, staminaMax, userBatting, type GameState, type PAResult,
 } from "@/lib/baseball/game";
 import { PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
-import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
+import { HOME_POS, predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
@@ -43,6 +43,23 @@ const MISTAKE_TELL = 0.5;
 /** 날아오는 공 꼬리 길이 (초) · 나눌 점 수 */
 const TRAIL_SEC = 0.13;
 const TRAIL_N = 18;
+/** 타석 화면 수비수 그림 (GPT — 투수 그림체 · 정면) · 실제 원근 대비 키 배율 (투수 그림과 비슷하게) */
+const FIELDER = {
+  ifReady: "/baseball/sprites/fielder-if-ready.webp",
+  ifStand: "/baseball/sprites/fielder-if-stand.webp",
+  ofReady: "/baseball/sprites/fielder-of-ready.webp",
+  ofStand: "/baseball/sprites/fielder-of-stand.webp",
+} as const;
+const FIELDER_BOOST = 1.8;
+/** HUD · 이펙트 그림 (GPT 이미지 → public/baseball/ui) */
+const UI = {
+  profile: "/baseball/ui/profile.webp",
+  burst: "/baseball/ui/burst.webp",
+  ring: "/baseball/ui/ring.webp",
+  perfect: "/baseball/ui/perfect.webp",
+  good: "/baseball/ui/good.webp",
+  homerun: "/baseball/ui/homerun.webp",
+} as const;
 const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 503, scale: 0.1956 };
 /**
  * 투구 줄 (그록 영상 → scripts/baseball-pitcher-video.py): 세트 → 다리 들기 → 내딛기 → 공 놓기(PITCH_RELEASE_T) → 팔로스루.
@@ -120,6 +137,8 @@ interface Banner {
   t: number;
   dur: number;
   big?: boolean;
+  /** 글자 대신 그림 로고 (홈런 등) */
+  logo?: string;
 }
 
 interface Popup {
@@ -209,6 +228,10 @@ export class Match {
   contactShown = false;
   batTilt = 0;
   timingText = "";
+  /** 판정 글자가 뜬 뒤 시간 (튀어나오는 연출) */
+  timingT = 0;
+  /** 그림 이펙트 (맞는 순간 섬광 · 충격파 링) */
+  fxs: { src: string; x: number; y: number; t: number; dur: number; size: number; grow: number; rot: number }[] = [];
   timingColor = "#fff";
   pitchInfo = "";
   lastCall = "";
@@ -699,6 +722,7 @@ export class Match {
     }
     const W = timingWindow(b.hit, this.buntArmed, !!this.decision.special);
     this.timingText = timingLabel(e, W);
+    this.timingT = 0;
     this.timingMs = Math.round(e * 1000);
     this.timingColor = this.timingText === "PERFECT" ? "#ffd23f" : this.timingText === "GOOD" ? "#7dff9a" : "#ff9a7a";
     this.pushUi();
@@ -1101,7 +1125,8 @@ export class Match {
     if (res) {
       const col = res.kind === "HR" ? "#ffd23f" : res.kind === "HIT" ? "#7dff9a" : res.kind === "BB" ? "#7ad7ff" : res.kind === "K" ? (this.userBat ? "#ff7a7a" : "#ffd23f") : "#ffffff";
       const sub = res.runs ? `+${res.runs}점` : undefined;
-      this.setBanner(res.text, sub, col, 1.5, big || res.runs > 0);
+      this.setBanner(res.text, sub, col, res.kind === "HR" ? 2 : 1.5, big || res.runs > 0);
+      if (res.kind === "HR" && this.banner) this.banner.logo = UI.homerun;
       if (res.kind === "K") (this.userBat ? sfx.groan : () => sfx.cheer(0.7))();
       if (this.cfg.career && this.userBat) {
         const ln = this.s.sides[batSide(this.s)].bat[this.cfg.career.myIdx];
@@ -1213,6 +1238,9 @@ export class Match {
     }
     this.particles = this.particles.filter((p) => p.life > 0);
     if (this.impact && (this.impact.t += dt) > 0.22) this.impact = null;
+    this.timingT += dt;
+    for (const f of this.fxs) f.t += dt;
+    this.fxs = this.fxs.filter((f) => f.t < f.dur);
     // 컨택존 · 타자 옮기기 (투구 전만, 초당 0.65m — 끝에서 끝까지 1초 남짓)
     if (this.userBat && (this.phase === "ready" || this.phase === "windup") && (this.czVel.x || this.czVel.y)) {
       this.cz = {
@@ -1326,6 +1354,9 @@ export class Match {
             const at = this.scr(o.at.x, o.at.y, 0);
             this.impact.x = at.x;
             this.impact.y = at.y;
+            // 그림 이펙트: 섬광(세기 = 맞은 질) · 정타 이상이면 충격파 링
+            this.fxs.push({ src: UI.burst, x: at.x, y: at.y, t: 0, dur: perfect ? 0.32 : 0.22, size: (foul ? 70 : 90) + q * 70 + (perfect ? 40 : 0), grow: 0.25, rot: this.rng() * Math.PI });
+            if (perfect || (!foul && q > 0.6)) this.fxs.push({ src: UI.ring, x: at.x, y: at.y, t: 0, dur: perfect ? 0.45 : 0.32, size: perfect ? 120 : 80, grow: perfect ? 2.6 : 1.8, rot: 0 });
             for (let i = 0; i < (foul ? 8 : 18); i++) {
               const a = this.rng() * Math.PI * 2;
               const v = 120 + this.rng() * 260;
@@ -1529,6 +1560,8 @@ export class Match {
     ctx.drawImage(battingBg(q, this.night), 0, 0, DW, DH);
     const p = this.pitch;
     // 투수
+    // 수비수 (내야 4 · 외야 3): 구장 그림 땅 위 실제 수비 위치 — 먼 쪽부터 그리고 투수는 그 앞
+    this.drawFielders(ctx);
     // 투수판(높이 0.25m) 위 · 크기는 구장 그림 목업 기준 (키 ≈ 135px)
     const mp = PITCHER_FEET;
     const pitcherScale = 0.77;
@@ -1758,6 +1791,20 @@ export class Match {
       ctx.fill();
       ctx.restore();
     }
+    // 그림 이펙트 (섬광 · 충격파 링): 빨리 커지며 사라짐
+    for (const f of this.fxs) {
+      const im = img(f.src);
+      if (!im.complete || !im.naturalWidth) continue;
+      const u = f.t / f.dur;
+      const sz = f.size * (0.6 + u * f.grow + (1 - (1 - u) ** 3) * 0.4);
+      ctx.save();
+      ctx.globalAlpha = u < 0.15 ? u / 0.15 : 1 - smooth(0.35, 1, u);
+      ctx.globalCompositeOperation = "lighter";
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.rot);
+      ctx.drawImage(im, -sz / 2, -sz / 2 * (im.naturalHeight / im.naturalWidth), sz, sz * (im.naturalHeight / im.naturalWidth));
+      ctx.restore();
+    }
     // 파티클
     for (const pt of this.particles) {
       ctx.globalAlpha = Math.min(1, pt.life * 3);
@@ -1777,20 +1824,36 @@ export class Match {
       ctx.fillText(this.pitchInfo, z1.x + 30, z0.y + 15);
     }
     if (this.timingText && this.userBat && (this.phase === "flight" || this.phase === "contact" || this.phase === "call")) {
-      ctx.font = '26px "Black Han Sans", sans-serif';
+      const logo = this.timingText === "PERFECT" ? UI.perfect : this.timingText === "GOOD" ? UI.good : null;
+      const lim = logo ? img(logo) : null;
+      if (lim && lim.complete && lim.naturalWidth) {
+        // 튀어나옴: 1.7배 → 0.92 → 1 (0.18초), 살짝 위로 떠오름
+        const t = this.timingT;
+        const pop = t < 0.1 ? 1.7 - (t / 0.1) * 0.78 : t < 0.18 ? 0.92 + ((t - 0.1) / 0.08) * 0.08 : 1;
+        const w = (logo === UI.perfect ? 230 : 170) * pop;
+        const h = w * (lim.naturalHeight / lim.naturalWidth);
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, t / 0.05);
+        ctx.drawImage(lim, 512 - w / 2, 215 - h / 2 - Math.min(t, 0.6) * 12, w, h);
+        ctx.restore();
+      } else {
+        ctx.font = '26px "Black Han Sans", sans-serif';
+        ctx.textAlign = "center";
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        ctx.strokeText(this.timingText, 512, 296);
+        ctx.fillStyle = this.timingColor;
+        ctx.fillText(this.timingText, 512, 296);
+      }
       ctx.textAlign = "center";
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = "rgba(0,0,0,0.7)";
-      ctx.strokeText(this.timingText, 512, 296);
       ctx.fillStyle = this.timingColor;
-      ctx.fillText(this.timingText, 512, 296);
       // 얼마나 빨랐나 늦었나 (ms)
       if (this.timingText !== "PERFECT") {
         const ms = `${this.timingMs > 0 ? "늦음 +" : "빠름 "}${this.timingMs}ms`;
         ctx.font = '700 14px "JetBrains Mono", monospace';
         ctx.lineWidth = 4;
-        ctx.strokeText(ms, 512, 318);
-        ctx.fillText(ms, 512, 318);
+        ctx.strokeText(ms, 512, lim ? 272 : 318);
+        ctx.fillText(ms, 512, lim ? 272 : 318);
       }
     }
     if (this.batInfo && this.userBat) {
@@ -2365,6 +2428,25 @@ export class Match {
     grd.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = grd;
     ctx.fillRect(0, y - hgt / 2, DW, hgt);
+    const lim = b.logo ? img(b.logo) : null;
+    if (lim && lim.complete && lim.naturalWidth) {
+      // 홈런: 로고가 크게 튀어나와 흔들림
+      const pop = b.t < 0.14 ? 2 - (b.t / 0.14) * 1.1 : b.t < 0.26 ? 0.9 + ((b.t - 0.14) / 0.12) * 0.1 : 1 + Math.sin(b.t * 9) * 0.02;
+      const w = 360 * pop;
+      const h = w * (lim.naturalHeight / lim.naturalWidth);
+      ctx.drawImage(lim, 512 - w / 2, y - 20 - h / 2, w, h);
+      if (b.sub) {
+        ctx.font = '22px "Black Han Sans", sans-serif';
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "rgba(0,0,0,0.8)";
+        ctx.strokeText(b.sub, 512, y + h / 2 + 4);
+        ctx.fillText(b.sub, 512, y + h / 2 + 4);
+      }
+      ctx.globalAlpha = 1;
+      return;
+    }
     const sc = 1 + (1 - inK) * 0.4;
     ctx.save();
     ctx.translate(512, y + (b.sub ? -6 : 8));
@@ -2571,113 +2653,271 @@ export class Match {
       this.batterCard(ctx);
       return;
     }
-    // 점수판
-    this.panel(ctx, 12, 12, 238, 76);
-    const rows: [string, number, string][] = [
-      [s.opts.away.short, s.score[0], s.opts.away.color],
-      [s.opts.home.short, s.score[1], s.opts.home.color],
-    ];
-    rows.forEach(([n, sc, col], i) => {
-      const y = 38 + i * 30;
-      ctx.fillStyle = col;
-      ctx.fillRect(22, y - 15, 6, 20);
-      ctx.fillStyle = "#fff";
-      ctx.font = '800 16px "JetBrains Mono", monospace';
-      ctx.fillText(n, 36, y);
-      const me = (i === 1) === s.opts.userHome;
-      if (me) {
-        ctx.fillStyle = "#ffcf4a";
-        ctx.font = '700 10px "Nanum Gothic", sans-serif';
-        ctx.fillText("나", 80, y - 1);
-      }
-      ctx.fillStyle = "#fff";
-      ctx.font = '24px "Black Han Sans", sans-serif';
-      ctx.textAlign = "right";
-      ctx.fillText(String(sc), 150, y + 2);
-      ctx.textAlign = "left";
-      if ((i === 0) === s.top) {
-        ctx.fillStyle = "#ffcf4a";
-        ctx.beginPath();
-        ctx.moveTo(158, y - 6);
-        ctx.lineTo(166, y - 10);
-        ctx.lineTo(166, y - 2);
-        ctx.fill();
-      }
-    });
-    ctx.fillStyle = "#fff";
-    ctx.font = '20px "Black Han Sans", sans-serif';
-    ctx.textAlign = "center";
-    ctx.fillText(`${s.inning}회`, 208, 46);
-    ctx.font = '700 13px "Nanum Gothic", sans-serif';
-    ctx.fillText(s.top ? "초 ▲" : "말 ▼", 208, 68);
-    ctx.textAlign = "left";
-
-    // 볼카운트 · 주자
-    this.panel(ctx, DW - 196, 12, 184, 92);
-    const dots: [string, number, number, string][] = [
-      ["B", s.balls, 3, "#7dff9a"],
-      ["S", s.strikes, 2, "#ffd23f"],
-      ["O", s.outs, 2, "#ff4d6d"],
-    ];
-    dots.forEach(([l, n, max, col], i) => {
-      const y = 36 + i * 24;
-      ctx.fillStyle = "#fff";
-      ctx.font = '800 14px "JetBrains Mono", monospace';
-      ctx.fillText(l, DW - 184, y + 5);
-      for (let k = 0; k < max; k++) {
-        ctx.fillStyle = k < n ? col : "rgba(255,255,255,0.16)";
-        ctx.beginPath();
-        ctx.arc(DW - 160 + k * 20, y, 7, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    });
-    // 주자 다이아몬드
-    const cx = DW - 52;
-    const cy = 58;
-    const base = (bx: number, by: number, on: boolean) => {
-      ctx.save();
-      ctx.translate(bx, by);
-      ctx.rotate(Math.PI / 4);
-      ctx.fillStyle = on ? "#ffd23f" : "rgba(255,255,255,0.18)";
-      ctx.fillRect(-7, -7, 14, 14);
-      ctx.restore();
-    };
-    base(cx + 18, cy, s.bases[0] !== null);
-    base(cx, cy - 18, s.bases[1] !== null);
-    base(cx - 18, cy, s.bases[2] !== null);
-
+    this.scoreBoard(ctx);
+    this.countBoard(ctx);
     this.batterCard(ctx);
     this.pitcherCard(ctx);
     // 미션 진행 중
     if (s.mission && this.phase !== "mission") {
-      this.panel(ctx, 262, 12, 300, 30);
-      ctx.fillStyle = s.mission.char ? charById(s.mission.char).color : NPC_COLOR[s.mission.who] ?? "#ffcf4a";
       ctx.font = '700 13px "Nanum Gothic", sans-serif';
-      ctx.fillText(`미션 · ${s.mission.who}: ${s.mission.text}`, 272, 32);
+      const t = `미션 · ${s.mission.who}: ${s.mission.text}`;
+      const w = ctx.measureText(t).width + 24;
+      this.panel(ctx, 512 - w / 2, 56, w, 28);
+      ctx.fillStyle = s.mission.char ? charById(s.mission.char).color : NPC_COLOR[s.mission.who] ?? "#ffcf4a";
+      ctx.textAlign = "center";
+      ctx.fillText(t, 512, 75);
+      ctx.textAlign = "left";
     }
   }
 
-  private panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-    ctx.fillStyle = "rgba(10,12,22,0.78)";
-    ctx.strokeStyle = "rgba(255,255,255,0.14)";
-    ctx.lineWidth = 1.5;
+  /**
+   * 타석 화면 수비수 7명 (1루 · 2루 · 3루 · 유격 · 좌익 · 중견 · 우익). 투수 그림처럼 실제 원근보다 크게(FIELDER_BOOST) 해야 보임.
+   * 와인드업 · 투구 중엔 준비 자세(무릎 굽힘), 그 밖엔 서 있음. 왼쪽 수비수는 좌우 뒤집어 다양하게
+   */
+  private drawFielders(ctx: CanvasRenderingContext2D) {
+    const ready = this.phase === "windup" || this.phase === "flight" || this.phase === "contact";
+    const order = [6, 7, 8, 3, 5, 2, 4].sort((a, b) => HOME_POS[b][1] - HOME_POS[a][1]);
+    for (const i of order) {
+      const [fx, fz] = HOME_POS[i];
+      const g = proj(fx, 0, fz);
+      const outfield = i >= 6;
+      const src = outfield ? (ready ? FIELDER.ofReady : FIELDER.ofStand) : ready ? FIELDER.ifReady : FIELDER.ifStand;
+      const im = img(src);
+      if (!im.complete || !im.naturalWidth) continue;
+      // 서 있는 그림 키(528px) = 1.75m 로 맞춤
+      const k = (g.s * 1.75 * FIELDER_BOOST) / 528;
+      const w = im.naturalWidth * k;
+      const h = im.naturalHeight * k;
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.ellipse(g.x, g.y, w * 0.4, Math.max(1.5, w * 0.08), 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.save();
+      ctx.translate(g.x, g.y);
+      if (fx < 0) ctx.scale(-1, 1);
+      ctx.drawImage(im, -w / 2, -h, w, h);
+      ctx.restore();
+    }
+  }
+
+  /** HUD 판 (목업: 짙은 남색 그라데이션 + 파란 테두리 · 윗변 밝은 줄) */
+  private panel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, edge = "rgba(90,150,255,0.55)") {
+    const g = ctx.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, "rgba(20,30,62,0.9)");
+    g.addColorStop(1, "rgba(8,12,28,0.9)");
+    ctx.fillStyle = g;
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 1.6;
     ctx.beginPath();
     ctx.roundRect(x, y, w, h, 10);
     ctx.fill();
     ctx.stroke();
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(x + 2.5, y + 2.5, w - 5, h - 5, 8);
+    ctx.stroke();
   }
 
-  private statBar(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, v: number, col: string) {
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = '700 10px "Nanum Gothic", sans-serif';
-    ctx.fillText(label, x, y + 8);
-    ctx.fillStyle = "rgba(255,255,255,0.12)";
-    ctx.fillRect(x + 26, y + 1, 70, 7);
-    ctx.fillStyle = col;
-    ctx.fillRect(x + 26, y + 1, 70 * clamp(v / 1000, 0, 1), 7);
+  /** 작은 딱지 (포지션 · 우타 · P …) */
+  private chip(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, bg: string, fg = "#fff", h = 18) {
+    ctx.font = '800 11px "Nanum Gothic", sans-serif';
+    const w = ctx.measureText(text).width + 12;
+    ctx.fillStyle = bg;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 5);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    ctx.textAlign = "center";
+    ctx.fillText(text, x + w / 2, y + h / 2 + 4);
+    ctx.textAlign = "left";
+    return w;
+  }
+
+  /** 팀 로고 타일 (팀 색 · 첫 글자) */
+  private teamTile(ctx: CanvasRenderingContext2D, x: number, y: number, s: number, t: Team) {
+    const g = ctx.createLinearGradient(x, y, x, y + s);
+    g.addColorStop(0, t.color);
+    g.addColorStop(1, t.dark ?? "#111");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.roundRect(x, y, s, s, 5);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
     ctx.fillStyle = "#fff";
-    ctx.font = '700 10px "JetBrains Mono", monospace';
-    ctx.fillText(String(v), x + 100, y + 8);
+    ctx.font = `italic 900 ${Math.round(s * 0.62)}px "Black Han Sans", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(0,0,0,0.45)";
+    ctx.strokeText(t.short[0], x + s / 2, y + s * 0.74);
+    ctx.fillText(t.short[0], x + s / 2, y + s * 0.74);
+    ctx.textAlign = "left";
+  }
+
+  /** 점수판 (왼쪽 위): 팀 타일 · 약칭 · 점수 | 회 · 초말 */
+  private scoreBoard(ctx: CanvasRenderingContext2D) {
+    const s = this.s;
+    const x = 12, y = 12, w = 268, h = 82;
+    this.panel(ctx, x, y, w, h);
+    const teams: [Team, number][] = [
+      [s.opts.away, s.score[0]],
+      [s.opts.home, s.score[1]],
+    ];
+    teams.forEach(([t, sc], i) => {
+      const ry = y + 10 + i * 34;
+      const atBat = (i === 0) === s.top;
+      if (atBat) {
+        ctx.fillStyle = "rgba(255,207,74,0.1)";
+        ctx.fillRect(x + 6, ry - 2, 186, 32);
+      }
+      this.teamTile(ctx, x + 10, ry, 28, t);
+      ctx.fillStyle = "#fff";
+      ctx.font = '800 18px "JetBrains Mono", monospace';
+      ctx.fillText(t.short, x + 46, ry + 21);
+      if ((i === 1) === s.opts.userHome) {
+        ctx.fillStyle = "#ffcf4a";
+        ctx.font = '800 10px "Nanum Gothic", sans-serif';
+        ctx.fillText("나", x + 98, ry + 20);
+      }
+      ctx.fillStyle = "#fff";
+      ctx.font = '28px "Black Han Sans", sans-serif';
+      ctx.textAlign = "right";
+      ctx.fillText(String(sc), x + 180, ry + 25);
+      ctx.textAlign = "left";
+    });
+    // 세로 구분선 · 회차
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.beginPath();
+    ctx.moveTo(x + 196, y + 10);
+    ctx.lineTo(x + 196, y + h - 10);
+    ctx.stroke();
+    const cx = x + 232;
+    ctx.fillStyle = "#ffcf4a";
+    ctx.beginPath();
+    if (s.top) {
+      ctx.moveTo(cx - 22, y + 30);
+      ctx.lineTo(cx - 14, y + 18);
+      ctx.lineTo(cx - 6, y + 30);
+    } else {
+      ctx.moveTo(cx - 22, y + 58);
+      ctx.lineTo(cx - 14, y + 70);
+      ctx.lineTo(cx - 6, y + 58);
+    }
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.font = '24px "Black Han Sans", sans-serif';
+    ctx.fillText(`${s.inning}회`, cx + 10, y + 36);
+    ctx.font = '20px "Black Han Sans", sans-serif';
+    ctx.fillText(s.top ? "초" : "말", cx + 10, y + 66);
+    ctx.textAlign = "left";
+  }
+
+  /** 볼카운트 · 주자 (오른쪽 위) */
+  private countBoard(ctx: CanvasRenderingContext2D) {
+    const s = this.s;
+    const w = 226, h = 90;
+    const x = DW - 12 - w, y = 12;
+    this.panel(ctx, x, y, w, h);
+    const rows: [string, number, number, string][] = [
+      ["B", s.balls, 3, "#56e07a"],
+      ["S", s.strikes, 2, "#ffcf3a"],
+      ["O", s.outs, 2, "#ff4d5e"],
+    ];
+    rows.forEach(([l, n, max, col], i) => {
+      const ry = y + 22 + i * 24;
+      ctx.fillStyle = "#fff";
+      ctx.font = '800 16px "JetBrains Mono", monospace';
+      ctx.fillText(l, x + 14, ry + 6);
+      for (let k = 0; k < max; k++) {
+        const on = k < n;
+        const dx = x + 46 + k * 24;
+        if (on) {
+          ctx.shadowColor = col;
+          ctx.shadowBlur = 8;
+        }
+        ctx.fillStyle = on ? col : "rgba(255,255,255,0.14)";
+        ctx.beginPath();
+        ctx.arc(dx, ry, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+    });
+    ctx.strokeStyle = "rgba(255,255,255,0.15)";
+    ctx.beginPath();
+    ctx.moveTo(x + 124, y + 10);
+    ctx.lineTo(x + 124, y + h - 10);
+    ctx.stroke();
+    // 다이아몬드 (2루 위 · 3루 왼쪽 · 1루 오른쪽 · 홈 아래)
+    const cx = x + 175, cy = y + 42, d = 21;
+    const base = (bx: number, by: number, on: boolean, home = false) => {
+      ctx.save();
+      ctx.translate(bx, by);
+      ctx.rotate(Math.PI / 4);
+      if (on) {
+        ctx.shadowColor = "#ffcf3a";
+        ctx.shadowBlur = 10;
+      }
+      ctx.fillStyle = home ? "rgba(255,255,255,0.35)" : on ? "#ffcf3a" : "rgba(255,255,255,0.16)";
+      const r = home ? 6 : 9;
+      ctx.fillRect(-r, -r, r * 2, r * 2);
+      ctx.restore();
+    };
+    base(cx + d, cy, s.bases[0] !== null);
+    base(cx, cy - d, s.bases[1] !== null);
+    base(cx - d, cy, s.bases[2] !== null);
+    base(cx, cy + d + 4, false, true);
+  }
+
+  /** 능력치 막대 (목업: 이름 · 그라데이션 막대 · 숫자) */
+  private statBar(ctx: CanvasRenderingContext2D, x: number, y: number, label: string, v: number, col: string, w = 96, shown?: string) {
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.font = '800 11px "Nanum Gothic", sans-serif';
+    ctx.fillText(label, x, y + 9);
+    const bx = x + 30;
+    ctx.fillStyle = "rgba(255,255,255,0.1)";
+    ctx.beginPath();
+    ctx.roundRect(bx, y + 1, w, 9, 4);
+    ctx.fill();
+    const k = clamp(v / 1000, 0, 1);
+    if (k > 0) {
+      const g = ctx.createLinearGradient(bx, 0, bx + w, 0);
+      g.addColorStop(0, col);
+      g.addColorStop(1, "#ffffff");
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.roundRect(bx, y + 1, Math.max(6, w * k), 9, 4);
+      ctx.fill();
+    }
+    ctx.fillStyle = "#fff";
+    ctx.font = '800 12px "JetBrains Mono", monospace';
+    ctx.textAlign = "right";
+    ctx.fillText(shown ?? String(v), bx + w + 34, y + 10);
+    ctx.textAlign = "left";
+  }
+
+  /** 얼굴 칸: 캐릭터면 얼굴 그림 · 아니면 빈 프로필 */
+  private portrait(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, face: string | null, edge: string) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.clip();
+    ctx.fillStyle = "#1a2236";
+    ctx.fillRect(x, y, w, h);
+    const im = img(face ?? UI.profile);
+    if (im.complete && im.naturalWidth) {
+      const sc = Math.max(w / im.naturalWidth, h / im.naturalHeight);
+      const iw = im.naturalWidth * sc, ih = im.naturalHeight * sc;
+      ctx.drawImage(im, x + (w - iw) / 2, y + (h - ih) / 2, iw, ih);
+    }
+    ctx.restore();
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.stroke();
   }
 
   private batterCard(ctx: CanvasRenderingContext2D) {
@@ -2685,91 +2925,91 @@ export class Match {
     const bs = this.s.sides[this.paBatter ? this.paSide : batSide(this.s)];
     const order = this.paBatter ? this.paOrder : bs.order;
     const ln = bs.bat[order];
-    const x = 12;
-    const y = DH - 112;
+    const x = 12, w = 292, h = 132;
+    const y = DH - 12 - h;
     const hero = b.special ? charById(b.special) : null;
-    this.panel(ctx, x, y, 236, 100);
-    if (hero) {
-      const im = img(faceUrl(hero.id));
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(x + 8, y + 8, 60, 66, 8);
-      ctx.clip();
-      if (im.complete && im.naturalWidth) ctx.drawImage(im, x + 8, y + 8, 60, 66);
-      ctx.restore();
-      ctx.strokeStyle = hero.color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(x + 8, y + 8, 60, 66, 8);
-      ctx.stroke();
-    }
-    const tx = hero ? x + 76 : x + 12;
+    const accent = hero ? hero.color : "#ff8a3d";
+    this.panel(ctx, x, y, w, h, hero ? hero.color : "rgba(255,138,61,0.7)");
+    // 타순 번호 딱지 · 얼굴
+    this.portrait(ctx, x + 10, y + 12, 70, 82, hero ? faceUrl(hero.id) : null, accent);
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.roundRect(x + 6, y + 8, 24, 24, 6);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = '18px "Black Han Sans", sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText(String(order + 1), x + 18, y + 27);
     ctx.textAlign = "left";
+    // 이름 · 포지션 · 타석
+    const tx = x + 90;
     ctx.fillStyle = hero ? hero.color : "#fff";
-    ctx.font = '17px "Black Han Sans", sans-serif';
-    ctx.fillText(`${hero ? "마타자 " : ""}${b.name}`, tx, y + 26);
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.font = '700 11px "Nanum Gothic", sans-serif';
-    const today = this.cfg.mode === "derby" ? "" : ` · 오늘 ${ln.ab}타수 ${ln.h}안타`;
+    ctx.font = '19px "Black Han Sans", sans-serif';
+    const nm = `${hero ? "마타자 " : ""}${b.name}`;
+    ctx.fillText(nm, tx, y + 30);
+    let cx = tx + ctx.measureText(nm).width + 8;
+    cx += this.chip(ctx, cx, y + 15, b.pos, "#ff8a3d") + 4;
+    this.chip(ctx, cx, y + 15, b.bats === "L" ? "좌타" : "우타", "rgba(255,255,255,0.14)");
+    // 오늘 · 시즌
+    ctx.font = '700 11.5px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    if (this.cfg.mode !== "derby") ctx.fillText(`오늘 ${ln.ab}타수 ${ln.h}안타${ln.hr ? ` ${ln.hr}홈런` : ""}`, tx, y + 50);
+    const se = seasonOf(b);
+    ctx.fillStyle = "#ffd98a";
+    ctx.font = '800 11.5px "JetBrains Mono", monospace';
+    ctx.fillText(`시즌 ${se.avg.toFixed(3).replace(/^0/, "")} · ${se.hr}HR · ${se.rbi}타점`, tx, y + 67);
+    // 능력치
+    this.statBar(ctx, tx, y + 76, "타격", b.hit, "#5fe07f", 120);
+    this.statBar(ctx, tx, y + 93, "파워", b.power, "#ff5a5a", 120);
+    this.statBar(ctx, tx, y + 110, "주루", b.run, "#4fb3ff", 120);
     const learned = !hero && b.learned ? charById(b.learned) : null;
-    ctx.fillText(`${order + 1}번 ${b.bats === "L" ? "좌타" : "우타"}${today}`, tx, y + 42);
-    this.statBar(ctx, tx, y + 50, "타격", b.hit, "#7dff9a");
-    this.statBar(ctx, tx, y + 64, "파워", b.power, "#ff7a5c");
-    this.statBar(ctx, tx, y + 78, "주루", b.run, "#7ad7ff");
     if ((hero || learned) && this.cfg.mode !== "derby") {
       const left = this.s.sides[batSide(this.s)].swingLeft;
       ctx.fillStyle = (hero ?? learned)!.color;
       ctx.font = '700 11px "Nanum Gothic", sans-serif';
-      ctx.fillText(`필살 ${"★".repeat(left)}${"☆".repeat(Math.max(0, 3 - left))}`, x + 12, y + 92);
+      ctx.fillText(`필살 ${"★".repeat(left)}${"☆".repeat(Math.max(0, 3 - left))}`, x + 12, y + 116);
     }
   }
 
   private pitcherCard(ctx: CanvasRenderingContext2D) {
     const p = this.pitcherNow;
     const fsd = this.s.sides[fieldSide(this.s)];
-    const x = DW - 248;
-    const y = DH - 112;
+    const w = 292, h = 132;
+    const x = DW - 12 - w;
+    const y = DH - 12 - h;
     const hero = p.special ? charById(p.special) : null;
-    this.panel(ctx, x, y, 236, 100);
-    if (hero) {
-      const im = img(faceUrl(hero.id));
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(x + 168, y + 8, 60, 66, 8);
-      ctx.clip();
-      if (im.complete && im.naturalWidth) ctx.drawImage(im, x + 168, y + 8, 60, 66);
-      ctx.restore();
-      ctx.strokeStyle = hero.color;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.roundRect(x + 168, y + 8, 60, 66, 8);
-      ctx.stroke();
-    }
+    const accent = hero ? hero.color : "#3d8bff";
+    this.panel(ctx, x, y, w, h, hero ? hero.color : "rgba(61,139,255,0.75)");
+    this.portrait(ctx, x + 10, y + 12, 70, 82, hero ? faceUrl(hero.id) : null, accent);
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.roundRect(x + 6, y + 8, 24, 24, 6);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.font = '18px "Black Han Sans", sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText("P", x + 18, y + 27);
     ctx.textAlign = "left";
+    const tx = x + 90;
     ctx.fillStyle = hero ? hero.color : "#fff";
-    ctx.font = '17px "Black Han Sans", sans-serif';
-    ctx.fillText(`${hero ? "마투수 " : ""}${p.name}`, x + 12, y + 26);
+    ctx.font = '19px "Black Han Sans", sans-serif';
+    const nm = `${hero ? "마투수 " : ""}${p.name}`;
+    ctx.fillText(nm, tx, y + 30);
+    this.chip(ctx, tx + ctx.measureText(nm).width + 8, y + 15, p.throws === "L" ? "좌투" : "우투", "#3d8bff");
     const ln = fsd.pit[fsd.pitcher];
-    const st = stamina01(this.s);
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.font = '700 11px "Nanum Gothic", sans-serif';
-    ctx.fillText(`${p.throws === "L" ? "좌투" : "우투"} · ${ln.pitches}구 · ${ln.k}K`, x + 12, y + 42);
-    this.statBar(ctx, x + 12, y + 50, "제구", p.control, "#7dff9a");
-    this.statBar(ctx, x + 12, y + 64, "변화", p.brk, "#c9b8ff");
-    // 체력
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = '700 10px "Nanum Gothic", sans-serif';
-    ctx.fillText("체력", x + 12, y + 86);
-    ctx.fillStyle = "rgba(255,255,255,0.12)";
-    ctx.fillRect(x + 38, y + 79, 120, 8);
-    ctx.fillStyle = st > 0.5 ? "#7dff9a" : st > 0.25 ? "#ffd23f" : "#ff4d6d";
-    ctx.fillRect(x + 38, y + 79, 120 * st, 8);
-    void staminaMax;
+    ctx.font = '700 11.5px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.fillText(`투구 수 ${ln.pitches} · ${ln.k}K`, tx, y + 50);
     if (hero) {
       ctx.fillStyle = hero.color;
       ctx.font = '700 11px "Nanum Gothic", sans-serif';
-      ctx.fillText(`마구 ${"★".repeat(fsd.ballLeft)}${"☆".repeat(Math.max(0, 3 - fsd.ballLeft))}`, x + 168, y + 92);
+      ctx.fillText(`마구 ${"★".repeat(fsd.ballLeft)}${"☆".repeat(Math.max(0, 3 - fsd.ballLeft))}`, tx, y + 67);
     }
+    this.statBar(ctx, tx, y + 76, "제구", p.control, "#5fe07f", 120);
+    this.statBar(ctx, tx, y + 93, "변화", p.brk, "#b98cff", 120);
+    const st = stamina01(this.s);
+    this.statBar(ctx, tx, y + 110, "체력", Math.round(st * 1000), st > 0.5 ? "#5fe07f" : st > 0.25 ? "#ffcf3a" : "#ff4d5e", 120, `${Math.round(st * 100)}%`);
+    void staminaMax;
   }
 }
 

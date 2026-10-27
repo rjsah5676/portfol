@@ -589,7 +589,7 @@ function Play({
         <>
           {/* 오른쪽 조작 칸 (필드 화면 · 결과 문구 동안은 숨김) */}
           <div
-            className="absolute top-[124px] right-3 flex w-[150px] flex-col gap-2 transition-opacity"
+            className="absolute top-[112px] right-3 flex w-[164px] flex-col items-stretch gap-2 transition-opacity"
             style={{ opacity: ["field", "result", "change", "contact", "intro"].includes(ui.phase) ? 0 : 1, pointerEvents: ["field", "result", "change", "contact", "intro"].includes(ui.phase) ? "none" : undefined }}
           >
             {ui.userBat && (
@@ -607,20 +607,25 @@ function Play({
                   </Btn>
                 )}
                 {ui.mode !== "derby" && (
-                  <Btn active={ui.bunt} disabled={!(ui.phase === "ready" || ui.phase === "windup")} className="py-2 text-[14px]" color="#7ad7ff" onClick={() => m?.toggleBunt()}>
-                    번트 <span className="text-[11px] font-normal opacity-70">B</span>
-                  </Btn>
+                  <button
+                    type="button"
+                    disabled={!(ui.phase === "ready" || ui.phase === "windup")}
+                    onClick={() => m?.toggleBunt()}
+                    className={`${font.title} flex h-[52px] items-center justify-center gap-2 rounded-2xl border-2 text-[22px] text-white transition disabled:opacity-40 ${ui.bunt ? "border-[#7ad7ff] bg-[#1d4f8a] shadow-[0_0_14px_#7ad7ff99]" : "border-[#3d7fd8] bg-gradient-to-b from-[#16294f] to-[#0b1530]"}`}
+                  >
+                    <img src="/baseball/ui/bunt.webp" alt="" className="h-[26px] w-auto" draggable={false} />
+                    번트
+                    <span className="font-['Nanum_Gothic'] text-[11px] font-normal opacity-60">B</span>
+                  </button>
                 )}
-                <Btn
+                <RoundBtn
+                  img="/baseball/ui/swing.webp"
+                  imgDown="/baseball/ui/swing-down.webp"
+                  label="스윙"
+                  sub="Space · 화면 터치"
                   disabled={!ui.canSwing}
-                  className={`${font.title} h-[96px] text-[30px]`}
-                  color={ACCENT}
                   onClick={() => m?.pressSwing()}
-                  style={{ borderRadius: 999 }}
-                >
-                  SWING
-                  <span className="block font-['Nanum_Gothic'] text-[11px] font-normal opacity-75">Space · 화면 터치</span>
-                </Btn>
+                />
               </>
             )}
             {!ui.userBat && (
@@ -638,17 +643,15 @@ function Play({
                     마구 ({ui.spLeft})<span className="block text-[11px] font-normal opacity-80">{ui.spName} · M</span>
                   </Btn>
                 )}
-                <Btn
+                <RoundBtn
+                  img="/baseball/ui/throw.webp"
+                  label={ui.gauging ? "STOP!" : "던지기"}
+                  sub="Space"
+                  size={136}
+                  hot={ui.gauging}
                   disabled={!(ui.aiming || ui.gauging)}
-                  className={`${font.title} h-[78px] text-[26px]`}
-                  color={ui.gauging ? "#ffd23f" : ACCENT}
-                  active={ui.gauging}
                   onClick={() => m?.pressThrow()}
-                  style={{ borderRadius: 999 }}
-                >
-                  {ui.gauging ? "STOP!" : "던지기"}
-                  <span className="block font-['Nanum_Gothic'] text-[11px] font-normal opacity-75">Space</span>
-                </Btn>
+                />
                 {ui.mode === "game" && (
                   <Btn disabled={!ui.aiming} className="py-1.5 text-[13px]" color="#8b93b8" onClick={() => setBullpen(true)}>
                     투수 교체
@@ -659,22 +662,23 @@ function Play({
           </div>
 
           {/* 타자 이동 패드 (터치) — 투구 전에 끌어서 타자 · 컨택존 옮기기 */}
-          {ui.userBat && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
+          {ui.userBat && !["field", "result", "change"].includes(ui.phase) && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
 
           {/* 아래: 메뉴 · 빨리감기 (필드 화면에선 홈플레이트를 안 가리게 오른쪽 위로) */}
-          <div className={`absolute flex gap-2 ${ui.fieldPlaying ? "top-[118px] right-3 flex-col items-end" : "bottom-3 left-1/2 -translate-x-1/2"}`}>
-            {ui.fieldPlaying && (
-              <>
-                <Btn active={ui.fast} className="px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => m?.toggleFast()}>
-                  ▶▶ 빨리
-                </Btn>
-                <Btn className="px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => m?.skipField()}>
-                  건너뛰기
-                </Btn>
-              </>
-            )}
+          {ui.fieldPlaying && (
+            <div className="absolute top-[112px] right-3 flex flex-col items-end gap-2">
+              <Btn active={ui.fast} className="px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => m?.toggleFast()}>
+                ▶▶ 빨리
+              </Btn>
+              <Btn className="px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => m?.skipField()}>
+                건너뛰기
+              </Btn>
+            </div>
+          )}
+          {/* 헤더 (맨 위 가운데): 배속 · 메뉴 · 전체화면 */}
+          <div className="absolute top-[14px] left-1/2 flex -translate-x-1/2 gap-1.5">
             <Btn
-              className="px-3 py-1.5 font-mono text-[13px]"
+              className="px-3 py-1 font-mono text-[13px]"
               color="#7dff9a"
               onClick={() => {
                 const i = SPEEDS.indexOf(ui.speed as (typeof SPEEDS)[number]);
@@ -690,11 +694,11 @@ function Play({
                 {ui.career.next ? `다음 타석부터 ${ui.career.next === "auto" ? "자동" : ui.career.next === "highlight" ? "하이라이트" : "직접"}` : ui.career.mode === "highlight" ? "하이라이트 중" : "직접 출전 중"}
               </Btn>
             )}
-            <Btn className="px-3 py-1.5 text-[13px]" color="#8b93b8" onClick={() => pause(true)}>
+            <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={() => pause(true)}>
               ❚❚ 메뉴
             </Btn>
             {canFs && (
-              <Btn className="px-3 py-1.5 text-[13px]" color="#8b93b8" onClick={toggleFs}>
+              <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={toggleFs}>
                 {fs ? "창 모드" : "⛶"}
               </Btn>
             )}
@@ -892,6 +896,32 @@ function LineScore({ m }: { m: Match }) {
 }
 
 /** 타자 이동 패드: 가운데 원을 끌면 그 방향으로 (화면 위 = 위). 손 떼면 멈춤 */
+/** 둥근 그림 버튼 (스윙 · 던지기) — GPT 그림 위에 글자, 누르면 살짝 눌림 */
+function RoundBtn({ img, imgDown, label, sub, onClick, disabled, hot, size = 150 }: { img: string; imgDown?: string; label: string; sub?: string; onClick: () => void; disabled?: boolean; hot?: boolean; size?: number }) {
+  const [down, setDown] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      onPointerDown={() => setDown(true)}
+      onPointerUp={() => setDown(false)}
+      onPointerLeave={() => setDown(false)}
+      className="relative mx-auto block select-none transition-[transform,filter,opacity] duration-75 disabled:opacity-45 disabled:saturate-50"
+      style={{ width: size, height: size, transform: down ? "scale(0.94)" : hot ? "scale(1.04)" : undefined, filter: hot ? "drop-shadow(0 0 14px #ffd23f)" : undefined }}
+    >
+      <img src={down && imgDown ? imgDown : img} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-contain" />
+      <span
+        className={`${font.title} pointer-events-none absolute inset-x-0 text-center text-white`}
+        style={{ bottom: size * 0.2, fontSize: size * 0.2, WebkitTextStroke: "1.5px rgba(70,25,0,0.9)", paintOrder: "stroke", textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}
+      >
+        {label}
+      </span>
+      {sub && <span className="pointer-events-none absolute inset-x-0 -bottom-4 text-center font-['Nanum_Gothic'] text-[10.5px] text-white/60">{sub}</span>}
+    </button>
+  );
+}
+
 function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: number) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [knob, setKnob] = useState({ x: 0, y: 0 });
@@ -929,8 +959,8 @@ function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: n
   return (
     <div
       ref={ref}
-      className="absolute left-4 select-none rounded-full border-2 border-white/25 bg-black/35 transition-opacity"
-      style={{ bottom: 128, width: R * 2 + 24, height: R * 2 + 24, opacity: active ? 1 : 0.35, touchAction: "none", pointerEvents: active ? undefined : "none" }}
+      className="absolute left-4 select-none rounded-full transition-opacity"
+      style={{ bottom: 162, width: R * 2 + 24, height: R * 2 + 24, opacity: active ? 1 : 0.4, touchAction: "none", pointerEvents: active ? undefined : "none", backgroundImage: "url(/baseball/ui/pad.webp)", backgroundSize: "100% 100%" }}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
         move(e);
@@ -942,12 +972,12 @@ function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: n
       onPointerCancel={end}
       onLostPointerCapture={end}
     >
-      <div className="pointer-events-none absolute top-1/2 left-1/2 text-center text-[10px] font-bold text-white/45" style={{ transform: "translate(-50%, -50%)", marginTop: -R - 2 }}>
-        ▲
-      </div>
-      <div
-        className="pointer-events-none absolute top-1/2 left-1/2 rounded-full border-2 border-[#ffc46e] bg-[#ffc46e]/30"
-        style={{ width: 40, height: 40, transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
+      <img
+        src="/baseball/ui/knob.webp"
+        alt=""
+        draggable={false}
+        className="pointer-events-none absolute top-1/2 left-1/2"
+        style={{ width: 52, height: 52, transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }}
       />
       <div className="pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] text-white/55">타자 이동 · 방향키</div>
     </div>
