@@ -553,7 +553,8 @@ export class Match {
     this.setPhase("windup");
     this.pitAnim = PIT_THROW;
     this.pitAnimT = 0;
-    if (this.userBat && this.swingStart < 0 && !this.buntArmed && !this.freeSwing) this.playBat(BAT_LOAD);
+    // 타자는 내가 치든 CPU 가 치든 와인드업에 맞춰 레그킥
+    if (this.swingStart < 0 && !this.buntArmed && !this.freeSwing) this.playBat(BAT_LOAD);
   }
 
   private release() {
