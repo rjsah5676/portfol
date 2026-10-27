@@ -194,7 +194,7 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  *   원본: scripts/baseball-batter-idle.py (시트 → 줄 · 마스크 · 기준점 json)
  */
 const IDLE = { src: "/baseball/sprites/batter-idle.webp", mask: "/baseball/sprites/batter-idle-mask.png", ...idleData, scale: 0.289 };
-/** 대기 순서 [칸, 초] — 3칸 1→2→3→2 천천히 (자주 바꾸면 그림 디테일이 꿈틀거려 보임) */
+/** 대기 순서 [칸, 초] — 3칸 1→2→3→2 천천히 (10칸 시트의 1·4·7번째, 엉덩이 고정 · 배트 끝만 살짝) */
 const IDLE_SEQ: [number, number][] = [[0, 0.42], [1, 0.3], [2, 0.42], [1, 0.3]];
 const IDLE_LEN = IDLE_SEQ.reduce((a, [, d]) => a + d, 0);
 function idleCell(t: number) {
