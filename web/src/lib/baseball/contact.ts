@@ -89,7 +89,8 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   const side = o.bats === "R" ? 1 : -1;
   let spray = (e / W) * 58 * side + o.at.x * 38 + rng.gauss() * (3 + 9 * (1 - c));
   // 높이: 높은 공일수록 뜸
-  const base = 6 + (o.at.y - 0.8) * 42 + rng.gauss() * 20;
+  // 존 높이(0.43m)에 맞춘 기울기 — 존 위 끝 ≈ +13°, 아래 끝 ≈ -13°
+  const base = 6 + (o.at.y - ZONE.mid) * 62 + rng.gauss() * 20;
   // 정타: 힘센 타자일수록 띄워서 담장 쪽 (힘 500 → 23° · 1000 → 29°)
   const ideal = perfect ? 17 + (o.power / 1000) * 12 + rng.gauss() * 5 : 22 + rng.gauss() * 7;
   let la = lerp(base, ideal, Math.pow(c, 1.4));

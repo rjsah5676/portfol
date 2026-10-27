@@ -172,7 +172,7 @@ export class Match {
   buntArmed = false;
   spArmed = false;
   kindIdx = 0;
-  target = { x: 0, y: 0.8 };
+  target = { x: 0, y: ZONE.mid };
   gaugeT = 0;
   gaugeVal = 0;
   quality = 0.7;
@@ -493,7 +493,7 @@ export class Match {
   private toPitch() {
     if (this.userBat) this.setPhase("ready");
     else {
-      this.target = { x: 0, y: 0.8 };
+      this.target = { x: 0, y: ZONE.mid };
       this.setPhase("aim");
     }
   }
@@ -523,7 +523,7 @@ export class Match {
       if (this.cpuUseSp && this.cfg.mode !== "derby") fsd.ballLeft--;
       if (this.cfg.mode === "derby" && !this.derby.boss) {
         // 배팅볼: 존 안 · 느긋하게
-        this.target = { x: this.rng.gauss() * 0.1, y: 0.8 + this.rng.gauss() * 0.12 };
+        this.target = { x: this.rng.gauss() * 0.1, y: ZONE.mid + this.rng.gauss() * 0.09 };
         this.quality = 0.5;
       }
       if (this.cpuUseSp) {
@@ -754,7 +754,7 @@ export class Match {
   private computeTilt() {
     // 방망이가 공 높이를 지나가게 기울임
     if (!this.pitch && !this.outcome) return;
-    const at = this.outcome?.at ?? (this.pitch ? plateCross(this.pitch) : { x: 0, y: 0.8 });
+    const at = this.outcome?.at ?? (this.pitch ? plateCross(this.pitch) : { x: 0, y: ZONE.mid });
     const bp = proj(at.x, at.y, 0);
     const lefty = this.batterNow.bats === "L";
     const { x: bx, y: by, sc } = this.batterPos();

@@ -191,14 +191,63 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  * 새 타자 그림 시험 중 (지피티 통짜 그림, 대기 자세 1장) — 있으면 모든 프레임을 이걸로 그림.
  * 스윙 · 스윙 후 그림이 오면 프레임 표로 바꿀 것.
  */
-const STILL = { src: "/baseball/sprites/batter-stance.webp", ax: 96, ay: 693, scale: 0.289 };
+const STILL = { src: "/baseball/sprites/batter-stance.webp", mask: "/baseball/sprites/batter-stance-mask.png", ax: 96, ay: 693, scale: 0.289, ref: 0.941 };
 let still: HTMLImageElement | null = null;
+let stillMask: HTMLImageElement | null = null;
 function stillImg() {
   if (!still && typeof Image !== "undefined") {
     still = new Image();
     still.src = STILL.src;
+    stillMask = new Image();
+    stillMask.src = STILL.mask;
   }
   return still && still.complete && still.naturalWidth ? still : null;
+}
+const hexRgb = (h: string) => {
+  const v = parseInt(h.replace("#", "").slice(0, 6), 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => c / 255);
+};
+const stillCache = new Map<string, HTMLCanvasElement>();
+/**
+ * 색 바꾸기: 마스크(R = 헬멧, G = 소매 · 양말) 자리만 그 픽셀 밝기 × 팀색으로 다시 칠함 (하이라이트는 흰 쪽으로).
+ * 마스크가 아직 안 왔으면 원래 그림(주황) 그대로.
+ */
+function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
+  const mk = stillMask;
+  if (!mk || !mk.complete || !mk.naturalWidth || typeof document === "undefined") return st;
+  const key = `${lk.helm}|${lk.team}`;
+  const hit = stillCache.get(key);
+  if (hit) return hit;
+  const W = st.naturalWidth;
+  const H = st.naturalHeight;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d", { willReadFrequently: true })!;
+  g.drawImage(mk, 0, 0, W, H);
+  const m = g.getImageData(0, 0, W, H).data;
+  g.clearRect(0, 0, W, H);
+  g.drawImage(st, 0, 0);
+  const id = g.getImageData(0, 0, W, H);
+  const d = id.data;
+  const ch = hexRgb(lk.helm);
+  const ct = hexRgb(lk.team);
+  for (let i = 0; i < d.length; i += 4) {
+    const wh = m[i] / 255;
+    const wt = m[i + 1] / 255;
+    if (wh + wt < 0.01) continue;
+    const col = wh >= wt ? ch : ct;
+    const w = Math.max(wh, wt);
+    const k = Math.max(d[i], d[i + 1], d[i + 2]) / 255 / STILL.ref;
+    const hi = Math.max(0, k - 1) * 0.6;
+    for (let j = 0; j < 3; j++) {
+      const v = Math.min(1, col[j] * k + hi) * 255;
+      d[i + j] = d[i + j] * (1 - w) + v * w;
+    }
+  }
+  g.putImageData(id, 0, 0);
+  stillCache.set(key, c);
+  return c;
 }
 
 export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: SpriteLook, x: number, y: number, sc: number, flip = false, trail = 0): boolean {
@@ -210,7 +259,7 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
     ctx.imageSmoothingQuality = "high";
     ctx.translate(x, y + FOOT_Y * sc);
     ctx.scale(flip ? -s : s, s);
-    ctx.drawImage(st, -STILL.ax, -STILL.ay);
+    ctx.drawImage(tintedStill(st, lk), -STILL.ax, -STILL.ay);
     ctx.restore();
     return true;
   }

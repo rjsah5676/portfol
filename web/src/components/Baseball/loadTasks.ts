@@ -16,7 +16,7 @@ const fontsTask = keyed("baseball:fonts", () =>
 export function baseballTasks(): LoadTask[] {
   const t: LoadTask[] = [];
   for (const c of CHARS) t.push(faceUrl(c.id), cutinUrl(c.id), artUrl(c.id));
-  t.push("/baseball/stadium/bat-dusk.webp", "/baseball/sprites/batter-stance.webp", "/baseball/sprites/pitcher-set.webp");
+  t.push("/baseball/stadium/bat-dusk.webp", "/baseball/sprites/batter-stance.webp", "/baseball/sprites/batter-stance-mask.png", "/baseball/sprites/pitcher-set.webp");
   t.push(fontsTask);
   return t;
 }

@@ -39,7 +39,10 @@ export const PITCHES: Record<PitchKind, PitchDef> = {
 };
 
 /** 스트라이크 존 (공 반지름 포함 판정) */
-export const ZONE = { x: 0.215, y0: 0.48, y1: 1.12 };
+/**
+ * 스트라이크 존 (m): 폭 = 홈플레이트 43cm, 높이는 우리 2.5등신 타자 기준 무릎(0.47) ~ 어깨와 벨트 가운데(0.90) → 정사각형
+ */
+export const ZONE = { x: 0.215, y0: 0.47, y1: 0.9, mid: 0.685 };
 export const BALL_R = 0.037;
 export const inZone = (x: number, y: number) =>
   Math.abs(x) <= ZONE.x + BALL_R && y >= ZONE.y0 - BALL_R && y <= ZONE.y1 + BALL_R;
@@ -134,7 +137,7 @@ export function makePitch(
   if (mistake) {
     // 실투: 한가운데로 밋밋하게
     tx = lerp(tx, 0, 0.7);
-    ty = lerp(ty, 0.82, 0.7);
+    ty = lerp(ty, ZONE.mid, 0.7);
   }
   if (o.special) {
     tx = o.target.x + rng.gauss() * 0.03;
