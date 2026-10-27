@@ -57,7 +57,7 @@ export const TYPES: Record<BatType, { name: string; desc: string; pos: string; a
 };
 
 /** 숨은 재능 — 1시즌 끝 스카우트 평가에서 공개. 성장 속도(mul) + 한계(limit, 가까울수록 덜 오름). SS 는 각성으로만 */
-export const TALENTS = [
+export const TALENTS: { g: string; w: number; mul: number; limit: number }[] = [
   { g: "F", w: 0.08, mul: 0.8, limit: 400 },
   { g: "D", w: 0.17, mul: 0.88, limit: 465 },
   { g: "C", w: 0.3, mul: 0.94, limit: 535 },
@@ -65,7 +65,7 @@ export const TALENTS = [
   { g: "A", w: 0.13, mul: 1.1, limit: 690 },
   { g: "S", w: 0.05, mul: 1.2, limit: 790 },
   { g: "SS", w: 0, mul: 1.35, limit: 880 },
-] as const;
+];
 
 /* ─────────────── 일정 ─────────────── */
 

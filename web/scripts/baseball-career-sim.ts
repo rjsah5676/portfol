@@ -19,6 +19,8 @@ import { TYPES as TYPE_DEF } from "../src/lib/baseball/career";
 if (process.env.GROW) Object.assign(GROW, JSON.parse(process.env.GROW));
 if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.APT) as Record<string, object>)) Object.assign(TYPE_DEF[k as BatType].apt, v);
 
+// TAL='[[0.72,360],[0.82,420],...]' — 재능 F~SS 의 [mul, limit] 덮어쓰기
+if (process.env.TAL) (JSON.parse(process.env.TAL) as [number, number][]).forEach(([mul, limit], i) => Object.assign(TALENTS[i], { mul, limit }));
 if (process.env.XP) TUNE.gameXp = Number(process.env.XP);
 if (process.env.TR) TUNE.train = Number(process.env.TR);
 
