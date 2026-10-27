@@ -141,9 +141,9 @@ export const KICK_STEP_T = 5;
 /** 들기 시작 = 공 놓기(PITCH_RELEASE_T 0.74초) 0.1초 전 */
 const LIFT_AT = 0.64;
 /** 대기 → 최고점 걸리는 시간 */
-const LIFT_TOTAL = 0.24;
+const LIFT_TOTAL = 0.34;
 /** 안 치고 보낼 때 내리는 데 걸리는 시간 */
-const LOWER_TOTAL = 0.22;
+const LOWER_TOTAL = 0.31;
 const KICK_TOP = loadData.n - 1;
 const KICK: [number, number][] = (() => {
   const out: [number, number][] = [[0, LIFT_AT]];
