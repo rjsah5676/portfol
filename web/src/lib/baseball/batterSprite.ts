@@ -157,11 +157,11 @@ const KICK: [number, number][] = (() => {
 })();
 /**
  * 스윙 줄 칸 [칸, 이 시간까지] — 레그킥 최고점에서 바로:
- *   발 내림 → 내딛기 → 배트 끌고 나옴(머리는 포수 쪽) → 임팩트(SWING_HIT_T 0.07초) → 뻗음(투수 쪽) → 팔로스루.
+ *   발 내림 → 내딛기 → 배트 끌고 나옴(머리는 포수 쪽) → 돌아 나옴 → 임팩트(SWING_HIT_T 0.07초) → 뻗음(투수 쪽) → 팔로스루.
  *   사이 장은 앞뒤 두 장 첨부해 중간 자세를 콕 집어 뽑음 → scripts/baseball-batter-strip.py
  * 원본: scripts/baseball-batter-swing.py (시트 + 따로 고친 칸)
  */
-const SWING_SEQ: [number, number][] = [[0, 0.016], [1, 0.032], [2, 0.05], [3, 0.12], [4, 0.17], [5, 99]];
+const SWING_SEQ: [number, number][] = [[0, 0.012], [1, 0.026], [2, 0.04], [3, 0.055], [4, 0.12], [5, 0.17], [6, 99]];
 const SWING_BASE = 2000;
 /** batterFrame 이 새 그림 레그킥 칸을 돌려줄 때 더하는 값 (옛 프레임 번호와 안 겹치게) */
 const KICK_BASE = 1000;
