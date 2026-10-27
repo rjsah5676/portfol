@@ -27,10 +27,7 @@ export interface PitchDef {
   /** 회전 변화 (m, 비행 끝에서 「회전 없는 공」 대비 — Statcast 구종 평균 움직임): x 는 던지는 팔 쪽 +, y 는 위 + (직구는 떠오르는 회전) */
   bx: number;
   by: number;
-  /**
-   * 회전 변화 모양 L: 목표 직선에서 brk·(u^L − u^(L−1)). L 2 = 물리 그대로(손에서부터 갈라짐),
-   * L 이 클수록 처음엔 직구처럼 직선을 타다가(피치 터널) 막판에 꺾임 — 끝에서 꺾이는 각도는 L 과 상관없이 같음
-   */
+  /** 회전 변화 모양 L: 목표 직선에서 brk·(u^L − u). 2 = 물리, 클수록 막판에 몰려 꺾임 (한 방향으로만 휨) */
   late: number;
   /** 유인구는 낮게 던지는 구종 (떨어지는 공) */
   low?: boolean;
@@ -40,23 +37,20 @@ export interface PitchDef {
 export const PITCHES: Record<PitchKind, PitchDef> = {
   // Statcast 평균 (인치 → m): 포심 팔쪽 8 · 위 16 / 투심 15 · 8 / 슬라이더 글러브쪽 6 · 2 / 커터 2.5 · 8 / 커브 9 · −10 / 체인지업 14 · 6 / 스플리터 10 · 3 / 싱커 15 · 7
   // 직구는 「곧게」 읽혀야 해서 좌우는 과장(MOVE_GAIN.x) 뒤에도 실제 크기쯤 (0.08 × 2.5 ≈ 실제 0.19m)
-  FB: { id: "FB", name: "직구", short: "직", speed: 1, bx: 0.08, by: 0.41, late: 2.6, color: "#ffffff" },
-  TS: { id: "TS", name: "투심", short: "투", speed: 0.97, bx: 0.38, by: 0.2, late: 2.8, color: "#d8f0ff" },
-  SL: { id: "SL", name: "슬라이더", short: "슬", speed: 0.88, bx: -0.15, by: 0.05, late: 3.2, color: "#ffe28a" },
-  CT: { id: "CT", name: "커터", short: "커터", speed: 0.94, bx: -0.06, by: 0.2, late: 3.4, color: "#fff3c4" },
-  CB: { id: "CB", name: "커브", short: "커", speed: 0.77, bx: -0.23, by: -0.25, late: 2.6, color: "#9ad6ff", low: true },
-  CH: { id: "CH", name: "체인지업", short: "체", speed: 0.83, bx: 0.36, by: 0.15, late: 3, color: "#b6ffb0", low: true },
-  FK: { id: "FK", name: "포크", short: "포", speed: 0.86, bx: 0.1, by: 0.03, late: 3.4, color: "#ffb0d8", low: true },
-  SK: { id: "SK", name: "싱커", short: "싱", speed: 0.92, bx: 0.38, by: 0.12, late: 3, color: "#c9b8ff", low: true },
+  FB: { id: "FB", name: "직구", short: "직", speed: 1, bx: 0.08, by: 0.41, late: 2, color: "#ffffff" },
+  TS: { id: "TS", name: "투심", short: "투", speed: 0.97, bx: 0.38, by: 0.2, late: 2.2, color: "#d8f0ff" },
+  SL: { id: "SL", name: "슬라이더", short: "슬", speed: 0.88, bx: -0.15, by: 0.05, late: 2.6, color: "#ffe28a" },
+  CT: { id: "CT", name: "커터", short: "커터", speed: 0.94, bx: -0.06, by: 0.2, late: 2.4, color: "#fff3c4" },
+  CB: { id: "CB", name: "커브", short: "커", speed: 0.77, bx: -0.23, by: -0.25, late: 2.4, color: "#9ad6ff", low: true },
+  CH: { id: "CH", name: "체인지업", short: "체", speed: 0.83, bx: 0.36, by: 0.15, late: 2.5, color: "#b6ffb0", low: true },
+  FK: { id: "FK", name: "포크", short: "포", speed: 0.86, bx: 0.1, by: 0.03, late: 2.5, color: "#ffb0d8", low: true },
+  SK: { id: "SK", name: "싱커", short: "싱", speed: 0.92, bx: 0.38, by: 0.12, late: 2.3, color: "#c9b8ff", low: true },
 };
 /**
  * 게임 과장 (튜닝 손잡이): 실제 움직임은 작은 화면 · 짧은 시간에 잘 안 읽혀서 회전 변화만 키움 (중력은 그대로).
  *   x = 좌우 (슬라이더 · 투심), y = 위아래 (직구 떠오르는 힘 · 커브 낙차)
  */
 export const MOVE_GAIN = { x: 2.5, y: 1.8, g: 0.7 };
-/** 중력 낙차 모양 (2 = 물리 · 클수록 늦게 떨어짐) — 3: 존 안 공은 비행 내내 화면에서 내려옴 (커브만 살짝 솟는 낙차) */
-export let GRAV_LATE = 3;
-export const setGravLate = (v: number) => (GRAV_LATE = v);
 /** 공 놓는 높이 (m) — 2.5등신 비율 (존 무릎 0.47 ~ 어깨 0.9)에 맞춘 값, 타석 화면 눈높이와 같음 (view.ts BC.camH) */
 export const RELEASE_H = 1.0555;
 const GRAV = 9.8;
@@ -203,8 +197,75 @@ export function makePitch(
     stuff,
     seed: rng(),
   };
+  if (!o.special) limitShape(p, def);
   if (o.special) applySpecial(p, o.special, speedScale, rng);
   return p;
+}
+
+/**
+ * 화면에서 어색한 움직임 막기 (scripts/baseball-pitch-audit.ts 로 구종 × 위치 × 능력치 전부 던져 보고 정한 한도).
+ * 눈높이 = 손 높이라 「공이 손보다 높이 가면」 화면에서 떠오름 → 위아래 변화 · 중력을 그 안으로 줄임 (커브만 살짝 솟는 낙차)
+ * 좌우는 휘는 반대쪽으로 갔다 되돌아오면 「몸쪽으로 오다 빠짐」 → 직구 계열은 없게, 변화구는 공 1.5개까지
+ * 둘 다 넘으면 그 공의 변화를 그만큼만 줄임 (위치 · 구종에 따라 덜 휨)
+ */
+/** 회전 변화 최대 (m) — 느린 공일수록 더 휘는 몫 × 게임 과장이 겹쳐 체인지업 등이 1m 넘게 휘던 것 */
+export const BRK_MAX = { x: 0.65, y: 0.6 };
+function limitShape(p: Pitch, def: PitchDef) {
+  p.brk.x = Math.max(-BRK_MAX.x, Math.min(BRK_MAX.x, p.brk.x));
+  p.brk.y = Math.max(-BRK_MAX.y, Math.min(BRK_MAX.y, p.brk.y));
+  const N = 40;
+  const at = (u: number) => basePos(p, u);
+  // 0 ~ 1 사이 가장 큰 배율 k (k 1 이면 그대로) — 배율이 작을수록 덜 휨 (k 0 = 직선, 늘 통과)
+  const fit = (apply: (k: number) => void, ok: () => boolean) => {
+    apply(1);
+    if (ok()) return;
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 18; i++) {
+      const m = (lo + hi) / 2;
+      apply(m);
+      if (ok()) lo = m;
+      else hi = m;
+    }
+    apply(lo);
+  };
+  // 위아래: 손(= 화면 눈높이) 위로 안 올라감 (커브만 5cm 솟는 낙차) + 한 번 내려오기 시작하면 다시 안 올라감 (막판 떠오름 없음)
+  const rise = def.id === "CB" ? 0.05 : 0.002;
+  const by0 = p.brk.y, dr0 = p.drop;
+  fit(
+    (k) => {
+      p.brk.y = by0 * k;
+      p.drop = dr0 * k;
+    },
+    () => {
+      let low = Infinity;
+      for (let i = 0; i <= N; i++) {
+        const y = at(i / N).y;
+        if (y > p.release.y + rise) return false;
+        if (y > low + 0.004) return false;
+        low = Math.min(low, y);
+      }
+      return true;
+    }
+  );
+  // 좌우: 휘는 반대쪽으로 「잘못 가는」 거리 — 직구 계열 0 (곧게 읽혀야) · 변화구 공 1.5개(6cm, 프론트도어 · 백도어)
+  const back = def.id === "FB" || def.id === "TS" || def.id === "SK" || def.id === "CT" ? 0.003 : 0.06;
+  const bx0 = p.brk.x;
+  fit(
+    (k) => (p.brk.x = bx0 * k),
+    () => {
+      const sgn = Math.sign(p.brk.x);
+      const x0 = p.release.x;
+      const x1 = p.target.x;
+      // 손 → 목표 사이 구간 밖으로, 휘는 반대쪽으로 벗어난 만큼
+      const lo = Math.min(x0, x1), hi = Math.max(x0, x1);
+      for (let i = 0; i <= N; i++) {
+        const x = at(i / N).x;
+        const out = sgn > 0 ? lo - x : x - hi;
+        if (out > back) return false;
+      }
+      return true;
+    }
+  );
 }
 
 /** 마구 */
@@ -273,13 +334,12 @@ export interface BallView {
 }
 
 function basePos(p: Pitch, u: number) {
-  // 회전 변화: 목표 직선에서 brk·(u^L − u^(L−1)) — 끝(u 1)에서 0 이라 목표에 정확히 들어옴, 지나간 뒤는 그 기울기(brk)로 계속
+  // 회전 변화: 목표 직선에서 brk·(u^L − u) — 한 방향으로만 휘고(변곡 없음) L 이 클수록 막판에 몰려 꺾임 · 끝(u 1)에서 0
+  // (u^L − u^(L−1) 「처음 직선」 모양은 중간에 휘는 방향이 뒤집혀 화면에서 S자로 보였음)
   const uc = clamp(u, 0, 1);
-  const b = Math.pow(uc, p.late) - Math.pow(uc, p.late - 1) + Math.max(0, u - 1);
-  // 중력: drop·(u^(Lg−1) − u^Lg) — Lg 2 면 물리 그대로(u − u²). 우리 구도는 손이 존 위 끝 바로 위라 물리 언덕이 그대로 보여서
-  // 회전 변화처럼 처음엔 목표 직선을 타다 막판에 떨어지게(GRAV_LATE) — 끝에서 떨어지는 각도는 물리와 같음
-  const Lg = GRAV_LATE;
-  const g = (p.drop ?? 0) * (u <= 1 ? Math.pow(uc, Lg - 1) - Math.pow(uc, Lg) : -(u - 1));
+  const b = Math.pow(uc, p.late) - uc + Math.max(0, u - 1) * (p.late - 1);
+  // 중력: drop·(u − u²) 물리 그대로
+  const g = (p.drop ?? 0) * (u <= 1 ? uc - uc * uc : -(u - 1));
   return {
     x: lerp(p.release.x, p.target.x, u) + p.brk.x * b,
     y: lerp(p.release.y, p.target.y, u) + p.brk.y * b + g,

@@ -49,6 +49,15 @@ export function proj(x: number, y: number, z: number) {
   return { x: gx + (bx - gx) * w, y: gy + (by - gy) * w, s: s + (sb - s) * w };
 }
 export const MOUND = proj(0, 0, 18.4);
+/**
+ * 투구 · 존 · 컨택존 전용: 공 카메라(BC) 하나로만 (높이에 따라 구장 그림 카메라와 섞지 않음).
+ * proj 는 0.43m 아래에서 땅 카메라와 섞어서(타구 · 땅볼용) 낮게 빠지는 투구가 그 구간에서 휘는 방향이 뒤집히고 꺾였음.
+ */
+export function ballProj(x: number, y: number, z: number) {
+  const sb = BC.F / (Math.max(z, -3) + BC.Dc);
+  const sv = Math.min(sb, SB_HOME);
+  return { x: CAM.cx + x * sb, y: BC.Y0 - (y - BC.camH) * sv, s: sb };
+}
 
 /**
  * 날아오는 공의 그림자 — 공과 같은 원근(BC 의 F · Dc)으로, 땅 높이만 따로 맞춘 카메라.

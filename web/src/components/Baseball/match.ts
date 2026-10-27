@@ -32,7 +32,7 @@ import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
-import { DH, DW, PITCHER_FEET, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
+import { DH, DW, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
 
 /** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
@@ -724,7 +724,7 @@ export class Match {
   }
   /** 지금 화면 시점으로 월드 → 화면 (타석 = 포수 뒤 · 투수 뷰 = 외야 카메라) */
   private scr(x: number, y: number, z: number) {
-    return this.pitcherView ? pvProj(this.pvCamNow(), x, y, z) : proj(x, y, z);
+    return this.pitcherView ? pvProj(this.pvCamNow(), x, y, z) : ballProj(x, y, z);
   }
   /** 투수 뷰: 공 놓는 순간의 손 자리 (와인드업 동안 매 프레임 기록) */
   private pvRelHand: { x: number; y: number } | null = null;
@@ -876,7 +876,7 @@ export class Match {
     // 방망이가 공 높이를 지나가게 기울임
     if (!this.pitch && !this.outcome) return;
     const at = this.outcome?.at ?? (this.pitch ? plateCross(this.pitch) : { x: 0, y: ZONE.mid });
-    const bp = proj(at.x, at.y, 0);
+    const bp = ballProj(at.x, at.y, 0);
     const lefty = this.shownBatter.bats === "L";
     const { x: bx, y: by, sc } = this.batterPos();
     const ps = pose(BATTER_RIG, BAT_SWING, SWING_HIT_T);
@@ -1557,8 +1557,8 @@ export class Match {
     }
 
     // 스트라이크 존
-    const z0 = proj(-ZONE.x, ZONE.y1, 0);
-    const z1 = proj(ZONE.x, ZONE.y0, 0);
+    const z0 = ballProj(-ZONE.x, ZONE.y1, 0);
+    const z1 = ballProj(ZONE.x, ZONE.y0, 0);
     const showZone = !this.userBat || this.cfg.diff < 2 || this.phase === "aim";
     if (showZone) {
       ctx.strokeStyle = this.userBat ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.6)";
@@ -1584,8 +1584,8 @@ export class Match {
     if (this.userBat && ["ready", "windup", "flight", "contact", "call"].includes(this.phase)) {
       const b = this.shownBatter;
       const { hw, hh } = contactZone(effectiveHit(this.s, b));
-      const a = proj(this.cz.x - hw, this.cz.y + hh, 0);
-      const c = proj(this.cz.x + hw, this.cz.y - hh, 0);
+      const a = ballProj(this.cz.x - hw, this.cz.y + hh, 0);
+      const c = ballProj(this.cz.x + hw, this.cz.y - hh, 0);
       const fade = this.phase === "contact" || this.phase === "call" ? 0.45 : 1;
       const moving = !!(this.czVel.x || this.czVel.y) && (this.phase === "ready" || this.phase === "windup");
       ctx.save();
@@ -1598,7 +1598,7 @@ export class Match {
       ctx.fill();
       ctx.stroke();
       // 가운데 (제일 잘 맞는 자리)
-      const m = proj(this.cz.x, this.cz.y, 0);
+      const m = ballProj(this.cz.x, this.cz.y, 0);
       ctx.strokeStyle = "rgba(255,220,150,0.9)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
@@ -1612,7 +1612,7 @@ export class Match {
 
     // 사용자 투수: 코스 표시
     if (!this.userBat && (this.phase === "aim" || this.phase === "gauge" || this.phase === "cutin" || this.phase === "windup")) {
-      const t = proj(this.target.x, this.target.y, 0);
+      const t = ballProj(this.target.x, this.target.y, 0);
       const inz = inZone(this.target.x, this.target.y);
       ctx.strokeStyle = inz ? "#ffd23f" : "#7ad7ff";
       ctx.lineWidth = 3;
@@ -1641,7 +1641,7 @@ export class Match {
       const show = this.cfg.diff === 0 ? 1 : this.cfg.diff === 1 ? smooth(0.45, 0.6, u) : 0;
       if (show > 0) {
         const at = plateCross(p);
-        const c = proj(at.x, at.y, 0);
+        const c = ballProj(at.x, at.y, 0);
         ctx.globalAlpha = show * 0.8;
         ctx.fillStyle = "rgba(255,210,63,0.35)";
         ctx.beginPath();
@@ -1917,7 +1917,7 @@ export class Match {
     if (this.phase === "gauge" || this.phase === "aim") this.drawGauge(ctx, lefty ? z.x1 + 26 : z.x0 - 62);
   }
 
-  private drawPitchBall(ctx: CanvasRenderingContext2D, p: Pitch, hand: { x: number; y: number }, pj: (x: number, y: number, z: number) => { x: number; y: number; s: number } = proj) {
+  private drawPitchBall(ctx: CanvasRenderingContext2D, p: Pitch, hand: { x: number; y: number }, pj: (x: number, y: number, z: number) => { x: number; y: number; s: number } = ballProj) {
     const t = this.tf;
     const v = pitchAt(p, t);
     // 놓는 점은 투구 그림 손 자리와 같게 맞춰 둠 (pitch.ts release) — 그래도 남는 차이(코드 리그 · 좌우 반전)는
@@ -1928,7 +1928,7 @@ export class Match {
     // 홈플레이트 지난 뒤(포수 쪽): 홈 통과 순간의 화면 속도 그대로 곧게 (예전엔 원근 계산을 홈에서 멈추고 거리도 잘라서
     // 좌우는 멈추고 위아래만 움직여 몸 앞에서 20 ~ 45° 「휘리릭」 꺾여 보였음)
     const pe = pitchAt(p, p.dur);
-    const pq = pitchAt(p, p.dur * 0.97);
+    const pq = pitchAt(p, p.dur * 0.995);
     const E = pj(pe.x, pe.y, pe.z);
     const Q = pj(pq.x, pq.y, pq.z);
     const du = Math.max(1e-4, 1 - pq.u);
@@ -1947,7 +1947,7 @@ export class Match {
     const sp = p.special;
     // 그림자
     // 타석 화면은 공과 같은 원근의 그림자 (shadowProj — 공이 떠 보이던 원인), 투수 뷰는 그 카메라 그대로
-    const g = pj === proj ? shadowProj(v.x, Math.max(v.z, 0.2)) : pj(v.x, 0, Math.max(v.z, 0.2));
+    const g = pj === ballProj ? shadowProj(v.x, Math.max(v.z, 0.2)) : pj(v.x, 0, Math.max(v.z, 0.2));
     // 그림자는 홈까지 (지나간 뒤엔 공만 곧게 날아감)
     ctx.fillStyle = `rgba(0,0,0,${(0.42 * (1 - smooth(1, 1.06, v.u))).toFixed(3)})`;
     ctx.beginPath();
