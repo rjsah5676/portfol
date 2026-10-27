@@ -141,12 +141,14 @@ export const KICK_STEP_T = 5;
 /** 들기 시작 = 공 놓기(PITCH_RELEASE_T 0.74초) 0.1초 전 */
 const LIFT_AT = 0.64;
 const LIFT_DT = [0.07, 0.07, 0.06, 0.06, 0.06]; // 1~5칸 머무는 시간 (들기 = 0.32초)
+/** 안 치고 보낼 때 내리는 한 칸 시간 (0.05 × 5칸 = 0.25초) */
+const LOWER_DT = 0.05;
 const KICK: [number, number][] = (() => {
   const out: [number, number][] = [[0, LIFT_AT]];
   let t = LIFT_AT;
   LIFT_DT.forEach((d, i) => out.push([i + 1, (t += d)]));
   out.push([6, KICK_STEP_T]);
-  for (let c = 5, u = KICK_STEP_T; c >= 0; c--) out.push([c, c === 0 ? 99 : (u += 0.03)]);
+  for (let c = 5, u = KICK_STEP_T; c >= 0; c--) out.push([c, c === 0 ? 99 : (u += LOWER_DT)]);
   return out;
 })();
 /** 스윙 첫머리 = 최고점에서 든 순서 거꾸로 내리기 (0.012초씩 → 0.07초 임팩트 전에 착지) — 스윙 그림 나오기 전까지는 대기 1칸으로 버팀 */
