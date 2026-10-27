@@ -23,7 +23,7 @@ import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { commit, evaluate, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, drawBatter, preloadBatter, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, drawBatter, KICK_STEP_T, preloadBatter, type SpriteLook } from "@/lib/baseball/batterSprite";
 import { BATCOL } from "@/lib/baseball/look";
 import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/lib/baseball/rig";
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
@@ -1091,6 +1091,8 @@ export class Match {
       case "flight": {
         const p = this.pitch!;
         this.tf += dt;
+        // 안 치고 보내면 공이 홈에 오기 0.1초 전에 레그킥 최고점에서 내딛음
+        if (this.userBat && this.batAnim === BAT_LOAD && this.batAnimT < KICK_STEP_T && this.tf >= p.dur - 0.1) this.batAnimT = KICK_STEP_T;
         // CPU 스윙 시작
         if (!this.userBat && this.decision?.swing && this.swingStart >= 0 && this.tf >= this.swingStart && this.batAnim !== BAT_SWING) {
           this.playBat(BAT_SWING);
