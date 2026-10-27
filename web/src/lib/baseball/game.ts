@@ -162,6 +162,15 @@ export function pitchThrown(s: GameState) {
   sd.stamina = Math.max(0, sd.stamina - 1);
   sd.pit[sd.pitcher].pitches++;
 }
+/**
+ * 체력 추가 소모 (공 1개 = 1): 맞고 · 내보내고 · 점수 주면 더 지침 (위기 투구 · 세트 포지션),
+ * 게이지 MAX 로 힘껏 던지면 조금 더
+ */
+export const STAMINA_COST = { hit: 1.5, walk: 1.5, hr: 3, run: 1.5, max: 0.5 };
+export function drainStamina(s: GameState, n: number) {
+  const sd = s.sides[fieldSide(s)];
+  sd.stamina = Math.max(0, sd.stamina - n);
+}
 
 /** 공 · 스트라이크 · 파울 (타석이 끝나면 결과) */
 export function callPitch(s: GameState, call: "ball" | "strike" | "swingMiss" | "foul" | "hbp"): PAResult | null {
@@ -195,6 +204,7 @@ function walk(s: GameState, hbp = false): PAResult {
   bs.bat[bs.order].pa++;
   bs.bat[bs.order].bb++;
   fs.pit[fs.pitcher].bb++;
+  drainStamina(s, STAMINA_COST.walk);
   const b = [...s.bases];
   const scored: number[] = [];
   if (b[0] !== null) {
@@ -229,6 +239,7 @@ export function applyPlay(s: GameState, f: FieldOut): PAResult {
     ln.hr++;
     fs.pit[fs.pitcher].hr++;
   }
+  if (hit) drainStamina(s, f.result === "HR" || f.result === "IPHR" ? STAMINA_COST.hr : STAMINA_COST.hit);
   ln.rbi += f.rbi;
   const kind: PAKind =
     f.result === "HR" || f.result === "IPHR" ? "HR" : hit ? "HIT" : f.result === "SF" || f.result === "SH" ? "SAC" : f.result === "FC" ? "FC" : f.result === "DP" ? "DP" : "OUT";
@@ -241,6 +252,7 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
   const fs = s.sides[fieldSide(s)];
   for (const id of scored) bs.bat[id].r++;
   fs.pit[fs.pitcher].r += runs;
+  if (runs) drainStamina(s, runs * STAMINA_COST.run);
   fs.pit[fs.pitcher].outs += outs;
   s.outs += outs;
   s.score[bi] += runs;

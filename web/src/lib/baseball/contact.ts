@@ -105,13 +105,15 @@ export const timingWindow = (hit: number, bunt: boolean, special: boolean) =>
 
 export function swing(o: SwingIn, rng: Rng): SwingResult {
   const sp = o.special;
-  const W = timingWindow(o.hit, o.bunt, !!sp);
+  // 구위가 좋으면 맞히는 창도 좁아짐 (헛스윙 ↑)
+  const W = timingWindow(o.hit, o.bunt, !!sp) * (1 - (o.pitch.special ? 0 : o.pitch.stuff ?? 0));
   // 바이올렛 피루엣: 한 바퀴 돌며 박자를 다시 맞춤 → 타이밍 오차 절반
   const e = sp === "violet" ? o.e * 0.5 : o.e;
   const r = Math.abs(e) / W;
   const qt = r >= 1 ? 0 : 1 - Math.pow(r, 1.6);
   // 좋은 공(게이지 MAX)은 정타가 덜 나옴 · 마구는 더
-  const pq = o.pitch.special ? 0.12 : o.pitch.mistake ? -0.15 : o.pitch.quality * 0.16;
+  // 구위 (변화 · 구속 능력치) 도 정타를 줄임
+  const pq = o.pitch.special ? 0.12 : o.pitch.mistake ? -0.15 : o.pitch.quality * 0.16 + (o.pitch.stuff ?? 0);
   let q: number;
   // 컨택존 없음(자동 진행 시뮬)은 「대충 잘 노린」 정도로 침 (dn 0.4 와 같게)
   let dn = 0.4;

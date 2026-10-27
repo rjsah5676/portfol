@@ -63,8 +63,10 @@ export interface Pitch {
   late: number;
   /** 0 ~ 1 (게이지) */
   quality: number;
-  /** 실투 (가운데로 몰림) */
+  /** 실투 (가운데 느린 직구) — 게이지가 바닥이거나, 제구 · 체력에 따라 가끔 손에서 빠짐 */
   mistake: boolean;
+  /** 구위 (변화 · 구속 능력치) — 높을수록 정타가 덜 나옴 (contact.swing 이 맞은 정도에서 뺌) */
+  stuff: number;
   /** 마구 구간표 */
   tl?: Timeline;
   /** 마구별 난수 (이그나 가짜 불꽃 방향 등) */
@@ -119,6 +121,10 @@ function seg(tl: Timeline, t: number): { u: number; s: Seg; k: number } {
 }
 
 /** 투수 · 구종 · 목표 · 게이지 결과로 실제 공 만들기 */
+/** 실투 확률 (공 하나): 기본 2% + 제구가 낮을수록 (제구 0 → +4%) + 체력 30% 밑으로 지칠수록 (바닥 → +9%) */
+export const mistakeChance = (control: number, stamina01: number) =>
+  0.02 + (1 - clamp(control, 0, 1000) / 1000) * 0.04 + Math.max(0, 0.3 - stamina01) * 0.3;
+
 export function makePitch(
   pitcher: Pitcher,
   o: { kind: PitchKind; target: { x: number; y: number }; quality: number; special?: CharId },
@@ -129,23 +135,26 @@ export function makePitch(
   const def = PITCHES[o.kind];
   const q = clamp(o.quality, 0, 1);
   const tired = stamina01 < 0.25 ? (0.25 - stamina01) * 2 : 0; // 0 ~ 0.5
-  const mistake = !o.special && q < 0.22;
-  // 제구: 게이지가 나쁠수록 · 제구가 낮을수록 · 지칠수록 목표에서 벗어남
-  const err = (1 - q) * 0.13 + (1 - pitcher.control / 1000) * 0.08 + tired * 0.12;
+  // 실투: 게이지 바닥 · 또는 제구가 낮고 지칠수록 가끔 손에서 빠짐 (마구마구식 「!」)
+  const mistake = !o.special && (q < 0.22 || rng() < mistakeChance(pitcher.control, stamina01));
+  // 제구: 게이지가 나쁠수록 · 제구가 낮을수록 · 지칠수록 목표에서 벗어남 (제구 300 ≈ 12cm · 900 ≈ 4cm, 게이지 0.7 기준)
+  const err = (1 - q) * 0.1 + (1 - pitcher.control / 1000) * 0.14 + tired * 0.12;
   let tx = o.target.x + rng.gauss() * err;
   let ty = o.target.y + rng.gauss() * err * 0.85;
   if (mistake) {
-    // 실투: 한가운데로 밋밋하게
-    tx = lerp(tx, 0, 0.7);
-    ty = lerp(ty, ZONE.mid, 0.7);
+    // 실투: 한가운데 근처로 밋밋한 느린 직구
+    tx = lerp(tx, 0, 0.85) + rng.gauss() * 0.03;
+    ty = lerp(ty, ZONE.mid, 0.85) + rng.gauss() * 0.03;
   }
   if (o.special) {
     tx = o.target.x + rng.gauss() * 0.03;
     ty = o.target.y + rng.gauss() * 0.03;
   }
   const hand = pitcher.throws === "R" ? -1 : 1; // 우투수의 팔 쪽 = 포수 왼쪽(-x)
-  const brkMul = (0.7 + (pitcher.brk / 1000) * 0.55) * (0.75 + q * 0.35) * (mistake ? 0.35 : 1);
-  const velo = pitcher.velo * def.speed * (0.94 + q * 0.07) * (1 - tired * 0.12) * (mistake ? 0.96 : 1);
+  const brkMul = (0.7 + (pitcher.brk / 1000) * 0.55) * (0.75 + q * 0.35) * (mistake ? 0.1 : 1);
+  const velo = mistake ? pitcher.velo * 0.9 * (1 - tired * 0.12) : pitcher.velo * def.speed * (0.94 + q * 0.07) * (1 - tired * 0.12);
+  // 구위: 변화 500 · 구속 140 기준 ±, 실투는 0
+  const stuff = mistake ? 0 : clamp((pitcher.brk - 500) / 500, -1, 1) * 0.06 + clamp((pitcher.velo - 140) / 25, -1, 1) * 0.05;
   const p: Pitch = {
     kind: o.kind,
     special: o.special,
@@ -158,6 +167,7 @@ export function makePitch(
     late: def.late,
     quality: q,
     mistake,
+    stuff,
     seed: rng(),
   };
   if (o.special) applySpecial(p, o.special, speedScale, rng);

@@ -4,7 +4,7 @@
  */
 import { swing, type SwingResult } from "./contact";
 import type { GameState, PAResult } from "./game";
-import { applyPlay, batSide, batter, callPitch, fieldSide, pitchThrown } from "./game";
+import { STAMINA_COST, applyPlay, batSide, batter, callPitch, drainStamina, fieldSide, pitchThrown } from "./game";
 import { simulatePlay, type FieldOut } from "./play";
 import { inZone, plateCross, type Pitch } from "./pitch";
 import type { Rng } from "./rng";
@@ -27,6 +27,8 @@ export interface Outcome {
   field?: FieldOut;
   /** 나쁜 결과 (헛스윙 · 아웃) */
   bad: boolean;
+  /** 게이지 MAX 로 힘껏 던진 공 (체력 조금 더) */
+  maxEffort?: boolean;
 }
 
 /**
@@ -50,6 +52,11 @@ export function effectiveHit(s: GameState, b: { hit: number; grow?: boolean; sit
 }
 
 export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: Rng, cz?: { x: number; y: number }): Outcome {
+  const o = judge(s, p, d, rng, cz);
+  if (p.quality >= 0.9 && !p.special && !p.mistake) o.maxEffort = true;
+  return o;
+}
+function judge(s: GameState, p: Pitch, d: SwingDecision | null, rng: Rng, cz?: { x: number; y: number }): Outcome {
   const at = plateCross(p);
   if (!d || !d.swing) {
     const b = batter(s);
@@ -91,6 +98,7 @@ export function evaluate(s: GameState, p: Pitch, d: SwingDecision | null, rng: R
 /** 반영 (타석이 끝나면 결과) */
 export function commit(s: GameState, o: Outcome): PAResult | null {
   pitchThrown(s);
+  if (o.maxEffort) drainStamina(s, STAMINA_COST.max);
   if (o.call === "bip" && o.field) return applyPlay(s, o.field);
   return callPitch(s, o.call as "ball" | "strike" | "swingMiss" | "foul" | "hbp");
 }

@@ -596,6 +596,8 @@ export class Match {
     const st = this.cfg.mode === "derby" ? 1 : stamina01(this.s);
     this.pitch = makePitch(p, { kind, target: this.target, quality: this.quality, special }, this.speedScale, this.rng, st);
     if (special) this.specialSound(special, "start");
+    // 실투 (마구마구식 「!」): 가운데 느린 직구 — 치는 쪽엔 기회, 던지는 쪽엔 경고
+    if (this.pitch.mistake) this.popup(DW / 2, 230, "! 실투", "#ff5a5a");
     this.tf = 0;
     this.setPhase("flight");
     const pc = this.pitch;
