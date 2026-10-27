@@ -225,9 +225,11 @@ const stillCache = new Map<string, HTMLCanvasElement>();
  * 색 바꾸기: 마스크(R = 헬멧, G = 소매 · 양말) 자리만 그 픽셀 밝기 × 팀색으로 다시 칠함 (하이라이트는 흰 쪽으로).
  * 마스크가 아직 안 왔으면 원래 그림(주황) 그대로.
  */
+/** 팀색 칠하기 — 채색 작업 끝나면 일괄 교체할 때까지 꺼둠 (모든 팀 원래 그림 그대로) */
+const RECOLOR = false;
 function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
   const mk = stillMask;
-  if (!mk || !mk.complete || !mk.naturalWidth || typeof document === "undefined") return st;
+  if (!RECOLOR || !mk || !mk.complete || !mk.naturalWidth || typeof document === "undefined") return st;
   const key = `${lk.helm}|${lk.team}`;
   const hit = stillCache.get(key);
   if (hit) return hit;
