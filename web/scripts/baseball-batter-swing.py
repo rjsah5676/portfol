@@ -1,6 +1,8 @@
 """
 스윙 줄 만들기: 한 시트에서 뽑은 스윙 칸들(1칸 = 레그킥 최고점) → 레그킥 최고점과 같은 배율 · 같은 기준점(축발)
-  python3 scripts/baseball-batter-swing.py <이름> <시트.png>
+  python3 scripts/baseball-batter-swing.py <이름> <시트.png> [칸번호:고친그림.png ...]
+- 고친 그림: 시트의 한 칸을 따로 고쳐 뽑은 그림으로 바꿈 (0부터, 1칸 = 0). 하체는 그대로라는 전제로
+  신발 크기(아래쪽 어두운 덩어리 넓이)를 원래 칸에 맞춰 배율을 정함
 - 칸 나누기: 배트가 옆 칸과 세로로 겹칠 수 있어서 빈 열 대신 덩어리(연결 성분) 5개를 x 순서로
 - 배율: 시트 전체가 한 배율 — 1칸(최고점) 몸 키(헬멧 꼭대기 → 땅)를 레그킥 줄 마지막 칸 몸 키에 맞춤
 - 기준점: 칸마다 맨 아래 30px 안 불투명 범위 가운데 (= 축발, 스윙 내내 가장 아래 있는 발)
@@ -12,7 +14,8 @@ from PIL import Image
 from scipy import ndimage
 
 NAME, SRC = sys.argv[1], sys.argv[2]
-NCELL = int(sys.argv[3]) if len(sys.argv) > 3 else 5
+FIX = dict((int(a.split(":", 1)[0]), a.split(":", 1)[1]) for a in sys.argv[3:])
+NCELL = 5
 s = open("scripts/baseball-char-art.py").read()
 ns = {"np": np, "Image": Image, "ndimage": ndimage}
 exec(s[s.index("def key(path):"):s.index("rgb, al = key(full)")], ns)
@@ -39,6 +42,24 @@ for k in big:
     ys, xs = np.where(mk)
     sl = (slice(ys.min(), ys.max() + 1), slice(xs.min(), xs.max() + 1))
     cells.append((rgb[sl], (al * mk)[sl]))
+
+def shoe_area(r, a):
+    H = a.shape[0]
+    d = (a > 0.5) & (r.max(-1) < 0.45)
+    d[: int(H * 0.8)] = False
+    lab, n = ndimage.label(ndimage.binary_closing(d, iterations=2))
+    return float(ndimage.sum(d, lab, range(1, n + 1)).max()) if n else 1.0
+
+
+for i, path in FIX.items():
+    r2, a2 = ns["key"](path)
+    ys, xs = np.where(a2 > 0.05)
+    r2, a2 = r2[ys.min():ys.max() + 1, xs.min():xs.max() + 1], a2[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+    f = np.sqrt(shoe_area(*cells[i]) / shoe_area(r2, a2))
+    im = Image.fromarray((np.dstack([r2, a2]) * 255).round().astype(np.uint8), "RGBA").resize((round(a2.shape[1] * f), round(a2.shape[0] * f)), Image.LANCZOS)
+    arr = np.asarray(im).astype(np.float32) / 255
+    cells[i] = (arr[..., :3], arr[..., 3])
+    print("fix", i, path.split("/")[-1], "scale", round(f, 3))
 
 # 레그킥 줄 마지막 칸(최고점) 몸 키
 lm = json.load(open("src/data/baseball/batter-load.json"))
