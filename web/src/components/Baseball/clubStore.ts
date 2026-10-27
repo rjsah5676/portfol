@@ -19,8 +19,7 @@ export function loadClub(): Club | null {
   if (!c) return null;
   c.record ??= { w: 0, l: 0, d: 0, rating: 1000, log: [] };
   c.nextSp ??= 0;
-  let staffChanged = false;
-  for (const k of c.cards) if (migrateStaff(k)) staffChanged = true;
+  const staffChanged = migrateStaff(c);
   const hofChanged = syncHof(c, loadHof());
   if (!repair(c)) return null;
   if (hofChanged || staffChanged) saveClub(c);

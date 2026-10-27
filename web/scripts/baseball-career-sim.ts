@@ -13,6 +13,11 @@ import {
 import { botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
 import type { Diff } from "../src/lib/baseball/ai";
 import { makeRng } from "../src/lib/baseball/rng";
+import { GROW } from "../src/lib/baseball/data";
+import { TYPES as TYPE_DEF } from "../src/lib/baseball/career";
+// 튜닝: GROW='{"base":300,"k":0.6}' · APT='{"contact":{"hit":1.3},"power":{"power":1.1}}'
+if (process.env.GROW) Object.assign(GROW, JSON.parse(process.env.GROW));
+if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.APT) as Record<string, object>)) Object.assign(TYPE_DEF[k as BatType].apt, v);
 
 if (process.env.XP) TUNE.gameXp = Number(process.env.XP);
 if (process.env.TR) TUNE.train = Number(process.env.TR);
@@ -21,7 +26,7 @@ const N = Number(process.argv[2] ?? 200);
 const diff = Number(process.argv[3] ?? 1) as Diff;
 const NGP = Number(process.argv[4] ?? Math.min(N, 80));
 const NSK = Number(process.argv[5] ?? Math.min(N, 40));
-const TYPES: BatType[] = ["contact", "power", "speed", "defense", "all"];
+const TYPES: BatType[] = ["contact", "power", "all"];
 type Mode = "direct" | "highlight" | "auto";
 
 export interface Persona {
@@ -170,7 +175,7 @@ else main();
 function main() {
   const t0 = Date.now();
   const base: ReturnType<typeof run>[] = [];
-  for (let i = 0; i < N; i++) base.push(run(i, [...GP_IDS]));
+  for (let i = 0; i < N; i++) base.push(run(i, []));
   const o0 = base.map((r) => r.ovr).sort((a, b) => a - b);
   console.log(`${N}명 · 난이도 ${diff} · ${((Date.now() - t0) / 1000).toFixed(0)}초`);
   console.log("백분위      p3   p10   p25   p50   p75   p90   p97   p99  max");

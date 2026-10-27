@@ -65,48 +65,52 @@ export interface PitCard {
   stamina: number;
   rep: PitchKind[];
 }
-/** 코치: 경기 팀 능력치에 작은 보너스 (등급만 있음, 점수 없음) · 치어리더: 아직 효과 없음 (자리만) */
-export type BuffStat = "hit" | "power" | "run" | "def" | "control" | "brk";
-export const BUFF_NAME: Record<BuffStat, string> = { hit: "맞히기", power: "파워", run: "주루", def: "수비", control: "제구", brk: "변화" };
+/**
+ * 코치 · 치어리더 (등급만 있음, 점수 없음)
+ * - 코치: 맡은 능력치를 경기 출전 선수 전원에게 (등급마다 C +1 · B +2 · A +3 · S +4 · SS +5)
+ * - 치어리더: 아직 효과 없음 (자리 · 카드만, 쓰임새는 나중에)
+ */
+export type BuffStat = "hit" | "power" | "run" | "def" | "control" | "brk" | "velo";
+export const BUFF_NAME: Record<BuffStat, string> = { hit: "맞히기", power: "파워", run: "주루", def: "수비", control: "제구", brk: "변화", velo: "구속" };
 export interface StaffCard {
   kind: "coach" | "cheer";
   id: string;
   name: string;
-  /** 직함 (타격 코치 · 응원단장 …) */
+  /** 직함 (타격 코치 · 치어리더 …) */
   title: string;
   grade: Grade;
+  /** 코치: 경기 보너스 능력치 (치어리더는 빈 배열) */
   buff: BuffStat[];
 }
-/** 처음 코치 4명 (수비 능력치는 빼는 중이라 수비 코치 없음) */
-export const COACH_DEFS: [string, BuffStat[]][] = [
-  ["타격 코치", ["hit"]],
-  ["장타 코치", ["power"]],
-  ["주루 코치", ["run"]],
-  ["투수 코치", ["control", "brk"]],
+/** 처음 코치 (타자 3 · 투수 3, 투수 쪽 체력 코치는 없음) · 치어리더 3 — 모두 C 등급 */
+export const COACH_DEFS: [name: string, title: string, buff: BuffStat][] = [
+  ["김타격", "타격 코치", "hit"],
+  ["김주루", "주루 코치", "run"],
+  ["김수비", "수비 코치", "def"],
+  ["김구속", "구속 코치", "velo"],
+  ["김제구", "제구 코치", "control"],
+  ["김변화", "변화 코치", "brk"],
 ];
-/** 예전 저장 (점수 · 수비 코치 · 치어리더 보너스) → 지금 규칙 */
-export function migrateStaff(c: Card): boolean {
-  if (!isStaff(c)) return false;
-  const old = c as StaffCard & { ovr?: number };
-  let ch = false;
-  if (!old.grade) {
-    old.grade = gradeOf(old.ovr ?? 250);
-    ch = true;
-  }
-  if (old.ovr !== undefined) {
-    delete old.ovr;
-    ch = true;
-  }
-  if (c.kind === "coach" && c.buff.includes("def")) {
-    c.title = "장타 코치";
-    c.buff = ["power"];
-    ch = true;
-  }
-  if (c.kind === "cheer" && c.buff.length) {
-    c.buff = [];
-    ch = true;
-  }
-  return ch;
+export const CHEER_NAMES = ["김하나", "김두나", "김세나"];
+/** 지금 코치 · 치어리더 규칙 판 (바뀌면 저장된 구단의 스태프를 새로 깔아 줌) */
+export const STAFF_V = 3;
+export function defaultStaff(id: (p: string) => string): { coaches: StaffCard[]; cheers: StaffCard[] } {
+  return {
+    coaches: COACH_DEFS.map(([name, title, buff]) => ({ kind: "coach", id: id("s"), name, title, grade: "C", buff: [buff] })),
+    cheers: CHEER_NAMES.map((name) => ({ kind: "cheer", id: id("s"), name, title: "치어리더", grade: "C", buff: [] })),
+  };
+}
+/** 예전 규칙 스태프 → 지금 규칙으로 갈아 끼움 (전부 C 등급이라 잃는 것 없음) */
+export function migrateStaff(club: Club): boolean {
+  if (club.staffV === STAFF_V) return false;
+  let n = club.seq ?? 1000;
+  const { coaches, cheers } = defaultStaff((p) => `${p}${++n}`);
+  club.seq = n;
+  club.cards = [...club.cards.filter((c) => c.kind !== "coach" && c.kind !== "cheer"), ...coaches, ...cheers];
+  club.slots.coach = coaches.map((c) => c.id);
+  club.slots.cheer = cheers.map((c) => c.id);
+  club.staffV = STAFF_V;
+  return true;
 }
 export type Card = BatCard | PitCard | StaffCard;
 
@@ -115,15 +119,15 @@ const GRADE_REP: Record<Grade, number> = { C: 250, B: 400, A: 600, S: 775, SS: 9
 export const isStaff = (c: Card): c is StaffCard => c.kind === "coach" || c.kind === "cheer";
 export const ovrOf = (c: Card) => (c.kind === "bat" ? batOvr(c) : c.kind === "pit" ? pitOvr(c) : GRADE_REP[c.grade]);
 export const gradeOfCard = (c: Card) => gradeOf(ovrOf(c));
-/** 코치 보너스: 등급마다 C +1 · B +2 · A +3 · S +4 · SS +5. 치어리더는 0 (다른 쓰임새 정할 때까지) */
+/** 코치 경기 보너스: 등급마다 C +1 · B +2 · A +3 · S +4 · SS +5 (치어리더는 0) */
 const GRADE_BUFF: Record<Grade, number> = { C: 1, B: 2, A: 3, S: 4, SS: 5 };
-export const buffOf = (c: StaffCard) => (c.kind === "cheer" ? 0 : GRADE_BUFF[c.grade]);
+export const buffOf = (c: StaffCard) => (c.kind === "coach" ? GRADE_BUFF[c.grade] : 0);
 
 /* ─────────────── 구단 ─────────────── */
 
 export const LINEUP_POS = ["CF", "2B", "RF", "1B", "3B", "LF", "C", "SS", "DH"];
 export const POS_NAME: Record<string, string> = { C: "포수", "1B": "1루수", "2B": "2루수", "3B": "3루수", SS: "유격수", LF: "좌익수", CF: "중견수", RF: "우익수", DH: "지명타자", P: "투수" };
-export const SLOTS = { lineup: 9, bench: 4, rotation: 5, bullpen: 5, closer: 1, coach: 4, cheer: 3 } as const;
+export const SLOTS = { lineup: 9, bench: 4, rotation: 5, bullpen: 5, closer: 1, coach: 6, cheer: 3 } as const;
 export type Area = keyof typeof SLOTS;
 export const AREA_KIND: Record<Area, CardKind> = { lineup: "bat", bench: "bat", rotation: "pit", bullpen: "pit", closer: "pit", coach: "coach", cheer: "cheer" };
 
@@ -149,6 +153,8 @@ export interface Club {
   /** 다음 선발 (선발 5명 중 몇 번째) */
   nextSp: number;
   record: ClubRecord;
+  /** 코치 · 치어리더 규칙 판 (STAFF_V) */
+  staffV?: number;
 }
 
 const REPS: PitchKind[][] = [
@@ -172,7 +178,6 @@ function namer(rng: Rng) {
     }
   };
 }
-const CHEER_GIVEN = ["지아", "하린", "서아", "유나", "다은", "예린", "소율", "채원", "나연", "수빈"];
 
 /** 종합이 정확히 target 이 되도록 타자 능력치 맞추기 (모양 tilt + 흔들림) */
 export function genBatStats(rng: Rng, target: number, tilt: Partial<Record<"hit" | "power" | "run" | "def", number>> = {}) {
@@ -245,11 +250,11 @@ export function newClub(teamId: string, seed = (Math.random() * 2 ** 32) >>> 0):
   const rotation = Array.from({ length: 5 }, () => pit("SP"));
   const bullpen = Array.from({ length: 4 }, () => pit("RP"));
   const closer = pit("CL");
-  const coaches: StaffCard[] = COACH_DEFS.map(([title, buff]) => ({ kind: "coach", id: id("s"), name: name(), title, grade: "C", buff }));
-  const cheers: StaffCard[] = ["응원단장", "치어리더", "치어리더"].map((title) => ({ kind: "cheer", id: id("s"), name: name(CHEER_GIVEN), title, grade: "C", buff: [] }));
+  const { coaches, cheers } = defaultStaff(id);
   cards.push(...starters, ...bench, ...rotation, ...bullpen, closer, ...coaches, ...cheers);
   return {
     v: 1,
+    staffV: STAFF_V,
     teamId,
     createdAt: Date.now(),
     seq,
@@ -285,7 +290,7 @@ export function hofCard(e: HofEntry): BatCard {
     id: hofCardId(e.id),
     name: e.name,
     num: e.num ?? hashNum(e.id),
-    pos: HOF_POS[e.type] ?? "DH",
+    pos: e.pos ?? HOF_POS[e.type] ?? "DH",
     bats: e.bats ?? "R",
     hit: e.stats.hit,
     power: e.stats.power,
@@ -365,7 +370,7 @@ const ovrs = (club: Club, ids: (string | null)[]) => ids.map((id) => cardById(cl
 
 /** 코치 · 치어리더 보너스 합 */
 export function staffBuffs(club: Club): Record<BuffStat, number> {
-  const out: Record<BuffStat, number> = { hit: 0, power: 0, run: 0, def: 0, control: 0, brk: 0 };
+  const out: Record<BuffStat, number> = { hit: 0, power: 0, run: 0, def: 0, control: 0, brk: 0, velo: 0 };
   for (const id of [...club.slots.coach, ...club.slots.cheer]) {
     const c = cardById(club, id);
     if (c && isStaff(c)) for (const b of c.buff) out[b] += buffOf(c);
@@ -393,7 +398,7 @@ export function buildTeam(club: Club): Team {
     return { name: c.name, num: c.num, pos: club.lpos[i], bats: c.bats, hit: up(c.hit, "hit"), power: up(c.power, "power"), run: up(c.run, "run"), def: up(c.def, "def"), look: c.look };
   });
   const pit = (c: Card | undefined, role: Pitcher["role"]): Pitcher | null =>
-    c && c.kind === "pit" ? { name: c.name, num: c.num, role, throws: c.throws, control: up(c.control, "control"), velo: c.velo, brk: up(c.brk, "brk"), stamina: c.stamina, rep: c.rep } : null;
+    c && c.kind === "pit" ? { name: c.name, num: c.num, role, throws: c.throws, control: up(c.control, "control"), velo: up(c.velo, "velo"), brk: up(c.brk, "brk"), stamina: c.stamina, rep: c.rep } : null;
   const rot = club.slots.rotation.filter((x): x is string => !!x);
   const spId = rot.length ? rot[club.nextSp % rot.length] : null;
   const pitchers = [

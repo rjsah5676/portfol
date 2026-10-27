@@ -290,13 +290,13 @@ export default function ClubScreen({ club, coin, onChange, onBack }: { club: Clu
           {tab === "staff" && (
             <div className="flex min-h-0 flex-1 flex-col gap-[3px]">
               <div className="text-[11px] font-bold text-white/50">코치</div>
-              {club.slots.coach.map((_, i) => slot({ area: "coach", i }, <span className="w-[30px] text-[11px] font-bold text-white/60">코치</span>))}
+              {club.slots.coach.map((_, i) => slot({ area: "coach", i }, <span className="w-[30px] text-[11px] font-bold text-white/60">{i < 3 ? "타자" : "투수"}</span>))}
               <div className="mt-1 text-[11px] font-bold text-white/50">치어리더</div>
               {club.slots.cheer.map((_, i) => slot({ area: "cheer", i }, <span className="w-[30px] text-[11px] font-bold text-[#ff8ad1]">응원</span>))}
               <div className="mt-auto rounded-lg border border-[#7dff9a]/30 bg-[#7dff9a]/[0.06] p-2 text-[11.5px] leading-relaxed text-white/80">
-                <b className="text-[#7dff9a]">코치 보너스 합계</b> (경기에 나가는 선수 전원 · 치어리더 효과는 준비 중)
+                <b className="text-[#7dff9a]">코치 보너스 합계</b> (경기 출전 선수 전원 · 치어리더 효과는 준비 중)
                 <div className="mt-0.5 flex flex-wrap gap-x-3">
-                  {(Object.keys(buffs) as (keyof typeof buffs)[]).filter((k) => k !== "def").map((k) => (
+                  {(Object.keys(buffs) as (keyof typeof buffs)[]).map((k) => (
                     <span key={k}>
                       {BUFF_NAME[k]} <b className="font-mono text-[#7dff9a]">+{buffs[k]}</b>
                     </span>

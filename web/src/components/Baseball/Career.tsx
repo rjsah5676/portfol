@@ -5,14 +5,14 @@
  * 규칙 · 숫자는 lib/baseball/career.ts, 저장은 careerStore.ts.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
+import type { Diff } from "@/lib/baseball/ai";
 import {
-  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS, GP_IDS,
+  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
-  TRAIN_KEYS, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
+  CAREER_DIFF, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
   awardRace, costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
-  type Action, type BatType, type Career, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
+  type Action, type BatType, type Career, type FieldPos, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
 } from "@/lib/baseball/career";
 import { slotName, slotOf } from "@/lib/baseball/careerGame";
@@ -479,15 +479,16 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
   const [name, setName] = useState(() => NAMES[Math.floor(Math.random() * NAMES.length)]);
   const [num, setNum] = useState(() => 10 + Math.floor(Math.random() * 60));
   const [bats, setBats] = useState<"R" | "L">("R");
-  const [type, setType] = useState<BatType>("contact");
-  const [diff, setDiff] = useState<Diff>(1);
+  const [type, setType] = useState<BatType>("all");
+  const [pos, setPos] = useState<FieldPos>("SS");
+  const diff: Diff = CAREER_DIFF;
   // 외형 커스터마이징은 잠금 (경기 그림이 아직 한 가지라 골라도 안 바뀜) — 기본 외형 고정
   const look: Look = DEFAULT_LOOK;
   const [tab, setTab] = useState<"look" | "base">("base");
   const t = TYPES[type];
   const start = () => {
     const lg = legacy ? hof.find((h) => h.id === legacy.id) : undefined;
-    onStart({ name, num, bats, type, diff, look, deck: deck.length === DECK_SIZE ? deck : recommendDeck(type), legacy: lg ? { name: lg.name, skill: legacy?.skill, stats: lg.stats } : undefined });
+    onStart({ name, num, bats, type, pos, diff, look, deck: deck.length === DECK_SIZE ? deck : recommendDeck(type), legacy: lg ? { name: lg.name, skill: legacy?.skill, stats: lg.stats } : undefined });
   };
   const head = (
     <div className="flex items-center justify-between">
@@ -593,14 +594,6 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
               </Btn>
             ))}
           </Field>
-          <Field label="난이도">
-            {([0, 1, 2] as Diff[]).map((d) => (
-              <Btn key={d} active={diff === d} className="px-3 py-1 text-[13px]" color="#7ad7ff" onClick={() => setDiff(d)}>
-                {DIFF_NAME[d]}
-              </Btn>
-            ))}
-          </Field>
-          <div className="pl-[68px] text-[11px] text-white/45">경기 공 속도 · 상대 실력 (성장 규칙은 같아요)</div>
         </div>
         <div className="flex flex-1 flex-col gap-1.5">
           <div className="flex items-center gap-2">
@@ -611,18 +604,30 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
             <Btn disabled className="px-3 py-0.5 text-[12.5px]" color="#8b93b8">
               🔒 투수 육성 · 잠금
             </Btn>
-            <span className="ml-2 text-[13px] font-bold text-white/70">타입</span>
           </div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {(Object.keys(TYPES) as BatType[]).map((k) => (
-              <Btn key={k} active={type === k} className="py-2 text-[14px]" onClick={() => setType(k)}>
-                {TYPES[k].name}
-              </Btn>
-            ))}
+          <div className="flex items-center gap-1.5">
+            <span className="w-[56px] text-[13px] font-bold text-white/70">수비 위치</span>
+            <div className="grid flex-1 grid-cols-3 gap-1.5">
+              {PICK_POS.map((p) => (
+                <Btn key={p.pos} active={pos === p.pos} className="py-1.5 text-[14px]" onClick={() => setPos(p.pos)}>
+                  {p.name}
+                </Btn>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-[56px] text-[13px] font-bold text-white/70">타입</span>
+            <div className="grid flex-1 grid-cols-3 gap-1.5">
+              {PICK_TYPES.map((k) => (
+                <Btn key={k} active={type === k} className="py-1.5 text-[14px]" onClick={() => setType(k)}>
+                  {TYPES[k].name}
+                </Btn>
+              ))}
+            </div>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
             <div className="text-[13px] text-white/75">
-              {t.desc} · 수비 위치 {t.pos}
+              {t.desc} · {PICK_POS.find((p) => p.pos === pos)?.name} (수비 위치는 능력치에 영향 없음)
             </div>
             <div className="mt-1.5 grid grid-cols-4 gap-2">
               {STAT_KEYS.map((k) => (
@@ -638,17 +643,6 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
               ))}
             </div>
           </div>
-          <div className="mt-1 text-[13px] font-bold text-white/70">코치진</div>
-          <div className="grid grid-cols-5 gap-1.5">
-            {GP_IDS.map((id) => (
-              <div key={id} className="rounded-lg border border-white/12 bg-black/30 px-2 py-1.5 text-left text-[11.5px] leading-tight">
-                <span className="block text-[13px] font-bold">
-                  {GP_BOOSTS[id].name} <span className="text-[#7ad7ff]">C</span>
-                </span>
-                <span className="block text-white/65">{GP_BOOSTS[id].desc("C")}</span>
-              </div>
-            ))}
-          </div>
         </div>
       </div>
           )}
@@ -658,7 +652,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
         <div className="text-[12.5px] leading-relaxed text-white/60">
           19세 입단 · 한 해 {GAMES}경기 · {RETIRE_FROM}년차부터 은퇴를 고를 수 있고 {MAX_SEASONS}년차엔 은퇴. 숨은 재능은 1년차가 끝나면 알려 줘요.
           <br />
-          결과는 운 · 선택 · 실력에 따라 갈려요 (보통 450~550 · 잘 풀리면 600~700대 · 코치까지 다 갖추면 그 위).
+          결과는 운 · 선택 · 실력에 따라 갈려요 (보통 450~550 · 잘 풀리면 600~700대).
         </div>
         <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
           다음 ▶
@@ -1239,14 +1233,14 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
           <span className="ml-2 text-[13px] text-white/50">(이번 주 {c.gameInWeek + 1}/2)</span>
         </div>
         <div className="text-[13px] text-white/60">
-          {st.userHome ? "홈" : "원정"} · 9이닝 · {DIFF_NAME[c.diff]}
+          {st.userHome ? "홈" : "원정"} · 9이닝
         </div>
       </div>
       <div className="flex gap-2 text-[13px]">
         <div className="flex-1 rounded-xl bg-white/[0.04] px-3 py-1.5">
           <div className="text-white/55">내 자리</div>
           <div className="text-[15px] font-bold">
-            {slotName(st.myIdx)} 타자 · {TYPES[c.type].pos}
+            {slotName(st.myIdx)} 타자 · {posOf(c)}
           </div>
           <div className="text-[12px] text-white/55">
             컨디션 {COND_NAME[c.cond]}

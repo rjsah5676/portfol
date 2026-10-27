@@ -30,13 +30,29 @@ export const STAT_NAME: Record<StatKey, string> = { hit: "맞히기", power: "�
 
 /* ─────────────── 선수 타입 · 재능 ─────────────── */
 
+/**
+ * 새 선수: 수비 위치 (포수 · 내야수 · 외야수 — 능력치 영향 없음) + 타입 셋 중 하나
+ *   교타자 (맞히기 ↑ 파워 ↓) · 거포 (맞히기 ↓ 파워 ↑) · 만능 (고르게) — 교타자 · 거포는 같은 크기로 맞바꿈
+ * 준족 · 수비형은 예전 저장 · 명예의 전당 표시용으로만 남김
+ */
 export type BatType = "contact" | "power" | "speed" | "defense" | "all";
+export const PICK_TYPES: BatType[] = ["contact", "power", "all"];
+export type FieldPos = "C" | "SS" | "CF";
+export const PICK_POS: { pos: FieldPos; name: string }[] = [
+  { pos: "C", name: "포수" },
+  { pos: "SS", name: "내야수" },
+  { pos: "CF", name: "외야수" },
+];
+const EVEN = { apt: { hit: 1.0, power: 1.0, run: 1.0, def: 1.0 }, start: { hit: 125, power: 115, run: 125, def: 125 } };
+/** 육성 경기 난이도는 중급 하나 */
+export const CAREER_DIFF = 1;
 export const TYPES: Record<BatType, { name: string; desc: string; pos: string; apt: Stats; start: Stats }> = {
-  contact: { name: "교타자", desc: "맞히기가 잘 자람", pos: "2B", apt: { hit: 1.55, power: 0.95, run: 1.1, def: 1.06 }, start: { hit: 160, power: 85, run: 125, def: 115 } },
-  power: { name: "거포", desc: "파워가 잘 자람 · 발은 느림", pos: "1B", apt: { hit: 0.84, power: 1.12, run: 0.82, def: 0.92 }, start: { hit: 105, power: 170, run: 85, def: 105 } },
+  // 교타자 · 거포 성장 비율은 육성 시뮬로 맞춤 (타입별 종합 평균이 비슷하게 — 홈런이 경기 평가를 많이 올려서 거포 쪽 성장은 작게)
+  contact: { name: "교타자", desc: "맞히기 ↑ · 파워 ↓", pos: "2B", apt: { hit: 1.35, power: 0.82, run: 1.0, def: 1.0 }, start: { hit: 150, power: 90, run: 125, def: 125 } },
+  power: { name: "거포", desc: "파워 ↑ · 맞히기 ↓", pos: "1B", apt: { hit: 0.78, power: 1.08, run: 1.0, def: 1.0 }, start: { hit: 100, power: 130, run: 125, def: 125 } },
   speed: { name: "준족", desc: "주루 · 수비가 잘 자람", pos: "CF", apt: { hit: 1.12, power: 0.88, run: 1.5, def: 1.18 }, start: { hit: 125, power: 75, run: 180, def: 125 } },
   defense: { name: "수비형", desc: "수비가 잘 자람", pos: "SS", apt: { hit: 1.02, power: 0.88, run: 1.08, def: 1.4 }, start: { hit: 115, power: 85, run: 125, def: 180 } },
-  all: { name: "만능형", desc: "고르게 자람", pos: "3B", apt: { hit: 1.0, power: 1.0, run: 1.0, def: 1.0 }, start: { hit: 125, power: 115, run: 125, def: 125 } },
+  all: { name: "만능", desc: "고르게 자람", pos: "3B", ...EVEN },
 };
 
 /** 숨은 재능 — 1시즌 끝 스카우트 평가에서 공개. 성장 속도(mul) + 한계(limit, 가까울수록 덜 오름). SS 는 각성으로만 */
@@ -465,7 +481,7 @@ export const GP_BOOSTS: Record<GpId, { name: string; desc: (g: CoachGrade) => st
   defCoach: { name: "수비 코치", desc: (g) => coachDesc(g, "수비 훈련", "수비"), price: 250, train: "def" },
   cheer: { name: "치어리더", desc: (g) => (COACH_GRADE[g].rest ? `휴식 · 개인정비 회복 +${Math.round(COACH_GRADE[g].rest * 100)}%` : "기본 — 등급이 오르면 휴식 회복 ↑"), price: 200 },
 };
-/** 이 판 코치 등급 (지금은 C 고정 · 시뮬은 TUNE.coach 로 바꿔 봄) */
+/** 이 판 코치 등급 (육성 모드엔 코치를 안 씀 — gp 가 비어 있음. 시뮬은 TUNE.coach 로 바꿔 봄) */
 export const coachGrade = (_c: Career, _id: GpId): CoachGrade => TUNE.coach;
 export const GP_IDS = Object.keys(GP_BOOSTS) as GpId[];
 
@@ -573,6 +589,8 @@ export interface Career {
   injury: Injury | null;
   awakened: boolean;
   gp: GpId[];
+  /** 수비 위치 (예전 저장엔 없음 → 타입 기본 위치) */
+  pos?: FieldPos;
   phase: Phase;
   season: number;
   week: number;
@@ -608,6 +626,8 @@ export interface NewCareerOpts {
   type: BatType;
   diff: Diff;
   gp?: GpId[];
+  /** 수비 위치 (없으면 타입 기본) */
+  pos?: FieldPos;
   seed?: number;
   /** 인연 덱 (없으면 시드로 3명) */
   deck?: CharId[];
@@ -649,7 +669,7 @@ export function newCareer(o: NewCareerOpts): Career {
     num: o.num,
     bats: o.bats,
     type: o.type,
-    diff: o.diff,
+    diff: CAREER_DIFF,
     stats,
     talent,
     talentKnown: false,
@@ -681,7 +701,9 @@ export function newCareer(o: NewCareerOpts): Career {
     legacy: o.legacy ? { name: o.legacy.name, skill: skills[0] } : undefined,
     injury: null,
     awakened: false,
-    gp: o.gp ?? [...GP_IDS],
+    // 육성 모드 코치는 뺌 (밸런싱 단순하게)
+    gp: o.gp ?? [],
+    pos: o.pos,
     phase: "camp",
     season: 1,
     week: 0,
@@ -749,8 +771,8 @@ export function statGrade(v: number) {
  * [종합, 그 이상인 비율]
  */
 export const PCT_TABLE: [number, number][] = [
-  [950, 0.00002], [900, 0.0001], [850, 0.0005], [800, 0.002], [750, 0.005], [700, 0.01], [650, 0.03], [600, 0.065], [550, 0.175],
-  [500, 0.415], [450, 0.685], [400, 0.86], [350, 0.98], [300, 0.998], [0, 1],
+  [950, 0.00002], [900, 0.0001], [850, 0.0005], [800, 0.002], [750, 0.005], [700, 0.01], [650, 0.03], [600, 0.07], [550, 0.19],
+  [500, 0.47], [450, 0.74], [400, 0.95], [350, 0.995], [300, 0.999], [0, 1],
 ];
 export function topPct(ovr: number) {
   for (let i = 0; i < PCT_TABLE.length - 1; i++) {
@@ -784,6 +806,9 @@ function grow(c: Career, k: StatKey, base: number): number {
   return c.stats[k] - before;
 }
 
+/** 내 수비 위치 */
+export const posOf = (c: Pick<Career, "pos" | "type">) => c.pos ?? TYPES[c.type].pos;
+
 /** 경기에 나갈 내 선수 (컨디션 · 특수능력 · 장비 · 체력 반영) */
 export function careerBatter(c: Career): Batter {
   const f = COND_GAME[c.cond] * (c.stamina < 20 ? 0.9 : 1);
@@ -797,7 +822,7 @@ export function careerBatter(c: Career): Batter {
   return {
     name: c.name,
     num: c.num,
-    pos: TYPES[c.type].pos,
+    pos: posOf(c),
     bats: c.bats,
     hit: v("hit", f),
     power: v("power", f),
@@ -1911,6 +1936,8 @@ export interface HofEntry {
   /** 구단 카드로 넘길 때 (예전 저장엔 없음) */
   bats?: "R" | "L";
   num?: number;
+  /** 수비 위치 (예전 저장엔 없음) */
+  pos?: string;
 }
 /** 계승할 수 있는 특수능력인가 */
 export const inheritable = (id: SkillId) => !skill(id).set && !skill(id).bad && !skill(id).boon;
@@ -1918,7 +1945,7 @@ export function hofEntry(c: Career): HofEntry {
   const r = retireCard(c);
   const st = {} as Stats;
   for (const k of STAT_KEYS) st[k] = Math.round(c.stats[k]);
-  return { id: c.id, name: c.name, type: c.type, ovr: r.ovr, grade: r.grade.g, nick: r.nick[0], stats: st, hr: c.total.hr, avg: avg(c.total), seasons: c.seasons.length, at: Date.now(), gp: c.gp.length, skills: c.skills.filter(inheritable), partner: r.partner, look: c.look, bats: c.bats, num: c.num };
+  return { id: c.id, name: c.name, type: c.type, ovr: r.ovr, grade: r.grade.g, nick: r.nick[0], stats: st, hr: c.total.hr, avg: avg(c.total), seasons: c.seasons.length, at: Date.now(), gp: c.gp.length, skills: c.skills.filter(inheritable), partner: r.partner, look: c.look, bats: c.bats, num: c.num, pos: posOf(c) };
 }
 
 /* ─────────────── 봇 육성 (자동 진행 · 밸런스 시뮬) ─────────────── */
