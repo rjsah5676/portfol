@@ -85,10 +85,12 @@ export const BAT_LOAD: Anim = {
 };
 
 /**
- * 스윙 누르고 공 맞기까지 (초). 그림 스윙 앞 4장(발 내림 · 내딛기 · 배트 끌고 나옴 · 돌아 나옴)이 장당 2프레임 이상 보이게 0.12.
+ * 스윙 누르고 공 맞기까지 (초) = 실제 프로 타자의 다운스윙 시작 → 임팩트 시간.
+ *   Blast Motion 「Time to Contact」 MLB 평균 0.149초 (프로 0.13~0.17)
+ *   Escamilla 외 2009: 손이 앞으로 나오기 시작 → 공 맞음 0.14 ± 0.02초 (대학 · 프로)
  * 아래 BAT_SWING 리그 키(0.07에 맞춤)는 그림이 안 왔을 때만 쓰는 예비라 그대로 둠.
  */
-export const SWING_HIT_T = 0.12;
+export const SWING_HIT_T = 0.15;
 export const BAT_SWING: Anim = {
   dur: 0.55,
   loop: false,
