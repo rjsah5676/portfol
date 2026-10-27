@@ -8,7 +8,7 @@
 import type { Vars } from "./types";
 
 /** both = 그랜드(셋이서) 루트: 두 사람을 동시에 읽어야 맞히는 순간 (mG01~ → mindG, 히로인 문턱과 따로 셈) */
-export type MindWho = "amy" | "yeonseo" | "both";
+export type MindWho = "amy" | "yeonseo" | "sera" | "both";
 export interface MindMoment {
   id: string;
   who: MindWho;
@@ -49,14 +49,16 @@ export const MIND: MindMoment[] = [
   { id: "mY11", who: "yeonseo", week: 3, note: "비 그친 다음 날 아침을 제일 좋아한다.", cap: "비 그친 다음 날 아침." },
   { id: "mY12", who: "yeonseo", week: 3, note: "말할 준비가 될 때까지, 기다려 주길 바란다.", cap: "수요일 두 시까지." },
   { id: "mY13", who: "yeonseo", week: 4, note: "목소리보다 카드 소리가 먼저 안심시킨다.", cap: "수화기 너머 셔플." },
+  // 세라 규칙: 거짓말을 바로 앎 · 선물 · 돈 싫어함 · "기억나?"를 먼저 안 물음 · 두 번 두드리기는 진심일 때만
+  { id: "mS01", who: "sera", week: 1, note: "약속을 받아 주면 웃는다. 다음엔 접으라는 말은, 아직 이르다.", cap: "내일 봬요." },
   { id: "mG01", who: "both", week: 4, note: "말없이 따라와 주길 바라는 사람과, 스스로는 칩을 못 집는 사람.", cap: "가운데 남은 칩." },
   { id: "mG02", who: "both", week: 4, note: "미워할 시간이 필요한 사람과, 용서받을 생각이 없는 사람.", cap: "같이 앉는 것과 용서는 별개." },
   { id: "mG03", who: "both", week: 4, note: "한 사람은 공평한 걸, 한 사람은 온전한 걸 좋아한다.", cap: "부서지지 않은 두부." },
   { id: "mG04", who: "both", week: 4, note: "둘 다, 같이 먹는 저녁을 오래 못 가져 봤다.", cap: "셋이서 김치찌개." },
 ];
 
-export const MIND_VAR: Record<MindWho, string> = { amy: "mindA", yeonseo: "mindY", both: "mindG" };
-const IS_MIND = /^m[AYG]\d\d$/;
+export const MIND_VAR: Record<MindWho, string> = { amy: "mindA", yeonseo: "mindY", sera: "mindS", both: "mindG" };
+const IS_MIND = /^m[AYGS]\d\d$/;
 export const isMindKey = (k: string) => IS_MIND.test(k);
 export const mindOf = (v: Vars, who: MindWho) => v[MIND_VAR[who]] ?? 0;
 export const mindTotal = (who: MindWho) => MIND.filter((m) => m.who === who).length;

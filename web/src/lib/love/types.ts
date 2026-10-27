@@ -3,7 +3,7 @@
  * 대본은 전부 직렬화 가능한 데이터 (함수 없음) → 세이브에 그대로 저장 가능
  */
 
-export type CharKey = "yeonseo" | "amy" | "boss" | "taeyang" | "jeongmin" | "chunhee";
+export type CharKey = "yeonseo" | "amy" | "sera" | "boss" | "taeyang" | "jeongmin" | "chunhee";
 /** 서브 캐릭터: 말할 때 자동으로 옆자리에 작게 나왔다가, 몇 줄 안 말하면 들어감 */
 export const SUBS: readonly CharKey[] = ["taeyang", "jeongmin", "chunhee", "boss"];
 /** 말하는 사람: 스탠딩 있는 캐릭터 + 주인공(me) + 나레이션(narr) */
@@ -357,7 +357,8 @@ export type Step =
   | { t: "when"; cond: Cond; to: string; else?: string }
   | { t: "day"; day: number; slot: string }
   | { t: "title"; text: string; sub?: string }
-  | { t: "mini"; kind: "deal"; key: string }
+  /** 딜링 근무 (1일차 한 번) — finale: 마지막 라운드 목표 자리에 새 손님(세라)이 앉음 */
+  | { t: "mini"; kind: "deal"; key: string; finale?: CharKey; seats?: (CharKey | null)[] }
   | { t: "mini"; kind: "tell"; key: string; tell: TellSpec }
   | { t: "mini"; kind: "poker"; key: string; poker: PokerSpec }
   | { t: "mini"; kind: "match"; key: string; match: MatchSpec }

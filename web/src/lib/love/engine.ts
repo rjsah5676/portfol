@@ -49,6 +49,7 @@ export const REST: Record<CharKey, Face> = {
   taeyang: "base",
   jeongmin: "base",
   chunhee: "base",
+  sera: "base",
 };
 /** 장소 옷 — 이 배경에 들어가면 자동으로 입는 옷 */
 const PLACE_OUTFIT: Partial<Record<BgId, Partial<Record<CharKey, Outfit>>>> = {

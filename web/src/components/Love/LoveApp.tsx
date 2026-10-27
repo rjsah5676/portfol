@@ -50,7 +50,7 @@ import {
   run,
 } from "@/lib/love/engine";
 import { type ReactLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
-import { type Heroine, SKILL_LINE, SKILL_NAME, SKILL_PRO, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
+import { HEROINES, type Heroine, SKILL_LINE, SKILL_NAME, SKILL_PRO, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
 import { voiceOf } from "@/lib/love/voices";
 import {
   type BgmId,
@@ -1096,22 +1096,23 @@ export default function LoveApp() {
   const stageRef = useRef<Record<Heroine, number> | null>(null);
   const affA = s?.vars.affA ?? 0;
   const affY = s?.vars.affY ?? 0;
+  const affS = s?.vars.affS ?? 0;
   useEffect(() => {
     if (phase !== "game" || !s) {
       stageRef.current = null;
       return;
     }
-    const now = { amy: heroStage(s.vars, "amy"), yeonseo: heroStage(s.vars, "yeonseo") };
+    const now = { amy: heroStage(s.vars, "amy"), yeonseo: heroStage(s.vars, "yeonseo"), sera: heroStage(s.vars, "sera") };
     const prev = stageRef.current;
     stageRef.current = now;
     if (!prev) return;
-    for (const who of ["amy", "yeonseo"] as Heroine[])
+    for (const who of HEROINES)
       if (now[who] > prev[who]) {
         setStageUp({ who, stage: now[who], n: Date.now() });
         play("heart");
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [affA, affY, phase]);
+  }, [affA, affY, affS, phase]);
   // 마음 읽기: 날이 바뀌면 어제 알게 된 것 한 줄씩 (그날 새로 켜진 마음 플래그만)
   const [mindDay, setMindDay] = useState<{ day: number; items: typeof MIND; n: number } | null>(null);
   const dayNoRef = useRef<number | null>(null);
@@ -2151,7 +2152,7 @@ export default function LoveApp() {
             {rb?.k === "mini" && (
               <div onClick={(e) => e.stopPropagation()}>
                 {rb.step.kind === "deal" ? (
-                  <DealMini play={play} onDone={(n) => setS(miniDone(s, rb.step.key, n))} />
+                  <DealMini play={play} seats={rb.step.seats} finale={rb.step.finale} onDone={(n) => setS(miniDone(s, rb.step.key, n))} />
                 ) : rb.step.kind === "poker" ? (
                   <StoryPoker
                     spec={rb.step.poker}
@@ -2211,7 +2212,7 @@ export default function LoveApp() {
                 <div className="lv-fadein text-center">
                   <div className="text-[4.5cqw] font-black text-white">{rb.text}</div>
                   {rb.sub && (
-                    <div className="mt-[0.6cqw] text-[1.6cqw] text-white/60">{rb.sub}</div>
+                    <div className="mt-[0.6cqw] whitespace-pre-line text-[1.6cqw] leading-[1.7] text-white/60 [word-break:keep-all]">{rb.sub}</div>
                   )}
                 </div>
               </div>
@@ -2992,6 +2993,7 @@ function RelHud({ vars, onOpen, dot }: { vars: Record<string, number>; onOpen: (
       {dot && <i className="lv-new-dot lv-new-dot-hud" />}
       <span className="lv-heart-a">{hearts(heroStage(vars, "amy"))}</span>
       <span className="lv-heart-y">{hearts(heroStage(vars, "yeonseo"))}</span>
+      <span className="lv-heart-s">{hearts(heroStage(vars, "sera"))}</span>
       <span className="text-[#ffd27a]">{"✦".repeat(skillOf(vars) + 1)}</span>
     </button>
   );
@@ -3001,7 +3003,8 @@ function RelHud({ vars, onOpen, dot }: { vars: Record<string, number>; onOpen: (
 function RelPanel({ vars }: { vars: Record<string, number> }) {
   return (
     <div className="grid flex-1 grid-cols-2 gap-[1.6cqw] overflow-y-auto">
-      {(["amy", "yeonseo"] as Heroine[]).map((who) => {
+      <div className="col-span-2 grid grid-cols-3 gap-[1.6cqw]">
+      {HEROINES.map((who) => {
         const st = heroStage(vars, who);
         return (
           <div key={who} className="lv-relcard">
@@ -3010,7 +3013,7 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
             <div className="text-[1.9cqw] font-bold" style={{ color: NAME_COLOR[who] }}>
               {NAME[who]}
             </div>
-            <div className={`text-[2cqw] tracking-[0.2em] ${who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
+            <div className={`text-[2cqw] tracking-[0.2em] ${who === "amy" ? "lv-heart-a" : who === "sera" ? "lv-heart-s" : "lv-heart-y"}`}>
               {hearts(st)}
             </div>
             <div className="text-[1.5cqw] text-[#ffd27a]">「{STAGE_NAME[who][st]}」</div>
@@ -3018,6 +3021,7 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
           </div>
         );
       })}
+      </div>
       <MindNotes vars={vars} />
       <TellNotes vars={vars} />
       <div className="lv-relcard col-span-2 !flex-row !justify-around">

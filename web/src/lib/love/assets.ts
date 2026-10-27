@@ -27,6 +27,8 @@ export const STAND: Record<CharKey, StandSet> = {
     base: `${B}/char/yeonseo-base.webp`,
     faces: faces("yeonseo", ["away", "smile", "cold", "surprise", "sad", "blush", "cry", "laugh", "angry"]),
   },
+  /** 세라 — 지금은 포커 전신 그림을 임시로 씀 (표정 차분은 GPT 요청 후) */
+  sera: { base: `${B}/char/sera-base.webp`, faces: {} },
   amy: {
     base: `${B}/char/amy-base.webp`,
     faces: faces("amy", ["smile", "pout", "surprise", "sad", "blush", "smug", "angry", "cry", "wink"]),
@@ -272,6 +274,7 @@ export const FACE_ICON: Partial<Record<Who, string>> = {
   // 새 스탠딩에서 얼굴만 잘라 만든 아이콘 (폰 · 일정 카드 · 관계 화면). 대사창 초상은 PORTRAIT 로 표정까지 따라감
   yeonseo: `${B}/char/yeonseo-icon.webp`,
   amy: `${B}/char/amy-icon.webp`,
+  sera: `${B}/char/sera-icon.webp`,
   taeyang: `${B}/char/taeyang-icon.webp`,
   jeongmin: `${B}/char/jeongmin-icon.webp`,
   chunhee: `${B}/char/chunhee-icon.webp`,
@@ -281,6 +284,7 @@ export const FACE_ICON: Partial<Record<Who, string>> = {
 export const NAME: Record<Who, string> = {
   yeonseo: "연서",
   amy: "에이미",
+  sera: "세라",
   boss: "백상현",
   me: "{name}",
   narr: "",
@@ -293,6 +297,7 @@ export const NAME: Record<Who, string> = {
  *  표정 그림은 같은 캔버스라 같은 값. 의상은 캔버스가 달라 따로 (없으면 기본 옷 값) */
 export const PORTRAIT: Record<string, [number, number, number, number]> = {
   "amy": [0.3724, 0.4849, 0.105, 0.1305],
+  "sera": [0.3529, 0.4732, 0.1014, 0.1335],
   "amy-store": [0.3377, 0.4689, 0.1211, 0.0965],
   "amy-tshirt": [0.2839, 0.5035, 0.1168, 0.0977],
   "boss": [0.3403, 0.414, 0.0859, 0.1257],
@@ -312,6 +317,7 @@ export const PORTRAIT: Record<string, [number, number, number, number]> = {
 export const SUIT: Record<Who, string> = {
   amy: "♥",
   yeonseo: "♠",
+  sera: "♥",
   me: "♣",
   narr: "",
   boss: "♦",
@@ -323,6 +329,7 @@ export const SUIT: Record<Who, string> = {
 export const NAME_COLOR: Record<Who, string> = {
   yeonseo: "#8fa8ff",
   amy: "#7fd3ff",
+  sera: "#ff8cc0",
   boss: "#e0b46a",
   me: "#e8e2d4",
   narr: "#e8e2d4",

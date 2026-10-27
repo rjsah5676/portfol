@@ -798,6 +798,346 @@
   color: #ffffffaa;
 }
 
+/* 딜링 근무 (1일차) — 펍 배경 위 원형 테이블 · 둘레를 도는 불빛 · 카드가 포물선으로 날아감 */
+.lv-deal {
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 55%, #0000 0%, #000a 70%, #000d 100%),
+    linear-gradient(180deg, #05060cc0, #05060ce6);
+  backdrop-filter: blur(3px) saturate(0.8);
+  cursor: var(--lv-cur);
+  user-select: none;
+}
+.lv-deal-head {
+  position: absolute;
+  top: 3.2%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8cqw;
+}
+.lv-deal-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9cqw;
+  font-size: clamp(18px, 2.6cqw, 34px);
+  font-weight: 900;
+  letter-spacing: 0.32em;
+  color: #ffe39a;
+  text-shadow: 0 0.2cqw 1cqw #000, 0 0 2cqw #ffd27a44;
+}
+.lv-deal-title span {
+  font-size: 0.5em;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: #fff3d6aa;
+}
+.lv-deal-pips {
+  display: flex;
+  gap: 0.7cqw;
+}
+.lv-deal-pips i {
+  width: clamp(10px, 1.3cqw, 18px);
+  height: clamp(14px, 1.8cqw, 25px);
+  border: 1.5px solid #ffffff38;
+  border-radius: 3px;
+  background: #ffffff0c;
+  transition: all 0.25s;
+}
+.lv-deal-pips i.now {
+  border-color: #ffd27a;
+  box-shadow: 0 0 0.8cqw #ffd27a88;
+}
+.lv-deal-pips i.on {
+  border-color: #ffe39a;
+  background: linear-gradient(160deg, #ffe39a, #c9a25a);
+  box-shadow: 0 0 0.9cqw #ffd27a99;
+}
+.lv-deal-pips i.off {
+  border-color: #ffffff55;
+  background: repeating-linear-gradient(135deg, #ffffff22 0 2px, #0000 2px 5px);
+}
+.lv-deal-table {
+  position: relative;
+  width: min(66%, 118cqh);
+  aspect-ratio: 2.05 / 1;
+  margin-top: 3%;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #6b4423, #3a2210 60%, #241407);
+  box-shadow:
+    0 2.4cqw 4cqw #000c,
+    0 0 0 0.25cqw #1a0e05,
+    inset 0 0.35cqw 0.5cqw #ffffff22,
+    inset 0 -0.4cqw 0.8cqw #0008;
+}
+.lv-deal-felt {
+  position: absolute;
+  inset: 5.5% 4%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 42%, #2f8a5c 0%, #1d6a43 45%, #0f4229 85%, #0b311f 100%);
+  box-shadow:
+    inset 0 0 0 0.18cqw #d6b26a99,
+    inset 0 0 0 0.75cqw #0b311f,
+    inset 0 0 0 0.85cqw #d6b26a40,
+    inset 0 1.2cqw 3cqw #0007;
+}
+.lv-deal-felt::after {
+  /* 펠트 결 */
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: repeating-radial-gradient(circle at 50% 120%, #ffffff05 0 2px, #0000 2px 5px);
+  mix-blend-mode: overlay;
+}
+.lv-deal-logo {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(14px, 2.5cqw, 34px);
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  color: #d6b26a2e;
+  text-shadow: 0 1px 0 #0004;
+}
+.lv-deal-sweep {
+  position: absolute;
+  width: 16%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  width: 19%;
+  background: radial-gradient(circle, #fffbeaee 0%, #ffe9a880 32%, #ffe9a800 70%);
+  mix-blend-mode: screen;
+  pointer-events: none;
+  transition-property: left, top;
+  transition-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+}
+.lv-deal-sweep.pink {
+  background: radial-gradient(circle, #ffe0efdd 0%, #ff8cc066 35%, #ff8cc000 70%);
+}
+.lv-deal-seat {
+  position: absolute;
+  width: 9.5%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 0.18cqw solid #ffffff3a;
+  background: radial-gradient(circle at 50% 35%, #2b3048, #121522);
+  box-shadow: 0 0.5cqw 1.1cqw #000a, inset 0 0.2cqw 0.4cqw #ffffff18;
+  transition: border-color 0.2s, box-shadow 0.2s, opacity 0.4s;
+}
+.lv-deal-seat > img,
+.lv-deal-seat > svg {
+  position: absolute;
+  inset: 7%;
+  width: 86%;
+  height: 86%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.lv-deal-seat > svg {
+  fill: #ffffff2e;
+}
+.lv-deal-seat.empty {
+  opacity: 0.35;
+  border-style: dashed;
+}
+.lv-deal-seat.goal {
+  border-color: #ffd27a;
+  box-shadow: 0 0 0 0.25cqw #ffd27a55, 0 0 1.8cqw #ffd27acc, 0 0.5cqw 1.1cqw #000a;
+  animation: lv-deal-goal 0.9s ease-in-out infinite;
+}
+.lv-deal-seat.goal.pink,
+.lv-deal-seat.arrive {
+  border-color: #ff8cc0;
+  box-shadow: 0 0 0 0.25cqw #ff8cc055, 0 0 2.2cqw #ff8cc0cc, 0 0.5cqw 1.1cqw #000a;
+}
+.lv-deal-seat.arrive > img {
+  animation: lv-deal-arrive 0.9s ease-out both;
+}
+@keyframes lv-deal-goal {
+  50% {
+    transform: translate(-50%, -50%) scale(1.07);
+  }
+}
+@keyframes lv-deal-arrive {
+  from {
+    opacity: 0;
+    filter: blur(6px) brightness(2);
+    transform: scale(0.7);
+  }
+}
+.lv-deal-tag {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 0.5cqw);
+  transform: translateX(-50%);
+  white-space: nowrap;
+  padding: 0.15cqw 0.8cqw;
+  border-radius: 99px;
+  background: #2a0f1ecc;
+  border: 1px solid #ff8cc088;
+  font-size: clamp(10px, 1.05cqw, 14px);
+  font-weight: 700;
+  color: #ffc4de;
+  animation: lv-fadein 0.6s 0.3s both;
+}
+.lv-deal-stack {
+  position: absolute;
+  left: 58%;
+  top: 72%;
+  width: 52%;
+  pointer-events: none;
+}
+.lv-deal-stack img {
+  position: absolute;
+  width: 100%;
+  border-radius: 6%;
+  box-shadow: 0 0.2cqw 0.4cqw #0009;
+}
+.lv-deal-dealer {
+  position: absolute;
+  width: 7%;
+  aspect-ratio: 0.72;
+  transform: translate(-50%, -50%);
+}
+.lv-deal-dealer img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border-radius: 7%;
+  box-shadow: 0 0.3cqw 0.6cqw #000a;
+}
+.lv-deal-dealer img + img {
+  transform: translate(10%, -6%) rotate(6deg);
+}
+.lv-deal-fly {
+  position: absolute;
+  width: 5.2%;
+  border-radius: 7%;
+  box-shadow: 0 0.6cqw 1cqw #000b;
+  pointer-events: none;
+  translate: -50% -50%;
+  animation:
+    lv-deal-fly 0.42s cubic-bezier(0.2, 0.75, 0.3, 1) both,
+    lv-deal-land 0.25s 0.5s ease-out forwards;
+}
+@keyframes lv-deal-land {
+  to {
+    opacity: 0;
+  }
+}
+.lv-deal-fly.miss {
+  animation: lv-deal-fly 0.42s cubic-bezier(0.2, 0.75, 0.3, 1) both, lv-deal-skid 0.5s 0.38s ease-in both;
+}
+@keyframes lv-deal-fly {
+  0% {
+    left: var(--x0);
+    top: var(--y0);
+    rotate: -40deg;
+    scale: 0.85;
+  }
+  55% {
+    scale: 1.18;
+  }
+  100% {
+    left: var(--x1);
+    top: var(--y1);
+    rotate: 8deg;
+    scale: 1;
+  }
+}
+@keyframes lv-deal-skid {
+  to {
+    opacity: 0;
+    translate: 10% -110%;
+    rotate: 70deg;
+  }
+}
+.lv-deal-pop {
+  position: absolute;
+  transform: translate(-50%, -150%);
+  font-size: clamp(14px, 1.8cqw, 24px);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #ffe39a;
+  text-shadow: 0 0.15cqw 0.5cqw #000, 0 0 1.2cqw #ffd27aaa;
+  pointer-events: none;
+  animation: lv-deal-pop 0.9s 0.3s ease-out both;
+}
+.lv-deal-pop.miss {
+  color: #c9c3b8;
+  text-shadow: 0 0.15cqw 0.5cqw #000;
+}
+.lv-deal-pop.pink {
+  color: #ffc4de;
+  font-style: italic;
+  text-shadow: 0 0.15cqw 0.5cqw #000, 0 0 1.4cqw #ff8cc0cc;
+}
+@keyframes lv-deal-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -90%) scale(0.7);
+  }
+  25% {
+    opacity: 1;
+    transform: translate(-50%, -150%) scale(1.1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -230%) scale(1);
+  }
+}
+.lv-deal-foot {
+  position: absolute;
+  bottom: 6%;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1cqw;
+  font-size: clamp(13px, 1.45cqw, 19px);
+  color: #fff3d6;
+  text-shadow: 0 0.15cqw 0.5cqw #000;
+  word-break: keep-all;
+}
+.lv-deal-foot b {
+  font-size: 1.4em;
+  color: #ffe39a;
+}
+.lv-deal-hint {
+  color: #fff3d6aa;
+  letter-spacing: 0.1em;
+}
+.lv-deal-skip {
+  position: absolute;
+  right: 2.4%;
+  bottom: 4%;
+  font-size: clamp(11px, 1.1cqw, 15px);
+  color: #ffffff77;
+}
+.lv-deal-skip:hover {
+  color: #fff;
+}
+/* 가로 폰: 테이블을 조금 작게, 아래 글자가 딜러 카드에 안 겹치게 */
+@media (max-height: 520px) {
+  .lv-deal-table {
+    width: min(58%, 92cqh);
+    margin-top: 5%;
+  }
+  .lv-deal-foot {
+    bottom: 2.5%;
+    gap: 0.6cqw;
+  }
+}
+
 /* 미니게임 */
 .lv-mini {
   cursor: var(--lv-cur);
@@ -1507,6 +1847,9 @@
 }
 .lv-heart-y {
   color: #c3a6ff;
+}
+.lv-heart-s {
+  color: #ff8cc0;
 }
 @keyframes lv-heart-pop {
   0% {
