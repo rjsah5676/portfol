@@ -2977,7 +2977,7 @@ export const W1: Scenes = {
     N("손등에, 장갑의 온기가 아직 남아 있었다."),
     { t: "cg", id: null },
     { t: "set", eff: { routeY: 1 } },
-    { t: "goto", to: "y2_d8" },
+    { t: "goto", to: "vy_d8" },
   ],
   r_none: [
     { t: "hide", who: "sera" },

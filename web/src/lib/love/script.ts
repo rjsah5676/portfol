@@ -3,16 +3,16 @@
  * 개편안: 프로젝트 claude/2026-10-23-love-v3-design.md
  */
 import { W1 } from "./script-w1";
-import { W2 } from "./script-w2";
 import { W2S } from "./script-w2s";
 import { W3S } from "./script-w3s";
 import { W4S } from "./script-w4s";
 import { VA } from "./script-va";
 import { VA4 } from "./script-va4";
+import { VY } from "./script-vy";
+import { VY4 } from "./script-vy4";
 import { W3N } from "./script-w3n";
-import { W3Y } from "./script-w3y";
 import type { Scenes } from "./types";
 
 export const START = "d1";
 
-export const SCENES: Scenes = { ...W1, ...W2, ...W2S, ...W3S, ...W4S, ...VA, ...VA4, ...W3Y, ...W3N };
+export const SCENES: Scenes = { ...W1, ...W2S, ...W3S, ...W4S, ...VA, ...VA4, ...VY, ...VY4, ...W3N };

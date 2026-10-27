@@ -410,7 +410,6 @@ export type EndingId =
   | "yeon_good"
   | "yeon_sad"
   | "yeon_vanish"
-  | "yeon_obsess"
   | "grand"
   | "plain"
   | "dealer"

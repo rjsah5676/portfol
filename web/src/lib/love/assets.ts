@@ -602,15 +602,6 @@ export const ENDINGS: EndingInfo[] = [
     review: "rev_yeon_vanish",
   },
   {
-    id: "yeon_obsess",
-    no: 10,
-    kind: "bad",
-    title: "다른 테이블엔 서지 마요",
-    copy: "무표정한 사랑은 조용히 선을 넘는다.",
-    hint: "연서 · 독점",
-    review: "rev_yeon_obsess",
-  },
-  {
     id: "grand",
     no: 11,
     kind: "true",
