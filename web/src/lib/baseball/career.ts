@@ -1120,12 +1120,16 @@ function layout(c: Career) {
     out.push({ place: "downtown", char: top, special: true });
   }
   // 덱 사람마다: 외출 장소에 나오거나(❗) · 자기 훈련에 함께 오거나 · 안 나옴
-  for (const id of TUNE.noBond ? [] : c.deck) {
+  // 지도엔 한 주에 한 사람까지 · 이야기가 준비된 사람 20% (아니면 8%) — 예전(45% · 사람 수 제한 없음)엔 매주 누군가 떠 있어서
+  // 만나러만 다니면 훈련할 틈이 없었음 (만남 = 행동력 5, 한 주 수입 6). 나머지는 함께 훈련으로 (행동력 추가 없음)
+  const order = TUNE.noBond ? [] : [...c.deck].sort(() => rng() - 0.5);
+  for (const id of order) {
     if (out.some((x) => x.char === id)) continue;
     const r = rng();
     const quiet = nextBeat(c, id).kind === "hang";
-    if (r < (quiet ? 0.22 : 0.45)) out.push({ place: take(), char: id });
-    else if (r < 0.75) {
+    const onMap = !out.some((x) => x.char);
+    if (onMap && r < (quiet ? 0.08 : 0.2)) out.push({ place: take(), char: id });
+    else if (r < 0.55) {
       const k = BONDS[id].stat as TrainKey;
       if (!trainers[k]) trainers[k] = id;
     }
