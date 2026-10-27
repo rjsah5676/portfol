@@ -1,6 +1,7 @@
 """
 스윙 줄 만들기: 한 시트에서 뽑은 스윙 칸들(1칸 = 레그킥 최고점) → 레그킥 최고점과 같은 배율 · 같은 기준점(축발)
-  python3 scripts/baseball-batter-swing.py <이름> <시트.png> [칸번호:고친그림.png ...]
+  python3 scripts/baseball-batter-swing.py <이름> <시트.png> [칸번호:고친그림.png ...] [drop:칸번호,...]
+- drop: 그 칸은 빼고 줄을 만듦 (0부터)
 - 고친 그림: 시트의 한 칸을 따로 고쳐 뽑은 그림으로 바꿈 (0부터, 1칸 = 0). 하체는 그대로라는 전제로
   신발 크기(아래쪽 어두운 덩어리 넓이)를 원래 칸에 맞춰 배율을 정함
 - 칸 나누기: 배트가 옆 칸과 세로로 겹칠 수 있어서 빈 열 대신 덩어리(연결 성분) 5개를 x 순서로
@@ -14,7 +15,8 @@ from PIL import Image
 from scipy import ndimage
 
 NAME, SRC = sys.argv[1], sys.argv[2]
-FIX = dict((int(a.split(":", 1)[0]), a.split(":", 1)[1]) for a in sys.argv[3:])
+DROP = {int(x) for a in sys.argv[3:] if a.startswith("drop:") for x in a[5:].split(",")}
+FIX = dict((int(a.split(":", 1)[0]), a.split(":", 1)[1]) for a in sys.argv[3:] if not a.startswith("drop:"))
 NCELL = 5
 s = open("scripts/baseball-char-art.py").read()
 ns = {"np": np, "Image": Image, "ndimage": ndimage}
@@ -76,7 +78,9 @@ c0 = idle[:, :idm["CW"]]
 ref_shoe = np.median(c0[..., :3][shoe_mask(c0)], 0)
 
 frames = []
-for r, a in cells[1:]:  # 1칸(최고점)은 레그킥 줄 것을 그대로 쓰므로 뺌
+for i, (r, a) in enumerate(cells):
+    if i == 0 or i in DROP:  # 1칸(최고점)은 레그킥 줄 것을 그대로 쓰므로 뺌
+        continue
     ax, ay = anchor(a)
     im = Image.fromarray((np.dstack([r, a]) * 255).round().astype(np.uint8), "RGBA")
     im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
