@@ -1925,19 +1925,31 @@ export class Match {
     const r0 = pitchAt(p, 0);
     const p0 = pj(r0.x, r0.y, r0.z);
     const off = { x: hand.x - p0.x, y: hand.y - p0.y };
+    // 홈플레이트 지난 뒤(포수 쪽): 홈 통과 순간의 화면 속도 그대로 곧게 (예전엔 원근 계산을 홈에서 멈추고 거리도 잘라서
+    // 좌우는 멈추고 위아래만 움직여 몸 앞에서 20 ~ 45° 「휘리릭」 꺾여 보였음)
+    const pe = pitchAt(p, p.dur);
+    const pq = pitchAt(p, p.dur * 0.97);
+    const E = pj(pe.x, pe.y, pe.z);
+    const Q = pj(pq.x, pq.y, pq.z);
+    const du = Math.max(1e-4, 1 - pq.u);
     const toScreen = (x: number, y: number, z: number, u: number) => {
-      const s = pj(x, y, Math.max(z, -1.5));
+      if (u > 1) {
+        const d = (u - 1) / du;
+        return { x: E.x + (E.x - Q.x) * d, y: E.y + (E.y - Q.y) * d, s: E.s + (E.s - Q.s) * d };
+      }
+      const s = pj(x, y, z);
       // 투수 그림 손 ↔ 공 놓는 점 차이는 비행 70% 동안 천천히 줄임 (빨리 줄이면 공이 손에서 툭 떨어졌다 다시 떠 보임)
       const k = 1 - smooth(0, 0.7, u);
       return { x: s.x + off.x * k, y: s.y + off.y * k, s: s.s };
     };
     // 지나간 공 (헛스윙 · 볼) 은 미트까지만 · 몸에 맞은 공은 거기서 끝
-    if (v.u > 1.25 || this.hbpHit) return;
+    if (v.u > 1.15 || this.hbpHit) return;
     const sp = p.special;
     // 그림자
     // 타석 화면은 공과 같은 원근의 그림자 (shadowProj — 공이 떠 보이던 원인), 투수 뷰는 그 카메라 그대로
     const g = pj === proj ? shadowProj(v.x, Math.max(v.z, 0.2)) : pj(v.x, 0, Math.max(v.z, 0.2));
-    ctx.fillStyle = "rgba(0,0,0,0.42)";
+    // 그림자는 홈까지 (지나간 뒤엔 공만 곧게 날아감)
+    ctx.fillStyle = `rgba(0,0,0,${(0.42 * (1 - smooth(1, 1.06, v.u))).toFixed(3)})`;
     ctx.beginPath();
     ctx.ellipse(g.x, g.y, Math.max(3.5, 0.06 * g.s), Math.max(1.5, 0.022 * g.s), 0, 0, Math.PI * 2);
     ctx.fill();

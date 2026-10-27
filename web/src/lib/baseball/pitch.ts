@@ -39,7 +39,8 @@ export interface PitchDef {
 
 export const PITCHES: Record<PitchKind, PitchDef> = {
   // Statcast 평균 (인치 → m): 포심 팔쪽 8 · 위 16 / 투심 15 · 8 / 슬라이더 글러브쪽 6 · 2 / 커터 2.5 · 8 / 커브 9 · −10 / 체인지업 14 · 6 / 스플리터 10 · 3 / 싱커 15 · 7
-  FB: { id: "FB", name: "직구", short: "직", speed: 1, bx: 0.19, by: 0.41, late: 2.6, color: "#ffffff" },
+  // 직구는 「곧게」 읽혀야 해서 좌우는 과장(MOVE_GAIN.x) 뒤에도 실제 크기쯤 (0.08 × 2.5 ≈ 실제 0.19m)
+  FB: { id: "FB", name: "직구", short: "직", speed: 1, bx: 0.08, by: 0.41, late: 2.6, color: "#ffffff" },
   TS: { id: "TS", name: "투심", short: "투", speed: 0.97, bx: 0.38, by: 0.2, late: 2.8, color: "#d8f0ff" },
   SL: { id: "SL", name: "슬라이더", short: "슬", speed: 0.88, bx: -0.15, by: 0.05, late: 3.2, color: "#ffe28a" },
   CT: { id: "CT", name: "커터", short: "커터", speed: 0.94, bx: -0.06, by: 0.2, late: 3.4, color: "#fff3c4" },
