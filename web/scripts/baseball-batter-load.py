@@ -2,7 +2,8 @@
 레그킥(로드) 줄 만들기: 따로 뽑은 그림 여러 장 → 대기 줄과 같은 배율 · 같은 기준점(축발 = 가까운 발 바닥 가운데)
   python3 scripts/baseball-batter-load.py <이름> <그림[:x0,y0,x1,y1]> ...
 - 첫 칸은 대기 줄(batter-idle) 1칸을 그대로 씀 → 대기 → 레그킥이 튀지 않게
-- 배율: 헬멧 폭을 대기 1칸 헬멧 폭에 맞춤 (몸이 펴지거나 굽어도 헬멧 크기는 같아야 하니까)
+- 배율: 몸 키(헬멧 꼭대기 → 땅)를 대기 1칸 몸 키에 맞춤 (지피티가 머리 대비 몸 비율을 장마다 조금씩 다르게 그려서,
+  헬멧 폭으로 맞추면 몸 전체가 커졌다 작아졌다 함)
 - 기준점: 맨 아래 50px 안의 불투명 범위 가운데 (= 땅 딛은 가까운 발)
 - 신발 색: 지피티가 장마다 갈색 · 검정을 오가서 대기 1칸 신발 색으로 맞춤
 """
@@ -28,6 +29,16 @@ def helmet_w(rgb, al):
     return float(np.percentile(xs, 98) - np.percentile(xs, 2))
 
 
+def helmet_top(rgb, al):
+    mx = rgb.max(-1); mn = rgb.min(-1); sat = (mx - mn) / np.maximum(mx, 1e-6)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    o = (al > 0.5) & (sat > 0.55) & (r > g) & (g > b) & (r > 0.5)
+    rows = np.where((al > 0.5).any(1))[0]
+    o[rows.min() + int((rows.max() - rows.min()) * 0.4):] = False
+    lab, n = ndimage.label(o); sz = ndimage.sum(o, lab, range(1, n + 1)); k = int(np.argmax(sz)) + 1
+    return float(np.where(lab == k)[0].min())
+
+
 def anchor(al):
     bot = int(np.where((al > 0.5).any(1))[0].max())
     xs = np.where((al[max(0, bot - 50):bot + 1] > 0.5).any(0))[0]
@@ -37,7 +48,7 @@ def anchor(al):
 idm = json.load(open("src/data/baseball/batter-idle.json"))
 idle = np.asarray(Image.open("public/baseball/sprites/batter-idle.webp").convert("RGBA")).astype(np.float32) / 255
 c0 = idle[:, :idm["CW"]]
-ref_w = helmet_w(c0[..., :3], c0[..., 3])
+ref_body = anchor(c0[..., 3])[1] - helmet_top(c0[..., :3], c0[..., 3])
 frames = [(Image.fromarray((c0 * 255).round().astype(np.uint8), "RGBA"), idm["ax"], idm["ay"])]
 for spec in SRCS:
     path, _, box = spec.partition(":")
@@ -47,8 +58,8 @@ for spec in SRCS:
         rgb, al = rgb[y0:y1, x0:x1], al[y0:y1, x0:x1]
     ys, xs = np.where(al > 0.05)
     rgb, al = rgb[ys.min():ys.max() + 1, xs.min():xs.max() + 1], al[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
-    k = ref_w / helmet_w(rgb, al)
     ax, ay = anchor(al)
+    k = ref_body / (ay - helmet_top(rgb, al))
     im = Image.fromarray((np.dstack([rgb, al]) * 255).round().astype(np.uint8), "RGBA")
     im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
     print(path.split("/")[-1], "scale", round(k, 3))
