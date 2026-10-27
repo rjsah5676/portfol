@@ -11,6 +11,7 @@ import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
 import imgLove from "@/img/menu/love.jpg";
+import imgBaseball from "@/img/menu/baseball.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -122,12 +123,20 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/baseball",
+        image: imgBaseball,
+        label: "픽셀 프로야구",
+        desc: "타이밍 타격 · 게이지 투구, 선수 육성 · 구단 · 온라인 대전",
+        icon: "⚾",
+        featured: true,
+        badge: "ALPHA",
+      },
+      {
         href: "/games/sketch",
         image: imgSketch,
         label: "DOODLE PARTY",
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
-        featured: true,
       },
       {
         href: "/games/melongame",

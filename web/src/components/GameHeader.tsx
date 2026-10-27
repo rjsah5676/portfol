@@ -10,6 +10,7 @@ import { AchievementList, AchievementRank, useAchReady } from "@/components/Poin
 import { DailyMissionList, useDailyReady } from "@/components/Points/DailyMissions";
 import type { AchGame } from "@/lib/points";
 import GameIcon from "@/components/GameIcon";
+import NavBadge from "@/components/Menu/NavBadge";
 
 export interface TopEntry {
   name: string;
@@ -63,6 +64,7 @@ export default function GameHeader({
   extra,
   scroll = true,
   className = "",
+  badge,
 }: {
   icon: string;
   title: string;
@@ -80,6 +82,8 @@ export default function GameHeader({
   /** 처음 들어올 때 게임 위치로 스크롤 */
   scroll?: boolean;
   className?: string;
+  /** 제목 옆 작은 딱지 (예: "ALPHA") — 메뉴의 badge 와 같은 모양 */
+  badge?: string;
 }) {
   const ref = useRef<HTMLElement>(null);
   const [guideOpen, setGuideOpen] = useState(false);
@@ -133,6 +137,11 @@ export default function GameHeader({
             <h1 className="truncate font-['Nanum_Gothic',sans-serif] text-lg font-bold text-white sm:text-xl">
               {title}
             </h1>
+            {badge && (
+              <span className="shrink-0 self-center">
+                <NavBadge badge={badge} />
+              </span>
+            )}
             <span
               className="hidden shrink-0 font-mono text-[10px] tracking-[0.2em] uppercase @lg:inline"
               style={{ color: accent }}
