@@ -76,6 +76,8 @@ export type BgId =
   | "black";
 /** 이벤트 CG (핵심 장면 한 장 그림 — 스탠딩 대신 화면 전체) */
 export type CgId =
+  // v4 세라
+  | "s_keypad"
   // 1~2주차
   | "y_closet"
   | "y_umbrella"

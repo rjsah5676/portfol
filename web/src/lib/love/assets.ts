@@ -188,7 +188,7 @@ export const CG: Record<
   {
     src: string;
     title: string;
-    who: "yeonseo" | "amy";
+    who: "yeonseo" | "amy" | "sera";
     video?: string;
     /** 차분 — { 이름: 그림 } (같은 구도에서 표정 · 상태만 다른 그림). 대본: { t: "cgv", v: 이름 } */
     vars?: Record<string, string>;
@@ -241,8 +241,13 @@ export const CG: Record<
     vars: { kiss: `${B}/cg/a-kiss-kiss.webp`, after: `${B}/cg/a-kiss-after.webp` },
   },
   y_door: { src: `${B}/cg/y-door.webp`, title: "손바닥 하나만큼", who: "yeonseo", vars: { blush: `${B}/cg/y-door-blush.webp` } },
+  // ---- v4 세라 ----
+  s_keypad: { src: `${B}/cg/s-keypad.webp`, title: "보지도 않고 네 자리", who: "sera" },
   y_win: { src: `${B}/cg/y-win.webp`, title: "제일 맛있는 물", who: "yeonseo", video: `${B}/cg/y-win.mp4`, vars: { smile: `${B}/cg/y-win-smile.webp`, water: `${B}/cg/y-win-water.webp` } },
 };
+/** CG 히로인 표시 (갤러리 · CG 제목 무늬와 색) */
+export const CG_SUIT = { amy: "♥", yeonseo: "♠", sera: "♥" } as const;
+export const CG_TONE = { amy: "#7fd3ff", yeonseo: "#8fa8ff", sera: "#ff8cc0" } as const;
 /** CG 차분 그림 주소 (없는 이름이면 원본) */
 export const cgSrc = (id: CgId, v?: string | null) => (v && CG[id].vars?.[v]) || CG[id].src;
 /** 갤러리 · 본 장면 기록용 키 ("a_kiss" / "a_kiss~close") */
@@ -273,6 +278,7 @@ export const CG_ORDER: CgId[] = (
   "y_win",
   "end_yeon_good",
   "end_yeon_true",
+  "s_keypad",
   "end_grand",
   ] as CgId[]
 ).filter((id) => !CG[id].pending);

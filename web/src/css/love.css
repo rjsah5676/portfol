@@ -2992,6 +2992,7 @@
 .lv-gal-chip-suit { font-size: 1cqw; }
 .lv-gal-chip-a .lv-gal-chip-suit { color: #7fd3ff; }
 .lv-gal-chip-y .lv-gal-chip-suit { color: #8fa8ff; }
+.lv-gal-chip-s .lv-gal-chip-suit { color: #ff8cc0; }
 .lv-gal-chip:hover { border-color: rgba(255, 210, 122, 0.6); color: #fff; }
 .lv-gal-chip-on {
   background: rgba(255, 210, 122, 0.16);

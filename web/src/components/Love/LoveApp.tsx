@@ -13,6 +13,8 @@ import {
   BGM_ONCE,
   CG,
   CG_ORDER,
+  CG_SUIT,
+  CG_TONE,
   ENDINGS,
   FACE_ICON,
   NAME,
@@ -2658,7 +2660,7 @@ function CgView({
       {!c.tight && <div className="lv-cg-bar lv-cg-bar-t" />}
       <div className="lv-cg-bar lv-cg-bar-b" />
       <div className="lv-cg-title">
-        <span className={c.who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>♥</span> EVENT ·{" "}
+        <span style={{ color: CG_TONE[c.who] }}>♥</span> EVENT ·{" "}
         {c.title}
       </div>
       <div className="lv-cg-flash" />
@@ -3663,7 +3665,7 @@ function Gallery({
   const [view, setView] = useState<CgId | null>(null);
   const [page, setPage] = useState(0);
   // 회상 CG: 히로인별로 거르고 4x3 씩 페이지 넘김
-  const [who, setWho] = useState<"all" | "amy" | "yeonseo">("all");
+  const [who, setWho] = useState<"all" | "amy" | "yeonseo" | "sera">("all");
   const [gp, setGp] = useState(0);
   const PER = 12;
   const list = CG_ORDER.filter((id) => who === "all" || CG[id].who === who);
@@ -3748,17 +3750,18 @@ function Gallery({
                 ["all", "전체", CG_ORDER],
                 ["amy", "에이미", CG_ORDER.filter((id) => CG[id].who === "amy")],
                 ["yeonseo", "연서", CG_ORDER.filter((id) => CG[id].who === "yeonseo")],
+                ["sera", "세라", CG_ORDER.filter((id) => CG[id].who === "sera")],
               ] as const
             ).map(([k, label, ids]) => (
               <button
                 key={k}
-                className={`lv-gal-chip ${k === "amy" ? "lv-gal-chip-a" : k === "yeonseo" ? "lv-gal-chip-y" : ""} ${who === k ? "lv-gal-chip-on" : ""}`}
+                className={`lv-gal-chip ${k === "amy" ? "lv-gal-chip-a" : k === "yeonseo" ? "lv-gal-chip-y" : k === "sera" ? "lv-gal-chip-s" : ""} ${who === k ? "lv-gal-chip-on" : ""}`}
                 onClick={() => {
                   setWho(k);
                   setGp(0);
                 }}
               >
-                {k !== "all" && <span className="lv-gal-chip-suit">{k === "amy" ? "♥" : "♠"}</span>}
+                {k !== "all" && <span className="lv-gal-chip-suit">{CG_SUIT[k]}</span>}
                 {label}
                 <i>
                   {seenIn([...ids])}/{ids.length}
@@ -3784,8 +3787,8 @@ function Gallery({
                     <span className="lv-gal-cg-img" style={{ backgroundImage: `url("${CG[id].src}")` }} />
                   ) : (
                     <span className="lv-gal-cg-q">
-                      <span className={CG[id].who === "amy" ? "text-[#7fd3ff]/25" : "text-[#8fa8ff]/25"}>
-                        {CG[id].who === "amy" ? "♥" : "♠"}
+                      <span style={{ color: CG_TONE[CG[id].who], opacity: 0.25 }}>
+                        {CG_SUIT[CG[id].who]}
                       </span>
                     </span>
                   )}
@@ -3801,8 +3804,8 @@ function Gallery({
                     </span>
                   )}
                   <span className="lv-gal-cg-cap">
-                    <span className={CG[id].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
-                      {CG[id].who === "amy" ? "♥" : "♠"}
+                    <span style={{ color: CG_TONE[CG[id].who] }}>
+                      {CG_SUIT[CG[id].who]}
                     </span>{" "}
                     {ok ? CG[id].title : "아직 못 본 장면"}
                   </span>
@@ -3878,8 +3881,8 @@ function Gallery({
             )}
           </ZoomMedia>
           <div className="lv-gal-view-bar" onClick={(e) => e.stopPropagation()}>
-            <span className={CG[view].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
-              {CG[view].who === "amy" ? "♥" : "♠"}
+            <span style={{ color: CG_TONE[CG[view].who] }}>
+              {CG_SUIT[CG[view].who]}
             </span>
             <span className="lv-gal-view-title">{CG[view].title}</span>
             {pages.length > 1 && (
@@ -4305,7 +4308,7 @@ const statsOf = (st: GState, cgs: CgId[], endings: EndingId[]): RollStats => ({
 });
 /** 그 엔딩 루트에서 본 CG (앨범 사진) — 다른 엔딩의 엔딩 CG 는 빼고 */
 function rollPhotos(id: EndingId, seen: CgId[]): { src: string; title: string }[] {
-  const who = id.startsWith("amy") ? "amy" : id.startsWith("yeon") ? "yeonseo" : null;
+  const who = id.startsWith("amy") ? "amy" : id.startsWith("yeon") ? "yeonseo" : id.startsWith("sera") ? "sera" : null;
   const own = `end_${id}`;
   return CG_ORDER.filter(
     (c) => seen.includes(c) && (!who || CG[c].who === who) && (!c.startsWith("end_") || c === own)
