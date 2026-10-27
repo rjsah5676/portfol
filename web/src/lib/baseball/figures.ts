@@ -232,6 +232,29 @@ const headShape = (paint: P): Attachment =>
     paint(ctx, c);
   });
 
+/** 뒷목 — 머리선이 둥글게 올라간 모양 (네모 패치처럼 안 보이게) · 양옆만 선 */
+export function neckBack(ctx: CanvasRenderingContext2D, c: RigColors, top = -3) {
+  ctx.beginPath();
+  ctx.moveTo(-8, 2);
+  ctx.lineTo(-7, top + 3);
+  ctx.quadraticCurveTo(0, top - 4, 7, top + 3);
+  ctx.lineTo(8, 2);
+  ctx.closePath();
+  ctx.fillStyle = c.skin;
+  ctx.fill();
+  // 머리카락 아래 그늘
+  ctx.fillStyle = "rgba(60,30,20,0.18)";
+  ctx.fillRect(-8, top + 1, 16, 3);
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = OUT;
+  ctx.beginPath();
+  ctx.moveTo(-8, 2);
+  ctx.lineTo(-7, top + 3);
+  ctx.moveTo(8, 2);
+  ctx.lineTo(7, top + 3);
+  ctx.stroke();
+}
+
 /** 기본 몸 파츠 (모든 선수 공통) */
 export function baseSkin(): Skin {
   return {
@@ -335,8 +358,7 @@ export function baseSkin(): Skin {
       ctx.strokeStyle = OUT;
       ctx.stroke();
       // 목
-      ctx.fillStyle = c.skin;
-      ctx.fillRect(-8, -4, 16, 8);
+      neckBack(ctx, c);
     }),
     face: headShape((ctx, c) => {
       ctx.rotate(Math.PI / 2);

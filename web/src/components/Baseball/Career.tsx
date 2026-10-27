@@ -23,6 +23,8 @@ import { BattleModal, BondCard, BondPanel, BondsModal, BoonPickModal, DeckStep, 
 import { BAT_IDLE, BATS, BATTER_RIG, HELMETS, PITCHER_RIG, PIT_IDLE, baseSkin } from "@/lib/baseball/figures";
 import { DEFAULT_LOOK, LOOK_KEYS, LOOK_LABEL, LOOK_OPTS, SKINS, lookColors, lookSkin, type Look } from "@/lib/baseball/look";
 import { drawRig, pose } from "@/lib/baseball/rig";
+import { batterFrame, drawBatter } from "@/lib/baseball/batterSprite";
+import { BATCOL } from "@/lib/baseball/look";
 import {
   SPEEDS, addHof, affStart, autoGame, bondLevel, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBattle, takeReport, type GameReport, type PlayMode,
 } from "./careerStore";
@@ -703,6 +705,16 @@ function Figure({ look, num, name, bats, learned, metal, front, w, h }: { look: 
     let skin = lookSkin(base, look, { heroBat: !!lc });
     if (front) skin = { ...skin, cap: skin.hairFront, mitt: skin.hand };
     const colors = lookColors({ team: team.color, dark: team.dark, skin: "#eec29e", hair: "#1d1a22", pants: "#eef0f4", accent: lc?.color ?? "#f2f2f2", num: String(num), name, flip: bats === "L" }, look);
+    const spriteLook = {
+      team: colors.team,
+      helm: colors.team,
+      skin: colors.skin,
+      pants: colors.pants,
+      dark: colors.dark,
+      bat: lc ? "#fff3d6" : BATCOL[look.bat]?.wood ?? BATCOL[0].wood,
+      num: String(num),
+      glow: lc ? lc.color : undefined,
+    };
     let raf = 0;
     const t0 = performance.now();
     const loop = (now: number) => {
@@ -718,7 +730,8 @@ function Figure({ look, num, name, bats, learned, metal, front, w, h }: { look: 
         const ps = pose(BATTER_RIG, BAT_IDLE, t);
         // 방망이 끝 ~ 발끝이 다 들어오게 (머리 · 방망이 안 잘리게)
         const sc = h / 215;
-        drawRig(ctx, BATTER_RIG, ps, skin, colors, w / 2 + (bats === "L" ? 1 : -1) * w * 0.06, h - 64 * sc, sc, bats === "L");
+        const bx = w / 2 + (bats === "L" ? 1 : -1) * w * 0.06;
+        if (!drawBatter(ctx, batterFrame(BAT_IDLE, t), spriteLook, bx, h - 64 * sc, sc, bats === "L")) drawRig(ctx, BATTER_RIG, ps, skin, colors, bx, h - 64 * sc, sc, bats === "L");
       }
       raf = requestAnimationFrame(loop);
     };

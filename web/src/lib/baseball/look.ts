@@ -3,7 +3,7 @@
  * 지금은 코드로 그린 임시 파츠. 그림을 받으면 같은 슬롯의 image 붙임으로 갈아 끼움 (뼈 · 애니는 그대로 → 어떤 자세에서도 이음매 유지).
  * 나중 BM 스킨은 여기에 4번째부터 (잠금 표시).
  */
-import { BATS, HEAD_SCALE, batShape } from "./figures";
+import { BATS, HEAD_SCALE, batShape, neckBack } from "./figures";
 import type { Attachment, RigColors, Skin } from "./rig";
 
 export interface Look {
@@ -65,8 +65,7 @@ const HAIR_BACK: Attachment[] = [
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = OUT;
     ctx.stroke();
-    ctx.fillStyle = c.skin;
-    ctx.fillRect(-8, -4, 16, 8);
+    neckBack(ctx, c);
   }),
   head((ctx, c) => {
     // 덮수룩: 아래로 삐친 끝
@@ -82,8 +81,7 @@ const HAIR_BACK: Attachment[] = [
     ctx.lineWidth = 2.5;
     ctx.strokeStyle = OUT;
     ctx.stroke();
-    ctx.fillStyle = c.skin;
-    ctx.fillRect(-7, -2, 14, 6);
+    neckBack(ctx, c, -1);
   }),
   head((ctx, c) => {
     // 묶은 머리: 아래로 꼬리

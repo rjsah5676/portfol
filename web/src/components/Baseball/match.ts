@@ -23,6 +23,8 @@ import { PITCHES, ZONE, inZone, makePitch, pitchAt, plateCross, type Pitch, type
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { commit, evaluate, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
+import { batterFrame, drawBatter, preloadBatter, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { BATCOL } from "@/lib/baseball/look";
 import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/lib/baseball/rig";
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 import { sfx } from "./sfx";
@@ -278,6 +280,7 @@ export class Match {
     }
     this.batSkin = baseSkin();
     this.pitSkin = baseSkin();
+    void preloadBatter();
     this.ui = this.makeUi();
     this.setBanner(
       cfg.bond ? cfg.bond.title : cfg.mode === "derby" ? "HOME RUN DERBY" : "PLAY BALL!",
@@ -456,7 +459,8 @@ export class Match {
     const bc = b.special ? charById(b.special) : null;
     // 육성 선수: 필살을 배웠으면 그 캐릭터 색 배트
     const lc = !bc && b.learned ? charById(b.learned) : null;
-    this.batSkin = { ...baseSkin(), helmet: bc ? HELMETS.hero : HELMETS.basic, bat: bc || lc ? BATS.hero : this.rng() < 0.3 ? BATS.metal : BATS.wood };
+    const metal = this.rng() < 0.3;
+    this.batSkin = { ...baseSkin(), helmet: bc ? HELMETS.hero : HELMETS.basic, bat: bc || lc ? BATS.hero : metal ? BATS.metal : BATS.wood };
     this.pitSkin = baseSkin();
     this.batColors = colorsFor(bs.team, bs.order * 7 + 3, b.num, b.special ? bc!.name : b.name, (bc ?? lc)?.color);
     // 육성: 내 선수 외형 · 우리 팀 유니폼
@@ -466,6 +470,18 @@ export class Match {
       this.batSkin = lookSkin(this.batSkin, b.look, { heroBat: !!lc });
       this.batColors = lookColors(this.batColors, b.look);
     } else if (myLook && this.cfg.career && batSide(this.s) === meIdx) this.batColors = uniColors(this.batColors, myLook);
+    // 픽셀 스프라이트 외형
+    const c = this.batColors;
+    this.batLook = {
+      team: c.team,
+      helm: bc ? c.accent : c.team,
+      skin: c.skin,
+      pants: c.pants,
+      dark: c.dark,
+      bat: bc || lc ? "#fff3d6" : b.look ? BATCOL[b.look.bat]?.wood ?? BATCOL[0].wood : metal ? "#c8ced8" : "#d9a35b",
+      num: c.num,
+      glow: bc || lc ? c.accent : undefined,
+    };
     const pc = p.special ? charById(p.special) : null;
     this.pitColors = colorsFor(this.cfg.mode === "derby" ? TEAM_DEFS[1] : fsd.team, fsd.pitcher * 5 + 1, p.num, p.name, pc?.color);
     if (myLook && this.cfg.career && fieldSide(this.s) === meIdx) this.pitColors = uniColors(this.pitColors, myLook);
@@ -474,6 +490,7 @@ export class Match {
     this.pitColors.pants = "#8e95a8";
   }
   batColors: RigColors = colorsFor(TEAM_DEFS[0], 0, 0, "");
+  batLook: SpriteLook = { team: "#FF8A3D", helm: "#FF8A3D", skin: "#eec29e", pants: "#eef0f4", dark: "#1d2a52", bat: "#d9a35b" };
   pitColors: RigColors = colorsFor(TEAM_DEFS[1], 0, 0, "");
 
   private toPitch() {
@@ -1440,7 +1457,8 @@ export class Match {
     ctx.beginPath();
     ctx.ellipse(bx, by + 150, 110, 18, 0, 0, Math.PI * 2);
     ctx.fill();
-    drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
+    // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
+    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT), this.batLook, bx, by, sc, lefty)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
 
     // 파티클
     for (const pt of this.particles) {
