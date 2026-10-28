@@ -952,8 +952,8 @@ export class Match {
     this.pushUi();
   }
 
-  /** 화면 아무 데나 누름 */
-  tap(sx: number, sy: number) {
+  /** 화면 아무 데나 누름 · swing = 화면 누름으로 스윙할지 (터치 기기는 스윙 버튼으로만 — 화면 아무 데나 닿아도 휘둘러지던 문제) */
+  tap(sx: number, sy: number, swing = true) {
     if (this.paused) return;
     if (this.phase === "mission") return this.skipMission();
     if (this.phase === "field") {
@@ -961,7 +961,7 @@ export class Match {
       this.pushUi();
       return;
     }
-    if (this.userBat) return this.pressSwing();
+    if (this.userBat) return swing ? this.pressSwing() : undefined;
     if (this.phase === "aim") {
       if (this.aimAt(sx, sy)) this.pressThrow();
     } else if (this.phase === "gauge") this.pressThrow();
