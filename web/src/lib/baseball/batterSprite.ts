@@ -348,6 +348,12 @@ function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
   return c;
 }
 
+/** 타자 시트 중 아직 한 번도 안 그린 것 (첫 그림 때 디코드 · GPU 업로드로 화면이 멈칫해서 미리 1px 로 한 번 그려 둠) */
+export function batterSheets(): HTMLImageElement[] {
+  stillImg();
+  return [kickImg, swingImg].filter((x): x is HTMLImageElement => !!x);
+}
+
 export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: SpriteLook, x: number, y: number, sc: number, flip = false, trail = 0): boolean {
   const st = stillImg();
   if (st) {

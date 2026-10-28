@@ -24,7 +24,7 @@ import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, batterSheets, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, type SpriteLook } from "@/lib/baseball/batterSprite";
 /** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
 const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
@@ -1530,7 +1530,32 @@ export class Match {
   }
 
   // ───────────── 그리기 ─────────────
+  /** 큰 그림 시트 미리 데우기 (한 프레임에 하나, 투구 전 화면에서만) — 첫 투구 때 스트라이드 시트(1.6만 px)를
+   *  처음 그리며 디코드 · GPU 업로드로 0.3초 멈칫하던 것 */
+  private warmed = new Set<HTMLImageElement>();
+  private warmUp(ctx: CanvasRenderingContext2D) {
+    if (this.phase !== "intro" && this.phase !== "mission" && this.phase !== "ready" && this.phase !== "aim" && this.phase !== "change") return;
+    const list = [
+      ...batterSheets(),
+      img(PITCHER_THROW.src),
+      img(FIELDER.inf),
+      img(FIELDER.of),
+      img(UI.burst),
+      img(UI.ring),
+      img(UI.homerun),
+      img(UI.profile),
+    ];
+    for (const im of list) {
+      if (this.warmed.has(im) || !im.complete || !im.naturalWidth) continue;
+      this.warmed.add(im);
+      ctx.drawImage(im, 0, 0, 1, 1);
+      return;
+    }
+  }
+
   draw(ctx: CanvasRenderingContext2D, q: number) {
+    // 배경보다 먼저 1px 로 그려 가려짐
+    this.warmUp(ctx);
     ctx.save();
     if (this.shake > 0) ctx.translate((this.rng() - 0.5) * this.shake * 30, (this.rng() - 0.5) * this.shake * 30);
     if (this.zoomT > 0) {
