@@ -52,8 +52,10 @@ export interface SwingIn {
  * 히트가 높을수록 넓음 (스트라이크 존 · 공 반지름 포함 기준 가로세로 배율):
  *   히트 300 → 0.34 (존 9칸 중 1칸의 1.2배) · 500 → 0.53 · 700 → 0.71 · 900 → 0.90 · 999 → 0.99. 최저 0.2
  */
+/** 컨택존 최소 크기 (스트라이크존 대비) — 타격 300 이하는 다 이 크기 (초반에 존이 너무 작아 맞히기 자체가 힘들었음) */
+export const CZ_TUNE = { min: 0.34 };
 export function contactZone(hit: number) {
-  const k = clamp(0.34 + ((hit - 300) / 600) * 0.56, 0.2, 1);
+  const k = clamp(0.34 + ((hit - 300) / 600) * 0.56, CZ_TUNE.min, 1);
   return { hw: (ZONE.x + BALL_R) * k, hh: ((ZONE.y1 - ZONE.y0) / 2 + BALL_R) * k };
 }
 /**

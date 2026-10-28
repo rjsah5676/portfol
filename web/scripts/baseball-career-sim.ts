@@ -10,11 +10,13 @@ import {
   act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, gameKey, newCareer, ovrOf, spUses, stepOf,
   BONDS, TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy, type SkillId,
 } from "../src/lib/baseball/career";
-import { PITCH_LV, TEAM_TUNE, botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
+import { AUTO_CZ, PITCH_LV, TEAM_TUNE, type SwingHook, botHook, leadCz, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
 import type { Diff } from "../src/lib/baseball/ai";
 import { makeRng } from "../src/lib/baseball/rng";
+import { humanSwing } from "../src/lib/baseball/ai";
+import { CZ_TUNE } from "../src/lib/baseball/contact";
 import { GROW } from "../src/lib/baseball/data";
-import { MOOD, TYPES as TYPE_DEF } from "../src/lib/baseball/career";
+import { MOOD, ROOKIE, TYPES as TYPE_DEF } from "../src/lib/baseball/career";
 // 튜닝: GROW='{"base":300,"k":0.6}' · APT='{"contact":{"hit":1.3},"power":{"power":1.1}}'
 if (process.env.GROW) Object.assign(GROW, JSON.parse(process.env.GROW));
 if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.APT) as Record<string, object>)) Object.assign(TYPE_DEF[k as BatType].apt, v);
@@ -22,7 +24,23 @@ if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.
 // TAL='[[0.72,360],[0.82,420],...]' — 재능 F~SS 의 [mul, limit] 덮어쓰기
 if (process.env.TAL) (JSON.parse(process.env.TAL) as [number, number][]).forEach(([mul, limit], i) => Object.assign(TALENTS[i], { mul, limit }));
 if (process.env.TR) TUNE.train = Number(process.env.TR);
+if (process.env.ROOK) Object.assign(ROOKIE, JSON.parse(process.env.ROOK));
+if (process.env.CZMIN) CZ_TUNE.min = Number(process.env.CZMIN);
 if (process.env.TT) Object.assign(TEAM_TUNE, JSON.parse(process.env.TT));
+/**
+ * 사람 흉내의 컨택존 — HCZ='{"lead":0.6,"sd":0.05}' (기본): 존 가운데를 공 쪽으로 lead 만큼 옮기고 ± sd 흔들림.
+ * 2026-10-28 실제 로그(1년차 직접 .18 ~ .20)에 맞춘 값. HCZ=off 면 예전처럼 컨택존 없이 (존 크기가 결과에 안 들어가 초반을 과하게 좋게 봄)
+ */
+const HCZ = process.env.HCZ === "off" ? null : (JSON.parse(process.env.HCZ ?? '{"lead":0.6,"sd":0.05}') as { lead: number; sd: number });
+const czHook = (sigma: number): SwingHook => (s, p, at, b, rng) => {
+  const c = humanSwing(p, at, s.strikes, sigma, rng);
+  return { swing: c.swing, e: c.e, bunt: false, cz: leadCz(at, HCZ!.lead, HCZ!.sd, rng) };
+};
+/** FMODE=direct|highlight|auto — 경기 방식을 다 이걸로 · AUTOCZ='{"lead":0.15,"sd":0.07}' */
+const FMODE = process.env.FMODE as Mode | undefined;
+if (process.env.AUTOCZ) Object.assign(AUTO_CZ, JSON.parse(process.env.AUTOCZ));
+/** 미션 · 타율 방식별 집계 */
+export const MS = { direct: { ok: 0, n: 0, h: 0, ab: 0 }, auto: { ok: 0, n: 0, h: 0, ab: 0 } };
 if (process.env.MOOD) Object.assign(MOOD, JSON.parse(process.env.MOOD));
 if (process.env.PLV) PITCH_LV.splice(0, PITCH_LV.length, ...(JSON.parse(process.env.PLV) as number[]));
 
@@ -90,13 +108,19 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}, extra: S
     } else if (st === "game") {
       if (canPlay(c)) {
         const setup = careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, diff, spUses(c), c.deck.map((id) => [id, BONDS[id].stat]), c.mood ?? 0);
-        const me = humanHook(ps.sigma);
+        const me = HCZ ? czHook(ps.sigma) : humanHook(ps.sigma);
         const bot = botHook(diff);
+        const mode = FMODE ?? ps.mode;
         const g =
-          ps.mode === "auto"
+          mode === "auto"
             ? playCareerGame(setup, bot, makeRng(c.seed + c.turn * 101))
-            : playCareerGame(setup, me, makeRng(c.seed + c.turn * 101), ps.mode === "highlight" ? bot : undefined);
-        applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: g.pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char })), direct: ps.mode !== "auto", clutch: g.clutch });
+            : playCareerGame(setup, me, makeRng(c.seed + c.turn * 101), mode === "highlight" ? bot : undefined);
+        for (const pa of g.pas) {
+          const k = pa.auto || mode === "auto" ? MS.auto : MS.direct;
+          if (pa.mission) (k.n++, pa.mission.ok && k.ok++);
+          if (pa.kind !== "BB" && pa.kind !== "SAC") (k.ab++, (pa.kind === "HIT" || pa.kind === "HR") && k.h++);
+        }
+        applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: g.pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char })), direct: (FMODE ?? ps.mode) !== "auto", clutch: g.clutch });
       } else applyGame(c, null);
     } else if (st === "seasonEnd") endSeason(c);
   }
@@ -218,6 +242,8 @@ function main() {
       yr.push(`${y}년 ${(h / Math.max(1, ab)).toFixed(3).slice(1)}·${hr.toFixed(1)}HR·상${aw.toFixed(0)}%`);
     }
     console.log("연차별", yr.join("  "));
+    const f = (k: typeof MS.direct) => `타율 ${(k.h / Math.max(1, k.ab)).toFixed(3)} (${k.ab}타수) · 미션 ${((k.ok / Math.max(1, k.n)) * 100).toFixed(0)}% (${k.n})`;
+    console.log(`직접 타석 ${f(MS.direct)}  |  자동 타석 ${f(MS.auto)}`);
   }
   const posts = base.flatMap((r) => r.c.seasons.map((s) => s.post ?? "?"));
   const cnt = (k: string) => ((posts.filter((p) => p === k).length / Math.max(1, posts.length)) * 100).toFixed(0);

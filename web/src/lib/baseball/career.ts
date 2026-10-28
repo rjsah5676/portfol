@@ -105,6 +105,15 @@ export const TRAIN_GAIN = 3.8;
 /** 밸런스 손잡이 (시뮬에서 바꿔 보기) */
 /** 시뮬용 손잡이 (coach = 코치 등급 · noBond = 인연 끔) */
 export const TUNE = { train: 1, coach: "C" as CoachGrade, noBond: false };
+/**
+ * 신인 보정: 경기용 타격 · 파워 +bonus 로 시작해 seasons 시즌에 걸쳐 0 으로 (1년차가 2년차보다 잘 치는 일이 없게 천천히)
+ * · 1년차 훈련 효율 ×train (초반을 빨리 벗어나게 — 최종 성장 분포는 재능 한계가 막음)
+ */
+export const ROOKIE = { bonus: 140, seasons: 4, train: 1.3 };
+export function rookieBonus(c: Pick<Career, "season" | "phase" | "week" | "gameInWeek">) {
+  const done = c.season - 1 + (c.phase === "season" || c.phase === "camp" ? (c.week * GAMES_PER_WEEK + c.gameInWeek) / GAMES : 1);
+  return Math.max(0, ROOKIE.bonus * (1 - done / ROOKIE.seasons));
+}
 /** 훈련 레벨: 같은 훈련 TRAIN_LV_EVERY 번마다 +1 (최대 5) · 레벨당 효율 +10% */
 export const TRAIN_LV_EVERY = 8;
 /** 필살타법 레벨: 필살 훈련 SP_EVERY 번마다 +1 (최대 5 = 마스터 → 경기당 2번) */
@@ -860,11 +869,12 @@ export function careerGameStats(c: Career): { stats: Stats; raw: Stats; cap: Sta
   const sit = fx.sit;
   const sitEq: Stats = { hit: SIT_W * ((sit.rispHit ?? 0) + (sit.twoK ?? 0) + (sit.late ?? 0)), power: SIT_W * ((sit.rispPow ?? 0) + (sit.late ?? 0)), run: 0 };
   const stats = {} as Stats, raw = {} as Stats, cap = {} as Stats;
+  const rb = rookieBonus(c);
   for (const k of STAT_KEYS) {
     raw[k] = c.stats[k] + fx.add[k] + gear[k];
     // 기본 능력치가 이미 한계를 넘었으면(성장 끝자락) 그건 깎지 않음
     cap[k] = Math.max(c.stats[k], limitOf(c, k) - sitEq[k]);
-    stats[k] = Math.round(clamp(Math.min(raw[k], cap[k]) * (k === "run" ? 1 : f), 1, 999));
+    stats[k] = Math.round(clamp((Math.min(raw[k], cap[k]) + (k === "run" ? 0 : rb)) * (k === "run" ? 1 : f), 1, 999));
   }
   return { stats, raw, cap, f, fx };
 }
@@ -1268,7 +1278,8 @@ function train(c: Career, k: TrainKey, rng: Rng): TurnOut {
     lines.push(`${charById(mate).name}와 함께 훈련! 효율 ×${mateMul.toFixed(2)} · 호감 +${d}`);
   }
   const mul = (tone === "fail" ? 0.3 : tone === "great" ? 2 : 1) * COND_TRAIN[c.cond] * trainMul(c, k) * mateMul * (0.85 + rng() * 0.3);
-  for (const [sk, w] of Object.entries(t.gain) as [StatKey, number][]) grow(c, sk, BASE_GAIN * TRAIN_GAIN * w * mul * TUNE.train);
+  const rookie = c.season === 1 ? ROOKIE.train : 1;
+  for (const [sk, w] of Object.entries(t.gain) as [StatKey, number][]) grow(c, sk, BASE_GAIN * TRAIN_GAIN * w * mul * TUNE.train * rookie);
   addStamina(c, -cost);
   c.tCount[k]++;
   if (k === "special") {
@@ -1463,8 +1474,12 @@ function spotEvent(c: Career, e: SpotEvent, rng: Rng): TurnOut {
     lines.push("광고 촬영! 얼굴이 알려지기 시작했다.");
   } else if (e === "quiz") {
     addCond(c, 1);
-    makePick(c, rng, "야구 퀴즈쇼 우승");
-    lines.push("퀴즈쇼 우승! 상품으로 특수능력 하나를 고를 수 있다.");
+    if (makePick(c, rng, "야구 퀴즈쇼 우승")) lines.push("퀴즈쇼 우승! 상품으로 특수능력 하나를 고를 수 있다.");
+    else {
+      // 고를 특수능력이 다 떨어졌으면 상금으로
+      addMoney(c, 300);
+      lines.push("퀴즈쇼 우승! 이미 다 아는 문제라 상금만 두둑이 받았다.");
+    }
   } else if (e === "volunteer") {
     addFame(c, 25);
     addTrust(c, 3);
@@ -1501,10 +1516,11 @@ function tryAwaken(c: Career, rng: Rng, p: number): TurnOut | undefined {
 /* ─────────────── 특수능력 고르기 (3장 중 1장) ─────────────── */
 
 /** 고를 카드 3장 — 가진 태그 쪽 1장은 웬만하면 넣어서 세트를 노릴 수 있게, 양날 카드 가끔 */
+/** 특수능력 고르기 만들기 — 고를 카드가 하나도 없으면 false */
 function makePick(c: Career, rng: Rng, from: string) {
   const owned = new Set(c.skills);
   const pool = SKILL_IDS.filter((id) => !owned.has(id) && !skill(id).noPick && !skill(id).set && !skill(id).bad);
-  if (!pool.length) return;
+  if (!pool.length) return false;
   const opts: SkillId[] = [];
   const tags = Object.entries(tagCount(c)).filter(([, n]) => (n ?? 0) > 0 && (n ?? 0) < 3).map(([t]) => t as Tag);
   const want = tags.length ? pool.filter((id) => !skill(id).risk && tags.includes(skill(id).tag as Tag)) : [];
@@ -1513,12 +1529,17 @@ function makePick(c: Career, rng: Rng, from: string) {
   if (risky.length && rng() < 0.35) opts.push(rng.pick(risky));
   const rest = pool.filter((id) => !opts.includes(id) && !skill(id).risk);
   while (opts.length < 3 && rest.length) opts.push(rest.splice(Math.floor(rng() * rest.length), 1)[0]);
+  // 일반 카드를 다 모았으면 남은 양날 카드로 채움 (예전엔 양날만 남으면 0장짜리 고르기 창이 떴음)
+  const left = risky.filter((id) => !opts.includes(id));
+  while (opts.length < 3 && left.length) opts.push(left.splice(Math.floor(rng() * left.length), 1)[0]);
+  if (!opts.length) return false;
   // 섞기
   for (let i = opts.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [opts[i], opts[j]] = [opts[j], opts[i]];
   }
   c.pick = { from, options: opts };
+  return true;
 }
 
 /** 고르기 답 (-1 = 건너뛰기) */

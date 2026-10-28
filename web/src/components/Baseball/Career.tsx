@@ -1497,6 +1497,7 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
     <Modal w={760}>
       <div className={`${font.title} text-[28px] text-[#ffd23f]`}>{p.from}</div>
       <div className="text-[13px] text-white/60">특수능력 하나를 골라요 · 같은 태그 3장이면 세트 효과 · 주황 테두리는 양날 카드</div>
+      {!p.options.length && <div className="mt-4 text-[14px] text-white/70">더 고를 수 있는 특수능력이 없어요. 넘기기를 눌러 주세요.</div>}
       <div className="mt-3 grid grid-cols-3 gap-3">
         {p.options.map((id, i) => {
           const s = skill(id);

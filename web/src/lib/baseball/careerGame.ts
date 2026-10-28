@@ -8,7 +8,8 @@ import {
   batSide, batter as curBatter, callPitch, cpuManage, fieldSide, maybeMission, newGame, nextHalf, pitchThrown, pitcher as curPitcher,
   stamina01, applyPlay, clutchOf, type BatLine, type Clutch, type GameState, type PAResult,
 } from "./game";
-import { makePitch, plateCross, type Pitch } from "./pitch";
+import { makePitch, plateCross, ZONE, type Pitch } from "./pitch";
+import { CZ_RANGE } from "./contact";
 import type { FieldOut } from "./play";
 import { commit, evaluate, type SwingDecision } from "./resolve";
 import { clamp, makeRng, type Rng } from "./rng";
@@ -202,13 +203,24 @@ export function quickPA(s: GameState, rng: Rng): PAResult {
 /** 내 타석 스윙 결정 (사람 · 봇 · 시뮬) */
 export type SwingHook = (s: GameState, p: Pitch, at: { x: number; y: number }, b: Batter, rng: Rng) => SwingDecision | null;
 
-/** 봇이 대신 치기 (자동 진행) — 그 난이도 봇 타자 실력. sp = 필살타법도 쓸지 (하이라이트의 자동 타석은 안 씀 — 내 직접 타석용으로 남김) */
+/**
+ * 자동 타석의 컨택존: 공 쪽으로 lead 만큼만 옮기고 ± sd 흔들림 (거의 가운데에 둠).
+ * 예전엔 자동이 컨택존을 아예 안 써서(늘 「대충 잘 노린」 판정) 존을 직접 옮겨 치는 사람보다 잘 쳤음 — 직접 치는 쪽이 이득이게.
+ * 사람(보통)은 lead ≈ 0.4 (scratchpad · 시뮬 HCZ)
+ */
+export const AUTO_CZ = { lead: 0.15, sd: 0.07 };
+export const leadCz = (at: { x: number; y: number }, lead: number, sd: number, rng: Rng) => ({
+  x: clamp(at.x * lead + rng.gauss() * sd, -CZ_RANGE.x, CZ_RANGE.x),
+  y: clamp(ZONE.mid + (at.y - ZONE.mid) * lead + rng.gauss() * sd, CZ_RANGE.y0, CZ_RANGE.y1),
+});
+
+/** 봇이 대신 치기 (자동 진행) — 그 난이도 봇 타자 실력 · 컨택존은 대충 (AUTO_CZ). sp = 필살타법도 쓸지 (하이라이트의 자동 타석은 안 씀 — 내 직접 타석용으로 남김) */
 export const botHook =
   (diff: Diff, sp = true): SwingHook =>
   (s, p, at, b, rng) => {
     const fbDur = 17 / (curPitcher(s).velo / 3.6) / SPEED_SCALE[diff];
     const c = cpuSwing(b, p, at, s.strikes, s.balls, diff, rng, fbDur);
-    return { swing: c.swing, e: c.e, bunt: false, special: sp ? useSp(s, b, c.swing, rng) : undefined };
+    return { swing: c.swing, e: c.e, bunt: false, special: sp ? useSp(s, b, c.swing, rng) : undefined, cz: leadCz(at, AUTO_CZ.lead, AUTO_CZ.sd, rng) };
   };
 
 /** 사람 흉내 (밸런스 시뮬): 타이밍 표준편차 sigma 초 */
