@@ -552,8 +552,21 @@ export const VY4: Scenes = {
     Y("봤어요. 그 두 번. 저도 그때 그 테이블에 있었으니까.", "base"),
     Y("그날 밤 생각했어요. 저 딜러는 나쁜 손인데, 왜 저 애는 살려 줬을까. 3년 동안 생각했어요.", "sad"),
     Y("…그리고 지금 알았어요. 그 손이 나쁜 손이 아니었다는 거. 나쁜 판에서, 할 수 있는 만큼만 한 손이었다는 거.", "cry"),
-    { t: "when", cond: { all: [{ v: "meta_trueA", op: ">=", n: 1 }, { v: "meta_trueY", op: ">=", n: 1 }] }, to: "g4_d24" },
-    { t: "when", cond: { all: [{ v: "heat", op: ">=", n: 8 }, { v: "affA", op: ">=", n: 12 }] }, to: "vy_d24_clash" },
+    { t: "when", cond: { all: [{ v: "meta_trueA", op: ">=", n: 1 }, { v: "meta_trueY", op: ">=", n: 1 }, { v: "meta_seraEnd", op: ">=", n: 1 }] }, to: "vy_d24_g" },
+    { t: "goto", to: "vy_d24_ans" },
+  ],
+  vy_d24_g: [
+    {
+      t: "choice",
+      prompt: "연서가 젖은 눈으로 나를 본다.",
+      opts: [
+        { text: "(그녀의 다음 말을 기다린다)", to: "vy_d24_ans" },
+        { text: "(★ 전화를 건다. 그 밤의 나머지 반을 가진 사람에게)", secret: true, to: "vg_d24_y" },
+      ],
+    },
+  ],
+  vy_d24_ans: [
+    { t: "when", cond: { all: [{ v: "heat", op: ">=", n: 9 }, { v: "affA", op: ">=", n: 14 }] }, to: "vy_d24_clash" },
     Y("집에 가요. …같이.", "whisper", "blush"),
     { t: "goto", to: "vy_d24_home" },
   ],

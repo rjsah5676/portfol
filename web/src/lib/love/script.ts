@@ -10,9 +10,10 @@ import { VA } from "./script-va";
 import { VA4 } from "./script-va4";
 import { VY } from "./script-vy";
 import { VY4 } from "./script-vy4";
-import { W3N } from "./script-w3n";
+import { VG } from "./script-vg";
+import { VE } from "./script-ve";
 import type { Scenes } from "./types";
 
 export const START = "d1";
 
-export const SCENES: Scenes = { ...W1, ...W2S, ...W3S, ...W4S, ...VA, ...VA4, ...VY, ...VY4, ...W3N };
+export const SCENES: Scenes = { ...W1, ...W2S, ...W3S, ...W4S, ...VA, ...VA4, ...VY, ...VY4, ...VG, ...VE };

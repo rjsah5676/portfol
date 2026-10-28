@@ -693,8 +693,21 @@ export const VA4: Scenes = {
     ME("그날 그만두고 사라졌어. 3년 동안. 그리고 공책 소문을 듣고 돌아왔어. 그 판을 끝내러."),
     ME("널 처음 만났을 때부터 알았어. 네가 그 사람 딸인 거."),
     A("……", "cry"),
-    { t: "when", cond: { all: [{ v: "meta_trueA", op: ">=", n: 1 }, { v: "meta_trueY", op: ">=", n: 1 }] }, to: "g4_d24" },
-    { t: "when", cond: { all: [{ v: "heat", op: ">=", n: 8 }, { v: "affY", op: ">=", n: 12 }] }, to: "va_d24_clash" },
+    { t: "when", cond: { all: [{ v: "meta_trueA", op: ">=", n: 1 }, { v: "meta_trueY", op: ">=", n: 1 }, { v: "meta_seraEnd", op: ">=", n: 1 }] }, to: "va_d24_g" },
+    { t: "goto", to: "va_d24_ans" },
+  ],
+  va_d24_g: [
+    {
+      t: "choice",
+      prompt: "에이미가 울고 있다.",
+      opts: [
+        { text: "(그녀가 고를 때까지 기다린다)", to: "va_d24_ans" },
+        { text: "(★ 전화를 건다. 그 밤의 나머지 반을 가진 사람에게)", secret: true, to: "vg_d24_a" },
+      ],
+    },
+  ],
+  va_d24_ans: [
+    { t: "when", cond: { all: [{ v: "heat", op: ">=", n: 8 }, { v: "affY", op: ">=", n: 6 }] }, to: "va_d24_clash" },
     A("다 말했어? 그게 다야?", "cry"),
     A("…나 정했어. 아빠 공책 읽고, 하루 종일 생각했어.", "sad"),
     A("아빠 판은 네 손이 짰어. 근데 그 손은 3년 동안 안 앉았고, 내 장판 말렸고, 내 숫자 세 줬어.", "cry"),

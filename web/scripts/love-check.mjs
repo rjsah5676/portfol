@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const read = (p) => readFileSync(fileURLToPath(new URL(p, import.meta.url)), "utf8");
-const files = { "script-w1.ts": "export const W1", "script-w2s.ts": "export const W2S", "script-w3s.ts": "export const W3S", "script-w4s.ts": "export const W4S", "script-va.ts": "export const VA", "script-va4.ts": "export const VA4", "script-vy.ts": "export const VY", "script-vy4.ts": "export const VY4", "script-w3n.ts": "export const W3N" };
+const files = { "script-w1.ts": "export const W1", "script-w2s.ts": "export const W2S", "script-w3s.ts": "export const W3S", "script-w4s.ts": "export const W4S", "script-va.ts": "export const VA", "script-va4.ts": "export const VA4", "script-vy.ts": "export const VY", "script-vy4.ts": "export const VY4", "script-vg.ts": "export const VG", "script-ve.ts": "export const VE" };
 let body = "";
 let head = "";
 for (const [f, mark] of Object.entries(files)) {

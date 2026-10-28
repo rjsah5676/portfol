@@ -606,7 +606,7 @@ export const ENDINGS: EndingInfo[] = [
     no: 11,
     kind: "true",
     title: "All In",
-    copy: "셋이 앉은 마지막 판.",
+    copy: "넷이 앉은 판, 셋이 본 아침.",
     hint: "두 개의 진실",
   },
   {
