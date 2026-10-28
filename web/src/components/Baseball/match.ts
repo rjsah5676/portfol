@@ -25,7 +25,7 @@ import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, batterSheets, drawable, drawBatter, sheetImage, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, strideStartFor, walkinFrame, WALKIN_LEN, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, batterSheets, drawable, drawBatter, sheetImage, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, strideStartFor, syncIdleTo, walkinFrame, WALKIN_IDLE_CELL, WALKIN_LEN, type SpriteLook } from "@/lib/baseball/batterSprite";
 /** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
 const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
@@ -67,8 +67,8 @@ const BOOST_DUR = 2.8;
  */
 const TEMPO = { call: 1.1, ready: 1.4, first: 1.9, result: 2.0, change: 2.4 };
 /** 타석에 걸어 들어오기 재생 속도 · 다 들어온 뒤 첫 공까지 숨 고르기 */
-const WALK_SPEED = 1.15;
-const WALK_SETTLE = 0.7;
+const WALK_SPEED = 0.9;
+const WALK_SETTLE = 0.5;
 const BOOST_PHASES: Phase[] = ["ready", "windup", "flight", "contact", "call"];
 /** HUD · 이펙트 그림 (GPT 이미지 → public/baseball/ui) */
 const UI = {
@@ -1412,14 +1412,17 @@ export class Match {
     }
     // 리그 애니
     this.batAnimT += dt;
-    // 걸어 들어오기: 2.36초 영상을 조금 빠르게 (≈2초) · 스윙 · 레그킥이 시작되면 바로 끝
+    // 걸어 들어오기: 2.36초 줄을 조금 느리게 (≈2.6초) · 스윙 · 레그킥이 시작되면 바로 끝
     if (this.walkPending && this.phase === "ready") {
       this.walkPending = false;
       this.walkT = 0;
     }
     if (this.walkT < WALKIN_LEN) {
       this.walkT = this.batAnim === BAT_IDLE ? this.walkT + dt * WALK_SPEED : Infinity;
-      if (this.walkT >= WALKIN_LEN) this.walkDoneAt = this.time;
+      if (this.walkT >= WALKIN_LEN) {
+        this.walkDoneAt = this.time;
+        syncIdleTo(WALKIN_IDLE_CELL);
+      }
     }
     // 빈 스윙이 끝나면 하던 자세로: 와인드업 중이면 레그킥 시계에 맞춰, 공이 날아오는 중이면 최고점, 그 밖엔 대기
     if (this.freeSwing && this.batAnim === BAT_SWING && this.batAnimT > FREE_SWING_T) {

@@ -72,7 +72,21 @@ strip.save(f"public/baseball/sprites/{NAME}.webp", quality=88, method=6)
 # resize 한 그림의 원점(0,0) = 영상 (0,0) = 칸좌표 (-PASTE/S + BB0) → 칸좌표 c 는 그림 (c × OUT − (원점 칸좌표 × OUT))
 ax = idm["ax"] * OUT - ox - x0
 ay = idm["ay"] * OUT - oy - y0
+# 마지막 칸과 제일 닮은 대기 칸 → 다 들어오면 대기 반복을 그 칸부터 (튀지 않게)
+def on_canvas(im, ax_, ay_):
+    cv = Image.new("RGBA", (900, 900)); cv.alpha_composite(im, (round(450 - ax_), round(820 - ay_)))
+    return np.asarray(cv).astype(np.float32) / 255
+last = ims[-1].crop((x0, y0, x1, y1))
+last = last.resize((round(last.width / OUT), round(last.height / OUT)), Image.LANCZOS)
+Wc = on_canvas(last, (idm["ax"] * OUT - ox - x0) / OUT, (idm["ay"] * OUT - oy - y0) / OUT)
+full = Image.open("public/baseball/sprites/batter-idle.webp").convert("RGBA")
+icols = idm.get("cols", idm["n"])
+def score(i):
+    c = full.crop(((i % icols) * idm["CW"], (i // icols) * idm["CH"], (i % icols + 1) * idm["CW"], (i // icols + 1) * idm["CH"]))
+    I = on_canvas(c, idm["ax"], idm["ay"])
+    return np.abs(Wc[..., 3] - I[..., 3]).mean() + np.abs(Wc[..., :3] * Wc[..., 3:] - I[..., :3] * I[..., 3:]).mean()
+IDLE_CELL = min(range(idm["n"]), key=score)
 seq = [[j, round((idx[j + 1] if j + 1 < len(idx) else idx[j] + STEP) / 24 / SPEED, 4)] for j in range(len(idx))]
-meta = dict(CW=CW, CH=CH, n=len(ims), cols=COLS, ax=round(ax, 1), ay=round(ay, 1), scale=OUT, seq=seq)
+meta = dict(CW=CW, CH=CH, n=len(ims), cols=COLS, ax=round(ax, 1), ay=round(ay, 1), scale=OUT, idle=IDLE_CELL, seq=seq)
 json.dump(meta, open(f"src/data/baseball/{NAME}.json", "w"))
 print({k2: v for k2, v in meta.items() if k2 != "seq"}, "strip", strip.size, "len", seq[-1][1])

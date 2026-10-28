@@ -281,8 +281,18 @@ const IDLE = { src: "/baseball/sprites/batter-idle.webp", mask: "/baseball/sprit
 /** 대기 순서 [칸, 초] — 그록 영상(첫 장면 = 마지막 장면이라 그대로 반복) 칸을 같은 간격으로 · 시간표는 json(seq, 끝 시각) */
 const IDLE_SEQ: [number, number][] = idleData.seq.map(([c, e], i, a) => [c, e - (i ? a[i - 1][1] : 0)] as [number, number]);
 const IDLE_LEN = IDLE_SEQ.reduce((a, [, d]) => a + d, 0);
+/** 대기 반복 시작 맞추기: 지금 이 순간 대기 칸 cell 이 나오게 */
+let idleT0 = 0;
+export function syncIdleTo(cell: number) {
+  let at = 0;
+  for (const [c, d] of IDLE_SEQ) {
+    if (c === cell) break;
+    at += d;
+  }
+  idleT0 = (typeof performance !== "undefined" ? performance.now() / 1000 : 0) - at;
+}
 function idleCell(t: number) {
-  let u = t % IDLE_LEN;
+  let u = (((t - idleT0) % IDLE_LEN) + IDLE_LEN) % IDLE_LEN;
   for (const [c, d] of IDLE_SEQ) {
     if (u < d) return c;
     u -= d;
@@ -295,17 +305,15 @@ const KICKS = { src: "/baseball/sprites/batter-load.webp", ...loadData };
 const SWINGS = { src: "/baseball/sprites/batter-swing.webp", ...swingData };
 /**
  * 타석에 걸어 들어오기 (scripts/baseball-batter-walkin.py) — 대기 칸과 같은 기준점, 칸은 walkData.scale 배로 작게 저장
- * walkinFrame(t) → WALK_BASE + 칸 · 끝 WALK_MIX 초는 마지막 칸 → 대기 1칸 겹치기 (배트 각도가 살짝 달라서)
+ * walkinFrame(t) → WALK_BASE + 칸. 다 들어오면 대기 반복을 마지막 칸과 제일 닮은 대기 칸(walkData.idle)부터 (syncIdleTo)
+ * (예전: 대기 1칸과 겹쳐 넘기기 → 두 그림이 반투명으로 겹쳐 보였음)
  */
 const WALKS = { src: "/baseball/sprites/batter-walkin.webp", ...walkData };
 const WALK_BASE = 4000;
-const WALK_MIX_BASE = 5000;
-const WALK_MIX = 0.18;
-/** 걸어 들어오기 길이 (초) — 대기로 넘어가는 겹치기 포함 */
-export const WALKIN_LEN = walkData.seq[walkData.seq.length - 1][1] + WALK_MIX;
+/** 걸어 들어오기 길이 (초) */
+export const WALKIN_LEN = walkData.seq[walkData.seq.length - 1][1];
+export const WALKIN_IDLE_CELL = walkData.idle;
 export function walkinFrame(t: number): number {
-  const end = walkData.seq[walkData.seq.length - 1][1];
-  if (t >= end) return WALK_MIX_BASE + Math.min(100, Math.round(((t - end) / WALK_MIX) * 100));
   return WALK_BASE + (walkData.seq.find(([, e]) => t < e) ?? walkData.seq[walkData.seq.length - 1])[0];
 }
 let walkImg: HTMLImageElement | null = null;
@@ -420,17 +428,10 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
       const cols = IDLE.cols ?? IDLE.n;
       ctx.drawImage(drawable(tintedStill(st, lk)), (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
     };
-    if (frame >= WALK_BASE && frame < WALK_MIX_BASE + 101 && !(wk && wk.complete && wk.naturalWidth)) {
+    if (frame >= WALK_BASE && !(wk && wk.complete && wk.naturalWidth)) {
       // 걸어 들어오기 그림이 아직이면 대기 자세로
       idleFirst();
-    } else if (frame >= WALK_MIX_BASE && frame <= WALK_MIX_BASE + 100) {
-      const k = (frame - WALK_MIX_BASE) / 100;
-      ctx.globalAlpha = 1 - k;
-      walkCell(WALKS.n - 1);
-      ctx.globalAlpha = k;
-      idleFirst();
-      ctx.globalAlpha = 1;
-    } else if (frame >= WALK_BASE && frame < WALK_MIX_BASE) {
+    } else if (frame >= WALK_BASE) {
       walkCell(frame - WALK_BASE);
     } else if (frame >= RETURN_BASE && sw && sw.complete && sw.naturalWidth) {
       // 착지 자세 → 대기 (겹쳐서)
