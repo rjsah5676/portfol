@@ -2,11 +2,18 @@
  * 야구 로딩 화면(GameLoader)에 넘길 할 일 — M1 은 격투게임 그림(얼굴 · 컷인)과 글꼴만.
  * 새 그림 · 소리를 넣으면 여기에도 추가할 것.
  */
-import { CHARS, artUrl, cutinUrl, faceUrl } from "@/lib/baseball/data";
+import { CHARS, FAMILY, GIVEN, artUrl, cutinUrl, faceUrl } from "@/lib/baseball/data";
 import { keyed, type LoadTask } from "@/lib/preload";
 
 const FONTS = ['16px "Black Han Sans"', '16px "Jua"', '700 16px "JetBrains Mono"', '800 16px "JetBrains Mono"', '700 16px "Nanum Gothic"', '800 16px "Nanum Gothic"'];
-const FONT_TEXT = "픽셀 프로야구 나만의 리그 훈련 휴식 외출 상점 은퇴 스트라이크 볼 파울 헛스윙 삼진 안타 홈런 2루타 3루타 아웃 득점 0123456789 km/h 마구 필살타법 미션";
+// 한글 웹폰트는 글자 묶음(unicode-range)으로 나눠 받아서, 처음 쓰는 글자가 나오면 그 묶음을 받는 동안 캔버스 글씨가 늦게 뜸
+// (판은 먼저 뜨고 글씨가 늦게 옴) → 경기 화면에 나오는 글씨는 로딩 화면에서 미리 받아 둠
+const MISSION_TEXT =
+  "의 특별 미션! 성공 코인 호감 실패하면 돌발 마구/필살 감독 신뢰 누르면 바로 시작 주장 선배 안경 후배 " +
+  "담장 넘겨 봐. 네 힘이면 돼. 장타 하나. 보여 줘. 주자 불러들여. 발로 만든 점수! 한 점만. 네가 해내는 거 보고 싶어. 안타 하나만. 나 보고 있어. " +
+  "주자 불러들여! 한 점만 내 봐 여기서 한 방! 홈런 치면 보너스다 장타 하나 부탁해! 안타 하나만 쳐 줘! 이번 이닝 무실점으로 막아! 삼진으로 잡아! " +
+  "아쉽지만 안타! 미션 성공! 미션 실패… 특수능력 발동! 끈질긴 승부 득점권 타격 파워 주루 7회~ 2스트라이크 회초 회말 오늘 타수 안타 시즌 타점 투구 수 제구 변화 체력 좌타 우타 좌투 우투 빠름 늦음 투수 교체";
+const FONT_TEXT = "픽셀 프로야구 나만의 리그 훈련 휴식 외출 상점 은퇴 스트라이크 볼 파울 헛스윙 삼진 안타 홈런 2루타 3루타 아웃 득점 0123456789 km/h 마구 필살타법 미션 " + MISSION_TEXT + " " + CHARS.map((c) => c.name).join(" ") + " " + FAMILY.join("") + GIVEN.join("");
 const fontsTask = keyed("baseball:fonts", () =>
   typeof document === "undefined" || !document.fonts
     ? Promise.resolve()
