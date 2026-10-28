@@ -7,7 +7,7 @@
  *   같은 시드 · 같은 성향으로 GP 부스트 0 vs 전부 를 비교해서 GP 몫(≤ 30%) 확인
  */
 import {
-  act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, newCareer, ovrOf, spUses, stepOf,
+  act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, gameKey, newCareer, ovrOf, spUses, stepOf,
   BONDS, TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy, type SkillId,
 } from "../src/lib/baseball/career";
 import { botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
@@ -21,7 +21,6 @@ if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.
 
 // TAL='[[0.72,360],[0.82,420],...]' — 재능 F~SS 의 [mul, limit] 덮어쓰기
 if (process.env.TAL) (JSON.parse(process.env.TAL) as [number, number][]).forEach(([mul, limit], i) => Object.assign(TALENTS[i], { mul, limit }));
-if (process.env.XP) TUNE.gameXp = Number(process.env.XP);
 if (process.env.TR) TUNE.train = Number(process.env.TR);
 
 const N = Number(process.argv[2] ?? 200);
@@ -87,7 +86,7 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}, extra: S
       }
     } else if (st === "game") {
       if (canPlay(c)) {
-        const setup = careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, diff, spUses(c), c.deck.map((id) => [id, BONDS[id].stat]));
+        const setup = careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, diff, spUses(c), c.deck.map((id) => [id, BONDS[id].stat]));
         const me = humanHook(ps.sigma);
         const bot = botHook(diff);
         const g =
@@ -205,6 +204,9 @@ function main() {
   const avgOf = (f: (c: Career) => number) => (base.reduce((a, r) => a + f(r.c), 0) / N).toFixed(1);
   console.log(`평균 스탯 hit ${avgOf((c) => c.stats.hit)} pow ${avgOf((c) => c.stats.power)} run ${avgOf((c) => c.stats.run)} · 특수능력 ${avgOf((c) => c.skills.length)} · 필살 ${avgOf((c) => (c.learned ? 1 : 0))} · 인기도 ${avgOf((c) => c.fame)}`);
   console.log(`통산 평균 타율 ${(base.reduce((a, r) => a + r.c.total.h / Math.max(1, r.c.total.ab), 0) / N).toFixed(3)}  HR ${avgOf((c) => c.total.hr)}  경기 ${avgOf((c) => c.total.g)}  신뢰 ${avgOf((c) => c.trust)}`);
+  const posts = base.flatMap((r) => r.c.seasons.map((s) => s.post ?? "?"));
+  const cnt = (k: string) => ((posts.filter((p) => p === k).length / Math.max(1, posts.length)) * 100).toFixed(0);
+  console.log(`가을야구 (시즌 ${posts.length}): 우승 ${cnt("우승")}% · 준우승 ${cnt("준우승")}% · 준PO 탈락 ${cnt("준PO 탈락")}% · 진출 실패 ${cnt("진출 실패")}%`);
   console.log(`자금: 쓴 돈 ${(base.reduce((a, r) => a + r.spent, 0) / N).toFixed(0)} · 남은 돈 ${avgOf((c) => c.money)} · 장비 단계 합 ${avgOf((c) => Object.values(c.gear).reduce((a, b) => a + (b ?? 0), 0))}`);
 
   // 코치: 같은 선수 코치 없음 vs 전부 C (기본)

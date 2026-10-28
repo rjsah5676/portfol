@@ -34,6 +34,9 @@ export function slotOf(trust: number) {
 }
 export const slotName = (i: number) => `${i + 1}번`;
 
+/** 육성 상대 투수 수준 (연차별 · 제구 · 변화 평균) — 원래 팀 기본은 560 */
+export const PITCH_LV = [300, 330, 360, 390, 420, 450, 480, 510, 540, 560];
+
 /** 시즌마다 같은 동료 · 매주 다른 상대 (시드로 고정) */
 export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number, bondChars?: CareerSetup["bondChars"]): CareerSetup {
   const rTeam = makeRng((seed ^ (season * 0x9e37)) >>> 0);
@@ -42,6 +45,15 @@ export function careerSetup(seed: number, season: number, week: number, me: Batt
   const rOpp = makeRng((seed * 31 + season * 977 + week * 131) >>> 0);
   const def = TEAM_DEFS[1 + (week % 3)];
   const opp = makeTeam(def, rOpp);
+  // 상대 투수: 연차마다 세짐 (1년차 300 · 30씩 → 7년차 480 · 그 뒤 510 · 540 · 560) — 처음부터 560 이라 초반에 너무 못 쳤음
+  const lv = PITCH_LV[Math.min(PITCH_LV.length - 1, Math.max(0, season - 1))];
+  // 우리 팀 투수도 똑같이 낮춰야 팀 승률이 반반 (상대만 낮추면 동료들이 다 쳐서 순위 1위가 너무 쉬움)
+  for (const p of [...opp.pitchers, ...my.pitchers]) {
+    const d = lv - 560;
+    p.control = Math.max(150, p.control + d);
+    p.brk = Math.max(150, p.brk + d);
+    p.velo = Math.round(p.velo + (d / 260) * 6);
+  }
   // 내 수비 위치 선수를 빼고 내 자리에 넣기
   const rest = my.batters.filter((b) => b.special || b.pos !== me.pos);
   while (rest.length > 8) {
@@ -216,6 +228,8 @@ export function enginePA(s: GameState, rng: Rng, hook: SwingHook): PAResult {
     const pitch = makePitch(p, { kind: plan.kind, target, quality: cpuGauge(diff, rng), special: useSpB ? p.special : undefined }, SPEED_SCALE[diff], rng, stamina01(s));
     const d = hook(s, pitch, plateCross(pitch), b, rng);
     const o = evaluate(s, pitch, d, rng);
+    // 내 필살타법은 앞으로 보냈을 때만 소모 — 헛스윙 · 파울이면 돌려줌
+    if (d?.special && o.sw?.kind !== "bip" && batSide(s) === (s.opts.userHome ? 1 : 0)) s.sides[batSide(s)].swingLeft++;
     const pa = commit(s, o);
     if (pa) return pa;
   }

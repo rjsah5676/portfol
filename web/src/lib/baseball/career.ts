@@ -17,7 +17,8 @@
  * 난수는 (시드, 턴 번호)로 정해서 새로고침해도 결과가 같음.
  */
 import type { Diff } from "./ai";
-import { charById, type Batter, type Boost, type CharId } from "./data";
+import { PITCH_LV } from "./careerGame";
+import { TEAM_DEFS, charById, type Batter, type Boost, type CharId } from "./data";
 import type { BatLine } from "./game";
 import { clamp, makeRng, type Rng } from "./rng";
 import { DEFAULT_LOOK, type Look } from "./look";
@@ -58,13 +59,13 @@ export const TYPES: Record<BatType, { name: string; desc: string; pos: string; a
 
 /** 숨은 재능 — 1시즌 끝 스카우트 평가에서 공개. 성장 속도(mul) + 한계(limit, 가까울수록 덜 오름). SS 는 각성으로만 */
 export const TALENTS: { g: string; w: number; mul: number; limit: number }[] = [
-  { g: "F", w: 0.08, mul: 0.8, limit: 400 },
-  { g: "D", w: 0.17, mul: 0.88, limit: 465 },
-  { g: "C", w: 0.3, mul: 0.94, limit: 535 },
-  { g: "B", w: 0.27, mul: 1.0, limit: 605 },
-  { g: "A", w: 0.13, mul: 1.1, limit: 690 },
-  { g: "S", w: 0.05, mul: 1.2, limit: 790 },
-  { g: "SS", w: 0, mul: 1.35, limit: 880 },
+  { g: "F", w: 0.08, mul: 0.72, limit: 320 },
+  { g: "D", w: 0.17, mul: 0.8, limit: 380 },
+  { g: "C", w: 0.3, mul: 0.88, limit: 440 },
+  { g: "B", w: 0.27, mul: 0.97, limit: 520 },
+  { g: "A", w: 0.13, mul: 1.12, limit: 680 },
+  { g: "S", w: 0.05, mul: 1.25, limit: 780 },
+  { g: "SS", w: 0, mul: 1.35, limit: 820 },
 ];
 
 /* ─────────────── 일정 ─────────────── */
@@ -99,9 +100,11 @@ export const TRAINS: Record<TrainKey, { name: string; desc: string; cost: number
 export const TRAIN_KEYS: TrainKey[] = ["hit", "power", "run", "special"];
 /** 훈련 한 번 기본 성장 (재능 · 타입 · 컨디션 · 높을수록 덜 오름 반영 전) */
 export const BASE_GAIN = 1.38;
+/** 훈련 배율 — 경기로는 능력치가 안 오르니(행동력 · 체력 · 컨디션만) 훈련이 성장의 몸통 */
+export const TRAIN_GAIN = 3.8;
 /** 밸런스 손잡이 (시뮬에서 바꿔 보기) */
 /** 시뮬용 손잡이 (coach = 코치 등급 · noBond = 인연 끔) */
-export const TUNE = { gameXp: 0.128, train: 1, coach: "C" as CoachGrade, noBond: false };
+export const TUNE = { train: 1, coach: "C" as CoachGrade, noBond: false };
 /** 훈련 레벨: 같은 훈련 TRAIN_LV_EVERY 번마다 +1 (최대 5) · 레벨당 효율 +10% */
 export const TRAIN_LV_EVERY = 8;
 /** 필살타법 레벨: 필살 훈련 SP_EVERY 번마다 +1 (최대 5) — 경기당 횟수 2 + 레벨 */
@@ -128,8 +131,12 @@ export interface Fx {
   injury?: number;
   injuryDur?: number;
   great?: number;
-  gameXp?: number;
-  hrXp?: number;
+  /** 경기마다 행동력 + */
+  gameAct?: number;
+  /** 경기마다 체력 + */
+  gameSta?: number;
+  /** 홈런 하나마다 컨디션 ▲ 확률 */
+  hrCond?: number;
   money?: number;
   fame?: number;
   awaken?: number;
@@ -179,7 +186,7 @@ export const SKILLS = {
   // 파워
   fullswing: { name: "풀스윙", desc: "경기 파워 +45", val: 2, tag: "power", fx: { add: { power: 45 } } },
   muscle: { name: "근력 체질", desc: "근력 훈련 효율 +18%", val: 2, tag: "power", fx: { train: { power: 0.18 } } },
-  slugger: { name: "장타 본능", desc: "홈런 경험치 +60%", val: 2, tag: "power", fx: { hrXp: 0.6 } },
+  slugger: { name: "장타 본능", desc: "홈런 치면 60% 확률로 컨디션 ▲", val: 2, tag: "power", fx: { hrCond: 0.6 } },
   // 스피드
   track: { name: "육상부 출신", desc: "주루 훈련 효율 +18%", val: 2, tag: "speed", fx: { train: { run: 0.18 } } },
   dash: { name: "스타트 대시", desc: "경기 주루 +45", val: 2, tag: "speed", fx: { add: { run: 45 } } },
@@ -217,7 +224,7 @@ export const SKILLS = {
   b_zena_prank: { name: "장난 기운", desc: "인기도 +40% · 호감 +15%", val: 3, tag: "luck", boon: "zena", noPick: true, fx: { fame: 0.4, aff: 0.15 } },
   b_mei_steam: { name: "찜기 단련", desc: "타격 훈련 효율 +15%", val: 3, tag: "contact", boon: "mei", noPick: true, fx: { train: { hit: 0.15 } } },
   b_mei_palm: { name: "태극 타법", desc: "경기 타격 +25 · 파워 +20", val: 3, tag: "contact", boon: "mei", noPick: true, fx: { add: { hit: 25, power: 20 } } },
-  b_mei_bun: { name: "왕만두 도시락", desc: "휴식 회복 +30% · 경기 경험치 +8%", val: 3, tag: "luck", boon: "mei", noPick: true, fx: { rest: 0.3, gameXp: 0.08 } },
+  b_mei_bun: { name: "왕만두 도시락", desc: "휴식 회복 +30% · 경기마다 체력 +2", val: 3, tag: "luck", boon: "mei", noPick: true, fx: { rest: 0.3, gameSta: 2 } },
   b_mei_gap: { name: "빈틈 읽기", desc: "경기 타격 +35", val: 3, tag: "contact", boon: "mei", noPick: true, fx: { add: { hit: 35 } } },
   b_ivan_fist: { name: "철곰 정권", desc: "득점권에서 파워 +80", val: 3, tag: "clutch", boon: "ivan", noPick: true, fx: { sit: { rispPow: 80 } } },
   b_ivan_body: { name: "강철 육체", desc: "부상 확률 -35%", val: 3, tag: "grit", boon: "ivan", noPick: true, fx: { injury: -0.35 } },
@@ -240,7 +247,7 @@ export const SKILLS = {
   glass: { name: "유리 몸 천재", desc: "모든 훈련 +18% / 부상 확률 +60%", val: 2, risk: true, fx: { train: { all: 0.18 }, injury: 0.6 } },
   gambler: { name: "도박꾼", desc: "자금 +60% / 슬럼프 2배", val: 2, risk: true, fx: { money: 0.6, slump: 1 } },
   allin: { name: "한방주의", desc: "경기 파워 +80 / 경기 타격 -50", val: 2, risk: true, fx: { add: { power: 80, hit: -50 } } },
-  cram: { name: "실전파", desc: "경기 경험치 +30% / 훈련 -15%", val: 2, risk: true, fx: { gameXp: 0.3, train: { all: -0.15 } } },
+  cram: { name: "실전파", desc: "경기마다 행동력 +1 / 훈련 -15%", val: 2, risk: true, fx: { gameAct: 1, train: { all: -0.15 } } },
   showoff: { name: "관종", desc: "인기도 +80% / 감독 신뢰 깎임 2배", val: 2, risk: true, fx: { fame: 0.8, trust: 1 } },
   // 나쁜 것 (이벤트)
   clutchBad: { name: "찬스 약함", desc: "득점권에서 타격 -60", val: -6, bad: true, noPick: true, fx: { sit: { rispHit: -60 } } },
@@ -248,7 +255,7 @@ export const SKILLS = {
   // 세트 (같은 태그 3장)
   set_clutch: { name: "클러치 히터", desc: "찬스 세트: 득점권 타격 · 파워 +60", val: 6, set: "clutch", noPick: true, fx: { sit: { rispHit: 60, rispPow: 60 } } },
   set_contact: { name: "타격 기계", desc: "컨택 세트: 경기 타격 +60", val: 6, set: "contact", noPick: true, fx: { add: { hit: 60 } } },
-  set_power: { name: "거포 각성", desc: "파워 세트: 경기 파워 +60 · 홈런 경험치 +40%", val: 6, set: "power", noPick: true, fx: { add: { power: 60 }, hrXp: 0.4 } },
+  set_power: { name: "거포 각성", desc: "파워 세트: 경기 파워 +60 · 홈런 치면 40% 확률로 컨디션 ▲", val: 6, set: "power", noPick: true, fx: { add: { power: 60 }, hrCond: 0.4 } },
   set_speed: { name: "바람의 아들", desc: "스피드 세트: 경기 주루 +80", val: 6, set: "speed", noPick: true, fx: { add: { run: 80 } } },
   set_grit: { name: "불굴", desc: "근성 세트: 컨디션 최악 없음 · 부상 기간 절반", val: 6, set: "grit", noPick: true, fx: { condFloor: true, injuryDur: -0.5 } },
   set_luck: { name: "럭키 가이", desc: "행운 세트: 각성 확률 3배 · 대성공 +5%", val: 6, set: "luck", noPick: true, fx: { awaken: 2, great: 0.05 } },
@@ -282,7 +289,7 @@ export function fxOf(c: Pick<Career, "skills"> & { blv?: Partial<Record<SkillId,
     add: { hit: 0, power: 0, run: 0 } as Stats,
     sit: {} as NonNullable<Batter["sit"]>,
     train: { hit: 0, power: 0, run: 0, special: 0, all: 0 } as Record<TrainKey | "all", number>,
-    injury: 0, injuryDur: 0, great: 0, gameXp: 0, hrXp: 0, money: 0, fame: 0, awaken: 0, slump: 0, trust: 0, condFloor: false, calm: false,
+    injury: 0, injuryDur: 0, great: 0, gameAct: 0, gameSta: 0, hrCond: 0, money: 0, fame: 0, awaken: 0, slump: 0, trust: 0, condFloor: false, calm: false,
     aff: 0, rest: 0, fail: 0, stam: 0,
   };
   for (const id of c.skills) {
@@ -294,8 +301,9 @@ export function fxOf(c: Pick<Career, "skills"> & { blv?: Partial<Record<SkillId,
     f.injury += (x.injury ?? 0) * m;
     f.injuryDur += (x.injuryDur ?? 0) * m;
     f.great += (x.great ?? 0) * m;
-    f.gameXp += (x.gameXp ?? 0) * m;
-    f.hrXp += (x.hrXp ?? 0) * m;
+    f.gameAct += (x.gameAct ?? 0) * m;
+    f.gameSta += (x.gameSta ?? 0) * m;
+    f.hrCond += (x.hrCond ?? 0) * m;
     f.money += (x.money ?? 0) * m;
     f.fame += (x.fame ?? 0) * m;
     f.awaken += (x.awaken ?? 0) * m;
@@ -498,9 +506,25 @@ export interface SeasonRec {
   awards: string[];
   ovr: number;
   salary: number;
+  /** 팀 정규시즌 순위 (1 ~ 4) */
+  rank?: number;
+  /** 가을야구 결과 — 우승 · 준우승 · 준PO 탈락 · 진출 실패 */
+  post?: PostRes;
 }
 
-export type Phase = "camp" | "season" | "seasonEnd" | "off" | "retired";
+export type Phase = "camp" | "season" | "post" | "seasonEnd" | "off" | "retired";
+export type PostRes = "우승" | "준우승" | "준PO 탈락" | "진출 실패";
+/** 가을야구 진행 — 2 · 3위 준플레이오프 단판 → 1위와 한국시리즈 3판 2선승 */
+export interface Post {
+  stage: "semi" | "final";
+  /** 상대 팀 (TEAM_DEFS 번호) */
+  opp: number;
+  w: number;
+  l: number;
+  /** 가을야구에서 치른 경기 수 (상대 · 시드용) */
+  n: number;
+  rank: number;
+}
 
 export interface Pending {
   kind: "scene" | "coach" | "night" | "press";
@@ -579,6 +603,12 @@ export interface Career {
   specials: number[];
   /** 이번 시즌 그 사람과 나아간 이야기 수 */
   bcount: Partial<Record<BondId, number>>;
+  /** 이번 시즌 팀 순위표 [승, 패] — TEAM_DEFS 번호 순 (0 = 우리 팀) */
+  table?: [number, number][];
+  /** 가을야구 진행 중 */
+  post?: Post | null;
+  /** 이번 시즌 가을야구 결과 (결산에 남김) */
+  postRes?: PostRes;
   /** 이어받은 선배 (계승) */
   legacy?: { name: string; skill?: SkillId };
   /** 외형 (능력치 영향 없음) */
@@ -730,7 +760,8 @@ export const talentName = (c: Career) => (c.talentKnown ? TALENTS[c.talent].g : 
 export const trainLv = (c: Career, k: TrainKey) => Math.min(5, 1 + Math.floor(c.tCount[k] / TRAIN_LV_EVERY));
 export const spLv = (c: Career) => (c.learned ? Math.min(5, 1 + Math.floor(c.spXp / SP_EVERY)) : 0);
 /** 경기당 필살타법 횟수 */
-export const spUses = (c: Career) => (c.learned ? 2 + spLv(c) : 0);
+/** 필살타법 경기당 횟수 — 맞혀서 앞으로 보낸 기준 1번 */
+export const spUses = (c: Career) => (c.learned ? 1 : 0);
 
 export function ovrOf(c: Pick<Career, "stats" | "skills" | "learned" | "spXp"> & { blv?: Partial<Record<SkillId, number>> }) {
   const s = c.stats;
@@ -860,6 +891,7 @@ export function stepOf(c: Career): Step {
   if (c.askRetire) return "retireAsk";
   if (c.phase === "seasonEnd") return "seasonEnd";
   if (c.phase === "season" && c.slot >= 1) return "game";
+  if (c.phase === "post") return "game";
   return "turn";
 }
 
@@ -872,11 +904,123 @@ export function whenText(c: Career) {
     const g = c.week * GAMES_PER_WEEK + c.gameInWeek + 1;
     return c.slot >= 1 ? `${c.season}년차 ${g}/${GAMES}경기` : `${c.season}년차 ${c.week + 1}주차 관리`;
   }
+  if (c.phase === "post" && c.post) return `${c.season}년차 ${postName(c.post)}`;
   if (c.phase === "seasonEnd") return `${c.season}년차 시즌 결산`;
   return "은퇴";
 }
 /** 이번 시즌 몇 경기째 (0 부터) */
 export const gameNo = (c: Career) => c.week * GAMES_PER_WEEK + c.gameInWeek;
+export const postName = (p: Post) => (p.stage === "semi" ? "준플레이오프" : `한국시리즈 ${p.w + p.l + 1}차전`);
+/**
+ * 이번 경기 열쇠 → careerSetup 의 week 자리 (상대 = TEAM_DEFS[1 + key % 3] · 상대 선수 시드).
+ * 정규시즌은 경기 번호, 가을야구는 300 + 3n + (상대 − 1) 이라 상대가 정해진 팀으로 나옴.
+ */
+export const gameKey = (c: Career) => (c.phase === "post" && c.post ? 300 + c.post.n * 3 + (c.post.opp - 1) : gameNo(c));
+
+/* ─────────────── 팀 순위 · 가을야구 ─────────────── */
+
+const newTable = (): [number, number][] => TEAM_DEFS.map(() => [0, 0]);
+/** 다른 팀 시즌 전력 (시드 고정 · 서로 붙을 때 승률 ±) */
+function teamPow(c: Pick<Career, "seed" | "season">) {
+  const r = makeRng((c.seed * 131 + c.season * 7177 + 3) >>> 0);
+  return TEAM_DEFS.map((_, i) => (i === 0 ? 0 : (r() - 0.5) * 0.24));
+}
+/** 순위표 — 승률 순 (같으면 시드로) */
+export function standings(c: Pick<Career, "seed" | "season" | "table">) {
+  const t = c.table ?? newTable();
+  const pow = teamPow(c);
+  return TEAM_DEFS.map((d, i) => ({ i, name: d.name, short: d.short, color: d.color, w: t[i][0], l: t[i][1], pct: t[i][0] / Math.max(1, t[i][0] + t[i][1]) }))
+    .sort((a, b) => b.pct - a.pct || b.w - a.w || pow[b.i] - pow[a.i])
+    .map((r, k) => ({ ...r, rank: k + 1 }));
+}
+export const myRank = (c: Pick<Career, "seed" | "season" | "table">) => standings(c).find((r) => r.i === 0)!.rank;
+/** 다른 두 팀끼리 한 경기 */
+function simOthers(c: Career, opp: number, rng: Rng) {
+  const [x, y] = [1, 2, 3].filter((i) => i !== opp);
+  const pow = teamPow(c);
+  const xw = rng() < 0.5 + pow[x] - pow[y];
+  c.table![xw ? x : y][0]++;
+  c.table![xw ? y : x][1]++;
+}
+/** 가을야구 보상 (자금 · 인기도 · 신뢰) — 수상 하나 = 자금 400 · 인기 100 · 신뢰 6 기준 */
+const POST_PRIZE = {
+  in: { money: 100, fame: 30, trust: 2 },
+  semi: { money: 150, fame: 50, trust: 3 },
+  second: { money: 250, fame: 80, trust: 3 },
+  champ: { money: 500, fame: 200, trust: 6 },
+};
+function prize(c: Career, k: keyof typeof POST_PRIZE) {
+  const p = POST_PRIZE[k];
+  addMoney(c, p.money);
+  addFame(c, p.fame);
+  addTrust(c, p.trust);
+  return `자금 +${p.money}만 · 인기도 +${p.fame} · 감독 신뢰 +${p.trust}`;
+}
+/** 정규시즌 끝 → 순위대로 가을야구 or 결산 */
+function startPost(c: Career, rng: Rng, lines: string[]) {
+  const st = standings(c);
+  const me = st.find((r) => r.i === 0)!;
+  lines.push(`정규시즌 끝 — 우리 팀 ${me.rank}위 (${me.w}승 ${me.l}패)`);
+  if (me.rank > 3) {
+    c.postRes = "진출 실패";
+    c.phase = "seasonEnd";
+    lines.push("가을야구 진출 실패…");
+    return;
+  }
+  lines.push(`가을야구 진출! ${prize(c, "in")}`);
+  if (me.rank === 1) {
+    // 2 · 3위 준PO 는 결과만
+    const pow = teamPow(c);
+    const [a, b] = [st[1].i, st[2].i];
+    const aw = rng() < 0.55 + pow[a] - pow[b];
+    const opp = aw ? a : b;
+    c.post = { stage: "final", opp, w: 0, l: 0, n: 0, rank: 1 };
+    lines.push(`1위로 한국시리즈 직행! 준플레이오프에서 올라온 ${TEAM_DEFS[opp].name}와 3판 2선승`);
+  } else {
+    const opp = st[me.rank === 2 ? 2 : 1].i;
+    c.post = { stage: "semi", opp, w: 0, l: 0, n: 0, rank: me.rank };
+    lines.push(`준플레이오프 단판 — ${TEAM_DEFS[opp].name}! 이기면 한국시리즈`);
+  }
+  c.phase = "post";
+}
+/** 가을야구 한 경기 결과 */
+function postGame(c: Career, win: boolean | null, rng: Rng, lines: string[]) {
+  const p = c.post!;
+  p.n++;
+  if (win === null) {
+    lines.push("무승부 — 다시 붙는다");
+    return;
+  }
+  if (p.stage === "semi") {
+    if (!win) {
+      c.postRes = "준PO 탈락";
+      lines.push("준플레이오프 패배… 올해 가을은 여기까지.");
+      return endPost(c);
+    }
+    const top = standings(c)[0].i;
+    lines.push(`준플레이오프 승리! ${prize(c, "semi")}`, `한국시리즈 — ${TEAM_DEFS[top].name}와 3판 2선승`);
+    c.post = { stage: "final", opp: top, w: 0, l: 0, n: p.n, rank: p.rank };
+    return;
+  }
+  if (win) p.w++;
+  else p.l++;
+  lines.push(`한국시리즈 ${p.w}승 ${p.l}패`);
+  if (p.w >= 2) {
+    c.postRes = "우승";
+    lines.push(`🏆 우승!! ${prize(c, "champ")}`, "우승 보상으로 특수능력 하나를 고를 수 있다.");
+    makePick(c, rng, `${c.season}년차 우승 보상`);
+    return endPost(c);
+  }
+  if (p.l >= 2) {
+    c.postRes = "준우승";
+    lines.push(`준우승. ${prize(c, "second")}`);
+    return endPost(c);
+  }
+}
+function endPost(c: Career) {
+  c.post = null;
+  c.phase = "seasonEnd";
+}
 
 function turnRng(c: Career, salt = 0) {
   return makeRng((c.seed * 2654435761 + c.turn * 40503 + salt * 977 + 12345) >>> 0);
@@ -1073,13 +1217,13 @@ function train(c: Career, k: TrainKey, rng: Rng): TurnOut {
     lines.push(`${charById(mate).name}와 함께 훈련! 효율 ×${mateMul.toFixed(2)} · 호감 +${d}`);
   }
   const mul = (tone === "fail" ? 0.3 : tone === "great" ? 2 : 1) * COND_TRAIN[c.cond] * trainMul(c, k) * mateMul * (0.85 + rng() * 0.3);
-  for (const [sk, w] of Object.entries(t.gain) as [StatKey, number][]) grow(c, sk, BASE_GAIN * w * mul * TUNE.train);
+  for (const [sk, w] of Object.entries(t.gain) as [StatKey, number][]) grow(c, sk, BASE_GAIN * TRAIN_GAIN * w * mul * TUNE.train);
   addStamina(c, -cost);
   c.tCount[k]++;
   if (k === "special") {
     const before = spLv(c);
     c.spXp += tone === "great" ? 2 : tone === "fail" ? 0 : 1;
-    if (spLv(c) > before) lines.push(`필살타법 레벨 ${spLv(c)}! 경기당 ${spUses(c)}번`);
+    if (spLv(c) > before) lines.push(`필살타법 레벨 ${spLv(c)}!`);
   } else if (c.tCount[k] % TRAIN_LV_EVERY === 0 && c.tCount[k] / TRAIN_LV_EVERY < 5) lines.push(`${t.name} 레벨 ${trainLv(c, k)}!`);
   addTrust(c, 0.4);
   if (tone === "great") addCond(c, rng() < 0.3 ? 1 : 0);
@@ -1685,14 +1829,15 @@ export interface GameIn {
 /**
  * 경기 평가 S ~ D (성장 배율). 분포 목표 S 6 · A 20 · B 32 · C 25 · D 17% (scratchpad grade.ts 로 맞춤 — 사람 σ50ms · 능력 150~600 · 타입 4개 1920경기).
  * 예전엔 S 20%라 4타수 2안타 0타점에도 S 가 떴음 → 단타 몫 낮추고 아웃 수 · 타점 · 홈런 비중 올림, 미션 성공은 +0.5 만.
- * 배율은 평균 성장이 예전과 같게 (S 가 줄어든 만큼 다 같이 올림).
+ * 경기는 능력치를 직접 올리지 않음 — 능력치는 훈련 · 활동 · 이벤트로만. 경기 평가는 다음 활동 밑천(행동력 · 체력 · 컨디션)으로:
+ *   act = 행동력 (ACTIVE_PER_GAME 에 더함) · sta = 체력 · up / down = 컨디션 ▲ / ▼ 확률
  */
 export const GAME_GRADES = [
-  { g: "S", xp: 3.1, color: "#ff7ae0" },
-  { g: "A", xp: 2.05, color: "#ffcf4a" },
-  { g: "B", xp: 1.24, color: "#7dff9a" },
-  { g: "C", xp: 0.68, color: "#7ad7ff" },
-  { g: "D", xp: 0.31, color: "#9a9a9a" },
+  { g: "S", act: 2, sta: 3, up: 0.7, down: 0, color: "#ff7ae0" },
+  { g: "A", act: 1, sta: -2, up: 0.35, down: 0, color: "#ffcf4a" },
+  { g: "B", act: 0, sta: -5, up: 0, down: 0, color: "#7dff9a" },
+  { g: "C", act: 0, sta: -7, up: 0, down: 0, color: "#7ad7ff" },
+  { g: "D", act: -1, sta: -8, up: 0, down: 0.35, color: "#9a9a9a" },
 ] as const;
 /** 경기 평가 가중치 — 타입마다 「제 몫」을 다르게 봄 (준족은 출루 · 득점, 거포는 장타) */
 const GRADE_W: Record<BatType, { s: number; xb: number; hr: number; bb: number; r: number }> = {
@@ -1720,6 +1865,8 @@ export interface GameSummary {
   dnp: boolean;
   grade?: number;
   win?: boolean | null;
+  /** 이번 경기로 받은 행동력 */
+  act?: number;
 }
 
 /** 이번 경기에 나가나 (부상이면 못 나감) */
@@ -1733,6 +1880,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
   const lines: string[] = [];
   let title: string;
   let grade: number | undefined;
+  let act = ACTIVE_PER_GAME;
   const win = g ? g.win : rng() < 0.5;
   if (win === true) c.wins++;
   else if (win === false) c.losses++;
@@ -1744,23 +1892,22 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     addStamina(c, 8);
   } else {
     const l = g.line;
-    const L = c.line;
+    // 가을야구 기록은 정규시즌 기록(수상 · 연봉)과 따로 — 통산에만 더함
+    const L = c.phase === "post" ? c.total : c.line;
     L.g++;
     for (const k of ["pa", "ab", "h", "d2", "d3", "hr", "rbi", "bb", "k", "r"] as const) L[k] += l[k];
-    const singles = l.h - l.d2 - l.d3 - l.hr;
-    const xp: Stats = {
-      hit: singles * 7 + l.d2 * 6 + l.d3 * 5 + l.hr * 4 + l.bb * 3 + (l.ab - l.h) * 0.5 + 1.5,
-      power: l.d2 * 5 + l.hr * 11 * (1 + fx.hrXp) + 1.5,
-      run: l.d3 * 8 + l.d2 * 3 + l.r * 3.5 + l.bb * 1.5 + 4,
-    };
-    // 경기 평가 — 잘 칠수록 성장 배율이 커짐 (직접 친 실력이 크게 남게)
+    // 경기 평가 — 능력치 대신 행동력 · 체력 · 컨디션 (잘 칠수록 다음 훈련 · 활동을 더 할 수 있게)
     grade = gameGrade(l, g.missions, c.type);
-    for (const k of STAT_KEYS) grow(c, k, xp[k] * TUNE.gameXp * GAME_GRADES[grade].xp * (1 + fx.gameXp));
+    const G = GAME_GRADES[grade];
+    act = ACTIVE_PER_GAME + G.act + fx.gameAct;
     const tr = l.h * 2.5 + l.hr * 4 + l.rbi * 1 + l.bb * 1 - l.k * 1.5 - Math.max(0, l.ab - l.h - l.k) * 1.2 + g.missions * 4 - 0.5;
     addTrust(c, tr * 0.45);
-    addStamina(c, -7);
-    if (grade <= 1) addCond(c, rng() < 0.6 ? 1 : 0);
-    else if (grade === 4 && rng() < 0.35) addCond(c, -1);
+    addStamina(c, G.sta + fx.gameSta);
+    // 컨디션: S · A 가끔 ▲ · D 가끔 ▼ · 홈런 치면 장타 특능 확률로 ▲
+    let up = rng() < G.up;
+    for (let i = 0; i < l.hr && !up; i++) up = rng() < fx.hrCond;
+    if (up) addCond(c, 1);
+    else if (rng() < G.down) addCond(c, -1);
     addFame(c, l.h * 0.5 + l.hr * 3 + g.missions * 2 + (grade === 0 ? 5 : 0));
     addMoney(c, 15 + l.h * 6 + l.hr * 15 + l.rbi * 3 + Math.round(g.missionPt / 3) + (win ? 10 : 0));
     title = `[${GAME_GRADES[grade].g}] ${l.ab}타수 ${l.h}안타${l.hr ? ` ${l.hr}홈런` : ""}${l.rbi ? ` ${l.rbi}타점` : ""}${l.bb ? ` ${l.bb}볼넷` : ""} · 팀 ${win ? "승리" : win === false ? "패배" : "무승부"}`;
@@ -1787,20 +1934,33 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     }
     if (rng() < (c.stamina < 20 ? 0.04 : 0.005) * Math.max(0.2, 1 + fx.injury)) lines.push(...hurt(c, rng, false));
   }
-  pushLog(c, `${gameNo(c) + 1}경기: ${title}`);
+  pushLog(c, `${c.phase === "post" && c.post ? postName(c.post) : `${gameNo(c) + 1}경기`}: ${title}`);
   c.turn++;
   c.usedItem = false;
   tickInjury(c);
-  addActive(c, ACTIVE_PER_GAME);
+  act = Math.max(1, act);
+  addActive(c, act);
+  if (c.phase === "post") {
+    postGame(c, win, rng, lines);
+    return { title, lines, delta: diffOf(c, a), dnp: !g, grade, win, act };
+  }
+  // 순위표: 우리 경기 + 다른 두 팀끼리 한 경기
+  c.table ??= newTable();
+  const opp = 1 + (gameNo(c) % 3);
+  if (win !== null) {
+    c.table[0][win ? 0 : 1]++;
+    c.table[opp][win ? 1 : 0]++;
+  }
+  simOthers(c, opp, rng);
   c.gameInWeek++;
   if (c.gameInWeek >= GAMES_PER_WEEK) {
     c.gameInWeek = 0;
     c.week++;
     c.slot = 0;
     c.done = [];
-    if (c.week >= WEEKS) c.phase = "seasonEnd";
+    if (c.week >= WEEKS) startPost(c, rng, lines);
   }
-  return { title, lines, delta: diffOf(c, a), dnp: !g, grade, win };
+  return { title, lines, delta: diffOf(c, a), dnp: !g, grade, win, act };
 }
 
 /* ─────────────── 시즌 결산 · 은퇴 ─────────────── */
@@ -1841,7 +2001,9 @@ export interface SeasonSummary {
 /** 이번 시즌 리그 1위 기록 (시드 · 연차로 정해짐) — 타이틀 기준 */
 export function leagueBest(c: Pick<Career, "seed" | "season">) {
   const r = makeRng((c.seed * 31 + c.season * 977 + 5) >>> 0);
-  return { avg: 0.35 + r() * 0.05, hr: 11 + Math.floor(r() * 6), rbi: 34 + Math.floor(r() * 10) };
+  // 초반 연차는 상대 투수가 약해서(PITCH_LV) 기록이 잘 나오니 1위 기준도 그만큼 높게 — 1년차 +.04 · 홈런 +3 · 타점 +8
+  const e = (560 - PITCH_LV[Math.min(PITCH_LV.length - 1, Math.max(0, c.season - 1))]) / 260;
+  return { avg: 0.35 + r() * 0.05 + 0.04 * e, hr: 11 + Math.floor(r() * 6) + Math.round(3 * e), rbi: 34 + Math.floor(r() * 10) + Math.round(8 * e) };
 }
 /** 수상 레이스 — 지금까지 경기 수 기준 1위 페이스와 내 기록 */
 export function awardRace(c: Career) {
@@ -1904,7 +2066,12 @@ export function endSeason(c: Career): SeasonSummary {
     }
     lines.push("나이가 느껴진다… 발이 조금 무거워졌다.");
   }
-  const rec: SeasonRec = { season: c.season, line: { ...L }, awards, ovr: ovrOf(c), salary: c.salary };
+  const rank = myRank(c);
+  const rec: SeasonRec = { season: c.season, line: { ...L }, awards, ovr: ovrOf(c), salary: c.salary, rank, post: c.postRes };
+  lines.unshift(`팀 정규시즌 ${rank}위${c.postRes && c.postRes !== "진출 실패" ? ` · 가을야구 ${c.postRes}` : ""}`);
+  c.table = newTable();
+  c.post = null;
+  c.postRes = undefined;
   c.seasons.push(rec);
   for (const k of ["g", "pa", "ab", "h", "d2", "d3", "hr", "rbi", "bb", "k", "r"] as const) c.total[k] += L[k];
   c.line = emptyLine();
@@ -1944,6 +2111,9 @@ export function retireCard(c: Career) {
   const nick: string[] = [];
   const awards = c.seasons.flatMap((s) => s.awards);
   const cnt = (a: string) => awards.filter((x) => x === a).length;
+  const rings = c.seasons.filter((s) => s.post === "우승").length;
+  if (rings >= 3) nick.push("우승 청부사");
+  else if (rings >= 1 && !nick.length) nick.push(`우승 반지 ${rings}개`);
   if (cnt("MVP") >= 3) nick.push("리그의 지배자");
   if (cnt("홈런왕") >= 2 || t.hr >= 150) nick.push("홈런 공장");
   if (cnt("타격왕") >= 2 || (t.ab >= 600 && avg(t) >= 0.33)) nick.push("안타 제조기");

@@ -190,11 +190,11 @@ export function seasonOf(b: Batter): SeasonLine {
 }
 
 /**
- * 경기에 쓰는 타자 능력치. 육성 선수는 220 + 0.65 × 능력치 —
- * 150 → 318 · 300 → 415 · 500 → 545 · 999 → 869 (낮을 때도 어느 정도 치고, 키울수록 덜 벌어짐)
- * 육성 시뮬로 맞춤: 종합 분포 · 통산 타율 · 홈런이 이번 타격 정리 전과 비슷하게 (한계치는 그대로)
+ * 경기에 쓰는 타자 능력치. 육성 선수도 능력치 그대로 (덤 없음) — 대신 육성 상대 투수가 연차마다 세짐 (careerGame PITCH_LV).
+ * 예전: 220 + 0.65 × 능력치 (150 → 318 · 400 → 480 · 999 → 869) — 상대 투수가 처음부터 560 이라 덤을 크게 줬었는데, 400 만 돼도 컨택존이 꽉 찼음
+ * GROW 는 시뮬(baseball-career-sim GROW=...)로 덤을 다시 시험할 때만: v → base + k × v (base 0 · k 1 = 그대로)
  */
-export const GROW = { base: 220, k: 0.65 };
+export const GROW = { base: 0, k: 1 };
 export const playStat = (b: { grow?: boolean }, v: number) => (b.grow ? Math.round(GROW.base + v * GROW.k) : v);
 
 /** 필살타법을 쓸 수 있으면 그 캐릭터 (마타자 · 배운 선수) */

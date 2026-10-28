@@ -2,9 +2,9 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { BONDS, CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, hofEntry, ovrOf, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { BONDS, CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, gameKey, hofEntry, ovrOf, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
 import { logPlay } from "@/lib/baseball/telemetry";
-import { CHARS, type CharId } from "@/lib/baseball/data";
+import { CHARS, TEAM_DEFS, type CharId } from "@/lib/baseball/data";
 import { DEFAULT_LOOK } from "@/lib/baseball/look";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import { makeRng } from "@/lib/baseball/rng";
@@ -41,6 +41,7 @@ function normalize(c: Career): Career {
   c.aff ??= {};
   c.blv ??= {};
   c.battle ??= null;
+  c.table ??= TEAM_DEFS.map(() => [0, 0] as [number, number]);
   // 없어진 특수능력 (수비 세트 「골든 글러브」 등) 은 지움
   c.skills = (c.skills ?? []).filter((id) => id in SKILLS);
   // 육성 모드 코치는 뺌
@@ -78,7 +79,7 @@ export function addHof(c: Career) {
 
 /** 이번 주 경기 세팅 */
 export const setupOf = (c: Career): CareerSetup =>
-  careerSetup(c.seed, c.season, c.week * 2 + c.gameInWeek, careerBatter(c), c.trust, c.diff, spUses(c), bondCharsOf(c));
+  careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, c.diff, spUses(c), bondCharsOf(c));
 /** 인연 특별 미션을 줄 덱 캐릭터 (그 사람이 키워 주는 능력치 쪽을 요구) */
 export const bondCharsOf = (c: Career): CareerSetup["bondChars"] => c.deck.map((id) => [id, BONDS[id].stat]);
 const missionResults = (pas: MyPA[]) => pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char }));

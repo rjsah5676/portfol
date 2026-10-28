@@ -10,7 +10,7 @@ import {
   ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
   CAREER_DIFF, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
-  awardRace, costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
+  awardRace, costOf, fmtAvg, gameNo, myRank, postName, standings, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type FieldPos, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
@@ -162,7 +162,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     decideRetire(n, yes);
     if (yes) {
       addHof(n);
-      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards })) });
+      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards, rank: x.rank ?? null, post: x.post ?? null })) });
     }
     commit(n);
     sfx.cheer(0.8);
@@ -174,7 +174,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     logPlay("season", { ...careerSnap(n), line: s.line, awards: s.awards, talentReveal: s.talentReveal ?? null, retire: !!s.retire });
     if (s.retire) {
       addHof(n);
-      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards })) });
+      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards, rank: x.rank ?? null, post: x.post ?? null })) });
     }
     commit(n);
     setSeason(s);
@@ -824,7 +824,7 @@ function Hub(p: {
             <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-[#ffd23f]/40 bg-black/30">
               <div className={`${font.title} text-[30px]`}>{c.season}년차 시즌 종료!</div>
               <div className="text-[14px] text-white/65">
-                {c.line.g}경기 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점 · 팀 {c.wins}승 {c.losses}패 (통산)
+                {c.line.g}경기 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점 · 팀 {myRank(c)}위{c.postRes && c.postRes !== "진출 실패" ? ` · 가을야구 ${c.postRes}` : ""}
               </div>
               <Btn className={`${font.title} px-8 py-3 text-xl`} color="#ffd23f" onClick={p.onSeasonEnd}>
                 시즌 결산 보기
@@ -1002,7 +1002,7 @@ function SideStatus({ c }: { c: Career }) {
 }
 
 function Schedule({ c }: { c: Career }) {
-  const done = c.phase === "season" ? gameNo(c) : c.phase === "seasonEnd" || c.phase === "off" ? GAMES : 0;
+  const done = c.phase === "season" ? gameNo(c) : c.phase === "seasonEnd" || c.phase === "off" || c.phase === "post" ? GAMES : 0;
   return (
     <div className="flex items-center gap-[2px]">
       {Array.from({ length: GAMES }, (_, i) => (
@@ -1242,13 +1242,14 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
     <div className="flex flex-1 flex-col gap-2 rounded-2xl border-2 border-[#FF8A3D]/50 bg-black/35 p-3">
       <div className="flex items-center justify-between">
         <div className={`${font.title} text-[22px]`}>
-          {gameNo(c) + 1}경기 <span className="text-white/50">vs</span> <span style={{ color: opp.color }}>{opp.name}</span>
-          <span className="ml-2 text-[13px] text-white/50">(이번 주 {c.gameInWeek + 1}/2)</span>
+          {c.post ? <span className="text-[#ffd23f]">🍂 {postName(c.post)}</span> : `${gameNo(c) + 1}경기`} <span className="text-white/50">vs</span> <span style={{ color: opp.color }}>{opp.name}</span>
+          {!c.post && <span className="ml-2 text-[13px] text-white/50">(이번 주 {c.gameInWeek + 1}/2)</span>}
         </div>
         <div className="text-[13px] text-white/60">
           {st.userHome ? "홈" : "원정"} · 9이닝
         </div>
       </div>
+      <Standings c={c} />
       <div className="flex gap-2 text-[13px]">
         <div className="flex-1 rounded-xl bg-white/[0.04] px-3 py-1.5">
           <div className="text-white/55">내 자리</div>
@@ -1270,7 +1271,7 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
         </div>
       </div>
       <div className="text-[11.5px] text-white/50">
-        경기 평가 {GAME_GRADES.map((g) => `${g.g} ×${g.xp}`).join(" · ")} — 잘 칠수록 경기 경험치가 크게 늘어요 · 타순은 감독 신뢰 25 · 50 · 75에서 올라가요
+        경기 평가 {GAME_GRADES.map((g) => `${g.g} ⚡${ACTIVE_PER_GAME + g.act}`).join(" · ")} — 잘 칠수록 행동력 · 체력 · 컨디션을 더 받아요 (능력치는 훈련 · 활동으로) · 타순은 감독 신뢰 25 · 50 · 75에서 올라가요
       </div>
       {canPlay(c) ? (
         <>
@@ -1287,8 +1288,8 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
               ⚾ {MODE_NAME[mode]}로 경기 시작
             </Btn>
             <Btn className={`${font.title} py-3.5 text-[16px] leading-tight`} color="#7ad7ff" onClick={onAutoWeek}>
-              ⏩ 이번 주 남은 경기
-              <span className="block font-['Nanum_Gothic'] text-[11px] font-normal opacity-80">전부 자동</span>
+              {c.post ? "⏩ 이 경기" : "⏩ 이번 주 남은 경기"}
+              <span className="block font-['Nanum_Gothic'] text-[11px] font-normal opacity-80">{c.post ? "자동으로" : "전부 자동"}</span>
             </Btn>
           </div>
         </>
@@ -1300,6 +1301,22 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
     </div>
   );
 }
+/** 팀 순위표 한 줄 (가을야구 중이면 시리즈 상황) */
+function Standings({ c }: { c: Career }) {
+  const rows = standings(c);
+  return (
+    <div className="flex flex-wrap items-center gap-1 text-[12px] whitespace-nowrap">
+      <span className="text-white/45">{c.post ? `정규 ${c.post.rank}위` : "순위"}</span>
+      {rows.map((r) => (
+        <span key={r.i} className="rounded-md px-1.5 py-0.5 whitespace-nowrap" style={{ background: r.i === 0 ? `${r.color}33` : "rgba(255,255,255,0.05)", border: r.i === 0 ? `1px solid ${r.color}` : "1px solid transparent" }}>
+          <b style={{ color: r.color }}>{r.rank}</b> {r.short} <span className="font-mono text-white/70">{r.w}-{r.l}</span>
+        </span>
+      ))}
+      {c.post?.stage === "final" && <span className="ml-auto font-bold text-[#ffd23f]">시리즈 {c.post.w}-{c.post.l} · 2승 먼저</span>}
+      {!c.post && <span className="ml-auto text-white/40">3위까지 가을야구</span>}
+    </div>
+  );
+}
 const setupOfSafe = (c: Career) => {
   return setupOfCache(c);
 };
@@ -1307,7 +1324,7 @@ const setupOfSafe = (c: Career) => {
 let cacheKey = "";
 let cacheVal: ReturnType<typeof setupOf> | null = null;
 function setupOfCache(c: Career) {
-  const k = `${c.id}:${c.season}:${c.week}:${c.gameInWeek}:${Math.round(c.trust)}:${c.cond}`;
+  const k = `${c.id}:${c.season}:${c.phase}:${c.post?.n ?? 0}:${c.post?.opp ?? 0}:${c.week}:${c.gameInWeek}:${Math.round(c.trust)}:${c.cond}`;
   if (k !== cacheKey || !cacheVal) {
     cacheKey = k;
     cacheVal = setupOf(c);
@@ -1512,10 +1529,10 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
         {/* 오늘의 성장 */}
         <div className="flex flex-1 flex-col gap-1.5 rounded-xl border border-white/10 bg-black/25 p-2.5">
           <div className="flex items-center justify-between text-[12px] font-bold text-white/60">
-            <span>오늘의 성장</span>
+            <span>오늘의 보상</span>
             {g && (
               <span>
-                경기 평가 <b style={{ color: g.color }}>{g.g}</b> → 경험치 <b style={{ color: g.color }}>×{g.xp}</b>
+                경기 평가 <b style={{ color: g.color }}>{g.g}</b>
               </span>
             )}
           </div>
@@ -1535,7 +1552,8 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
             );
           })}
           <div className="mt-1 flex flex-wrap gap-1.5 text-[11.5px] font-bold">
-            {!r.sum.dnp && <span className="rounded-md bg-[#ffd23f22] px-2 py-0.5 text-[#ffd23f]">⚡ 행동력 +{ACTIVE_PER_GAME}</span>}
+            {<span className="rounded-md bg-[#ffd23f22] px-2 py-0.5 text-[#ffd23f]">⚡ 행동력 +{r.sum.act ?? ACTIVE_PER_GAME}</span>}
+            {d.stamina !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5" style={{ color: d.stamina > 0 ? "#7dff9a" : "#ffb37a" }}>체력 {d.stamina > 0 ? "+" : ""}{d.stamina}</span>}
             {d.money > 0 && <span className="rounded-md bg-white/10 px-2 py-0.5">자금 +{d.money}만</span>}
             {d.trust !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5" style={{ color: d.trust > 0 ? "#7ad7ff" : "#ff9a9a" }}>감독 신뢰 {d.trust > 0 ? "+" : ""}{d.trust}</span>}
             {d.fame > 0 && <span className="rounded-md bg-white/10 px-2 py-0.5 text-[#ff9ad5]">인기도 +{d.fame}</span>}
@@ -1550,7 +1568,7 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
           <div className="flex justify-between text-[11.5px] text-white/55">
             <span>시즌 진행</span>
             <span>
-              {done}/{GAMES} · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점
+              {done}/{GAMES} · 팀 {myRank(c)}위 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점
             </span>
           </div>
           <div className="mt-1 flex gap-[3px]">
@@ -1760,7 +1778,7 @@ function ShopModal({
 
 function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
   const rows = [
-    ...c.seasons.map((s) => ({ k: `${s.season}년차`, l: s.line, aw: s.awards.join(" · "), ovr: s.ovr })),
+    ...c.seasons.map((s) => ({ k: `${s.season}년차`, l: s.line, aw: [s.post === "우승" ? "🏆우승" : s.post === "준우승" ? "준우승" : "", ...s.awards].filter(Boolean).join(" · "), ovr: s.ovr })),
     ...(c.line.g ? [{ k: `${c.season}년차 (진행)`, l: c.line, aw: "", ovr: ovrOf(c) }] : []),
   ];
   return (
