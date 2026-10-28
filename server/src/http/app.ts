@@ -11,6 +11,7 @@ import { adminEconomyRouter } from "./adminEconomy";
 import { adminMembersRouter } from "./adminMembers";
 import { noticeRouters } from "./notice";
 import { loveRouters } from "./love";
+import { baseballRouters } from "./baseball";
 import { mailAdminRouter, mailRouter } from "./mail";
 import { meRouter } from "./me";
 import { pointsRouter } from "./points";
@@ -131,6 +132,9 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   app.use("/api/notice", notice.pub);
   app.use("/api/admin/notice", notice.admin);
   const love = loveRouters(deps);
+  const baseball = baseballRouters(deps);
+  app.use("/api/baseball", baseball.pub);
+  app.use("/api/admin/baseball", baseball.admin);
   app.use("/api/love", love.pub);
   app.use("/api/admin/love", love.admin);
   app.use("/api/admin/economy", adminEconomyRouter(deps));

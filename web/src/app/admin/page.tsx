@@ -13,6 +13,7 @@ import PostManager from "@/components/Admin/PostManager";
 import DataManager from "@/components/Admin/DataManager";
 import DefenseReset from "@/components/Admin/DefenseReset";
 import LoveReset from "@/components/Admin/LoveReset";
+import BaseballData from "@/components/Admin/BaseballData";
 import MailSender from "@/components/Admin/MailSender";
 import Economy from "@/components/Admin/Economy";
 import NoticeEditor from "@/components/Admin/NoticeEditor";
@@ -41,6 +42,7 @@ const SECTIONS = [
   { key: "guest", label: "방명록", desc: "방명록 메모 고치기 · 지우기" },
   { key: "rooms", label: "방", desc: "지금 열려 있는 방과 남아 있는 대국 방" },
   { key: "visitors", label: "방문자", desc: "누적 · 날짜별 방문자 수" },
+  { key: "baseball", label: "야구 플레이 데이터", desc: "픽셀 프로야구 육성 · 연습 경기 기록 보기 · 내려받기 (밸런스 분석용)" },
   { key: "retired", label: "내린 게임", desc: "메뉴에서 뺀 게임 5개 — 관리자만 들어가서 해 볼 수 있음" },
   { key: "data", label: "전체 데이터", desc: "모든 컬렉션을 문서 단위로 보기 · 고치기 · 지우기" },
 ] as const;
@@ -269,6 +271,7 @@ export default function AdminDashboard() {
         {tab === "notice" && <NoticeEditor />}
         {tab === "reports" && <Reports />}
         {tab === "retired" && <RetiredGames />}
+        {tab === "baseball" && <BaseballData />}
         {tab === "inbox" && <InquiryInbox items={inquiries} loaded={inqLoaded} />}
         {tab === "posts" && <PostManager posts={posts} loaded={postsLoaded} onChanged={loadPosts} />}
         {tab === "rankings" && (

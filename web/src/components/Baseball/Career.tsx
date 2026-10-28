@@ -26,8 +26,9 @@ import { drawRig, pose } from "@/lib/baseball/rig";
 import { batterFrame, drawBatter } from "@/lib/baseball/batterSprite";
 import { BATCOL } from "@/lib/baseball/look";
 import {
-  SPEEDS, addHof, affStart, autoGame, bondLevel, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBattle, takeReport, type GameReport, type PlayMode,
+  SPEEDS, addHof, affStart, autoGame, bondLevel, careerSnap, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBattle, takeReport, type GameReport, type PlayMode,
 } from "./careerStore";
+import { logPlay } from "@/lib/baseball/telemetry";
 import type { MatchCfg } from "./match";
 import { sfx } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
@@ -149,6 +150,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const doPick = (i: number) => {
     if (!c) return;
     const n = clone(c);
+    if (n.pick) logPlay("pick", { ...careerSnap(n), from: n.pick.from, boon: n.pick.boon ?? null, options: n.pick.options, chosen: i >= 0 ? n.pick.options[i] ?? null : null });
     const out = choosePick(n, i);
     commit(n);
     setQueue([out]);
@@ -158,7 +160,10 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     if (!c) return;
     const n = clone(c);
     decideRetire(n, yes);
-    if (yes) addHof(n);
+    if (yes) {
+      addHof(n);
+      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards })) });
+    }
     commit(n);
     sfx.cheer(0.8);
   };
@@ -166,7 +171,11 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     if (!c) return;
     const n = clone(c);
     const s = endSeason(n);
-    if (s.retire) addHof(n);
+    logPlay("season", { ...careerSnap(n), line: s.line, awards: s.awards, talentReveal: s.talentReveal ?? null, retire: !!s.retire });
+    if (s.retire) {
+      addHof(n);
+      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards })) });
+    }
     commit(n);
     setSeason(s);
     sfx.cheer(0.8);
@@ -229,7 +238,11 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
           onBack={() => setView("home")}
           hof={hof}
           onStart={(o) => {
-            commit(newCareer({ ...o, affStart: affStart() }));
+            {
+              const nc = newCareer({ ...o, affStart: affStart() });
+              logPlay("career_start", careerSnap(nc));
+              commit(nc);
+            }
             setView("hub");
             sfx.cheer(0.7);
           }}

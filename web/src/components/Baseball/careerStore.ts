@@ -2,7 +2,8 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { BONDS, CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, hofEntry, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { BONDS, CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, hofEntry, ovrOf, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { logPlay } from "@/lib/baseball/telemetry";
 import { CHARS, type CharId } from "@/lib/baseball/data";
 import { DEFAULT_LOOK } from "@/lib/baseball/look";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
@@ -130,12 +131,51 @@ export const takeReport = () => {
   return r;
 };
 
+/* ─────────────── 플레이 기록 (관리자 분석용) ─────────────── */
+/** 선수 상태 요약 (기록 한 줄에 같이 붙임) */
+export function careerSnap(c: Career) {
+  return {
+    cid: c.id,
+    season: c.season,
+    week: c.week,
+    turn: c.turn,
+    type: c.type,
+    talent: c.talent,
+    diff: c.diff,
+    ovr: ovrOf(c),
+    stats: { ...c.stats },
+    trust: Math.round(c.trust * 10) / 10,
+    cond: c.cond,
+    stamina: Math.round(c.stamina),
+    fame: Math.round(c.fame),
+    money: c.money,
+    skills: [...c.skills],
+    blv: { ...c.blv },
+    deck: [...c.deck],
+    bonds: { ...c.bonds },
+    aff: { ...c.aff },
+  };
+}
+function logGame(c: Career, g: GameIn, sum: GameSummary, mode: "direct" | "auto", pas: MyPA[]) {
+  logPlay("game", {
+    ...careerSnap(c),
+    mode,
+    line: g.line,
+    win: g.win,
+    grade: sum.grade ?? null,
+    missions: g.missions,
+    pas: pas.map((p) => ({ k: p.kind, auto: !!p.auto, m: p.mission ? (p.mission.ok ? "ok" : p.mission.partial ? "partial" : "fail") : undefined })),
+  });
+}
+
 /** 자동 진행 (또는 직접 출전을 그만둔 경기) */
 export function autoGame(c: Career, note?: string): GameReport {
   const st = setupOf(c);
   const g = playCareerGame(st, botHook(c.diff), makeRng((c.seed * 7 + c.turn * 131) >>> 0));
   c.inGame = false;
-  const sum = applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false });
+  const gin: GameIn = { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false };
+  const sum = applyGame(c, gin);
+  logGame(c, gin, sum, "auto", g.pas);
   const s = g.s;
   const r: GameReport = { sum, pas: g.pas, score: `${s.opts.away.short} ${s.score[0]} : ${s.score[1]} ${s.opts.home.short}`, auto: true, note };
   saveCareer(c);
@@ -148,6 +188,7 @@ export function finishDirect(g: GameIn, pas: MyPA[], score: string) {
   if (!c || !c.inGame) return;
   c.inGame = false;
   const sum = applyGame(c, { ...g, results: missionResults(pas) });
+  logGame(c, g, sum, "direct", pas);
   saveCareer(c);
   lastReport = { sum, pas, score, auto: false };
 }

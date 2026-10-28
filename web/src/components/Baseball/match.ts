@@ -19,6 +19,7 @@ import {
   batSide, batter as curBatter, changePitcher, cpuManage, fieldSide, maybeMission, mvp, newGame, nextHalf, pitcher as curPitcher,
   stamina01, staminaMax, userBatting, type GameState, type Mission, type PAResult,
 } from "@/lib/baseball/game";
+import { logPlay } from "@/lib/baseball/telemetry";
 import { BALL_R, PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
@@ -1212,6 +1213,7 @@ export class Match {
     if (this.cfg.bond) {
       const st = this.bondSt;
       this.ui = { ...this.makeUi(), over: { win: st.pts >= this.cfg.bond.need, score: [0, 0], mvp: "", pt: 0, bond: { pts: st.pts, need: this.cfg.bond.need } } };
+      logPlay("bond_battle", { char: this.cfg.bond.char, pts: st.pts, need: this.cfg.bond.need, pitches: this.cfg.bond.pitches, diff: this.cfg.diff });
       this.onUi(this.ui);
       return;
     }
@@ -1223,6 +1225,7 @@ export class Match {
       this.save.derbyBest = best;
       writeSave(this.save);
       this.ui = { ...this.makeUi(), over: { win: null, score: [0, 0], mvp: "", pt, derby: { dist: d.dist, hr: d.hr, best } } };
+      logPlay("derby", { dist: d.dist, hr: d.hr, outs: d.outs, diff: this.cfg.diff });
       this.onUi(this.ui);
       return;
     }
@@ -1236,6 +1239,11 @@ export class Match {
       this.onUi(this.ui);
       if (win) sfx.homerun();
       return;
+    }
+    {
+      // 연습 경기 기록 (관리자 분석용): 우리 팀 타격 합 · 상대 타격 합 · 점수
+      const sum = (side: number) => s.sides[side].bat.reduce((a, l) => ({ pa: a.pa + l.pa, ab: a.ab + l.ab, h: a.h + l.h, hr: a.hr + l.hr, bb: a.bb + l.bb, k: a.k + l.k, rbi: a.rbi + l.rbi }), { pa: 0, ab: 0, h: 0, hr: 0, bb: 0, k: 0, rbi: 0 });
+      logPlay("match", { mode: this.cfg.mode, diff: this.cfg.diff, innings: s.opts.innings, only: this.cfg.only ?? null, score: [s.score[meIdx], s.score[1 - meIdx]], win, bat: sum(meIdx), opp: sum(1 - meIdx), missions: this.missionsOk });
     }
     const pt = s.pt + (win ? 100 : win === null ? 50 : 30) + s.score[meIdx] * 5;
     this.save.pt += pt;
