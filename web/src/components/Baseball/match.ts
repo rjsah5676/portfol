@@ -136,6 +136,8 @@ export interface UiState {
   lefty: boolean;
   /** 육성: 아직 내 첫 타석 첫 공 전이라 경기 시작을 없던 걸로 할 수 있음 */
   canCancel: boolean;
+  /** 타자 · 투수 카드가 아래에 떠 있음 (타석 준비) — 그동안 아래쪽 버튼은 숨김 */
+  cards: boolean;
   kinds: { id: PitchKind; name: string }[];
   kind: number;
   aiming: boolean;
@@ -438,6 +440,7 @@ export class Match {
       spNow: ub && !!bSw && this.phase === "flight" && this.swingStart < 0 && !this.hbpHit && !this.buntArmed && (this.cfg.mode === "derby" && !this.cfg.bond ? true : us.swingLeft > 0),
       spChar: sp ? sp.id : null,
       lefty: b.bats === "L",
+      cards: !this.cardsGone && (this.phase === "ready" || this.phase === "aim"),
       canCancel: !!this.cfg.career && !this.s.over && this.paCount <= 1 && !this.myPAs.some((x) => !x.auto) && this.s.balls === 0 && this.s.strikes === 0 && ["intro", "mission", "ready"].includes(this.phase),
       kinds: p.rep.map((k) => ({ id: k, name: PITCHES[k].name })),
       kind: this.kindIdx,
@@ -488,7 +491,7 @@ export class Match {
   private careerAdvance(allAuto: boolean): MyPA[] {
     const s = this.s;
     const c = this.cfg.career!;
-    const autos = advanceToMyPA(s, c.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto);
+    const autos = advanceToMyPA(s, c.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff, allAuto) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto);
     this.myPAs.push(...autos);
     if (!s.over) {
       cpuManage(s, fieldSide(s));
@@ -1381,6 +1384,8 @@ export class Match {
     if (this.phase === "gauge" || this.phase === "windup" || this.phase === "cutin" || this.phase === "flight") this.cardsGone = true;
     const cardOn = !this.cardsGone && (this.phase === "ready" || this.phase === "aim");
     this.cardK = clamp(this.cardK + (cardOn ? dt / 0.3 : -dt / 0.25), 0, 1);
+    // 카드가 떠 있는 동안 아래쪽 버튼(필살 칩 · 터치 스윙)은 비켜 줌 → 바뀔 때 화면에 알림
+    if (cardOn !== this.ui.cards) this.pushUi();
     this.lastStrikes = this.s.strikes;
     // 컨택존 · 타자 옮기기 (투구 전만, 초당 0.65m — 끝에서 끝까지 1초 남짓)
     if (this.userBat && (this.phase === "ready" || this.phase === "windup") && (this.czVel.x || this.czVel.y)) {

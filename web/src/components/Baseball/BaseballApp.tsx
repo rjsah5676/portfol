@@ -711,7 +711,7 @@ function Play({
                 {touch && ui.spHero && ui.spChar && <SpecialBtn ui={ui} round onPress={() => m?.toggleSpecial()} />}
                 {/* 터치: 스윙은 이 버튼으로만 · 엄지가 편하게 화면 가운데 쪽 아래로 조금 */}
                 {touch && (
-                  <div style={{ transform: "translate(-34px, 56px)" }}>
+                  <div className="transition-opacity duration-200" style={{ transform: "translate(-34px, 56px)", opacity: ui.cards ? 0 : 1, pointerEvents: ui.cards ? "none" : undefined }}>
                     <RoundBtn img="/baseball/ui/swing.webp" imgDown="/baseball/ui/swing-down.webp" label="스윙" disabled={!ui.canSwing} onClick={() => m?.pressSwing()} />
                   </div>
                 )}
@@ -752,7 +752,7 @@ function Play({
 
           {/* 필살타법 (PC): 타자 반대쪽 아래 — 컷인이 나오는 쪽 */}
           {!touch && ui.userBat && ui.spHero && ui.spChar && !["field", "result", "change", "intro"].includes(ui.phase) && (
-            <div className="absolute bottom-4" style={ui.lefty ? { left: 16 } : { right: 16 }}>
+            <div className="absolute bottom-4 transition-opacity duration-200" style={{ ...(ui.lefty ? { left: 16 } : { right: 16 }), opacity: ui.cards ? 0 : 1, pointerEvents: ui.cards ? "none" : undefined }}>
               <SpecialBtn ui={ui} onPress={() => m?.toggleSpecial()} />
             </div>
           )}

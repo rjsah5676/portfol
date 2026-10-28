@@ -202,13 +202,13 @@ export function quickPA(s: GameState, rng: Rng): PAResult {
 /** 내 타석 스윙 결정 (사람 · 봇 · 시뮬) */
 export type SwingHook = (s: GameState, p: Pitch, at: { x: number; y: number }, b: Batter, rng: Rng) => SwingDecision | null;
 
-/** 봇이 대신 치기 (자동 진행) — 그 난이도 봇 타자 실력 */
+/** 봇이 대신 치기 (자동 진행) — 그 난이도 봇 타자 실력. sp = 필살타법도 쓸지 (하이라이트의 자동 타석은 안 씀 — 내 직접 타석용으로 남김) */
 export const botHook =
-  (diff: Diff): SwingHook =>
+  (diff: Diff, sp = true): SwingHook =>
   (s, p, at, b, rng) => {
     const fbDur = 17 / (curPitcher(s).velo / 3.6) / SPEED_SCALE[diff];
     const c = cpuSwing(b, p, at, s.strikes, s.balls, diff, rng, fbDur);
-    return { swing: c.swing, e: c.e, bunt: false, special: useSp(s, b, c.swing, rng) };
+    return { swing: c.swing, e: c.e, bunt: false, special: sp ? useSp(s, b, c.swing, rng) : undefined };
   };
 
 /** 사람 흉내 (밸런스 시뮬): 타이밍 표준편차 sigma 초 */
