@@ -37,8 +37,14 @@ export const slotName = (i: number) => `${i + 1}번`;
 /** 육성 상대 투수 수준 (연차별 · 제구 · 변화 평균) — 원래 팀 기본은 560. 육성 선수가 150 남짓에서 시작하니 첫해는 200 */
 export const PITCH_LV = [200, 240, 280, 320, 360, 400, 450, 500, 520, 540];
 
+/**
+ * 우리 팀 동료 덤: edge = 늘 (가을야구 진출 · 우승이 너무 운이 아니게) · mood = 팀 분위기 1 마다
+ * (팀 분위기는 내 경기 평가로 오르내림 — 내가 잘 치면 팀이 같이 살아남 · career.ts MOOD)
+ */
+export const TEAM_TUNE = { edge: 40, mood: 16, pit: 0.6 };
+
 /** 시즌마다 같은 동료 · 매주 다른 상대 (시드로 고정) */
-export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number, bondChars?: CareerSetup["bondChars"]): CareerSetup {
+export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number, bondChars?: CareerSetup["bondChars"], mood = 0): CareerSetup {
   const rTeam = makeRng((seed ^ (season * 0x9e37)) >>> 0);
   // 마선수 없음 — 캐릭터는 인연에서만
   const my = makeTeam(TEAM_DEFS[0], rTeam);
@@ -53,6 +59,18 @@ export function careerSetup(seed: number, season: number, week: number, me: Batt
     p.control = Math.max(150, p.control + d);
     p.brk = Math.max(150, p.brk + d);
     p.velo = Math.round(p.velo + (d / 260) * 6);
+  }
+  // 동료 덤 (기본 + 팀 분위기)
+  const boost = TEAM_TUNE.edge + mood * TEAM_TUNE.mood;
+  if (boost) {
+    for (const b of my.batters) {
+      b.hit = Math.max(1, Math.min(999, Math.round(b.hit + boost)));
+      b.power = Math.max(1, Math.min(999, Math.round(b.power + boost)));
+    }
+    for (const p of my.pitchers) {
+      p.control = Math.max(150, Math.round(p.control + boost * TEAM_TUNE.pit));
+      p.brk = Math.max(150, Math.round(p.brk + boost * TEAM_TUNE.pit));
+    }
   }
   // 내 수비 위치 선수를 빼고 내 자리에 넣기
   const rest = my.batters.filter((b) => b.special || b.pos !== me.pos);

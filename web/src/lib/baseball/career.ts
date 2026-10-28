@@ -605,6 +605,8 @@ export interface Career {
   bcount: Partial<Record<BondId, number>>;
   /** 이번 시즌 팀 순위표 [승, 패] — TEAM_DEFS 번호 순 (0 = 우리 팀) */
   table?: [number, number][];
+  /** 팀 분위기 (MOOD.min ~ MOOD.max) — 내 경기 평가로 오르내리고, 동료 타격 · 투구에 더해짐 (careerGame TEAM_TUNE) */
+  mood?: number;
   /** 가을야구 진행 중 */
   post?: Post | null;
   /** 이번 시즌 가을야구 결과 (결산에 남김) */
@@ -979,6 +981,18 @@ function simOthers(c: Career, opp: number, rng: Rng) {
   c.table![xw ? x : y][0]++;
   c.table![xw ? y : x][1]++;
 }
+/**
+ * 팀 분위기: 경기마다 조금 식고(keep) 내 평가만큼 더해짐 (S A B C D) · 결승타 · 끝내기 덤.
+ * 평범하게 치면 0 근처, 꾸준히 S · A 면 3 ~ 5 까지 — 동료가 그만큼 잘 쳐서 순위 · 가을야구가 내 활약을 따라감
+ */
+export const MOOD = { d: [2, 1, 0, -0.5, -1], gw: 0.5, walkoff: 1, keep: 0.85, min: -3, max: 6, hot: 3 };
+function moodAfter(c: Career, d: number, lines: string[]) {
+  const before = c.mood ?? 0;
+  c.mood = Math.round(clamp(before * MOOD.keep + d, MOOD.min, MOOD.max) * 100) / 100;
+  if (before < MOOD.hot && c.mood >= MOOD.hot) lines.push("🔥 네 활약에 팀 분위기가 달아올랐다! (동료들 타격 · 투구 ↑)");
+  else if (before >= 0 && c.mood < -1) lines.push("팀 분위기가 가라앉았다… 한 방이 필요하다.");
+}
+export const moodName = (m: number) => (m >= 4.5 ? "최고조" : m >= MOOD.hot ? "뜨거움" : m >= 1 ? "좋음" : m > -1 ? "보통" : "가라앉음");
 /** 가을야구 보상 (자금 · 인기도 · 신뢰) — 수상 하나 = 자금 400 · 인기 100 · 신뢰 6 기준 */
 const POST_PRIZE = {
   in: { money: 100, fame: 30, trust: 2 },
@@ -1930,6 +1944,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
   if (!g) {
     title = `결장 (${INJURY_NAME[c.injury?.kind ?? 0]}) · 팀 ${win ? "승리" : win === false ? "패배" : "무승부"}`;
     lines.push("벤치에서 동료들을 응원했다.");
+    moodAfter(c, 0, lines);
     addTrust(c, -0.6);
     addStamina(c, 8);
   } else {
@@ -1942,6 +1957,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     grade = gameGrade(l, g.missions, c.type, g.clutch);
     const G = GAME_GRADES[grade];
     act = ACTIVE_PER_GAME + G.act + fx.gameAct;
+    moodAfter(c, MOOD.d[grade] + (g.clutch?.walkoff ? MOOD.walkoff : g.clutch?.gw ? MOOD.gw : 0), lines);
     const tr = l.h * 2.5 + l.hr * 4 + l.rbi * 1 + l.bb * 1 - l.k * 1.5 - Math.max(0, l.ab - l.h - l.k) * 1.2 + g.missions * 4 - 0.5;
     addTrust(c, tr * 0.45);
     addStamina(c, G.sta + fx.gameSta);
@@ -2124,6 +2140,7 @@ export function endSeason(c: Career): SeasonSummary {
   c.table = newTable();
   c.post = null;
   c.postRes = undefined;
+  c.mood = 0;
   c.seasons.push(rec);
   for (const k of ["g", "pa", "ab", "h", "d2", "d3", "hr", "rbi", "bb", "k", "r"] as const) c.total[k] += L[k];
   c.line = emptyLine();

@@ -10,7 +10,7 @@ import {
   ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
   CAREER_DIFF, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
-  awardRace, costOf, fmtAvg, gameNo, myRank, postName, standings, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
+  awardRace, costOf, fmtAvg, gameNo, myRank, postName, standings, MOOD, moodName, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type FieldPos, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
@@ -1315,7 +1315,17 @@ function Standings({ c }: { c: Career }) {
       ))}
       {c.post?.stage === "final" && <span className="ml-auto font-bold text-[#ffd23f]">시리즈 {c.post.w}-{c.post.l} · 2승 먼저</span>}
       {!c.post && <span className="ml-auto text-white/40">3위까지 가을야구</span>}
+      <MoodChip m={c.mood ?? 0} />
     </div>
+  );
+}
+/** 팀 분위기 — 내 경기 평가로 오르내리고 동료 타격 · 투구에 더해짐 (잘 치면 팀이 같이 산다) */
+function MoodChip({ m }: { m: number }) {
+  const col = m >= MOOD.hot ? "#ff7a3d" : m >= 1 ? "#ffd23f" : m > -1 ? "#9aa3c2" : "#7ad7ff";
+  return (
+    <span className="rounded-md px-1.5 py-0.5 font-bold whitespace-nowrap" style={{ color: col, background: `${col}1f`, border: `1px solid ${col}66` }} title="경기 평가 S · A 면 오르고 D 면 내려가요. 분위기가 좋을수록 동료들도 잘 쳐요.">
+      {m >= MOOD.hot ? "🔥 " : ""}팀 분위기 {moodName(m)}
+    </span>
   );
 }
 const setupOfSafe = (c: Career) => {
@@ -1325,7 +1335,7 @@ const setupOfSafe = (c: Career) => {
 let cacheKey = "";
 let cacheVal: ReturnType<typeof setupOf> | null = null;
 function setupOfCache(c: Career) {
-  const k = `${c.id}:${c.season}:${c.phase}:${c.post?.n ?? 0}:${c.post?.opp ?? 0}:${c.week}:${c.gameInWeek}:${Math.round(c.trust)}:${c.cond}`;
+  const k = `${c.id}:${c.season}:${c.phase}:${c.post?.n ?? 0}:${c.post?.opp ?? 0}:${c.week}:${c.gameInWeek}:${Math.round(c.trust)}:${c.cond}:${c.mood ?? 0}`;
   if (k !== cacheKey || !cacheVal) {
     cacheKey = k;
     cacheVal = setupOf(c);

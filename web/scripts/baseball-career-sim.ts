@@ -10,11 +10,11 @@ import {
   act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, gameKey, newCareer, ovrOf, spUses, stepOf,
   BONDS, TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy, type SkillId,
 } from "../src/lib/baseball/career";
-import { PITCH_LV, botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
+import { PITCH_LV, TEAM_TUNE, botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
 import type { Diff } from "../src/lib/baseball/ai";
 import { makeRng } from "../src/lib/baseball/rng";
 import { GROW } from "../src/lib/baseball/data";
-import { TYPES as TYPE_DEF } from "../src/lib/baseball/career";
+import { MOOD, TYPES as TYPE_DEF } from "../src/lib/baseball/career";
 // 튜닝: GROW='{"base":300,"k":0.6}' · APT='{"contact":{"hit":1.3},"power":{"power":1.1}}'
 if (process.env.GROW) Object.assign(GROW, JSON.parse(process.env.GROW));
 if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.APT) as Record<string, object>)) Object.assign(TYPE_DEF[k as BatType].apt, v);
@@ -22,6 +22,8 @@ if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.
 // TAL='[[0.72,360],[0.82,420],...]' — 재능 F~SS 의 [mul, limit] 덮어쓰기
 if (process.env.TAL) (JSON.parse(process.env.TAL) as [number, number][]).forEach(([mul, limit], i) => Object.assign(TALENTS[i], { mul, limit }));
 if (process.env.TR) TUNE.train = Number(process.env.TR);
+if (process.env.TT) Object.assign(TEAM_TUNE, JSON.parse(process.env.TT));
+if (process.env.MOOD) Object.assign(MOOD, JSON.parse(process.env.MOOD));
 if (process.env.PLV) PITCH_LV.splice(0, PITCH_LV.length, ...(JSON.parse(process.env.PLV) as number[]));
 
 const N = Number(process.argv[2] ?? 200);
@@ -87,7 +89,7 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}, extra: S
       }
     } else if (st === "game") {
       if (canPlay(c)) {
-        const setup = careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, diff, spUses(c), c.deck.map((id) => [id, BONDS[id].stat]));
+        const setup = careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, diff, spUses(c), c.deck.map((id) => [id, BONDS[id].stat]), c.mood ?? 0);
         const me = humanHook(ps.sigma);
         const bot = botHook(diff);
         const g =
@@ -220,6 +222,15 @@ function main() {
   const posts = base.flatMap((r) => r.c.seasons.map((s) => s.post ?? "?"));
   const cnt = (k: string) => ((posts.filter((p) => p === k).length / Math.max(1, posts.length)) * 100).toFixed(0);
   console.log(`가을야구 (시즌 ${posts.length}): 우승 ${cnt("우승")}% · 준우승 ${cnt("준우승")}% · 준PO 탈락 ${cnt("준PO 탈락")}% · 진출 실패 ${cnt("진출 실패")}%`);
+  {
+    // 내 활약(같은 연차 안에서 타율 순 3등분)별 가을야구 — 잘 친 해일수록 우승이 잦아야
+    const thirds: string[][] = [[], [], []];
+    for (let y = 1; y <= 10; y++) {
+      const ss = base.flatMap((r) => r.c.seasons.filter((s) => s.season === y)).sort((a, b) => a.line.h / Math.max(1, a.line.ab) - b.line.h / Math.max(1, b.line.ab));
+      ss.forEach((s, i) => thirds[Math.min(2, Math.floor((i / ss.length) * 3))].push(s.post ?? "?"));
+    }
+    console.log("내 활약별", ["하위", "중간", "상위"].map((n, i) => { const a = thirds[i]; const f = (k: string) => ((a.filter((p) => p === k).length / Math.max(1, a.length)) * 100).toFixed(0); return `${n}: 우승 ${f("우승")}% 진출실패 ${f("진출 실패")}%`; }).join(" · "));
+  }
   console.log(`자금: 쓴 돈 ${(base.reduce((a, r) => a + r.spent, 0) / N).toFixed(0)} · 남은 돈 ${avgOf((c) => c.money)} · 장비 단계 합 ${avgOf((c) => Object.values(c.gear).reduce((a, b) => a + (b ?? 0), 0))}`);
 
   // 코치: 같은 선수 코치 없음 vs 전부 C (기본)

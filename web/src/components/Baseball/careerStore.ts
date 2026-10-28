@@ -79,7 +79,7 @@ export function addHof(c: Career) {
 
 /** 이번 주 경기 세팅 */
 export const setupOf = (c: Career): CareerSetup =>
-  careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, c.diff, spUses(c), bondCharsOf(c));
+  careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, c.diff, spUses(c), bondCharsOf(c), c.mood ?? 0);
 /** 인연 특별 미션을 줄 덱 캐릭터 (그 사람이 키워 주는 능력치 쪽을 요구) */
 export const bondCharsOf = (c: Career): CareerSetup["bondChars"] => c.deck.map((id) => [id, BONDS[id].stat]);
 const missionResults = (pas: MyPA[]) => pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char }));
