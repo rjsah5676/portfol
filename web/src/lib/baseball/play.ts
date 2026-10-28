@@ -40,6 +40,9 @@ export const POS_NAME = ["투수", "포수", "1루수", "2루수", "3루수", "�
  * 아래 달리기 · 송구 · 반응 · 다이빙 식은 이 값으로만 돌아감
  */
 const FIELD_DEF = 520;
+/** 낮은 라이너(타구각 범위)에 내야수 · 투수 반응 늦음 (초) */
+const LINER_LA = [2, 18];
+const LINER_REACT = 0.25;
 /** 외야수 기본 달리기 (m/s, 여기에 수비 실력 몫 +0.83) — 얕은 뜬공 · 빗맞은 라이너가 다 안타가 되지 않게 */
 const OF_SPEED = 6.4;
 /** 주자 달리기 (m/s): 주루 300 → 7.36 · 500 → 7.8 · 900 → 8.68 (주루가 2 · 3루타 · 내야안타에 잘 드러나게) */
@@ -301,7 +304,9 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
       tx: x, ty: y,
       goAt: 0.2 + (1 - d / 1000) * 0.15 + reactAdd
         // 땅볼: 투수는 투구 마무리 동작 때문에 늦고, 내야수는 첫발 · 옆걸음이라 생각보다 못 닿음
-        + (ball.la < 10 ? (i === 0 ? 0.15 : 0) : 0),
+        + (ball.la < 10 ? (i === 0 ? 0.15 : 0) : 0)
+        // 낮은 라이너: 내야수 · 투수는 공 보고 반응하기 바쁨 (정면 근처만 잡게 — 옆으로 몇 m씩 뛰어가 잡던 내야 라이너가 너무 많았음)
+        + (i !== 1 && i <= 5 && ball.la >= LINER_LA[0] && ball.la < LINER_LA[1] ? LINER_REACT : 0),
       stunUntil: 0, readyAt: 0, role: "idle", coverBase: -1,
     };
   });

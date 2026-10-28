@@ -2240,12 +2240,8 @@ export class Match {
       ctx.beginPath();
       ctx.arc(x, y, r, 0, Math.PI * 2);
       ctx.clip();
-      if (kind === "SL" || kind === "CT") {
-        ctx.fillStyle = "rgba(214,58,58,0.55)";
-        ctx.beginPath();
-        ctx.arc(x + r * 0.3, y - r * 0.25, r * 0.28, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (kind === "CB") {
+      // 슬라이더 · 커터는 예전에 빨간 점(회전축)을 찍었는데 공에 점 박힌 것 같아서 뺌 — 옅은 실밥 띠만
+      if (kind === "CB" || kind === "SL" || kind === "CT") {
         ctx.fillStyle = "rgba(225,85,90,0.2)";
         ctx.fillRect(x - r * 0.22, y - r, r * 0.44, r * 2);
       } else if (kind === "CH" || kind === "FK" || kind === "SK") {

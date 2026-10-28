@@ -97,6 +97,8 @@ export function locQuality(at: { x: number; y: number }, cz: { x: number; y: num
 }
 
 /** 타구 속도 (m/s) = base + c^1.3 × (c + 파워/1000 × pow) + 구속 몫 + 정타 덤 pf */
+/** 덮어 친 땅볼 확률 (기본 + 일찍 휘두른 정도 + 낮은 공) × (1 − 정타 몫) · 그때 타구각 */
+export const ROLL = { base: 0.22, early: 0.35, low: 0.2, pf: 0.85, la: -2, sd: 6 };
 export const EV = { base: 22, c: 16.3, pow: 4.2, pf: 4.7, laMid: 14, la0: 15, laPow: 7, laSd: 7, laCurve: 3, pfT0: 0.15, pfT1: 0.45 };
 
 /** 타이밍 창 (초) */
@@ -171,6 +173,11 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   let la = lerp(base, ideal, Math.pow(c, 1.4));
   // 빗맞으면 위아래로 크게 (팝플라이 · 땅볼)
   if (c < 0.45 && rng.chance(0.5)) la += (rng() < 0.5 ? -1 : 1) * rng.range(15, 35) * (1 - c);
+  // 덮어 친 땅볼: 일찍 휘두를수록 · 낮은 공일수록 · 덜 정타일수록 공 윗면을 때려 땅으로
+  // (타구각이 10 ~ 25° 에 몰려 5 ~ 10° 낮은 라이너가 내야수 정면으로 잡히던 게 너무 많았음 — 땅볼은 너무 적고)
+  const early = clamp(-e / W, 0, 1);
+  const low = clamp((ZONE.mid - o.at.y) / 0.3, 0, 1);
+  if (rng.chance((ROLL.base + early * ROLL.early + low * ROLL.low) * (1 - pf * ROLL.pf))) la = Math.min(la, ROLL.la + rng.gauss() * ROLL.sd);
   const pm = o.pitch.kmh / 3.6;
   let ev = EV.base + Math.pow(c, 1.3) * (EV.c + (o.power / 1000) * EV.pow) + pm * 0.08 * c;
   ev += EV.pf * pf;

@@ -17,6 +17,7 @@ const humanSigma = Number(process.argv[4] ?? 0) / 1000;
 const rng = makeRng(12345);
 const tot = { pa: 0, ab: 0, h: 0, hr: 0, bb: 0, k: 0, tb: 0, runs: 0, games: 0, pitches: 0, d2: 0, d3: 0, dp: 0, specialPitch: 0, specialHit: 0 };
 const results: Record<string, number> = {};
+const labels: Record<string, number> = {};
 
 function play(s: GameState, humanSide: number) {
   let guard = 0;
@@ -38,7 +39,7 @@ function play(s: GameState, humanSide: number) {
     tot.pitches++;
     if (useSp) tot.specialPitch++;
     if (useSp && o.call === "bip" && o.field && /HR|1B|2B|3B/.test(o.field.result)) tot.specialHit++;
-    if (o.field && !o.field.foul) results[o.field.result] = (results[o.field.result] ?? 0) + 1;
+    if (o.field && !o.field.foul) { results[o.field.result] = (results[o.field.result] ?? 0) + 1; const lb = o.field.label.replace(/^(투수|포수|1루수|2루수|3루수|유격수) (라이너|팝플라이|플라이)$/, "내야 $2").replace(/^(좌익수|중견수|우익수) (라이너|팝플라이|플라이)$/, "외야 $2").replace(/^.* 땅볼$/, "땅볼").replace(/^.* (안타|2루타|3루타)$/, "$1"); labels[lb] = (labels[lb] ?? 0) + 1; }
     const pa = commit(s, o);
     if (pa) {
       if (human || humanSide < 0) {
@@ -86,3 +87,5 @@ console.log(`홈런/타석 ${(tot.hr / tot.pa * 100).toFixed(1)}%  2루타 ${tot
 console.log(`경기당 득점 ${(tot.runs / tot.games).toFixed(2)} (${humanSigma ? "사람 팀" : "양 팀 합"})  경기당 공 ${(tot.pitches / tot.games).toFixed(0)}`);
 console.log(`마구 ${tot.specialPitch}개 중 안타 ${tot.specialHit}`);
 console.log("인플레이 결과:", results);
+const lt = Object.values(labels).reduce((a, b) => a + b, 0);
+console.log("타구 결과 (%):", Object.entries(labels).sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k, v]) => `${k} ${(v / lt * 100).toFixed(1)}`).join(" · "));
