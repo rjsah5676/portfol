@@ -47,6 +47,10 @@ const TRAIL_N = 18;
 const FIELDER = { inf: "/baseball/sprites/fielder-if-ready.webp", of: "/baseball/sprites/fielder-of-ready.webp" } as const;
 /** 타석 화면에 그리는 수비 자리 (m, HOME_POS 순서) — 실제 수비 위치처럼 조금씩 어긋나게: 1루수 베이스 쪽 · 유격수 깊게 · 3루수 얕게 · 외야 살짝 우중간 */
 const FIELDER_SPOT: [number, number][] = [[0, 18.4], [0, -1.6], [18.5, 28.5], [10.5, 40.5], [-16, 24.5], [-8, 42], [-29, 76], [2.5, 95], [33.5, 82]];
+/** 루상 주자 (공격 팀 · 타자와 같은 주황 유니폼) — 서 있는 그림 키 753px = 1.75m */
+const RUNNER = { lead: "/baseball/sprites/runner-lead.webp", hands: "/baseball/sprites/runner-hands.webp", ref: 753 } as const;
+/** 주자 리드 자리 (m): 1루 → 2루 쪽 3.5m · 2루 → 3루 쪽 4m · 3루는 파울 쪽 선 따라 홈 쪽 */
+const RUNNER_SPOT: [number, number][] = [[16.9, 21.9], [-2.9, 35.9], [-18.6, 17]];
 const FIELDER_H = [1, 1, 1.03, 0.97, 1, 0.98, 1.02, 1, 0.99];
 const FIELDER_BOOST = 1.8;
 /** 특수능력 발동 연출 길이 · 시간이 흐르는 화면 */
@@ -1290,7 +1294,8 @@ export class Match {
         break;
       case "ready":
         // 사용자 타자: 잠깐 숨 고르고 투구
-        if (this.pt > (this.cfg.mode === "derby" ? 0.8 : 1.0)) this.startWindup();
+        // 특수능력 발동 카드(왼쪽 위)가 떠 있으면 다 사라질 즈음까지 기다렸다 던짐 (투구 중에 떠 있으면 거슬림)
+        if (this.pt > (this.cfg.mode === "derby" ? 0.8 : 1.0) && !(this.boostFx && this.boostFx.t < BOOST_DUR - 0.35)) this.startWindup();
         break;
       case "aim":
       case "gauge":
@@ -1540,6 +1545,8 @@ export class Match {
       img(PITCHER_THROW.src),
       img(FIELDER.inf),
       img(FIELDER.of),
+      img(RUNNER.lead),
+      img(RUNNER.hands),
       img(UI.burst),
       img(UI.ring),
       img(UI.homerun),
@@ -2692,14 +2699,21 @@ export class Match {
    */
   private drawFielders(ctx: CanvasRenderingContext2D) {
     // 늘 준비 자세로 가만히 (서 있다 공 던질 때 확 숙이던 것) · 자리는 실제처럼 조금씩 어긋나게 (좌우 대칭 줄맞춤 위화감)
-    const order = [6, 7, 8, 3, 5, 2, 4].sort((a, b) => FIELDER_SPOT[a][1] - FIELDER_SPOT[b][1]).reverse();
-    for (const i of order) {
-      const [fx, fz] = FIELDER_SPOT[i];
-      const g = proj(fx, 0, fz);
-      const im = img(i >= 6 ? FIELDER.of : FIELDER.inf);
+    // 루상 주자(공격 팀)도 같이 — 리드 잡고 투수 쪽을 봄. 먼 쪽부터 그림
+    type Fig = { x: number; z: number; src: string; ref: number; flip: boolean; h: number };
+    const figs: Fig[] = [6, 7, 8, 3, 5, 2, 4].map((i) => ({ x: FIELDER_SPOT[i][0], z: FIELDER_SPOT[i][1], src: i >= 6 ? FIELDER.of : FIELDER.inf, ref: 528, flip: FIELDER_SPOT[i][0] < 0, h: FIELDER_H[i] }));
+    this.s.bases.forEach((r, b) => {
+      if (r === null) return;
+      const [x, z] = RUNNER_SPOT[b];
+      figs.push({ x, z, src: b === 0 ? RUNNER.lead : RUNNER.hands, ref: RUNNER.ref, flip: b === 0, h: 1 });
+    });
+    figs.sort((a, b) => b.z - a.z);
+    for (const f of figs) {
+      const g = proj(f.x, 0, f.z);
+      const im = img(f.src);
       if (!im.complete || !im.naturalWidth) continue;
-      // 서 있는 그림 키(528px) = 1.75m 로 맞춤 · 사람마다 키 조금씩
-      const k = (g.s * 1.75 * FIELDER_BOOST * FIELDER_H[i]) / 528;
+      // 서 있는 키(그림 px) = 1.75m 로 맞춤 · 사람마다 키 조금씩
+      const k = (g.s * 1.75 * FIELDER_BOOST * f.h) / f.ref;
       const w = im.naturalWidth * k;
       const h = im.naturalHeight * k;
       ctx.fillStyle = "rgba(0,0,0,0.3)";
@@ -2708,7 +2722,7 @@ export class Match {
       ctx.fill();
       ctx.save();
       ctx.translate(g.x, g.y);
-      if (fx < 0) ctx.scale(-1, 1);
+      if (f.flip) ctx.scale(-1, 1);
       ctx.drawImage(im, -w / 2, -h, w, h);
       ctx.restore();
     }
