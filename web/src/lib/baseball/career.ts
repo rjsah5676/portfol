@@ -95,7 +95,7 @@ export const TRAINS: Record<TrainKey, { name: string; desc: string; cost: number
   hit: { name: "타격 훈련", desc: "타격 ↑ (파워 조금)", cost: 18, gain: { hit: 1, power: 0.18 } },
   power: { name: "근력 훈련", desc: "파워 ↑ (타격 조금)", cost: 22, gain: { power: 1, hit: 0.15 } },
   run: { name: "주루 훈련", desc: "주루 ↑", cost: 19, gain: { run: 1 } },
-  special: { name: "필살타법 훈련", desc: "필살 레벨 ↑ (경기당 횟수 · 종합) — 배운 뒤에만", cost: 26, gain: { hit: 0.25, power: 0.25 } },
+  special: { name: "필살타법 훈련", desc: "필살 레벨 ↑ (종합 · Lv5 마스터면 경기당 2번) — 배운 뒤에만", cost: 26, gain: { hit: 0.25, power: 0.25 } },
 };
 export const TRAIN_KEYS: TrainKey[] = ["hit", "power", "run", "special"];
 /** 훈련 한 번 기본 성장 (재능 · 타입 · 컨디션 · 높을수록 덜 오름 반영 전) */
@@ -107,7 +107,7 @@ export const TRAIN_GAIN = 3.8;
 export const TUNE = { train: 1, coach: "C" as CoachGrade, noBond: false };
 /** 훈련 레벨: 같은 훈련 TRAIN_LV_EVERY 번마다 +1 (최대 5) · 레벨당 효율 +10% */
 export const TRAIN_LV_EVERY = 8;
-/** 필살타법 레벨: 필살 훈련 SP_EVERY 번마다 +1 (최대 5) — 경기당 횟수 2 + 레벨 */
+/** 필살타법 레벨: 필살 훈련 SP_EVERY 번마다 +1 (최대 5 = 마스터 → 경기당 2번) */
 export const SP_EVERY = 3;
 
 export const COND_NAME = ["최악", "나쁨", "보통", "좋음", "최고"] as const;
@@ -759,9 +759,8 @@ export const age = (c: Career) => START_AGE + c.season - 1;
 export const talentName = (c: Career) => (c.talentKnown ? TALENTS[c.talent].g : "?");
 export const trainLv = (c: Career, k: TrainKey) => Math.min(5, 1 + Math.floor(c.tCount[k] / TRAIN_LV_EVERY));
 export const spLv = (c: Career) => (c.learned ? Math.min(5, 1 + Math.floor(c.spXp / SP_EVERY)) : 0);
-/** 경기당 필살타법 횟수 */
-/** 필살타법 경기당 횟수 — 맞혀서 앞으로 보낸 기준 1번 */
-export const spUses = (c: Career) => (c.learned ? 1 : 0);
+/** 필살타법 경기당 횟수 — 맞혀서 앞으로 보낸 기준 1번 · 마스터(Lv5)면 2번 */
+export const spUses = (c: Career) => (c.learned ? (spLv(c) >= 5 ? 2 : 1) : 0);
 
 export function ovrOf(c: Pick<Career, "stats" | "skills" | "learned" | "spXp"> & { blv?: Partial<Record<SkillId, number>> }) {
   const s = c.stats;
@@ -1261,7 +1260,7 @@ function train(c: Career, k: TrainKey, rng: Rng): TurnOut {
   if (k === "special") {
     const before = spLv(c);
     c.spXp += tone === "great" ? 2 : tone === "fail" ? 0 : 1;
-    if (spLv(c) > before) lines.push(`필살타법 레벨 ${spLv(c)}!`);
+    if (spLv(c) > before) lines.push(spLv(c) >= 5 ? "필살타법 마스터! 이제 경기당 2번" : `필살타법 레벨 ${spLv(c)}!`);
   } else if (c.tCount[k] % TRAIN_LV_EVERY === 0 && c.tCount[k] / TRAIN_LV_EVERY < 5) lines.push(`${t.name} 레벨 ${trainLv(c, k)}!`);
   addTrust(c, 0.4);
   if (tone === "great") addCond(c, rng() < 0.3 ? 1 : 0);

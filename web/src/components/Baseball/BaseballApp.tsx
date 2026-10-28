@@ -434,7 +434,7 @@ function BaseballMain() {
                   <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> 또는 <b>화면 아무 데나 터치</b>.</p>
                   <p>빠르면 당겨 치고(우타 → 왼쪽), 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
                   <p>존 밖 공(볼)은 휘두르면 빗맞아요 — 참으면 볼넷.</p>
-                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 — 공이 날아올 때 스윙 대신 누르면 그 자리에서 특별한 스윙 (인연에서 배운 선수만, 경기당 1번 · 앞으로 보내야 씀)</p>
+                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 — 공이 날아올 때 스윙 대신 누르면 그 자리에서 특별한 스윙 (인연에서 배운 선수만, 경기당 1번 · 마스터하면 2번 · 앞으로 보내야 씀)</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#7ad7ff]`}>투구</div>

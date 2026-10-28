@@ -876,7 +876,7 @@ export class Match {
       if (!sw) return;
       const counted = this.cfg.mode !== "derby" || !!this.cfg.bond;
       if (counted && us.swingLeft <= 0) {
-        if (this.phase === "flight" || this.phase === "ready") this.popup(DW / 2, 200, "필살타법은 경기당 1번!", "#ff9ad5");
+        if (this.phase === "flight" || this.phase === "ready") this.popup(DW / 2, 200, "필살타법을 다 썼어요!", "#ff9ad5");
         return;
       }
       if (this.phase !== "flight") {
@@ -1233,6 +1233,7 @@ export class Match {
         const ln = this.s.sides[batSide(this.s)].bat[this.cfg.career.myIdx];
         this.myPAs.push({ inning: this.s.inning, text: res.text, kind: res.kind, rbi: ln.rbi - this.rbiBefore, mission: res.mission ? { ok: res.mission.ok, pt: 0, partial: res.mission.partial, char: res.mission.char } : undefined });
       }
+      if (res.missionVoid) this.popup(DW / 2, 150, "미션은 없던 걸로 (칠 공이 없었음)", "#bcd3ff");
       if (res.mission) {
         if (res.mission.ok) this.missionsOk++;
         const r = res.mission.ok ? "ok" : res.mission.partial ? "partial" : "fail";

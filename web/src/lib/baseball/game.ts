@@ -197,6 +197,8 @@ export interface PAResult {
   /** 이 타석으로 이닝 · 경기가 끝났나 */
   halfOver: boolean;
   gameOver: boolean;
+  /** 볼넷 · 몸에 맞는 공이라 미션이 없던 걸로 됨 */
+  missionVoid?: boolean;
   mission?: { ok: boolean; text: string; /** 빡센 미션(홈런 · 장타)에서 안타는 쳤음 — 코인 조금 · 실패 패널티 없음 */ partial?: boolean; char?: CharId };
 }
 
@@ -336,7 +338,11 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
         else if (s.outs >= 3) done = true;
         break;
     }
-    if (done !== null) {
+    // 볼넷 · 몸에 맞는 공은 칠 기회가 없었던 거라 미션 무효 (실패 · 패널티 없음) — 밀어내기로 점수 났으면 위에서 성공
+    if (r.kind === "BB" && !done && m.kind !== "zero" && m.kind !== "k") {
+      s.mission = null;
+      res.missionVoid = true;
+    } else if (done !== null) {
       s.mission = null;
       // 홈런 · 장타 미션은 빡세니까 안타라도 치면 살짝 보상 (코인 1/4 · 실패 패널티 없음)
       const partial = !done && (m.kind === "hr" || m.kind === "xbh") && (r.kind === "HIT" || r.kind === "HR");

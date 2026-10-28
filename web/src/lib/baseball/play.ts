@@ -914,7 +914,9 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   } else {
     result = batterBase >= 3 ? "3B" : batterBase === 2 ? "2B" : "1B";
     const nm = result === "3B" ? "3루타" : result === "2B" ? "2루타" : "안타";
-    const spot = Math.hypot(pts[Math.max(0, firstLandIdx)].x, pts[Math.max(0, firstLandIdx)].y) < 30 && result === "1B" ? "내야" : dirName(ball.spray);
+    // 내야안타 = 내야수가 잡았는데 못 잡아낸 것 (땅볼이 내야에 처음 튀어도 외야까지 빠져서 외야수가 잡았으면 그냥 안타)
+    const by = fielder >= 0 ? fielder : chaser;
+    const spot = result === "1B" && by >= 0 && by < 6 && Math.hypot(pts[Math.max(0, firstLandIdx)].x, pts[Math.max(0, firstLandIdx)].y) < 30 ? "내야" : dirName(ball.spray);
     label = `${spot} ${nm}`;
   }
   const rbi = result === "DP" ? 0 : runs;
