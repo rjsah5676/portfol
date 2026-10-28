@@ -35,10 +35,12 @@ export interface Outcome {
  * 몸에 맞는 공: 몸쪽으로 크게 빠져 타자 몸이 있는 자리를 지나는 공 (안 휘둘렀을 때).
  * 타자 몸 안쪽 끝 = 플레이트 가운데에서 0.52m (타석 안쪽 선 0.15m + 몸 앞). 타자가 플레이트 쪽으로 붙으면(shift +) 그만큼 가까워짐.
  */
+/** 타자 몸 안쪽 끝 (플레이트 가운데에서 m) — 타석 화면 타자 그림의 다리 · 배 끝과 맞춤 (0.47 로 줄이면 사구가 타석당 1.6 → 3.3% 라 판정은 그대로, 그림 쪽을 맞춤) */
+export const HBP_EDGE = 0.52;
 export function hitByPitch(at: { x: number; y: number }, bats: "R" | "L", shift = 0) {
   const inside = bats === "R" ? -at.x : at.x;
   // 컨택존을 바깥쪽 끝까지 옮겨도 몸은 조금만 붙음 (0.52 → 최소 0.46m) — 몸쪽 유인구가 줄줄이 사구가 되지 않게
-  const edge = Math.max(0.46, 0.52 - shift * 0.3);
+  const edge = Math.max(HBP_EDGE - 0.06, HBP_EDGE - shift * 0.3);
   return inside > edge && at.y > 0.15 && at.y < 1.75;
 }
 /** 컨택존을 옮긴 거리 중 플레이트 쪽 성분 (+ 붙음) — 몸 판정엔 30%만 반영 (hitByPitch) */

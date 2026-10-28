@@ -1682,27 +1682,35 @@ export interface GameIn {
   /** 직접 쳤나 (자동이면 false) */
   direct: boolean;
 }
-/** 경기 평가 S ~ D (성장 배율) */
+/**
+ * 경기 평가 S ~ D (성장 배율). 분포 목표 S 6 · A 20 · B 32 · C 25 · D 17% (scratchpad grade.ts 로 맞춤 — 사람 σ50ms · 능력 150~600 · 타입 4개 1920경기).
+ * 예전엔 S 20%라 4타수 2안타 0타점에도 S 가 떴음 → 단타 몫 낮추고 아웃 수 · 타점 · 홈런 비중 올림, 미션 성공은 +0.5 만.
+ * 배율은 평균 성장이 예전과 같게 (S 가 줄어든 만큼 다 같이 올림).
+ */
 export const GAME_GRADES = [
-  { g: "S", xp: 2.5, color: "#ff7ae0" },
-  { g: "A", xp: 1.65, color: "#ffcf4a" },
-  { g: "B", xp: 1.0, color: "#7dff9a" },
-  { g: "C", xp: 0.55, color: "#7ad7ff" },
-  { g: "D", xp: 0.25, color: "#9a9a9a" },
+  { g: "S", xp: 3.1, color: "#ff7ae0" },
+  { g: "A", xp: 2.05, color: "#ffcf4a" },
+  { g: "B", xp: 1.24, color: "#7dff9a" },
+  { g: "C", xp: 0.68, color: "#7ad7ff" },
+  { g: "D", xp: 0.31, color: "#9a9a9a" },
 ] as const;
 /** 경기 평가 가중치 — 타입마다 「제 몫」을 다르게 봄 (준족은 출루 · 득점, 거포는 장타) */
-const GRADE_W: Record<BatType, { s: number; xb: number; hr: number; bb: number; r: number; base: number }> = {
-  contact: { s: 1.55, xb: 1.8, hr: 2.3, bb: 1.0, r: 0.55, base: 0.35 },
-  power: { s: 0.85, xb: 1.5, hr: 2.2, bb: 0.6, r: 0.4, base: 0 },
-  speed: { s: 1.3, xb: 1.9, hr: 2.4, bb: 0.9, r: 0.9, base: 0.2 },
-  defense: { s: 1.15, xb: 1.7, hr: 2.4, bb: 0.7, r: 0.6, base: 0.4 },
-  all: { s: 1.05, xb: 1.6, hr: 2.4, bb: 0.6, r: 0.5, base: 0.2 },
+const GRADE_W: Record<BatType, { s: number; xb: number; hr: number; bb: number; r: number }> = {
+  contact: { s: 1.3, xb: 1.9, hr: 3.0, bb: 0.8, r: 0.5 },
+  power: { s: 0.8, xb: 1.8, hr: 3.2, bb: 0.6, r: 0.4 },
+  speed: { s: 1.15, xb: 1.9, hr: 3.0, bb: 0.8, r: 0.8 },
+  defense: { s: 1.0, xb: 1.8, hr: 3.0, bb: 0.7, r: 0.55 },
+  all: { s: 1.0, xb: 1.8, hr: 3.0, bb: 0.65, r: 0.5 },
 };
+/** S · A · B · C 문턱 (그 아래는 D) */
+const GRADE_CUT = [6.4, 3.1, 0.95, -0.4];
 export function gameGrade(l: BatLine, missions: number, type: BatType = "all") {
   const w = GRADE_W[type];
   const singles = l.h - l.d2 - l.d3 - l.hr;
-  const sc = w.base + singles * w.s + (l.d2 + l.d3 * 1.3) * w.xb + l.hr * w.hr + l.bb * w.bb + l.rbi * 0.4 + l.r * w.r + missions - l.k * 0.3;
-  return sc >= 4.5 ? 0 : sc >= 3 ? 1 : sc >= 1.8 ? 2 : sc >= 0.9 ? 3 : 4;
+  const sc =
+    singles * w.s + (l.d2 + l.d3 * 1.3) * w.xb + l.hr * w.hr + l.bb * w.bb + l.rbi * 0.8 + l.r * w.r + missions * 0.5 - l.k * 0.25 - (l.ab - l.h) * 0.3;
+  const i = GRADE_CUT.findIndex((c) => sc >= c);
+  return i < 0 ? 4 : i;
 }
 
 export interface GameSummary {

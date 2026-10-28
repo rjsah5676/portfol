@@ -17,9 +17,9 @@ import {
 } from "@/lib/baseball/figures";
 import {
   batSide, batter as curBatter, changePitcher, cpuManage, fieldSide, maybeMission, mvp, newGame, nextHalf, pitcher as curPitcher,
-  stamina01, staminaMax, userBatting, type GameState, type PAResult,
+  stamina01, staminaMax, userBatting, type GameState, type Mission, type PAResult,
 } from "@/lib/baseball/game";
-import { PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
+import { BALL_R, PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
@@ -207,6 +207,14 @@ function colorsFor(team: { color: string; dark: string }, seed: number, num: num
   };
 }
 
+/** 돌발 미션 주는 팀 사람들 초상 */
+const NPC_FACE: Record<string, string> = {
+  감독: "/baseball/ui/npc-manager.webp",
+  주장: "/baseball/ui/npc-captain.webp",
+  선배: "/baseball/ui/npc-senior.webp",
+  안경: "/baseball/ui/npc-glasses.webp",
+  후배: "/baseball/ui/npc-junior.webp",
+};
 const NPC_COLOR: Record<string, string> = { 감독: "#ffcf4a", 주장: "#7ad7ff", 선배: "#ff7a7a", 안경: "#b6ffb0", 후배: "#ffb0e6" };
 
 export class Match {
@@ -777,6 +785,8 @@ export class Match {
   cpuCz: { x: number; y: number } | undefined;
   /** 몸에 맞는 공 — 공이 타자 몸에 닿은 뒤 (공 그리기 멈춤) */
   hbpHit = false;
+  /** 몸에 맞고 튕겨 나가는 공 (화면 좌표) */
+  hbpBall: { x: number; y: number; vx: number; vy: number; t: number; r: number } | null = null;
 
   /** 타자 · 컨택존 옮기기 입력 (BaseballApp: 방향키 · WASD · 화면 패드) */
   setBatMove(x: number, y: number) {
@@ -970,7 +980,8 @@ export class Match {
     const inward = lefty ? this.cz.x < 0 : this.cz.x > 0;
     const ox = this.userBat ? this.cz.x * S0 * (inward ? 0.35 : 1) : 0;
     const oy = this.userBat ? -dy * S0 * (dy > 0 ? 0.2 : 1) : 0;
-    return { x: (lefty ? 702 : 322) + ox, y: 394 + oy, sc: 2.25, lefty };
+    // 플레이트에서 0.14m(42px) 더 떨어뜨림 — 몸쪽 공이 그림상 허벅지에 닿는 자리가 몸 맞는 공 판정 끝(0.52m)과 맞게
+    return { x: (lefty ? 744 : 280) + ox, y: 394 + oy, sc: 2.25, lefty };
   }
 
   /** 타석 화면 타구가 홈 뒤(카메라 쪽)로 오는지 — 파울팁 · 뒤로 뜬 파울 */
@@ -1170,8 +1181,17 @@ export class Match {
       }
       if (res.mission) {
         if (res.mission.ok) this.missionsOk++;
-        this.popup(DW / 2, 150, res.mission.text, res.mission.ok ? "#ffd23f" : res.mission.partial ? "#ffcf9a" : "#ff9a7a");
+        const r = res.mission.ok ? "ok" : res.mission.partial ? "partial" : "fail";
+        if (this.lastMission) this.missionFx = { m: this.lastMission, r, t: 0 };
+        else this.popup(DW / 2, 150, res.mission.text, res.mission.ok ? "#ffd23f" : res.mission.partial ? "#ffcf9a" : "#ff9a7a");
         (res.mission.ok || res.mission.partial ? sfx.missionOk : sfx.missionNg)();
+        // 성공: 금색 꽃가루
+        if (res.mission.ok && !this.reduceMotion)
+          for (let i = 0; i < 26; i++) {
+            const a = -Math.PI / 2 + (this.rng() - 0.5) * 2.6;
+            const v = 180 + this.rng() * 260;
+            this.particles.push({ x: 512, y: 300, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0.6 + this.rng() * 0.5, c: this.rng() < 0.5 ? "#ffd23f" : this.lastMission?.char ? charById(this.lastMission.char).color : "#ffffff" });
+          }
       }
       this.setPhase("result");
     } else {
@@ -1276,6 +1296,9 @@ export class Match {
     if (this.impact && (this.impact.t += dt) > 0.22) this.impact = null;
     this.timingT += dt;
     for (const f of this.fxs) f.t += dt;
+    if (this.hbpBall && (this.hbpBall.t += dt) > 0.7) this.hbpBall = null;
+    if (this.s.mission) this.lastMission = this.s.mission;
+    if (this.missionFx && (this.missionFx.t += dt) > 2.5) this.missionFx = null;
     this.fxs = this.fxs.filter((f) => f.t < f.dur);
     // 특수능력 발동: 타석 화면에서만 시간이 흐름 (미션 안내 · 인트로 동안은 기다림)
     if (this.boostFx && BOOST_PHASES.includes(this.phase)) {
@@ -1286,7 +1309,7 @@ export class Match {
     // 카드: 타석 준비 화면에서만 · 첫 와인드업 0.5초 전(던지는 쪽이면 게이지 시작)부터 빠지고 그 타석 동안은 안 나옴
     if (this.phase === "ready" && this.paFirst && this.pt > this.readyWait() - 0.5) this.cardsGone = true;
     if (this.phase === "gauge" || this.phase === "windup" || this.phase === "cutin" || this.phase === "flight") this.cardsGone = true;
-    const cardOn = !this.cardsGone && (this.phase === "ready" || this.phase === "aim" || this.phase === "mission");
+    const cardOn = !this.cardsGone && (this.phase === "ready" || this.phase === "aim");
     this.cardK = clamp(this.cardK + (cardOn ? dt / 0.3 : -dt / 0.25), 0, 1);
     this.lastStrikes = this.s.strikes;
     // 컨택존 · 타자 옮기기 (투구 전만, 초당 0.65m — 끝에서 끝까지 1초 남짓)
@@ -1419,6 +1442,12 @@ export class Match {
           const bats = this.shownBatter.bats;
           if (hitByPitch(plateCross(p), bats, batterShift(bats, this.czNow()))) {
             this.hbpHit = true;
+            {
+              const v = pitchAt(p, this.tf);
+              const q = ballProj(v.x, v.y, v.z);
+              const out = bats === "L" ? 1 : -1;
+              this.hbpBall = { x: q.x, y: q.y, vx: -out * (160 + this.rng() * 80), vy: -260, t: 0, r: Math.max(5, BALL_R * q.s) };
+            }
             sfx.mitt(true);
             sfx.groan();
             if (!this.reduceMotion) this.shake = Math.max(this.shake, 0.18);
@@ -1628,6 +1657,7 @@ export class Match {
       ctx.globalAlpha = 1;
     }
     if (this.phase === "mission" && this.s.mission) this.drawMission(ctx);
+    this.drawMissionFx(ctx);
   }
 
   private lastWasField() {
@@ -1787,8 +1817,9 @@ export class Match {
     }
 
     // 공
-    const ballBefore = p && this.phase === "flight";
-    if (ballBefore && p) this.drawPitchBall(ctx, p, hand);
+    // 홈 근처(마지막 8%)부터는 타자 앞에 그림 — 타자 옆을 지나는 몸쪽 공이 그림상 몸 뒤로 숨어 「맞았는데 볼」처럼 보였음
+    const ballNear = !!p && this.phase === "flight" && this.tf >= p.dur * 0.92;
+    if (p && this.phase === "flight" && !ballNear) this.drawPitchBall(ctx, p, hand);
     if (this.phase === "windup" && this.pitAnimT > 0.2 && !img(PITCHER_THROW.src).naturalWidth) {
       // 손에 든 공 (코드 리그일 때만 — 투구 줄 그림엔 공이 그려져 있음)
       const ps = pose(PITCHER_RIG, this.pitAnim, (this.pitAnimT * PIT_RIG_RELEASE_T) / PITCH_RELEASE_T);
@@ -1840,6 +1871,17 @@ export class Match {
     }
     // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
     if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT, this.swingSp), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
+    if (ballNear && p) this.drawPitchBall(ctx, p, hand);
+    // 몸에 맞은 공: 맞은 자리에서 튕겨 나가 떨어짐
+    if (this.hbpBall) {
+      const b = this.hbpBall;
+      const t = b.t;
+      const x = b.x + b.vx * t;
+      const y = b.y + b.vy * t + 900 * t * t;
+      ctx.globalAlpha = 1 - smooth(0.45, 0.7, t);
+      this.drawBall(ctx, x, y, b.r);
+      ctx.globalAlpha = 1;
+    }
 
     // 임팩트: 링 + 빛살 (히트스톱 동안은 멈춘 채 크게)
     if (this.impact) {
@@ -2566,50 +2608,253 @@ export class Match {
     ctx.globalAlpha = 1;
   }
 
-  private drawMission(ctx: CanvasRenderingContext2D) {
-    const m = this.s.mission!;
-    const a = smooth(0, 0.2, this.pt);
-    ctx.globalAlpha = a;
-    const x = 252;
-    const y = 360;
-    ctx.fillStyle = "rgba(10,12,22,0.92)";
-    const mc = m.char ? charById(m.char).color : NPC_COLOR[m.who] ?? "#fff";
-    ctx.strokeStyle = mc;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.roundRect(x, y, 520, 104, 14);
-    ctx.fill();
-    ctx.stroke();
-    // 말하는 사람 (인연 캐릭터면 얼굴 그림 · 아니면 간단 얼굴)
-    const fim = m.char ? img(faceUrl(m.char)) : null;
-    if (fim && fim.complete && fim.naturalWidth) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.roundRect(x + 14, y + 14, 76, 76, 12);
-      ctx.clip();
-      ctx.drawImage(fim, x + 14, y + 14, 76, 76 * (fim.naturalHeight / fim.naturalWidth));
-      ctx.restore();
+  /** 미션 주는 사람 얼굴 (인연 캐릭터 얼굴 · 팀 사람들 초상) */
+  private missionFace(m: Mission) {
+    return m.char ? faceUrl(m.char) : NPC_FACE[m.who] ?? null;
+  }
+  private missionColor(m: Mission) {
+    return m.char ? charById(m.char).color : NPC_COLOR[m.who] ?? "#ffcf4a";
+  }
+  /** 미션 결과로 실제로 바뀌는 것 (육성 · 연습 경기마다 다름) */
+  private missionRewards(m: Mission, r: "ok" | "partial" | "fail"): { t: string; good: boolean }[] {
+    const out: { t: string; good: boolean }[] = [];
+    const bond = m.char ? charById(m.char).name : null;
+    const career = !!this.cfg.career;
+    if (r === "ok") {
+      out.push(career ? { t: `자금 +${Math.round(m.pt / 3)}만`, good: true } : { t: `+${m.pt} 코인`, good: true });
+      out.push({ t: this.userBat ? "필살타법 +1" : "마구 +1", good: true });
+      if (career) out.push({ t: "감독 신뢰 ↑", good: true }, { t: "인기도 +2", good: true }, { t: "경기 평가 ↑", good: true });
+      if (bond && career) out.push({ t: `${bond} 호감 +6`, good: true });
+    } else if (r === "partial") {
+      const pp = Math.round(m.pt / 4);
+      out.push(career ? { t: `자금 +${Math.round(pp / 3)}만`, good: true } : { t: `+${pp} 코인`, good: true });
+      if (bond && career) out.push({ t: `${bond} 호감 +2`, good: true });
+      if (career) out.push({ t: "패널티 없음", good: true });
     } else {
-      ctx.fillStyle = mc;
+      if (career) out.push({ t: "감독 신뢰 ↓", good: false });
+      if (bond && career) out.push({ t: `${bond} 호감 −3`, good: false });
+      if (!out.length) out.push({ t: "보상 없음", good: false });
+    }
+    return out;
+  }
+  /** 보상 칩 한 줄 (x 부터 오른쪽으로) — 그린 폭 */
+  private rewardChips(ctx: CanvasRenderingContext2D, x: number, y: number, list: { t: string; good: boolean }[], k = 1, small = false) {
+    ctx.font = `800 ${small ? 11 : 12.5}px "Nanum Gothic", sans-serif`;
+    let cx = x;
+    list.forEach((c, i) => {
+      const a = clamp(k * list.length - i, 0, 1);
+      if (a <= 0) return;
+      const w = ctx.measureText(c.t).width + 14;
+      const h = small ? 18 : 22;
+      ctx.save();
+      ctx.globalAlpha *= a;
+      ctx.translate(0, (1 - a) * 8);
+      ctx.fillStyle = c.good ? "rgba(255,210,63,0.16)" : "rgba(255,90,90,0.16)";
+      ctx.strokeStyle = c.good ? "rgba(255,210,63,0.7)" : "rgba(255,110,110,0.7)";
+      ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.roundRect(x + 14, y + 14, 76, 76, 12);
+      ctx.roundRect(cx, y, w, h, 6);
       ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = c.good ? "#ffe9a8" : "#ffb0b0";
+      ctx.textAlign = "left";
+      ctx.fillText(c.t, cx + 7, y + h / 2 + 4.5);
+      ctx.restore();
+      cx += w + 6;
+    });
+    return cx - x;
+  }
+  /** 얼굴 (둥근 네모 · 테두리) */
+  private missionPortrait(ctx: CanvasRenderingContext2D, m: Mission, x: number, y: number, s: number, gray = false) {
+    const col = this.missionColor(m);
+    const src = this.missionFace(m);
+    const im = src ? img(src) : null;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, s, s, 14);
+    ctx.fillStyle = "#141a33";
+    ctx.fill();
+    ctx.clip();
+    if (im && im.complete && im.naturalWidth) {
+      if (gray) ctx.filter = "grayscale(1) brightness(0.8)";
+      const h = s * (im.naturalHeight / im.naturalWidth);
+      ctx.drawImage(im, x, y, s, h);
+      ctx.filter = "none";
+    } else {
+      ctx.fillStyle = col;
+      ctx.fillRect(x, y, s, s);
       ctx.fillStyle = "#1a1a24";
-      ctx.font = '26px "Black Han Sans", sans-serif';
+      ctx.font = '30px "Black Han Sans", sans-serif';
       ctx.textAlign = "center";
-      ctx.fillText(m.who, x + 52, y + 61);
+      ctx.fillText(m.who, x + s / 2, y + s / 2 + 11);
       ctx.textAlign = "left";
     }
-    ctx.fillStyle = m.char ? mc : "#ffcf4a";
-    ctx.font = '800 13px "Nanum Gothic", sans-serif';
-    ctx.fillText(m.char ? `${m.who}의 특별 미션!  성공 +${m.pt} 코인 · 호감 ↑ (실패하면 호감 ↓)` : `돌발 미션!  성공 +${m.pt} 코인 · 마구/필살 +1 (실패하면 감독 신뢰 ↓)`, x + 106, y + 32);
+    ctx.restore();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = gray ? "#666" : col;
+    ctx.beginPath();
+    ctx.roundRect(x, y, s, s, 14);
+    ctx.stroke();
+  }
+
+  /**
+   * 미션 등장 카드 (타석 시작) — 돌발 미션 · 인연 미션 같은 틀, 인연은 그 사람 색으로 빛나게.
+   * 「MISSION!」 리본이 들어오고 카드가 튀어 오름 · 성공하면 / 실패하면 바뀌는 것 칩으로
+   */
+  private drawMission(ctx: CanvasRenderingContext2D) {
+    const m = this.s.mission!;
+    const t = this.pt;
+    const col = this.missionColor(m);
+    const bond = !!m.char;
+    const W = 600, H = 168;
+    const x = 512 - W / 2, y = 318;
+    const pop = t < 0.18 ? 0.7 + (t / 0.18) * 0.38 : t < 0.3 ? 1.08 - ((t - 0.18) / 0.12) * 0.08 : 1;
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, t / 0.12);
+    // 화면 살짝 어둡게
+    ctx.fillStyle = "rgba(4,6,16,0.35)";
+    ctx.fillRect(0, 0, DW, DH);
+    ctx.translate(512, y + H / 2);
+    ctx.scale(pop, pop);
+    ctx.translate(-512, -(y + H / 2));
+    // 판: 인연은 그 사람 색 빛 · 돌발은 남색
+    if (bond) {
+      ctx.save();
+      ctx.shadowColor = col;
+      ctx.shadowBlur = 26 + Math.sin(t * 6) * 8;
+      ctx.fillStyle = "rgba(0,0,0,0.01)";
+      ctx.beginPath();
+      ctx.roundRect(x, y, W, H, 18);
+      ctx.fill();
+      ctx.restore();
+    }
+    const g = ctx.createLinearGradient(x, y, x + W, y + H);
+    g.addColorStop(0, bond ? `${col}55` : "rgba(40,52,96,0.96)");
+    g.addColorStop(0.45, "rgba(14,18,38,0.96)");
+    g.addColorStop(1, "rgba(8,10,24,0.96)");
+    ctx.fillStyle = g;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = bond ? 4 : 3;
+    ctx.beginPath();
+    ctx.roundRect(x, y, W, H, 18);
+    ctx.fill();
+    ctx.stroke();
+    // 리본 (왼쪽 위에서 미끄러져 들어옴)
+    {
+      const rk = 1 - Math.pow(1 - Math.min(1, t / 0.28), 3);
+      const label = bond ? `♥ ${m.who}의 부탁` : `${m.who}의 돌발 미션`;
+      ctx.font = '20px "Black Han Sans", sans-serif';
+      const lw = ctx.measureText(label).width + 30;
+      const rx = x + 14 - (1 - rk) * 220;
+      const ry = y - 16;
+      ctx.globalAlpha *= rk;
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(rx, ry);
+      ctx.lineTo(rx + lw + 12, ry);
+      ctx.lineTo(rx + lw, ry + 30);
+      ctx.lineTo(rx - 12, ry + 30);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = "#14102a";
+      ctx.fillText(label, rx + 12, ry + 23);
+      ctx.globalAlpha = Math.min(1, t / 0.12);
+    }
+    // 「MISSION!」 큰 글씨 (오른쪽 위)
+    ctx.save();
+    ctx.translate(x + W - 20, y - 2);
+    ctx.rotate(-0.08);
+    ctx.font = '30px "Black Han Sans", sans-serif';
+    ctx.textAlign = "right";
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(0,0,0,0.85)";
+    ctx.strokeText("MISSION!", 0, 0);
+    const mg = ctx.createLinearGradient(0, -26, 0, 0);
+    mg.addColorStop(0, "#fff6c2");
+    mg.addColorStop(1, bond ? col : "#ffb625");
+    ctx.fillStyle = mg;
+    ctx.fillText("MISSION!", 0, 0);
+    ctx.restore();
+    // 얼굴
+    this.missionPortrait(ctx, m, x + 18, y + 26, 118);
+    // 미션 내용
+    const tx = x + 152;
     ctx.fillStyle = "#fff";
-    ctx.font = '22px "Jua", "Nanum Gothic", sans-serif';
-    ctx.fillText(`"${m.text}"`, x + 106, y + 66);
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
-    ctx.font = '12px "Nanum Gothic", sans-serif';
-    ctx.fillText("누르면 바로 시작", x + 106, y + 90);
-    ctx.globalAlpha = 1;
+    ctx.font = '25px "Jua", "Nanum Gothic", sans-serif';
+    ctx.textAlign = "left";
+    ctx.fillText(`"${m.text}"`, tx, y + 58);
+    // 보상
+    ctx.font = '800 12px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "#ffd23f";
+    ctx.fillText("성공하면", tx, y + 92);
+    this.rewardChips(ctx, tx + 58, y + 77, this.missionRewards(m, "ok"), Math.min(1, Math.max(0, (t - 0.25) / 0.5)));
+    const fail = this.missionRewards(m, "fail");
+    ctx.font = '800 11px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "#ff9a9a";
+    ctx.fillText(m.kind === "hr" || m.kind === "xbh" ? "실패하면 (안타면 봐줌)" : "실패하면", tx, y + 125);
+    ctx.font = '800 11px "Nanum Gothic", sans-serif';
+    const fx = tx + ctx.measureText(m.kind === "hr" || m.kind === "xbh" ? "실패하면 (안타면 봐줌)" : "실패하면").width + 10;
+    this.rewardChips(ctx, fx, y + 112, fail, Math.min(1, Math.max(0, (t - 0.5) / 0.4)), true);
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.font = "12px \"Nanum Gothic\", sans-serif";
+    ctx.textAlign = "right";
+    ctx.fillText("누르면 바로 시작 · Space", x + W - 18, y + H - 12);
+    ctx.textAlign = "left";
+    ctx.restore();
+  }
+
+  /** 미션 결과 연출 — 도장(MISSION CLEAR! / 아쉽지만 안타! / MISSION FAILED) + 얼굴 + 실제로 바뀐 것 칩 */
+  missionFx: { m: Mission; r: "ok" | "partial" | "fail"; t: number } | null = null;
+  private lastMission: Mission | null = null;
+  private drawMissionFx(ctx: CanvasRenderingContext2D) {
+    const f = this.missionFx;
+    if (!f) return;
+    const t = f.t;
+    const a = Math.min(1, t / 0.1) * (1 - smooth(2.1, 2.5, t));
+    const ok = f.r !== "fail";
+    const col = f.r === "ok" ? "#ffd23f" : f.r === "partial" ? "#d8e2f0" : "#ff6b6b";
+    const label = f.r === "ok" ? "MISSION CLEAR!" : f.r === "partial" ? "아쉽지만 안타!" : "MISSION FAILED";
+    const cy = 340;
+    ctx.save();
+    ctx.globalAlpha = a;
+    // 판
+    const W = 520, H = 150;
+    const x = 512 - W / 2, y = cy - H / 2;
+    ctx.fillStyle = "rgba(8,10,24,0.88)";
+    ctx.strokeStyle = ok ? this.missionColor(f.m) : "#5a5f73";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(x, y, W, H, 16);
+    ctx.fill();
+    ctx.stroke();
+    // 실패는 쿵 하고 흔들림
+    const shake = f.r === "fail" && t > 0.16 && t < 0.4 ? Math.sin(t * 90) * 5 * (1 - (t - 0.16) / 0.24) : 0;
+    this.missionPortrait(ctx, f.m, x + 16 + shake, y + 16, 96, f.r === "fail");
+    // 도장: 크게 → 쾅 (기울어짐)
+    const sk = t < 0.16 ? 2.4 - (t / 0.16) * 1.5 : t < 0.26 ? 0.9 + ((t - 0.16) / 0.1) * 0.1 : 1;
+    ctx.save();
+    ctx.translate(x + 128 + 180 + shake, y + 44);
+    ctx.rotate(-0.07);
+    ctx.scale(sk, sk);
+    ctx.font = `${f.r === "partial" ? 30 : 34}px "Black Han Sans", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = "rgba(0,0,0,0.9)";
+    ctx.strokeText(label, 0, 12);
+    const g = ctx.createLinearGradient(0, -18, 0, 14);
+    g.addColorStop(0, "#ffffff");
+    g.addColorStop(1, col);
+    ctx.fillStyle = g;
+    ctx.fillText(label, 0, 12);
+    ctx.restore();
+    // 미션 내용 (작게)
+    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.font = '13px "Jua", "Nanum Gothic", sans-serif';
+    ctx.textAlign = "left";
+    ctx.fillText(`${f.m.who}: "${f.m.text}"`, x + 128, y + 82);
+    // 바뀐 것 칩 (하나씩 튀어나옴)
+    this.rewardChips(ctx, x + 128, y + 96, this.missionRewards(f.m, f.r), Math.min(1, Math.max(0, (t - 0.3) / 0.6)));
+    ctx.restore();
   }
 
   // ───────────── HUD ─────────────
