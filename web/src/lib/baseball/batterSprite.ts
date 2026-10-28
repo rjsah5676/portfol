@@ -11,6 +11,7 @@ import data from "@/data/baseball/batter-v3.json";
 import idleData from "@/data/baseball/batter-idle.json";
 import loadData from "@/data/baseball/batter-load.json";
 import swingData from "@/data/baseball/batter-swing.json";
+import walkData from "@/data/baseball/batter-walkin.json";
 import { BAT_BUNT, BAT_LOAD, BAT_SWING, PITCH_RELEASE_T, SWING_HIT_T } from "./figures";
 import type { Anim } from "./rig";
 
@@ -292,6 +293,22 @@ function idleCell(t: number) {
 const KICKS = { src: "/baseball/sprites/batter-load.webp", ...loadData };
 /** 스윙 줄 — 레그킥 줄과 같은 배율 · 같은 기준점(축발) */
 const SWINGS = { src: "/baseball/sprites/batter-swing.webp", ...swingData };
+/**
+ * 타석에 걸어 들어오기 (scripts/baseball-batter-walkin.py) — 대기 칸과 같은 기준점, 칸은 walkData.scale 배로 작게 저장
+ * walkinFrame(t) → WALK_BASE + 칸 · 끝 WALK_MIX 초는 마지막 칸 → 대기 1칸 겹치기 (배트 각도가 살짝 달라서)
+ */
+const WALKS = { src: "/baseball/sprites/batter-walkin.webp", ...walkData };
+const WALK_BASE = 4000;
+const WALK_MIX_BASE = 5000;
+const WALK_MIX = 0.18;
+/** 걸어 들어오기 길이 (초) — 대기로 넘어가는 겹치기 포함 */
+export const WALKIN_LEN = walkData.seq[walkData.seq.length - 1][1] + WALK_MIX;
+export function walkinFrame(t: number): number {
+  const end = walkData.seq[walkData.seq.length - 1][1];
+  if (t >= end) return WALK_MIX_BASE + Math.min(100, Math.round(((t - end) / WALK_MIX) * 100));
+  return WALK_BASE + (walkData.seq.find(([, e]) => t < e) ?? walkData.seq[walkData.seq.length - 1])[0];
+}
+let walkImg: HTMLImageElement | null = null;
 let still: HTMLImageElement | null = null;
 let stillMask: HTMLImageElement | null = null;
 let kickImg: HTMLImageElement | null = null;
@@ -319,6 +336,7 @@ function stillImg() {
     stillMask.src = IDLE.mask;
     kickImg = sheetImage(KICKS.src);
     swingImg = sheetImage(SWINGS.src);
+    walkImg = sheetImage(WALKS.src);
   }
   return still && still.complete && still.naturalWidth ? still : null;
 }
@@ -374,7 +392,7 @@ function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
 /** 타자 시트 중 아직 한 번도 안 그린 것 (첫 그림 때 디코드 · GPU 업로드로 화면이 멈칫해서 미리 1px 로 한 번 그려 둠) */
 export function batterSheets(): CanvasImageSource[] {
   stillImg();
-  return [still, kickImg, swingImg].filter((x): x is HTMLImageElement => !!x).map(drawable);
+  return [still, kickImg, swingImg, walkImg].filter((x): x is HTMLImageElement => !!x).map(drawable);
 }
 
 export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: SpriteLook, x: number, y: number, sc: number, flip = false, trail = 0): boolean {
@@ -392,7 +410,29 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
       const c = Math.min(cell, SWINGS.n - 1);
       ctx.drawImage(drawable(sw!), (c % SWINGS.cols) * SWINGS.CW, Math.floor(c / SWINGS.cols) * SWINGS.CH, SWINGS.CW, SWINGS.CH, -SWINGS.ax, -SWINGS.ay, SWINGS.CW, SWINGS.CH);
     };
-    if (frame >= RETURN_BASE && sw && sw.complete && sw.naturalWidth) {
+    const wk = walkImg;
+    const walkCell = (cell: number) => {
+      const c = Math.min(cell, WALKS.n - 1);
+      const k = 1 / WALKS.scale;
+      ctx.drawImage(drawable(wk!), (c % WALKS.cols) * WALKS.CW, Math.floor(c / WALKS.cols) * WALKS.CH, WALKS.CW, WALKS.CH, -WALKS.ax * k, -WALKS.ay * k, WALKS.CW * k, WALKS.CH * k);
+    };
+    const idleFirst = () => {
+      const cols = IDLE.cols ?? IDLE.n;
+      ctx.drawImage(drawable(tintedStill(st, lk)), (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+    };
+    if (frame >= WALK_BASE && frame < WALK_MIX_BASE + 101 && !(wk && wk.complete && wk.naturalWidth)) {
+      // 걸어 들어오기 그림이 아직이면 대기 자세로
+      idleFirst();
+    } else if (frame >= WALK_MIX_BASE && frame <= WALK_MIX_BASE + 100) {
+      const k = (frame - WALK_MIX_BASE) / 100;
+      ctx.globalAlpha = 1 - k;
+      walkCell(WALKS.n - 1);
+      ctx.globalAlpha = k;
+      idleFirst();
+      ctx.globalAlpha = 1;
+    } else if (frame >= WALK_BASE && frame < WALK_MIX_BASE) {
+      walkCell(frame - WALK_BASE);
+    } else if (frame >= RETURN_BASE && sw && sw.complete && sw.naturalWidth) {
       // 착지 자세 → 대기 (겹쳐서)
       const k = Math.min(1, (frame - RETURN_BASE) / 100);
       ctx.globalAlpha = 1 - k;

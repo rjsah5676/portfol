@@ -25,7 +25,7 @@ import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, batterSheets, drawable, drawBatter, sheetImage, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, strideStartFor, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, batterSheets, drawable, drawBatter, sheetImage, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, strideStartFor, walkinFrame, WALKIN_LEN, type SpriteLook } from "@/lib/baseball/batterSprite";
 /** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
 const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
@@ -66,6 +66,9 @@ const BOOST_DUR = 2.8;
  * result: 타석 결과 배너 · change: 공수 교대
  */
 const TEMPO = { call: 1.1, ready: 1.4, first: 1.9, result: 2.0, change: 2.4 };
+/** 타석에 걸어 들어오기 재생 속도 · 다 들어온 뒤 첫 공까지 숨 고르기 */
+const WALK_SPEED = 1.15;
+const WALK_SETTLE = 0.7;
 const BOOST_PHASES: Phase[] = ["ready", "windup", "flight", "contact", "call"];
 /** HUD · 이펙트 그림 (GPT 이미지 → public/baseball/ui) */
 const UI = {
@@ -276,6 +279,11 @@ export class Match {
   private cardsGone = false;
   /** 이번 타석 첫 공 전 (타자가 타석에 들어서는 숨 고르기 조금 더) */
   private paFirst = false;
+  /** 타석에 걸어 들어오는 시간 (WALKIN_LEN 넘으면 끝 · Infinity = 안 함) */
+  walkT = Infinity;
+  private walkPending = false;
+  /** 다 걸어 들어온 시각 (this.time · 없으면 -1) */
+  private walkDoneAt = -1;
   pitchInfo = "";
   lastCall = "";
 
@@ -586,6 +594,11 @@ export class Match {
     this.updateSkins();
     this.lastStrikes = 0;
     this.paFirst = true;
+    // 새 타자: 타석에 걸어 들어오기 (타석 시점 · 사용자 타자만 — 투수 시점은 리그 그림이라 없음, 홈런더비는 같은 타자라 없음)
+    // (돌발미션 카드가 먼저 뜨면 그 뒤 타석 준비 화면에서 시작 — update)
+    this.walkT = Infinity;
+    this.walkPending = this.userBat && this.cfg.mode !== "derby" && !this.reduceMotion;
+    this.walkDoneAt = -1;
     this.cardsGone = false;
     this.boostFx = null;
     if (this.userBat) this.showBoosts("all");
@@ -664,7 +677,10 @@ export class Match {
   /** 투구 시작 (CPU 투수면 여기서 정함) */
   /** 타자 준비 → 와인드업까지 기다리는 시간 (특수능력 카드가 떠 있으면 그게 사라질 즈음까지) */
   private readyWait() {
-    const base = this.cfg.mode === "derby" ? 0.8 : this.paFirst ? TEMPO.first : TEMPO.ready;
+    let base = this.cfg.mode === "derby" ? 0.8 : this.paFirst ? TEMPO.first : TEMPO.ready;
+    // 걸어 들어오는 중이면 다 들어오고 WALK_SETTLE 뒤에 던짐
+    if (this.paFirst && this.walkT < WALKIN_LEN) base = Math.max(base, this.pt + (WALKIN_LEN - this.walkT) / WALK_SPEED + WALK_SETTLE);
+    else if (this.paFirst && this.walkDoneAt >= 0) base = Math.max(base, this.pt + (this.walkDoneAt + WALK_SETTLE - this.time));
     return this.boostFx ? Math.max(base, this.pt + (BOOST_DUR - 0.35 - this.boostFx.t)) : base;
   }
 
@@ -1396,6 +1412,15 @@ export class Match {
     }
     // 리그 애니
     this.batAnimT += dt;
+    // 걸어 들어오기: 2.36초 영상을 조금 빠르게 (≈2초) · 스윙 · 레그킥이 시작되면 바로 끝
+    if (this.walkPending && this.phase === "ready") {
+      this.walkPending = false;
+      this.walkT = 0;
+    }
+    if (this.walkT < WALKIN_LEN) {
+      this.walkT = this.batAnim === BAT_IDLE ? this.walkT + dt * WALK_SPEED : Infinity;
+      if (this.walkT >= WALKIN_LEN) this.walkDoneAt = this.time;
+    }
     // 빈 스윙이 끝나면 하던 자세로: 와인드업 중이면 레그킥 시계에 맞춰, 공이 날아오는 중이면 최고점, 그 밖엔 대기
     if (this.freeSwing && this.batAnim === BAT_SWING && this.batAnimT > FREE_SWING_T) {
       this.freeSwing = false;
@@ -1954,7 +1979,9 @@ export class Match {
       ctx.restore();
     }
     // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
-    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT, this.swingSp, this.strideAt), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
+    // 걸어 들어오기 (미션 카드 동안은 출발 자리에서 기다림)
+    const bFrame = this.walkPending ? walkinFrame(0) : this.walkT < WALKIN_LEN ? walkinFrame(this.walkT) : batterFrame(this.batAnim, this.batAnimT, this.swingSp, this.strideAt);
+    if (!drawBatter(ctx, bFrame, this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
     if (ballNear && p) this.drawPitchBall(ctx, p, hand);
     // 몸에 맞은 공: 맞은 자리에서 튕겨 나가 떨어짐
     if (this.hbpBall) {

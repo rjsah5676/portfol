@@ -26,7 +26,7 @@ export function baseballTasks(): LoadTask[] {
     t.push(faceUrl(c.id), cutinUrl(c.id), artUrl(c.id));
     if (hasSwingArt(c.id)) t.push(swingArtUrl(c.id));
   }
-  t.push("/baseball/stadium/bat-low.webp", "/baseball/sprites/batter-idle.webp", "/baseball/sprites/batter-idle-mask.png", "/baseball/sprites/batter-load.webp", "/baseball/sprites/batter-swing.webp", "/baseball/sprites/pitcher-set.webp", "/baseball/sprites/pitcher-throw.webp");
+  t.push("/baseball/stadium/bat-low.webp", "/baseball/sprites/batter-idle.webp", "/baseball/sprites/batter-idle-mask.png", "/baseball/sprites/batter-load.webp", "/baseball/sprites/batter-swing.webp", "/baseball/sprites/batter-walkin.webp", "/baseball/sprites/pitcher-set.webp", "/baseball/sprites/pitcher-throw.webp");
   // 경기 화면 HUD · 수비수 · 타격 효과
   t.push("/baseball/sprites/fielder-if-ready.webp", "/baseball/sprites/fielder-of-ready.webp", "/baseball/sprites/runner-lead.webp", "/baseball/sprites/runner-hands.webp");
   for (const u of ["swing", "swing-down", "bunt", "pad", "knob", "burst", "ring", "homerun", "throw", "profile", "npc-manager", "npc-captain", "npc-senior", "npc-glasses", "npc-junior"]) t.push(`/baseball/ui/${u}.webp`);
