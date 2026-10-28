@@ -34,8 +34,8 @@ export function slotOf(trust: number) {
 }
 export const slotName = (i: number) => `${i + 1}번`;
 
-/** 육성 상대 투수 수준 (연차별 · 제구 · 변화 평균) — 원래 팀 기본은 560 */
-export const PITCH_LV = [300, 330, 360, 390, 420, 450, 480, 510, 540, 560];
+/** 육성 상대 투수 수준 (연차별 · 제구 · 변화 평균) — 원래 팀 기본은 560. 육성 선수가 150 남짓에서 시작하니 첫해는 200 */
+export const PITCH_LV = [200, 240, 280, 320, 360, 400, 450, 500, 520, 540];
 
 /** 시즌마다 같은 동료 · 매주 다른 상대 (시드로 고정) */
 export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number, bondChars?: CareerSetup["bondChars"]): CareerSetup {

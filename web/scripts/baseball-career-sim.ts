@@ -10,7 +10,7 @@ import {
   act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, gameKey, newCareer, ovrOf, spUses, stepOf,
   BONDS, TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy, type SkillId,
 } from "../src/lib/baseball/career";
-import { botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
+import { PITCH_LV, botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
 import type { Diff } from "../src/lib/baseball/ai";
 import { makeRng } from "../src/lib/baseball/rng";
 import { GROW } from "../src/lib/baseball/data";
@@ -22,6 +22,7 @@ if (process.env.APT) for (const [k, v] of Object.entries(JSON.parse(process.env.
 // TAL='[[0.72,360],[0.82,420],...]' — 재능 F~SS 의 [mul, limit] 덮어쓰기
 if (process.env.TAL) (JSON.parse(process.env.TAL) as [number, number][]).forEach(([mul, limit], i) => Object.assign(TALENTS[i], { mul, limit }));
 if (process.env.TR) TUNE.train = Number(process.env.TR);
+if (process.env.PLV) PITCH_LV.splice(0, PITCH_LV.length, ...(JSON.parse(process.env.PLV) as number[]));
 
 const N = Number(process.argv[2] ?? 200);
 const diff = Number(process.argv[3] ?? 1) as Diff;
@@ -204,6 +205,18 @@ function main() {
   const avgOf = (f: (c: Career) => number) => (base.reduce((a, r) => a + f(r.c), 0) / N).toFixed(1);
   console.log(`평균 스탯 hit ${avgOf((c) => c.stats.hit)} pow ${avgOf((c) => c.stats.power)} run ${avgOf((c) => c.stats.run)} · 특수능력 ${avgOf((c) => c.skills.length)} · 필살 ${avgOf((c) => (c.learned ? 1 : 0))} · 인기도 ${avgOf((c) => c.fame)}`);
   console.log(`통산 평균 타율 ${(base.reduce((a, r) => a + r.c.total.h / Math.max(1, r.c.total.ab), 0) / N).toFixed(3)}  HR ${avgOf((c) => c.total.hr)}  경기 ${avgOf((c) => c.total.g)}  신뢰 ${avgOf((c) => c.trust)}`);
+  {
+    // 연차별 타율 · 홈런 · 수상 (리그 1위 기준 맞추기)
+    const yr: string[] = [];
+    for (let y = 1; y <= 10; y++) {
+      const ss = base.flatMap((r) => r.c.seasons.filter((s) => s.season === y));
+      if (!ss.length) continue;
+      const ab = ss.reduce((a, s) => a + s.line.ab, 0), h = ss.reduce((a, s) => a + s.line.h, 0), hr = ss.reduce((a, s) => a + s.line.hr, 0) / ss.length;
+      const aw = (ss.filter((s) => s.awards.length).length / ss.length) * 100;
+      yr.push(`${y}년 ${(h / Math.max(1, ab)).toFixed(3).slice(1)}·${hr.toFixed(1)}HR·상${aw.toFixed(0)}%`);
+    }
+    console.log("연차별", yr.join("  "));
+  }
   const posts = base.flatMap((r) => r.c.seasons.map((s) => s.post ?? "?"));
   const cnt = (k: string) => ((posts.filter((p) => p === k).length / Math.max(1, posts.length)) * 100).toFixed(0);
   console.log(`가을야구 (시즌 ${posts.length}): 우승 ${cnt("우승")}% · 준우승 ${cnt("준우승")}% · 준PO 탈락 ${cnt("준PO 탈락")}% · 진출 실패 ${cnt("진출 실패")}%`);

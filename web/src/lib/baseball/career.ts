@@ -838,7 +838,17 @@ function grow(c: Career, k: StatKey, base: number): number {
 export const posOf = (c: Pick<Career, "pos" | "type">) => c.pos ?? TYPES[c.type].pos;
 
 /** 경기에 나갈 내 선수 (컨디션 · 특수능력 · 장비 · 체력 반영) */
-export function careerBatter(c: Career): Batter {
+/**
+ * 상황 보너스(득점권 · 2스트라이크 · 7회~)는 늘 붙는 게 아니라서, 경기용 한계를 셀 땐 이만큼만 셈
+ * (득점권 타격 +100 → 한계 50 만큼 차지). 그 상황이 오면 보너스는 한계를 넘어 다 붙음.
+ */
+export const SIT_W = 0.5;
+/**
+ * 경기용 능력치 — 기본 + 특수능력 · 축복 + 장비 (+ 상황 보너스 몫) 을 합쳐서 재능 한계(코치 보너스 포함)까지만,
+ * 그다음 컨디션 배율. 특수능력 · 축복은 한계를 넘기는 게 아니라 한계까지 빨리 채워 주는 쪽.
+ * (예전엔 한계가 기본 능력치에만 걸려서 경기에선 한계 + 200 넘게 나왔음)
+ */
+export function careerGameStats(c: Career): { stats: Stats; raw: Stats; cap: Stats; f: number; fx: ReturnType<typeof fxOf> } {
   const f = COND_GAME[c.cond] * (c.stamina < 20 ? 0.9 : 1);
   const fx = fxOf(c);
   const gear = { hit: 0, power: 0, run: 0 } as Stats;
@@ -846,19 +856,47 @@ export function careerBatter(c: Career): Batter {
     const t = c.gear[id];
     if (t) gear[GEAR[id].stat] += GEAR_TIER[t - 1].game;
   }
-  const v = (k: StatKey, scale: number) => Math.round(clamp(c.stats[k] * scale + fx.add[k] + gear[k], 1, 999));
+  const sit = fx.sit;
+  const sitEq: Stats = { hit: SIT_W * ((sit.rispHit ?? 0) + (sit.twoK ?? 0) + (sit.late ?? 0)), power: SIT_W * ((sit.rispPow ?? 0) + (sit.late ?? 0)), run: 0 };
+  const stats = {} as Stats, raw = {} as Stats, cap = {} as Stats;
+  for (const k of STAT_KEYS) {
+    raw[k] = c.stats[k] + fx.add[k] + gear[k];
+    // 기본 능력치가 이미 한계를 넘었으면(성장 끝자락) 그건 깎지 않음
+    cap[k] = Math.max(c.stats[k], limitOf(c, k) - sitEq[k]);
+    stats[k] = Math.round(clamp(Math.min(raw[k], cap[k]) * (k === "run" ? 1 : f), 1, 999));
+  }
+  return { stats, raw, cap, f, fx };
+}
+
+export function careerBatter(c: Career): Batter {
+  const g = careerGameStats(c);
+  // 타석 연출의 「+N」도 한계에 막힌 만큼 줄여서 (실제로 붙은 만큼만)
+  const used = {} as Stats;
+  for (const k of STAT_KEYS) {
+    const extra = g.raw[k] - c.stats[k];
+    used[k] = extra > 0 ? clamp((Math.min(g.raw[k], g.cap[k]) - c.stats[k]) / extra, 0, 1) : 1;
+  }
+  const boosts = gameBoosts(c)
+    .map((b) => {
+      if (!b.add) return b;
+      const add: NonNullable<Boost["add"]> = {};
+      for (const k of STAT_KEYS) if (b.add[k]) add[k] = Math.round(b.add[k]! * used[k]);
+      const has = Object.values(add).some((v) => v);
+      return has ? { ...b, add } : b.sit ? { name: b.name, sit: b.sit } : null;
+    })
+    .filter((b): b is Boost => !!b);
   return {
     name: c.name,
     num: c.num,
     pos: posOf(c),
     bats: c.bats,
-    hit: v("hit", f),
-    power: v("power", f),
-    run: v("run", 1),
+    hit: g.stats.hit,
+    power: g.stats.power,
+    run: g.stats.run,
     season: { avg: c.line.ab ? c.line.h / c.line.ab : 0, hr: c.line.hr, rbi: c.line.rbi, ab: c.line.ab, h: c.line.h },
     learned: c.learned,
-    sit: fx.sit,
-    boosts: gameBoosts(c),
+    sit: g.fx.sit,
+    boosts,
     look: c.look,
     grow: true,
   };
