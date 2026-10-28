@@ -1958,7 +1958,7 @@ export class Match {
       const show = v.inHand ? 0 : smooth(0, 0.06, u) * (1 - smooth(0.97, 1, u));
       if (show > 0.01) {
         const c = ballProj(v.x, v.y, 0);
-        const R = Math.max(7, BALLR_PX(c.s) * BLUE_R);
+        const R = Math.max(5, BALLR_PX(c.s) * BLUE_R);
         ctx.save();
         ctx.globalAlpha = show;
         ctx.fillStyle = "rgba(70,150,255,0.22)";
@@ -4010,5 +4010,5 @@ export class Match {
 
 const BALLR_PX = (s: number) => 0.055 * s;
 /** 파란 원 반지름 = 플레이트에서 공 크기 × 이만큼 */
-const BLUE_R = 1.4;
+const BLUE_R = 1;
 export { DW, DH };
