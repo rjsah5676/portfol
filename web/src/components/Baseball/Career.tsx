@@ -26,7 +26,7 @@ import { drawRig, pose } from "@/lib/baseball/rig";
 import { batterFrame, drawBatter } from "@/lib/baseball/batterSprite";
 import { BATCOL } from "@/lib/baseball/look";
 import {
-  SPEEDS, addHof, affStart, autoGame, bondLevel, careerSnap, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBattle, takeReport, type GameReport, type PlayMode,
+  SPEEDS, addHof, affStart, autoGame, bondLevel, careerSnap, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBackToHub, takeBattle, takeReport, type GameReport, type PlayMode,
 } from "./careerStore";
 import { logPlay } from "@/lib/baseball/telemetry";
 import type { MatchCfg } from "./match";
@@ -79,6 +79,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
       setQueue([bt, ...(bt.extra ? [bt.extra] : [])]);
       setView("hub");
     }
+    if (takeBackToHub() && cur) setView("hub");
     if (rep) {
       setReports([rep]);
       setView("hub");

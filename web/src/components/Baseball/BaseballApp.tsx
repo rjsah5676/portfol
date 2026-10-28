@@ -7,7 +7,7 @@ import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match
 import { isMuted, setMuted } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font, useSpaceConfirm } from "./ui";
 import CareerMode from "./Career";
-import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
+import { SPEEDS, cancelDirect, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
 import { CLUB_DEFS, charById, clubDefById, faceUrl } from "@/lib/baseball/data";
 import { buildTeam, findGhosts, veloKmh, ghostTeam, gradeOf, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
 import { makeRng } from "@/lib/baseball/rng";
@@ -884,6 +884,18 @@ function Play({
             >
               소리 {muted ? "켜기" : "끄기"}
             </Btn>
+            {cfg.career && ui?.canCancel && (
+              <Btn
+                className="py-2 text-sm"
+                color="#ffd23f"
+                onClick={() => {
+                  cancelDirect();
+                  onExit();
+                }}
+              >
+                ↩ 경기 시작 취소 (아직 첫 공 전 · 육성 화면으로)
+              </Btn>
+            )}
             <Btn
               className="py-2 text-sm"
               color="#ff7a7a"

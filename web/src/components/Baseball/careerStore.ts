@@ -184,6 +184,20 @@ export function autoGame(c: Career, note?: string): GameReport {
 }
 
 /** 직접 출전한 경기 반영 */
+/** 실수로 누른 경기 시작 취소 (첫 공 전) — 경기 안 한 걸로, 육성 화면(허브)으로 바로 */
+let backToHub = false;
+export function cancelDirect() {
+  const c = loadCareer();
+  if (!c || !c.inGame) return;
+  c.inGame = false;
+  saveCareer(c);
+  backToHub = true;
+}
+export function takeBackToHub() {
+  const v = backToHub;
+  backToHub = false;
+  return v;
+}
 export function finishDirect(g: GameIn, pas: MyPA[], score: string) {
   const c = loadCareer();
   if (!c || !c.inGame) return;

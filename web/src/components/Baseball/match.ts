@@ -134,6 +134,8 @@ export interface UiState {
   spNow: boolean;
   spChar: CharId | null;
   lefty: boolean;
+  /** 육성: 아직 내 첫 타석 첫 공 전이라 경기 시작을 없던 걸로 할 수 있음 */
+  canCancel: boolean;
   kinds: { id: PitchKind; name: string }[];
   kind: number;
   aiming: boolean;
@@ -436,6 +438,7 @@ export class Match {
       spNow: ub && !!bSw && this.phase === "flight" && this.swingStart < 0 && !this.hbpHit && !this.buntArmed && (this.cfg.mode === "derby" && !this.cfg.bond ? true : us.swingLeft > 0),
       spChar: sp ? sp.id : null,
       lefty: b.bats === "L",
+      canCancel: !!this.cfg.career && !this.s.over && this.paCount <= 1 && !this.myPAs.some((x) => !x.auto) && this.s.balls === 0 && this.s.strikes === 0 && ["intro", "mission", "ready"].includes(this.phase),
       kinds: p.rep.map((k) => ({ id: k, name: PITCHES[k].name })),
       kind: this.kindIdx,
       aiming: !ub && this.phase === "aim",
