@@ -17,7 +17,7 @@ import {
 } from "@/lib/baseball/figures";
 import {
   batSide, batter as curBatter, changePitcher, cpuManage, fieldSide, maybeMission, mvp, newGame, nextHalf, pitcher as curPitcher,
-  stamina01, staminaMax, userBatting, type GameState, type Mission, type PAResult,
+  stamina01, staminaMax, userBatting, type GameState, type Mission, type PAKind, type PAResult,
 } from "@/lib/baseball/game";
 import { logPlay } from "@/lib/baseball/telemetry";
 import { BALL_R, PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
@@ -386,6 +386,7 @@ export class Match {
     this.pitSkin = baseSkin();
     // 육성: 첫 내 타석까지 미리 진행해 둠 — 인트로 동안 1번 타자가 서 있다가 내 선수로 휙 바뀌던 문제
     if (cfg.career) {
+      this.recapBase = this.snapRecap();
       this.careerAdvance(false, this.pendingLines);
       this.preAdvanced = true;
       this.updateSkins();
@@ -502,6 +503,10 @@ export class Match {
   /** 경기 요약 (문자중계): 건너뛴 타석을 한 줄씩 — 탭 · Space 로 건너뛰기 */
   recap: { lines: RecapLine[]; shown: number; t: number; step: number; hold: number } | null = null;
   private recapJustShown = false;
+  /** 요약 시작 때 상태 (첫 줄 전 점수표 · 주자) */
+  private recapBase: RecapBase | null = null;
+  /** 오늘 타석 기록 (팀 → 타순 → 「안타」 「삼진」 …) — 요약 화면 타순표 */
+  hist: string[][][] = [Array.from({ length: 9 }, () => []), Array.from({ length: 9 }, () => [])];
   private careerAdvance(allAuto: boolean, log?: RecapLine[]): MyPA[] {
     const s = this.s;
     const c = this.cfg.career!;
@@ -528,10 +533,12 @@ export class Match {
       // 내 타석까지 빠르게 진행 (남은 경기 자동이면 끝까지) — 첫 타석은 생성자에서 이미 진행해 둠
       const sc = [...s.score];
       const inn = s.inning;
+      if (!this.preAdvanced) this.recapBase = this.snapRecap();
       const autos = this.preAdvanced ? [] : this.careerAdvance(allAuto, this.pendingLines);
       this.preAdvanced = false;
-      // 건너뛴 타석이 있으면 먼저 「경기 요약」(문자중계)으로 보여 주고 다시 여기로 (그땐 진행 없이)
-      if (this.pendingLines.length) {
+      // 건너뛴 타석이 있으면 먼저 「경기 요약」(문자중계 화면)으로 보여 주고 다시 여기로 (그땐 진행 없이)
+      // 첫 타석은 건너뛴 타석이 없어도 양 팀 타순 · 점수표를 잠깐
+      if (this.pendingLines.length || (this.paCount === 0 && !this.recapJustShown && !s.over)) {
         this.startRecap(this.pendingLines);
         this.pendingLines = [];
         this.preAdvanced = true;
@@ -1283,6 +1290,7 @@ export class Match {
       if (this.cfg.career && this.userBat) {
         const ln = this.s.sides[batSide(this.s)].bat[this.cfg.career.myIdx];
         this.myPAs.push({ inning: this.s.inning, text: res.text, kind: res.kind, rbi: ln.rbi - this.rbiBefore, mission: res.mission ? { ok: res.mission.ok, pt: 0, partial: res.mission.partial, char: res.mission.char } : undefined });
+        this.hist[this.paSide][this.paOrder]?.push(paShort(res.text, res.kind));
       }
       if (res.mission) {
         if (res.mission.ok) this.missionsOk++;
@@ -1482,9 +1490,7 @@ export class Match {
         r.t += dt * (this.cfg.speed ?? 1);
         while (r.shown < r.lines.length && r.t >= r.step) {
           r.t -= r.step;
-          r.shown++;
-          const l = r.lines[r.shown - 1];
-          if (l.kind === "HR") sfx.ui();
+          this.revealRecap();
         }
         if (r.shown >= r.lines.length && r.t >= r.hold) {
           this.recap = null;
@@ -3089,140 +3095,299 @@ export class Match {
     ctx.restore();
   }
 
-  /** 미션 결과 연출 — 도장(MISSION CLEAR! / 아쉽지만 안타! / MISSION FAILED) + 얼굴 + 실제로 바뀐 것 칩 */
+  private snapRecap(): RecapBase {
+    const s = this.s;
+    return {
+      inning: s.inning, top: s.top, outs: s.outs, bases: [s.bases[0] !== null, s.bases[1] !== null, s.bases[2] !== null],
+      score: [s.score[0], s.score[1]], line: [[...s.line[0]], [...s.line[1]]], hits: [s.sides[0].hits, s.sides[1].hits],
+    };
+  }
   private startRecap(lines: RecapLine[]) {
     // 한 줄 0.12 ~ 0.45초 — 많으면 빨리. 다 해서 하이라이트(몇 이닝 건너뜀) 6초 · 직접(내 타석 사이 몇 타석) 2.5초 안팎
-    const step = clamp((this.cfg.highlight ? 6 : 2.5) / lines.length, 0.12, 0.45);
-    this.recap = { lines: [...lines], shown: 0, t: step * 0.6, step, hold: this.cfg.highlight ? 1 : 0.6 };
+    // 건너뛴 타석이 없으면 (첫 타석이 1회 첫 타자) 양 팀 타순만 잠깐
+    const step = lines.length ? clamp((this.cfg.highlight ? 6 : 2.5) / lines.length, 0.12, 0.45) : 0;
+    this.recap = { lines: [...lines], shown: 0, t: step * 0.6, step, hold: !lines.length ? 1.8 : this.cfg.highlight ? 1.1 : 0.7 };
     this.setPhase("recap");
+  }
+  /** 요약 한 줄 드러내기 (타순표의 오늘 기록에도 붙음) */
+  private revealRecap() {
+    const r = this.recap!;
+    const l = r.lines[r.shown++];
+    this.hist[l.side][l.ord]?.push(paShort(l.text, l.kind));
+    if (l.kind === "HR") sfx.ui();
   }
   skipRecap() {
     const r = this.recap;
     if (!r) return;
     if (r.shown < r.lines.length) {
-      r.shown = r.lines.length;
-      r.t = r.hold - 0.35;
+      while (r.shown < r.lines.length) this.revealRecap();
+      r.t = r.hold - 0.4;
     } else r.t = r.hold;
   }
 
-  /** 경기 요약 (문자중계) — 건너뛴 타석을 한 줄씩: 점수판 · 아웃 · 주자 + 최근 7줄 */
+  /**
+   * 경기 요약 (문자중계 · 화면 꽉 채움) — 건너뛴 타석을 한 줄씩.
+   * 위: 이닝별 점수표(R · H) / 양옆: 원정 · 홈 타순(포지션 · 이름 · 오늘 기록) / 가운데: 다이아몬드(주자 · 아웃) · 타자 vs 투수 · 중계 글
+   */
   private drawRecap(ctx: CanvasRenderingContext2D) {
     const r = this.recap;
     if (!r) return;
     const s = this.s;
+    const base = this.recapBase ?? this.snapRecap();
     const last = r.shown ? r.lines[r.shown - 1] : null;
-    ctx.save();
-    ctx.fillStyle = "rgba(4,6,16,0.55)";
-    ctx.fillRect(0, 0, DW, DH);
-    const x = 222, y = 74, w = 580, h = 410;
-    this.panel(ctx, x, y, w, h);
-    ctx.textBaseline = "alphabetic";
-    // 머리: 제목 · 회
-    ctx.font = '24px "Black Han Sans", sans-serif';
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#ffcf4a";
-    ctx.fillText("경기 요약", x + 22, y + 38);
-    if (last) {
-      ctx.font = '800 15px "Nanum Gothic", sans-serif';
-      ctx.fillStyle = "rgba(255,255,255,0.8)";
-      ctx.fillText(`${last.inning}회${last.top ? "초" : "말"} · ${last.ours ? "우리 공격" : "상대 공격"}`, x + 140, y + 37);
-    }
-    // 점수판
-    const sc = last ? last.score : [s.score[0], s.score[1]];
+    const st = last
+      ? { inning: last.inning, top: last.top, outs: last.outs, bases: last.bases, score: last.score, line: last.line, hits: last.hits }
+      : base;
     const me = mySide(s);
-    const team = (i: number) => (i === 0 ? s.opts.away : s.opts.home);
-    const bx = x + w - 250;
-    for (let i = 0; i < 2; i++) {
-      const ty = y + 22 + i * 22;
-      ctx.font = `${i === me ? "900" : "700"} 15px "Nanum Gothic", sans-serif`;
-      ctx.fillStyle = i === me ? "#ffcf4a" : "rgba(255,255,255,0.85)";
-      ctx.textAlign = "left";
-      ctx.fillText(`${team(i).short}${i === me ? " (우리)" : ""}`, bx, ty + 4);
-      ctx.textAlign = "right";
-      ctx.font = '22px "Black Han Sans", sans-serif';
-      ctx.fillText(String(sc[i]), bx + 130, ty + 6);
-    }
-    // 아웃 · 주자 (작은 다이아몬드)
-    const outs = last ? Math.min(3, last.outs) : s.outs;
-    const bases = last ? last.bases : [false, false, false];
-    const dx = x + w - 70, dy = y + 36;
-    const base = (bx2: number, by2: number, on: boolean) => {
+    const myIdx = this.cfg.career?.myIdx ?? -1;
+    const team = (i: number) => s.sides[i].team;
+    const enter = r.step ? Math.min(1, r.t / Math.min(0.12, r.step)) : 1;
+    ctx.save();
+    // 배경
+    const g = ctx.createLinearGradient(0, 0, 0, DH);
+    g.addColorStop(0, "#101a3c");
+    g.addColorStop(1, "#05070f");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, DW, DH);
+    ctx.strokeStyle = "rgba(255,255,255,0.03)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x < DW; x += 32) {
       ctx.beginPath();
-      ctx.moveTo(bx2, by2 - 8);
-      ctx.lineTo(bx2 + 8, by2);
-      ctx.lineTo(bx2, by2 + 8);
-      ctx.lineTo(bx2 - 8, by2);
-      ctx.closePath();
-      ctx.fillStyle = on ? "#ffcf4a" : "rgba(255,255,255,0.12)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 1.2;
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, DH);
       ctx.stroke();
+    }
+    ctx.textBaseline = "middle";
+
+    // ── 점수표 ──
+    const nInn = Math.max(9, st.line[0].length, st.line[1].length, st.inning);
+    const sx = 16, sy = 10, sw = DW - 32, sh = 84;
+    this.panel(ctx, sx, sy, sw, sh);
+    const nameW = 170, colW = Math.min(46, (sw - nameW - 2 * 56 - 16) / nInn);
+    const colX = (i: number) => sx + nameW + colW * (i + 0.5);
+    const rhX = (k: number) => sx + nameW + colW * nInn + 28 + k * 56;
+    const rowY = (i: number) => sy + 34 + i * 26;
+    ctx.font = '700 12px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.textAlign = "center";
+    for (let i = 0; i < nInn; i++) ctx.fillText(String(i + 1), colX(i), sy + 14);
+    ctx.fillText("R", rhX(0), sy + 14);
+    ctx.fillText("H", rhX(1), sy + 14);
+    for (let t = 0; t < 2; t++) {
+      const y = rowY(t);
+      // 지금 공격 칸
+      const curCol = st.inning - 1;
+      if ((t === 0) === st.top) {
+        ctx.fillStyle = "rgba(255,207,74,0.16)";
+        ctx.fillRect(colX(curCol) - colW / 2 + 2, y - 11, colW - 4, 22);
+      }
+      ctx.textAlign = "left";
+      ctx.fillStyle = team(t).color;
+      ctx.beginPath();
+      ctx.roundRect(sx + 14, y - 9, 18, 18, 4);
+      ctx.fill();
+      ctx.font = '900 15px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = t === me ? "#ffcf4a" : "#fff";
+      ctx.fillText(`${team(t).name}${t === me ? " (우리)" : ""}`, sx + 40, y + 1);
+      ctx.textAlign = "center";
+      ctx.font = '800 15px "Nanum Gothic", sans-serif';
+      for (let i = 0; i < nInn; i++) {
+        const v = st.line[t][i];
+        const played = i < st.inning - 1 || (i === st.inning - 1 && (t === 0 || !st.top));
+        ctx.fillStyle = v ? "#ffcf4a" : "rgba(255,255,255,0.7)";
+        ctx.fillText(v !== undefined && played ? String(v) : "", colX(i), y + 1);
+      }
+      ctx.font = '20px "Black Han Sans", sans-serif';
+      ctx.fillStyle = "#fff";
+      ctx.fillText(String(st.score[t]), rhX(0), y + 2);
+      ctx.font = '800 15px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = "rgba(255,255,255,0.75)";
+      ctx.fillText(String(st.hits[t]), rhX(1), y + 1);
+    }
+
+    // ── 양 팀 타순 ──
+    const lineup = (t: number, x: number) => {
+      const w = 290, y0 = 104, rowH = 44;
+      const atk = (t === 0) === st.top;
+      this.panel(ctx, x, y0, w, 9 * rowH + 34, atk ? "rgba(255,207,74,0.6)" : undefined);
+      ctx.textAlign = "left";
+      ctx.font = '900 14px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = t === me ? "#ffcf4a" : "#fff";
+      ctx.fillText(`${team(t).short} ${t === 0 ? "원정" : "홈"}`, x + 14, y0 + 17);
+      ctx.textAlign = "right";
+      ctx.font = '800 12px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = atk ? "#ffcf4a" : "rgba(255,255,255,0.4)";
+      ctx.fillText(atk ? "공격" : "수비", x + w - 14, y0 + 17);
+      team(t).batters.slice(0, 9).forEach((b, i) => {
+        const y = y0 + 34 + i * rowH;
+        const isMe = t === me && i === myIdx;
+        const now = !!last && last.side === t && last.ord === i;
+        if (now || isMe) {
+          ctx.fillStyle = now ? `rgba(255,255,255,${0.16 * enter})` : "rgba(255,207,74,0.1)";
+          ctx.beginPath();
+          ctx.roundRect(x + 6, y + 2, w - 12, rowH - 4, 6);
+          ctx.fill();
+        }
+        ctx.textAlign = "center";
+        ctx.font = '800 13px "Nanum Gothic", sans-serif';
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillText(String(i + 1), x + 20, y + rowH / 2);
+        this.chip(ctx, x + 32, y + rowH / 2 - 9, b.pos, "rgba(255,255,255,0.12)", "rgba(255,255,255,0.8)");
+        ctx.textAlign = "left";
+        ctx.font = `${isMe ? "900" : "800"} 15px "Nanum Gothic", sans-serif`;
+        ctx.fillStyle = isMe ? "#ffcf4a" : "#fff";
+        ctx.fillText(isMe ? `${b.name} ★` : b.name, x + 70, y + rowH / 2);
+        // 오늘 기록 (최근 3개)
+        const h = (this.hist[t][i] ?? []).slice(-3);
+        let cx = x + w - 10;
+        ctx.font = '800 11px "Nanum Gothic", sans-serif';
+        for (let k = h.length - 1; k >= 0; k--) {
+          const txt = h[k];
+          const tw = ctx.measureText(txt).width + 10;
+          cx -= tw;
+          const col = PA_SHORT_COL[txt] ?? "rgba(255,255,255,0.55)";
+          ctx.fillStyle = `${col}`;
+          ctx.globalAlpha = k === h.length - 1 && now ? 0.35 + 0.65 * enter : 1;
+          ctx.beginPath();
+          ctx.roundRect(cx, y + rowH / 2 - 9, tw - 3, 18, 4);
+          ctx.fill();
+          ctx.fillStyle = "#0b0f1e";
+          ctx.textAlign = "center";
+          ctx.fillText(txt, cx + (tw - 3) / 2, y + rowH / 2 + 1);
+          ctx.globalAlpha = 1;
+        }
+      });
     };
-    base(dx + 14, dy, bases[0]);
-    base(dx, dy - 14, bases[1]);
-    base(dx - 14, dy, bases[2]);
+    lineup(0, 16);
+    lineup(1, DW - 16 - 290);
+
+    // ── 가운데: 이닝 · 다이아몬드 · 타자 vs 투수 · 중계 ──
+    const cx0 = DW / 2;
+    ctx.textAlign = "center";
+    ctx.font = '26px "Black Han Sans", sans-serif';
+    ctx.fillStyle = "#ffcf4a";
+    ctx.fillText(`${st.inning}회${st.top ? "초" : "말"}`, cx0, 124);
+    ctx.font = '800 13px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.fillText(`${team(st.top ? 0 : 1).short} 공격`, cx0, 148);
+    // 다이아몬드
+    const dy = 222, dd = 50;
+    ctx.save();
+    ctx.translate(cx0, dy);
+    ctx.fillStyle = "rgba(60,140,70,0.35)";
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, dd);
+    ctx.lineTo(dd, 0);
+    ctx.lineTo(0, -dd);
+    ctx.lineTo(-dd, 0);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    const bag = (x: number, y: number, on: boolean) => {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.PI / 4);
+      ctx.fillStyle = on ? "#ffcf4a" : "rgba(255,255,255,0.85)";
+      if (on) {
+        ctx.shadowColor = "#ffcf4a";
+        ctx.shadowBlur = 12;
+      }
+      ctx.fillRect(-8, -8, 16, 16);
+      ctx.restore();
+    };
+    bag(dd, 0, st.bases[0]);
+    bag(0, -dd, st.bases[1]);
+    bag(-dd, 0, st.bases[2]);
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(-7, dd - 4);
+    ctx.lineTo(7, dd - 4);
+    ctx.lineTo(7, dd + 2);
+    ctx.lineTo(0, dd + 8);
+    ctx.lineTo(-7, dd + 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // 아웃
+    ctx.font = '800 13px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.textAlign = "right";
+    ctx.fillText("OUT", cx0 + 92, dy + 2);
     for (let i = 0; i < 2; i++) {
       ctx.beginPath();
-      ctx.arc(dx - 7 + i * 14, dy + 22, 5, 0, Math.PI * 2);
-      ctx.fillStyle = i < Math.min(2, outs) || outs >= 3 ? "#ff6a5a" : "rgba(255,255,255,0.15)";
+      ctx.arc(cx0 + 106 + i * 18, dy + 1, 6.5, 0, Math.PI * 2);
+      ctx.fillStyle = i < st.outs || st.outs >= 3 ? "#ff5a4a" : "rgba(255,255,255,0.15)";
       ctx.fill();
     }
-    // 줄들 (최근 7줄 · 새 줄은 미끄러져 들어옴)
-    ctx.strokeStyle = "rgba(255,255,255,0.1)";
-    ctx.beginPath();
-    ctx.moveTo(x + 16, y + 76);
-    ctx.lineTo(x + w - 16, y + 76);
-    ctx.stroke();
-    const N = 7, rowH = 40;
+    // 타자 vs 투수 (방금 타석)
+    if (last) {
+      ctx.textAlign = "center";
+      ctx.font = '900 15px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = last.me ? "#ffcf4a" : "#fff";
+      ctx.fillText(`${last.name}${last.me ? " (나)" : ""}`, cx0 - 70, 300);
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.font = '800 12px "Nanum Gothic", sans-serif';
+      ctx.fillText("VS", cx0, 300);
+      ctx.font = '900 15px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = "#cfe0ff";
+      ctx.fillText(last.pit, cx0 + 70, 300);
+    }
+    // 중계 (최근 5줄 · 새 줄은 밝게 미끄러져 들어옴)
+    const fy = 324, fh = 228, fx = cx0 - 200, fw = 400;
+    this.panel(ctx, fx, fy, fw, fh);
+    const N = 5;
     const from = Math.max(0, r.shown - N);
-    const enter = Math.min(1, r.t / 0.12);
     for (let i = from; i < r.shown; i++) {
       const l = r.lines[i];
       const row = i - from;
-      const isNew = i === r.shown - 1 && r.shown < r.lines.length + 1;
-      const ry = y + 92 + row * rowH;
-      const slide = isNew ? (1 - enter) * 24 : 0;
-      ctx.globalAlpha = isNew ? 0.3 + 0.7 * enter : 1;
-      if (l.me) {
-        ctx.fillStyle = "rgba(255,207,74,0.14)";
-        ctx.beginPath();
-        ctx.roundRect(x + 12, ry - 4, w - 24, rowH - 6, 6);
-        ctx.fill();
-      }
-      const good = l.kind === "HR" ? "#ffd23f" : l.kind === "HIT" ? "#7dff9a" : l.kind === "BB" ? "#7ad7ff" : "rgba(255,255,255,0.55)";
-      // 우리 공격 줄은 결과 색 그대로, 상대 공격은 반대로 (상대 안타 = 붉게)
-      const col = l.ours ? good : l.kind === "HR" || l.kind === "HIT" ? "#ff8a7a" : l.kind === "BB" ? "#ffb07a" : "rgba(255,255,255,0.55)";
+      const isNew = i === r.shown - 1;
+      const y = fy + 26 + row * 40;
+      const slide = isNew ? (1 - enter) * 18 : 0;
+      ctx.globalAlpha = isNew ? 0.3 + 0.7 * enter : 0.55 + 0.45 * (row / N);
+      const good = l.kind === "HR" ? "#ffd23f" : l.kind === "HIT" ? "#7dff9a" : l.kind === "BB" ? "#7ad7ff" : "rgba(255,255,255,0.6)";
+      const col = l.ours ? good : l.kind === "HR" || l.kind === "HIT" ? "#ff8a7a" : l.kind === "BB" ? "#ffb07a" : "rgba(255,255,255,0.6)";
       ctx.textAlign = "left";
-      ctx.font = '700 12px "Nanum Gothic", sans-serif';
-      ctx.fillStyle = "rgba(255,255,255,0.45)";
-      ctx.fillText(`${l.inning}회${l.top ? "초" : "말"}`, x + 22 + slide, ry + 20);
+      ctx.font = '700 11px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.fillText(`${l.inning}회${l.top ? "초" : "말"}`, fx + 14 + slide, y);
       ctx.fillStyle = l.ours ? "#ffcf4a" : "#7ad7ff";
       ctx.beginPath();
-      ctx.arc(x + 78 + slide, ry + 15, 4, 0, Math.PI * 2);
+      ctx.arc(fx + 60 + slide, y, 3.5, 0, Math.PI * 2);
       ctx.fill();
-      ctx.font = `${l.me ? "900" : "800"} 16px "Nanum Gothic", sans-serif`;
+      ctx.font = `${l.me ? "900" : "800"} 14px "Nanum Gothic", sans-serif`;
       ctx.fillStyle = l.me ? "#ffcf4a" : "#fff";
-      ctx.fillText(l.me ? `${l.name} (나)` : l.name, x + 92 + slide, ry + 21);
-      ctx.font = '900 16px "Nanum Gothic", sans-serif';
+      ctx.fillText(l.me ? `${l.name} (나)` : l.name, fx + 72 + slide, y);
+      ctx.font = '900 14px "Nanum Gothic", sans-serif';
       ctx.fillStyle = col;
-      const tx = x + 250 + slide;
-      ctx.fillText(l.text, tx, ry + 21);
+      const tx = fx + 190 + slide;
+      ctx.fillText(l.text, tx, y);
       if (l.runs > 0) {
         const tw = ctx.measureText(l.text).width;
         ctx.fillStyle = l.ours ? "#ffcf4a" : "#ff6a5a";
-        ctx.fillText(`  ${l.runs}점`, tx + tw, ry + 21);
+        ctx.fillText(`  ${l.runs}점`, tx + tw, y);
       }
       ctx.globalAlpha = 1;
     }
-    // 아래: 건너뛰기 안내 · 진행
-    ctx.textAlign = "center";
+    if (!r.lines.length) {
+      ctx.textAlign = "center";
+      ctx.font = '900 18px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = "#fff";
+      ctx.fillText("PLAY BALL!", cx0, fy + fh / 2 - 12);
+      ctx.font = '700 13px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.fillText(`${team(0).name} vs ${team(1).name}`, cx0, fy + fh / 2 + 14);
+    }
+    // 아래 안내
+    ctx.textAlign = "left";
     ctx.font = '700 12px "Nanum Gothic", sans-serif';
     ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.fillText(`${r.shown} / ${r.lines.length} 타석 · 탭 · Space 로 건너뛰기`, x + w / 2, y + h - 14);
+    ctx.fillText(r.lines.length ? `${r.shown} / ${r.lines.length} 타석 · 탭 · Space 로 건너뛰기` : "탭 · Space 로 시작", 22, DH - 20);
     ctx.restore();
   }
 
+  /** 미션 결과 연출 — 도장(MISSION CLEAR! / 아쉽지만 안타! / MISSION FAILED) + 얼굴 + 실제로 바뀐 것 칩 */
   missionFx: { m: Mission; r: "ok" | "partial" | "fail"; t: number; label?: string } | null = null;
   private lastMission: Mission | null = null;
   private drawMissionFx(ctx: CanvasRenderingContext2D) {
@@ -4013,3 +4178,33 @@ const BALLR_PX = (s: number) => 0.055 * s;
 /** 파란 원 반지름 = 플레이트에서 공 크기 × 이만큼 */
 const BLUE_R = 1;
 export { DW, DH };
+
+/** 요약 화면 처음 상태 */
+interface RecapBase {
+  inning: number;
+  top: boolean;
+  outs: number;
+  bases: [boolean, boolean, boolean];
+  score: [number, number];
+  line: [number[], number[]];
+  hits: [number, number];
+}
+/** 타석 결과 → 타순표 칩 글자 */
+function paShort(text: string, kind: PAKind): string {
+  if (kind === "HR") return "홈런";
+  if (/3루타/.test(text)) return "3루타";
+  if (/2루타/.test(text)) return "2루타";
+  if (kind === "HIT") return "안타";
+  if (kind === "BB") return /사구|몸에/.test(text) ? "사구" : "볼넷";
+  if (kind === "K") return "삼진";
+  if (kind === "DP") return "병살";
+  if (kind === "SAC" || /희생/.test(text)) return "희생";
+  if (kind === "FC") return "야선";
+  if (/땅볼/.test(text)) return "땅볼";
+  if (/직선|라이너/.test(text)) return "직선";
+  if (/뜬공|플라이/.test(text)) return "뜬공";
+  return "아웃";
+}
+const PA_SHORT_COL: Record<string, string> = {
+  홈런: "#ffd23f", "3루타": "#7dff9a", "2루타": "#7dff9a", 안타: "#7dff9a", 볼넷: "#7ad7ff", 사구: "#7ad7ff", 삼진: "#ff8a7a", 병살: "#ff8a7a",
+};

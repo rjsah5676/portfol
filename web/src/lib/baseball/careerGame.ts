@@ -310,20 +310,34 @@ export interface RecapLine {
   text: string;
   kind: PAResult["kind"];
   runs: number;
-  /** 이 타석 뒤 아웃 · 주자 · 점수 */
+  /** 공격 팀 (0 원정 · 1 홈) · 타순 번호 · 상대 투수 */
+  side: number;
+  ord: number;
+  pit: string;
+  /** 이 타석 뒤 아웃 · 주자 · 점수 · 이닝별 점수 · 안타 수 */
   outs: number;
   bases: [boolean, boolean, boolean];
   score: [number, number];
+  line: [number[], number[]];
+  hits: [number, number];
 }
 
-function recapOf(s: GameState, before: { inning: number; top: boolean; ours: boolean; me: boolean; name: string }, pa: PAResult): RecapLine {
-  return { ...before, text: pa.text, kind: pa.kind, runs: pa.runs, outs: pa.halfOver ? 3 : s.outs, bases: [s.bases[0] !== null, s.bases[1] !== null, s.bases[2] !== null], score: [s.score[0], s.score[1]] };
+type RecapHead = Pick<RecapLine, "inning" | "top" | "ours" | "me" | "name" | "side" | "ord" | "pit">;
+function recapOf(s: GameState, before: RecapHead, pa: PAResult): RecapLine {
+  return {
+    ...before, text: pa.text, kind: pa.kind, runs: pa.runs, outs: pa.halfOver ? 3 : s.outs,
+    bases: [s.bases[0] !== null, s.bases[1] !== null, s.bases[2] !== null], score: [s.score[0], s.score[1]],
+    line: [[...s.line[0]], [...s.line[1]]], hits: [s.sides[0].hits, s.sides[1].hits],
+  };
 }
 
 export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0, allAuto = false, log?: RecapLine[]): MyPA[] {
   const autoPAs: MyPA[] = [];
   let guard = 0;
-  const head = (me: boolean) => ({ inning: s.inning, top: s.top, ours: batSide(s) === mySide(s), me, name: curBatter(s).name });
+  const head = (me: boolean): RecapHead => ({
+    inning: s.inning, top: s.top, ours: batSide(s) === mySide(s), me, name: curBatter(s).name,
+    side: batSide(s), ord: s.sides[batSide(s)].order, pit: curPitcher(s).name,
+  });
   while (!s.over && guard++ < 600) {
     if (isMyPA(s, myIdx)) {
       if (!autoMine) break;

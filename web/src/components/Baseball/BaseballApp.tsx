@@ -775,7 +775,8 @@ function Play({
             </div>
           )}
           {/* 헤더 (맨 위 가운데): 배속 · 메뉴 · 전체화면 */}
-          <div className="absolute top-[14px] left-1/2 flex -translate-x-1/2 gap-1.5">
+          {/* (경기 요약 화면에선 점수표를 가리지 않게 오른쪽 아래로) */}
+          <div className={`absolute flex gap-1.5 ${ui.phase === "recap" ? "right-4 bottom-[6px]" : "top-[14px] left-1/2 -translate-x-1/2"}`}>
             <Btn
               className="px-3 py-1 font-mono text-[13px]"
               color="#7dff9a"
