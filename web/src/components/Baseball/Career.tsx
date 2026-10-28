@@ -54,7 +54,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const [queue, setQueue] = useState<TurnOut[]>([]);
   const [reports, setReports] = useState<GameReport[]>([]);
   const [season, setSeason] = useState<SeasonSummary | null>(null);
-  const [modal, setModal] = useState<null | "shop" | "records" | "bonds" | "guide" | "newConfirm" | "epilogue" | { place: PlaceId }>(null);
+  const [modal, setModal] = useState<null | "shop" | "records" | "standings" | "bonds" | "guide" | "newConfirm" | "epilogue" | { place: PlaceId }>(null);
   /** 큐 맨 앞 결과의 미연시 장면을 봤나 */
   const [vnSeen, setVnSeen] = useState(false);
   const [toast, setToast] = useState("");
@@ -278,6 +278,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             onAdvance={doAdvance}
             onShop={() => setModal("shop")}
             onRecords={() => setModal("records")}
+            onStandings={() => setModal("standings")}
             onBonds={() => setModal("bonds")}
             onGuide={() => setModal("guide")}
             quiet={overlayBusy || !!modal}
@@ -377,6 +378,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
         />
       )}
       {modal === "records" && c && <RecordsModal c={c} onClose={() => setModal(null)} />}
+      {modal === "standings" && c && <StandingsModal c={c} onClose={() => setModal(null)} />}
       {modal === "bonds" && c && <BondsModal c={c} onClose={() => setModal(null)} />}
       {modal === "guide" && <GuideModal onClose={() => setModal(null)} />}
       {modal === "epilogue" && c && retireCard(c).partner && (
@@ -766,6 +768,7 @@ function Hub(p: {
   onAdvance: () => void;
   onShop: () => void;
   onRecords: () => void;
+  onStandings: () => void;
   onBonds: () => void;
   onGuide: () => void;
   /** 팝업이 떠 있음 (힌트 숨김) */
@@ -803,6 +806,11 @@ function Hub(p: {
           <Btn className="px-2 py-1 text-[13px] whitespace-nowrap" color="#8b93b8" onClick={p.onGuide}>
             ?
           </Btn>
+          {(c.phase === "season" || c.phase === "post" || c.phase === "seasonEnd") && (
+            <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#7dff9a" onClick={p.onStandings}>
+              순위
+            </Btn>
+          )}
           <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#7ad7ff" onClick={p.onRecords}>
             기록
           </Btn>
@@ -824,6 +832,10 @@ function Hub(p: {
           ) : step === "seasonEnd" ? (
             <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-[#ffd23f]/40 bg-black/30">
               <div className={`${font.title} text-[30px]`}>{c.season}년차 시즌 종료!</div>
+              {c.postRes && <div className={`${font.title} text-[22px]`} style={{ color: POST_BADGE[c.postRes]?.col }}>{POST_BADGE[c.postRes]?.t}</div>}
+              <div className="w-[440px]">
+                <StandingsTable rows={standings(c)} />
+              </div>
               <div className="text-[14px] text-white/65">
                 {c.line.g}경기 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점 · 팀 {myRank(c)}위{c.postRes && c.postRes !== "진출 실패" ? ` · 가을야구 ${c.postRes}` : ""}
               </div>
@@ -1319,6 +1331,66 @@ function Standings({ c }: { c: Career }) {
     </div>
   );
 }
+/** 순위표 (승 · 패 · 승률 · 게임차) — 3위까지 가을야구 */
+function StandingsTable({ rows }: { rows: ReturnType<typeof standings> }) {
+  const top = rows[0];
+  return (
+    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30 text-[14px]">
+      <div className="grid grid-cols-[40px_1fr_44px_44px_60px_52px] px-3 py-1.5 text-[11.5px] text-white/45">
+        <span>순위</span>
+        <span className="text-left">팀</span>
+        <span>승</span>
+        <span>패</span>
+        <span>승률</span>
+        <span>게임차</span>
+      </div>
+      {rows.map((r) => (
+        <div key={r.i}>
+          <div className="grid grid-cols-[40px_1fr_44px_44px_60px_52px] items-center px-3 py-1.5 font-mono" style={r.i === 0 ? { background: `${r.color}26`, boxShadow: `inset 3px 0 0 ${r.color}` } : undefined}>
+            <b style={{ color: r.color }}>{r.rank}</b>
+            <span className="text-left font-['Nanum_Gothic'] font-bold" style={{ color: r.i === 0 ? r.color : "#fff" }}>
+              {r.name}
+              {r.i === 0 ? " (우리)" : ""}
+            </span>
+            <span>{r.w}</span>
+            <span>{r.l}</span>
+            <span>{fmtAvg(r.pct)}</span>
+            <span className="text-white/60">{r.rank === 1 ? "-" : ((top.w - r.w + (r.l - top.l)) / 2).toFixed(1)}</span>
+          </div>
+          {r.rank === 3 && <div className="border-t border-dashed border-[#ffd23f]/50 text-center text-[10.5px] leading-[14px] text-[#ffd23f]/70">↑ 가을야구</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+function StandingsModal({ c, onClose }: { c: Career; onClose: () => void }) {
+  const rows = standings(c);
+  const left = c.phase === "season" ? GAMES - gameNo(c) : 0;
+  return (
+    <Modal w={520} onClose={onClose}>
+      <div className={`${font.title} text-[26px]`}>{c.season}년차 팀 순위</div>
+      <div className="mt-3">
+        <StandingsTable rows={rows} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[13px] text-white/70">
+        {c.phase === "season" && <span>남은 경기 {left}</span>}
+        {c.post && <span className="font-bold text-[#ffd23f]">{postName(c.post)}{c.post.stage === "final" ? ` · 시리즈 ${c.post.w}-${c.post.l}` : ""}</span>}
+        {c.postRes && <span className="font-bold text-[#ffd23f]">가을야구 {c.postRes}</span>}
+        <MoodChip m={c.mood ?? 0} />
+      </div>
+      <div className="mt-1 text-[11.5px] text-white/45">1위는 한국시리즈 직행 · 2 · 3위는 준플레이오프 단판 · 내가 잘 칠수록 팀 분위기가 올라 동료들도 잘 쳐요</div>
+      <Btn space className={`${font.title} mt-4 px-8 py-2 text-lg`} color="#7dff9a" onClick={onClose}>
+        닫기
+      </Btn>
+    </Modal>
+  );
+}
+const POST_BADGE: Record<string, { t: string; col: string }> = {
+  우승: { t: "🏆 한국시리즈 우승!", col: "#ffd23f" },
+  준우승: { t: "🥈 준우승", col: "#d8e2f0" },
+  "준PO 탈락": { t: "준플레이오프 탈락", col: "#ffb37a" },
+  "진출 실패": { t: "가을야구 진출 실패", col: "#9aa3c2" },
+};
 /** 팀 분위기 — 내 경기 평가로 오르내리고 동료 타격 · 투구에 더해짐 (잘 치면 팀이 같이 산다) */
 function MoodChip({ m }: { m: number }) {
   const col = m >= MOOD.hot ? "#ff7a3d" : m >= 1 ? "#ffd23f" : m > -1 ? "#9aa3c2" : "#7ad7ff";
@@ -1610,6 +1682,16 @@ function SeasonModal({ s, c, onClose, onReroll }: { s: SeasonSummary; c: Career;
   return (
     <Modal w={540}>
       <div className={`${font.title} text-[30px] text-[#ffd23f]`}>{s.season}년차 시즌 결산</div>
+      {s.post && (
+        <div className={`${font.title} mt-1 text-[24px]`} style={{ color: POST_BADGE[s.post]?.col }}>
+          {POST_BADGE[s.post]?.t ?? s.post}
+        </div>
+      )}
+      {s.standings && (
+        <div className="mt-2">
+          <StandingsTable rows={s.standings} />
+        </div>
+      )}
       <div className="mt-2 grid grid-cols-6 gap-1 rounded-xl bg-black/30 py-2 font-mono text-[13px]">
         {[
           ["경기", L.g],

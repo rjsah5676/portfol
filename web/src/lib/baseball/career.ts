@@ -2060,6 +2060,9 @@ export interface SeasonSummary {
   talentReveal?: string;
   /** 노쇠로 떨어진 능력치 */
   decline?: Partial<Stats>;
+  /** 팀 최종 순위표 (리셋 전) · 가을야구 결과 */
+  standings?: ReturnType<typeof standings>;
+  post?: PostRes;
   /** 10년차 끝이라 무조건 은퇴 */
   retire: boolean;
   /** 은퇴를 고를 수 있음 */
@@ -2135,6 +2138,8 @@ export function endSeason(c: Career): SeasonSummary {
     lines.push("나이가 느껴진다… 발이 조금 무거워졌다.");
   }
   const rank = myRank(c);
+  const finalTable = standings(c);
+  const postRes = c.postRes;
   const rec: SeasonRec = { season: c.season, line: { ...L }, awards, ovr: ovrOf(c), salary: c.salary, rank, post: c.postRes };
   lines.unshift(`팀 정규시즌 ${rank}위${c.postRes && c.postRes !== "진출 실패" ? ` · 가을야구 ${c.postRes}` : ""}`);
   c.table = newTable();
@@ -2160,7 +2165,7 @@ export function endSeason(c: Career): SeasonSummary {
     c.askRetire = canRetire;
   }
   pushLog(c, `${c.season}년차 결산 — 종합 ${rec.ovr}${awards.length ? ` · ${awards.join(" · ")}` : ""}`);
-  return { season: c.season, line: rec.line, awards, lines, salary: c.salary, prevSalary: prev, talentReveal, decline, retire, canRetire };
+  return { season: c.season, line: rec.line, awards, lines, salary: c.salary, prevSalary: prev, talentReveal, decline, retire, canRetire, standings: finalTable, post: postRes };
 }
 
 /** 은퇴할지 답 (7년차 결산부터) */
