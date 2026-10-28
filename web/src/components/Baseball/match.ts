@@ -2800,15 +2800,21 @@ export class Match {
     }
     return out;
   }
-  /** 보상 칩 한 줄 (x 부터 오른쪽으로) — 그린 폭 */
-  private rewardChips(ctx: CanvasRenderingContext2D, x: number, y: number, list: { t: string; good: boolean }[], k = 1, small = false) {
+  /** 보상 칩 한 줄 (x 부터 오른쪽으로) — 그린 폭. maxW 보다 길면 통째로 줄여서 판 밖으로 안 나가게 */
+  private rewardChips(ctx: CanvasRenderingContext2D, x: number, y: number, list: { t: string; good: boolean }[], k = 1, small = false, maxW = Infinity) {
     ctx.font = `800 ${small ? 11 : 12.5}px "Nanum Gothic", sans-serif`;
-    let cx = x;
+    const ws = list.map((c) => ctx.measureText(c.t).width + 14);
+    const total = ws.reduce((a, w) => a + w, 0) + 6 * Math.max(0, list.length - 1);
+    const sc = total > maxW ? maxW / total : 1;
+    const h = small ? 18 : 22;
+    ctx.save();
+    ctx.translate(x, y + (h * (1 - sc)) / 2);
+    ctx.scale(sc, sc);
+    let cx = 0;
     list.forEach((c, i) => {
       const a = clamp(k * list.length - i, 0, 1);
+      const w = ws[i];
       if (a <= 0) return;
-      const w = ctx.measureText(c.t).width + 14;
-      const h = small ? 18 : 22;
       ctx.save();
       ctx.globalAlpha *= a;
       ctx.translate(0, (1 - a) * 8);
@@ -2816,16 +2822,27 @@ export class Match {
       ctx.strokeStyle = c.good ? "rgba(255,210,63,0.7)" : "rgba(255,110,110,0.7)";
       ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.roundRect(cx, y, w, h, 6);
+      ctx.roundRect(cx, 0, w, h, 6);
       ctx.fill();
       ctx.stroke();
       ctx.fillStyle = c.good ? "#ffe9a8" : "#ffb0b0";
       ctx.textAlign = "left";
-      ctx.fillText(c.t, cx + 7, y + h / 2 + 4.5);
+      ctx.fillText(c.t, cx + 7, h / 2 + 4.5);
       ctx.restore();
       cx += w + 6;
     });
-    return cx - x;
+    ctx.restore();
+    return Math.min(total, maxW);
+  }
+  /** 한 줄 글씨를 maxW 안에 들어가게 글자 크기를 줄임 (size → min) */
+  private fitFont(ctx: CanvasRenderingContext2D, text: string, maxW: number, size: number, min: number, face: string) {
+    let sz = size;
+    ctx.font = `${sz}px ${face}`;
+    while (sz > min && ctx.measureText(text).width > maxW) {
+      sz -= 1;
+      ctx.font = `${sz}px ${face}`;
+    }
+    return sz;
   }
   /** 얼굴 (둥근 네모 · 테두리) */
   private missionPortrait(ctx: CanvasRenderingContext2D, m: Mission, x: number, y: number, s: number, gray = false) {
@@ -2869,7 +2886,7 @@ export class Match {
     const t = this.pt;
     const col = this.missionColor(m);
     const bond = !!m.char;
-    const W = 600, H = 168;
+    const W = 680, H = 168;
     const x = 512 - W / 2, y = 318;
     const pop = t < 0.18 ? 0.7 + (t / 0.18) * 0.38 : t < 0.3 ? 1.08 - ((t - 0.18) / 0.12) * 0.08 : 1;
     ctx.save();
@@ -2943,21 +2960,22 @@ export class Match {
     // 미션 내용
     const tx = x + 152;
     ctx.fillStyle = "#fff";
-    ctx.font = '25px "Jua", "Nanum Gothic", sans-serif';
+    const maxW = x + W - 20 - tx;
     ctx.textAlign = "left";
+    this.fitFont(ctx, `"${m.text}"`, maxW, 25, 16, '"Jua", "Nanum Gothic", sans-serif');
     ctx.fillText(`"${m.text}"`, tx, y + 58);
     // 보상
     ctx.font = '800 12px "Nanum Gothic", sans-serif';
     ctx.fillStyle = "#ffd23f";
     ctx.fillText("성공하면", tx, y + 92);
-    this.rewardChips(ctx, tx + 58, y + 77, this.missionRewards(m, "ok"), Math.min(1, Math.max(0, (t - 0.25) / 0.5)));
+    this.rewardChips(ctx, tx + 58, y + 77, this.missionRewards(m, "ok"), Math.min(1, Math.max(0, (t - 0.25) / 0.5)), false, maxW - 58);
     const fail = this.missionRewards(m, "fail");
     ctx.font = '800 11px "Nanum Gothic", sans-serif';
     ctx.fillStyle = "#ff9a9a";
     ctx.fillText(m.kind === "hr" || m.kind === "xbh" ? "실패하면 (안타면 봐줌)" : "실패하면", tx, y + 125);
     ctx.font = '800 11px "Nanum Gothic", sans-serif';
     const fx = tx + ctx.measureText(m.kind === "hr" || m.kind === "xbh" ? "실패하면 (안타면 봐줌)" : "실패하면").width + 10;
-    this.rewardChips(ctx, fx, y + 112, fail, Math.min(1, Math.max(0, (t - 0.5) / 0.4)), true);
+    this.rewardChips(ctx, fx, y + 112, fail, Math.min(1, Math.max(0, (t - 0.5) / 0.4)), true, tx + maxW - fx);
     ctx.fillStyle = "rgba(255,255,255,0.45)";
     ctx.font = "12px \"Nanum Gothic\", sans-serif";
     ctx.textAlign = "right";
@@ -2981,7 +2999,7 @@ export class Match {
     ctx.save();
     ctx.globalAlpha = a;
     // 판
-    const W = 520, H = 150;
+    const W = 600, H = 150;
     const x = 512 - W / 2, y = cy - H / 2;
     ctx.fillStyle = "rgba(8,10,24,0.88)";
     ctx.strokeStyle = ok ? this.missionColor(f.m) : "#5a5f73";
@@ -2996,7 +3014,7 @@ export class Match {
     // 도장: 크게 → 쾅 (기울어짐)
     const sk = t < 0.16 ? 2.4 - (t / 0.16) * 1.5 : t < 0.26 ? 0.9 + ((t - 0.16) / 0.1) * 0.1 : 1;
     ctx.save();
-    ctx.translate(x + 128 + 180 + shake, y + 44);
+    ctx.translate(x + 128 + (W - 128) / 2 + shake, y + 44);
     ctx.rotate(-0.07);
     ctx.scale(sk, sk);
     ctx.font = `${f.r === "partial" ? 30 : 34}px "Black Han Sans", sans-serif`;
@@ -3012,11 +3030,12 @@ export class Match {
     ctx.restore();
     // 미션 내용 (작게)
     ctx.fillStyle = "rgba(255,255,255,0.65)";
-    ctx.font = '13px "Jua", "Nanum Gothic", sans-serif';
     ctx.textAlign = "left";
+    const maxW = W - 128 - 18;
+    this.fitFont(ctx, `${f.m.who}: "${f.m.text}"`, maxW, 13, 10, '"Jua", "Nanum Gothic", sans-serif');
     ctx.fillText(`${f.m.who}: "${f.m.text}"`, x + 128, y + 82);
     // 바뀐 것 칩 (하나씩 튀어나옴)
-    this.rewardChips(ctx, x + 128, y + 96, this.missionRewards(f.m, f.r), Math.min(1, Math.max(0, (t - 0.3) / 0.6)));
+    this.rewardChips(ctx, x + 128, y + 96, this.missionRewards(f.m, f.r), Math.min(1, Math.max(0, (t - 0.3) / 0.6)), false, maxW);
     ctx.restore();
   }
 
