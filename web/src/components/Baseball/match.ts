@@ -371,6 +371,12 @@ export class Match {
     }
     this.batSkin = baseSkin();
     this.pitSkin = baseSkin();
+    // 육성: 첫 내 타석까지 미리 진행해 둠 — 인트로 동안 1번 타자가 서 있다가 내 선수로 휙 바뀌던 문제
+    if (cfg.career) {
+      this.careerAdvance(false);
+      this.preAdvanced = true;
+      this.updateSkins();
+    }
     void preloadBatter();
     this.ui = this.makeUi();
     this.setBanner(
@@ -474,6 +480,20 @@ export class Match {
   }
 
   // ───────────── 타석 준비 ─────────────
+  /** 육성: 다음 내 타석까지 빠르게 진행 → 그 사이 내 자동 타석들 */
+  private preAdvanced = false;
+  private careerAdvance(allAuto: boolean): MyPA[] {
+    const s = this.s;
+    const c = this.cfg.career!;
+    const autos = advanceToMyPA(s, c.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto);
+    this.myPAs.push(...autos);
+    if (!s.over) {
+      cpuManage(s, fieldSide(s));
+      this.rbiBefore = s.sides[batSide(s)].bat[c.myIdx].rbi;
+    }
+    return autos;
+  }
+
   private beginPA(): void {
     const s = this.s;
     if (s.over) return this.finish();
@@ -485,14 +505,12 @@ export class Match {
         else this.cfg.highlight = this.afterMode === "highlight";
         this.afterMode = null;
       }
-      // 내 타석까지 빠르게 진행 (남은 경기 자동이면 끝까지)
+      // 내 타석까지 빠르게 진행 (남은 경기 자동이면 끝까지) — 첫 타석은 생성자에서 이미 진행해 둠
       const sc = [...s.score];
       const inn = s.inning;
-      const autos = advanceToMyPA(s, this.cfg.career.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto);
-      this.myPAs.push(...autos);
+      const autos = this.preAdvanced ? [] : this.careerAdvance(allAuto);
+      this.preAdvanced = false;
       if (s.over) return this.finish();
-      cpuManage(s, fieldSide(s));
-      this.rbiBefore = s.sides[batSide(s)].bat[this.cfg.career.myIdx].rbi;
       if (this.paCount++ > 0) {
         const me = mySide(s);
         const got = s.score[me] - sc[me];
