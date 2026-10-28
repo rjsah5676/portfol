@@ -101,10 +101,11 @@ export function locQuality(at: { x: number; y: number }, cz: { x: number; y: num
 export const ROLL = { base: 0.22, early: 0.35, low: 0.2, pf: 0.85, la: -2, sd: 6 };
 /** 필살타법 손잡이 (play.ts 의 수비 쪽 효과는 SP_FIELD) */
 /**
- * 맞힌 공(앞으로 보낸 공) 하나의 득점가치를 다 0.6 ~ 0.7 로 (보통 스윙 0.19) — 모양만 다르게:
- * 카이 2루타 라이너 · 이반 · 릴리 홈런 · 메이 빈틈 · 바이올렛 · 소영 장타 · 이그나 · 건모 · 제나는 수비 방해 (scratchpad spsw2.ts, σ50ms)
+ * 맞힌 공(앞으로 보낸 공) 하나의 득점가치를 다 0.64 ~ 0.71 로 (보통 스윙 0.19 · σ50ms) — 모양은 캐릭터마다 뚜렷하게:
+ * 카이 2루타 · 이그나 강습 땅볼 → 장내 홈런 · 제나 단타 (안타율 최고) · 이반 홈런 아니면 범타 · 릴리 홈런 · 메이 고른 라이너
+ * 소영 (아무 공이나 맞힘) · 바이올렛 (타이밍 반) 은 맞히기 쉬운 쪽이 특징 (scratchpad spsw2.ts)
  */
-export const SP_TUNE = { kaiEv: 5.2, ignaEv: 1, soyEv: 2.1, ivanC: 0.7, ivanEv0: 40, ivanEvC: 8, meiEv: 9, violetEv: 6.8 };
+export const SP_TUNE = { kaiEv: 6.6, kaiLa: 13, ignaEv: 0.3, ignaLa: 0, soyEv: 2.1, ivanC: 0.92, ivanEv0: 47, ivanEvC: 8, ivanMiss: 14, meiEv: 9, meiLa: 13, zenaEv: -2, zenaLa: 3, violetEv: 6.8 };
 export const EV = { base: 22, c: 16.3, pow: 4.2, pf: 4.7, laMid: 14, la0: 15, laPow: 7, laSd: 7, laCurve: 3, pfT0: 0.15, pfT1: 0.45 };
 
 /** 타이밍 창 (초) */
@@ -194,10 +195,13 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   //   목표: 안타 55 ~ 65%, 홈런은 힘 캐릭터(이반 · 릴리)만 30 ~ 40%
   switch (sp) {
     case "kai":
-      la = clamp(la, 4, 16);
+      // 질풍: 총알 라이너 → 외야 사이 2루타
+      la = clamp(lerp(la, SP_TUNE.kaiLa, 0.6), SP_TUNE.kaiLa - 5, SP_TUNE.kaiLa + 5);
       ev += SP_TUNE.kaiEv;
       break;
     case "igna":
+      // 업화: 불붙은 강습 땅볼 — 잡으려는 수비가 화상으로 놓침 (play.ts)
+      la = clamp(lerp(la, SP_TUNE.ignaLa, 0.65), -10, 9);
       ev += SP_TUNE.ignaEv;
       break;
     case "soyoung":
@@ -205,21 +209,27 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
       ev += SP_TUNE.soyEv;
       break;
     case "ivan":
+      // 철곰: 제대로 맞으면 담장 너머 · 아니면 그냥 공 (모 아니면 도)
       if (c > SP_TUNE.ivanC) {
         ev = Math.max(ev, SP_TUNE.ivanEv0 + SP_TUNE.ivanEvC * c);
         la = clamp(lerp(la, 28, 0.6), 18, 38);
         spray = clamp(spray, -40, 40);
-      }
+      } else ev -= SP_TUNE.ivanMiss;
       break;
     case "mei": {
-      // 태극: 라이너로 휘어 수비 사이 빈틈으로
-      la = clamp(lerp(la, 13, 0.6), 5, 22);
+      // 태극: 낮게 휘는 라이너로 수비 사이 빈틈 — 단타 제조기
+      la = clamp(lerp(la, SP_TUNE.meiLa, 0.6), 3, SP_TUNE.meiLa + 6);
       const gaps = [-24, -9, 9, 24];
       const g = gaps.reduce((a, b) => (Math.abs(b - spray) < Math.abs(a - spray) ? b : a));
       spray = lerp(spray, g, 0.8) + rng.gauss() * 2;
       ev += SP_TUNE.meiEv;
       break;
     }
+    case "zena":
+      // 번개: 수비가 감전돼 느린 사이 — 짧은 타구도 다 살아나감 (단타 · 내야안타)
+      la = clamp(lerp(la, SP_TUNE.zenaLa, 0.55), -6, 20);
+      ev += SP_TUNE.zenaEv;
+      break;
     case "violet":
       la = clamp(lerp(la, 15, 0.55), 6, 24);
       ev += SP_TUNE.violetEv;

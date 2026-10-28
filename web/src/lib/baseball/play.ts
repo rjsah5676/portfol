@@ -41,7 +41,7 @@ export const POS_NAME = ["투수", "포수", "1루수", "2루수", "3루수", "�
  */
 const FIELD_DEF = 520;
 /** 필살타법 수비 쪽 효과 (예전: 릴리 중력 5.6 · 공기 0.0026, 건모 멈춤 1.5초, 제나 느려짐 2초, 카이 반응 +0.45, 이그나 화상 100%) */
-export const SP_FIELD = { lilyG: 8.4, lilyDrag: 0.0034, gunmoFreeze: 0.8, zenaSlow: 1.5, kaiReact: 0.3, ignaStunP: 0.3, ignaStun: 1.0 };
+export const SP_FIELD = { lilyG: 8.4, lilyDrag: 0.0034, gunmoFreeze: 0.8, zenaSlow: 2.5, kaiReact: 0.3, ignaStunP: 0.4, ignaStun: 1.0 };
 /** 몸을 날려 잡은 공 중 「필살수비!」 연출을 보여 주는 몫 */
 const DIVE_SHOW = 0.28;
 /** 낮은 라이너(타구각 범위)에 내야수 · 투수 반응 늦음 (초) */
