@@ -8,7 +8,7 @@ import { isMuted, setMuted } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font, useSpaceConfirm } from "./ui";
 import CareerMode from "./Career";
 import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
-import { CLUB_DEFS, clubDefById } from "@/lib/baseball/data";
+import { CLUB_DEFS, charById, clubDefById, faceUrl } from "@/lib/baseball/data";
 import { buildTeam, findGhosts, veloKmh, ghostTeam, gradeOf, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
 import { makeRng } from "@/lib/baseball/rng";
 import { clutchOf } from "@/lib/baseball/game";
@@ -361,7 +361,7 @@ export default function BaseballApp() {
                   <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> 또는 <b>화면 아무 데나 터치</b>.</p>
                   <p>빠르면 당겨 치고(우타 → 왼쪽), 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
                   <p>존 밖 공(볼)은 휘두르면 빗맞아요 — 참으면 볼넷.</p>
-                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 (인연에서 배운 선수만, 투구 전에)</p>
+                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 — 공이 날아올 때 스윙 대신 누르면 그 자리에서 특별한 스윙 (인연에서 배운 선수만, 경기당 1번 · 앞으로 보내야 씀)</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#7ad7ff]`}>투구</div>
@@ -623,18 +623,6 @@ function Play({
           >
             {ui.userBat && (
               <>
-                {ui.spHero && (
-                  <Btn
-                    active={ui.spArmed}
-                    disabled={ui.phase !== "ready" || ui.spArmed || ui.spLeft <= 0}
-                    className={`${font.title} py-2 text-[15px] leading-tight`}
-                    color="#ff5fb4"
-                    onClick={() => m?.toggleSpecial()}
-                  >
-                    {ui.spArmed ? "필살 준비!" : `필살타법 ${ui.mode === "derby" ? "" : `(${ui.spLeft})`}`}
-                    <span className="block text-[11px] font-normal opacity-80">{ui.spName} · K</span>
-                  </Btn>
-                )}
                 {touch && ui.mode !== "derby" && (
                   <button
                     type="button"
@@ -647,6 +635,7 @@ function Play({
                     <span className="font-['Nanum_Gothic'] text-[11px] font-normal opacity-60">B</span>
                   </button>
                 )}
+                {touch && ui.spHero && ui.spChar && <SpecialBtn ui={ui} round onPress={() => m?.toggleSpecial()} />}
                 {touch && <RoundBtn
                   img="/baseball/ui/swing.webp"
                   imgDown="/baseball/ui/swing-down.webp"
@@ -689,6 +678,13 @@ function Play({
               </>
             )}
           </div>
+
+          {/* 필살타법 (PC): 타자 반대쪽 아래 — 컷인이 나오는 쪽 */}
+          {!touch && ui.userBat && ui.spHero && ui.spChar && !["field", "result", "change", "intro"].includes(ui.phase) && (
+            <div className="absolute bottom-4" style={ui.lefty ? { left: 16 } : { right: 16 }}>
+              <SpecialBtn ui={ui} onPress={() => m?.toggleSpecial()} />
+            </div>
+          )}
 
           {/* 타자 이동 패드 (터치) — 투구 전에 끌어서 타자 · 컨택존 옮기기 */}
           {touch && ui.userBat && !["field", "result", "change"].includes(ui.phase) && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
@@ -926,6 +922,82 @@ function LineScore({ m }: { m: Match }) {
 
 /** 타자 이동 패드: 가운데 원을 끌면 그 방향으로 (화면 위 = 위). 손 떼면 멈춤 */
 /** 둥근 그림 버튼 (스윙 · 던지기) — GPT 그림 위에 글자, 누르면 살짝 눌림 */
+/**
+ * 필살타법 버튼 — 캐릭터 얼굴 + 퍼스널 컬러 링. 공이 날아오는 동안만 불이 들어오고 누르면 그 자리에서 특별한 스윙.
+ * round: 터치용 동그라미 (스윙 버튼 위) · 아니면 PC 칩 (K 키)
+ */
+function SpecialBtn({ ui, round, onPress }: { ui: UiState; round?: boolean; onPress: () => void }) {
+  const ch = charById(ui.spChar!);
+  const left = ui.mode === "derby" && !ui.career ? 99 : ui.spLeft;
+  const used = left <= 0;
+  const now = ui.spNow;
+  const state = used ? "사용함" : now ? "지금!" : "공이 오면";
+  const ring = used ? "#555" : ch.color;
+  const face = (sz: number) => (
+    <span
+      className={`relative block shrink-0 rounded-full p-[3px] ${now ? "animate-spin" : ""}`}
+      style={{
+        animationDuration: "1.1s",
+        width: sz,
+        height: sz,
+        background: now ? `conic-gradient(from 0deg, ${ring}, #fff, ${ring}, #fff, ${ring})` : ring,
+        boxShadow: now ? `0 0 18px ${ring}, 0 0 4px #fff` : "0 2px 6px rgba(0,0,0,0.5)",
+      }}
+    >
+      <img
+        src={faceUrl(ch.id)}
+        alt=""
+        draggable={false}
+        className={`block h-full w-full rounded-full bg-[#120b1e] object-cover ${now ? "animate-spin" : ""}`}
+        style={{ filter: used ? "grayscale(1) brightness(0.6)" : undefined, animationDuration: "1.1s", animationDirection: "reverse" }}
+      />
+    </span>
+  );
+  if (round)
+    return (
+      <button type="button" disabled={used} onClick={onPress} className="relative mx-auto flex select-none flex-col items-center gap-0.5 transition-transform active:scale-95">
+        {face(84)}
+        <span className={`${font.title} text-[15px] leading-none`} style={{ color: used ? "#999" : ch.color, WebkitTextStroke: "1px rgba(0,0,0,0.8)", paintOrder: "stroke" }}>
+          {ch.swing.name}
+        </span>
+        <span className="text-[10px] text-white/60">필살타법 · {state}</span>
+      </button>
+    );
+  return (
+    <button
+      type="button"
+      disabled={used}
+      onClick={onPress}
+      className="flex select-none items-center gap-2.5 rounded-2xl border-2 py-1.5 pr-3 pl-1.5 text-left transition-[transform,box-shadow] active:scale-95"
+      style={{
+        borderColor: used ? "rgba(255,255,255,0.15)" : ring,
+        background: used ? "rgba(10,8,18,0.75)" : `linear-gradient(100deg, ${ring}55, rgba(10,8,18,0.88) 60%)`,
+        boxShadow: now ? `0 0 22px ${ring}aa` : undefined,
+        transform: now ? "scale(1.05)" : undefined,
+      }}
+    >
+      {face(52)}
+      <span className="flex flex-col leading-tight">
+        <span className="text-[11px] text-white/65">필살타법 · {used ? "사용함" : ui.mode === "derby" && !ui.career ? "무제한" : `${left}번`}</span>
+        <span className={`${font.title} text-[19px]`} style={{ color: used ? "#888" : ch.color, WebkitTextStroke: "1px rgba(0,0,0,0.7)", paintOrder: "stroke" }}>
+          {ch.swing.name}
+        </span>
+      </span>
+      <span className="ml-1 flex flex-col items-center gap-0.5">
+        <span
+          className="grid h-8 w-8 place-items-center rounded-lg border-b-4 text-[16px] font-black"
+          style={{ background: now ? "#fff" : "rgba(255,255,255,0.12)", color: now ? "#120b1e" : "#fff", borderColor: now ? ring : "rgba(0,0,0,0.5)" }}
+        >
+          K
+        </span>
+        <span className="text-[10px] font-bold whitespace-nowrap" style={{ color: now ? "#fff" : "rgba(255,255,255,0.5)" }}>
+          {state}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function RoundBtn({ img, imgDown, label, sub, onClick, disabled, hot, size = 150 }: { img: string; imgDown?: string; label: string; sub?: string; onClick: () => void; disabled?: boolean; hot?: boolean; size?: number }) {
   const [down, setDown] = useState(false);
   return (

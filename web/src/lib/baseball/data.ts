@@ -134,6 +134,9 @@ const BB_ART = new Set<string>(["kai", "igna", "soyoung", "lily", "zena", "ivan"
 const BB_CUTIN = new Set<string>(["violet"]);
 export const artUrl = (id: string) => (BB_ART.has(id) ? `/baseball/char/${id}.webp` : `/fight/art/${id}.webp`);
 export const faceUrl = (id: string) => (BB_ART.has(id) ? `/baseball/char/${id}-face.webp` : `/fight/art/${id}-face.webp`);
+/** 필살타법 사이드 컷인 그림 (스윙 자세 · 오른쪽 보고 · 투명 배경, public/baseball/char/<id>-swing.webp) */
+export const hasSwingArt = (id: string) => BB_ART.has(id);
+export const swingArtUrl = (id: CharId) => `/baseball/char/${id}-swing.webp`;
 export const cutinUrl = (id: CharId) => (BB_CUTIN.has(id) ? `/baseball/char/${id}-cutin.webp` : `/fight/cutin/${id}.webp`);
 
 export interface Batter {

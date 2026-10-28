@@ -9,7 +9,7 @@
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { CZ_RANGE, contactZone, timingLabel, timingWindow } from "@/lib/baseball/contact";
-import { BP_PITCHER, TEAM_DEFS, charById, cutinUrl, faceUrl, makeTeam, seasonOf, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
+import { BP_PITCHER, TEAM_DEFS, artUrl, charById, cutinUrl, faceUrl, hasSwingArt, swingArtUrl, makeTeam, seasonOf, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
 import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_RIG_RELEASE_T, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
@@ -31,6 +31,8 @@ const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
 import { boneTip, drawRig, pose, type Anim, type RigColors, type Skin } from "@/lib/baseball/rig";
 import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
+/** 필살타법 사이드 컷인 길이 (초) */
+const SIDE_CUT_DUR = 1.35;
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
 import { DH, DW, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
@@ -128,6 +130,10 @@ export interface UiState {
   spHero: boolean;
   spLeft: number;
   spName: string;
+  /** 필살타법 — 지금 K 로 바로 칠 수 있나 (공이 날아오는 중 · 아직 안 휘두름) · 캐릭터 · 타자 왼손 */
+  spNow: boolean;
+  spChar: CharId | null;
+  lefty: boolean;
   kinds: { id: PitchKind; name: string }[];
   kind: number;
   aiming: boolean;
@@ -421,6 +427,9 @@ export class Match {
       spHero: hero && (this.cfg.mode !== "derby" || ub),
       spLeft: this.cfg.bond ? (ub ? us.swingLeft : 0) : this.cfg.mode === "derby" ? (ub ? 99 : 0) : ub ? us.swingLeft : us.ballLeft,
       spName: sp ? (ub ? sp.swing.name : sp.ball.name) : "",
+      spNow: ub && !!bSw && this.phase === "flight" && this.swingStart < 0 && !this.hbpHit && !this.buntArmed && (this.cfg.mode === "derby" && !this.cfg.bond ? true : us.swingLeft > 0),
+      spChar: sp ? sp.id : null,
+      lefty: b.bats === "L",
       kinds: p.rep.map((k) => ({ id: k, name: PITCHES[k].name })),
       kind: this.kindIdx,
       aiming: !ub && this.phase === "aim",
@@ -677,6 +686,14 @@ export class Match {
     this.goWindup();
   }
 
+  /** 필살타법 사이드 컷인 — 타자 반대쪽 옆에서 살짝 (게임은 안 멈춤) */
+  sideCut: { id: CharId; t: number; right: boolean } | null = null;
+  private spHintAt = -9;
+  private startSideCut(id: CharId) {
+    // 오른손 타자는 왼쪽에 서니까 오른쪽에서 · 왼손은 왼쪽에서
+    this.sideCut = { id, t: 0, right: this.batterNow.bats !== "L" };
+    sfx.cutin();
+  }
   private showCutin(id: CharId, title: string, sub: string, side: "bat" | "pit") {
     this.cutin = { id, title, sub, t: 0, side };
     sfx.cutin();
@@ -746,7 +763,7 @@ export class Match {
   }
 
   // ───────────── 입력 ─────────────
-  pressSwing() {
+  pressSwing(special = false) {
     if (this.paused) return;
     if (this.phase === "mission") return this.skipMission();
     // 공이 나온 뒤 한 번 휘둘렀으면 그 공은 끝
@@ -764,7 +781,7 @@ export class Match {
     const p = this.pitch!;
     if (this.hbpHit) return;
     const e = this.tf + SWING_HIT_T - p.dur;
-    this.decision = { swing: true, e, bunt: this.buntArmed, special: this.spArmed ? swingOf(b) : undefined, cz: { ...this.cz } };
+    this.decision = { swing: true, e, bunt: this.buntArmed, special: special ? swingOf(b) : undefined, cz: { ...this.cz } };
     this.swingStart = this.tf;
     this.freeSwing = false;
     this.outcome = evaluate(this.s, p, this.decision, this.rng);
@@ -835,16 +852,25 @@ export class Match {
     if (this.paused) return;
     const us = this.userSide();
     if (this.userBat) {
+      // 필살타법 = K 누르는 그 순간 바로 특별한 스윙 (예전: 준비 때 눌러 두고 화면 가득 컷인 → 다음 스윙)
       const b = this.batterNow;
       const sw = swingOf(b);
-      if (!sw || this.phase !== "ready") return;
-      if (this.spArmed) return;
+      if (!sw) return;
       const counted = this.cfg.mode !== "derby" || !!this.cfg.bond;
-      if (counted && us.swingLeft <= 0) return;
-      this.spArmed = true;
-      const c = charById(sw);
-      this.showCutin(c.id, c.swing.name, c.swing.desc, "bat");
-      this.afterCutin = "ready";
+      if (counted && us.swingLeft <= 0) {
+        if (this.phase === "flight" || this.phase === "ready") this.popup(DW / 2, 200, "필살타법은 경기당 1번!", "#ff9ad5");
+        return;
+      }
+      if (this.phase !== "flight") {
+        if ((this.phase === "ready" || this.phase === "windup") && this.time - this.spHintAt > 1.2) {
+          this.spHintAt = this.time;
+          this.popup(DW / 2, 200, "공이 날아올 때 K!", "#ff9ad5");
+        }
+        return;
+      }
+      if (this.swingStart >= 0 || this.hbpHit || this.buntArmed) return;
+      this.pressSwing(true);
+      if (this.decision?.special) this.startSideCut(sw);
     } else {
       const p = this.pitcherNow;
       if (!p.special || (this.phase !== "aim" && this.phase !== "gauge")) return;
@@ -1268,6 +1294,11 @@ export class Match {
   // ───────────── 시간 ─────────────
   update(dtRaw: number) {
     if (this.paused) return;
+    // 사이드 컷인은 히트스톱 · 슬로모션과 상관없이 제 속도로
+    if (this.sideCut) {
+      this.sideCut.t += Math.min(dtRaw, 1 / 20);
+      if (this.sideCut.t > SIDE_CUT_DUR) this.sideCut = null;
+    }
     // 배속: 자동으로 굴러가는 구간(수비 · 주루 필드 화면, 공수 교대)만 — 투구 · 스윙은 물론
     // 볼 · 스트라이크 · 헛스윙 · 삼진 · 볼넷 같은 투구 결과 문구도 제 속도로 보여야 함
     const auto = this.phase === "field" || this.phase === "change";
@@ -1394,6 +1425,7 @@ export class Match {
         this.tf += dt;
         // CPU 스윙 시작
         if (!this.userBat && this.decision?.swing && this.swingStart >= 0 && this.tf >= this.swingStart && this.batAnim !== BAT_SWING) {
+          if (this.decision.special) this.startSideCut(this.decision.special);
           this.playBat(BAT_SWING);
           sfx.swing(0.8 + (this.batterNow.power / 1000) * 0.4);
         }
@@ -1433,10 +1465,16 @@ export class Match {
               if (!foul) {
                 const kmh = Math.round(o.sw.ball.ev * 3.6);
                 this.batInfo = { text: `타구 ${kmh}km/h${pr.land > 30 ? ` · 비거리 ${Math.round(pr.land)}m` : ""}`, t: 0 };
-                // 홈런은 슬로모션 + 줌
+                // 홈런은 슬로모션 + 줌 · 필살타법은 맞기만 하면 조금 더 끌어서 보여 줌
                 if (pr.hr && !this.reduceMotion) {
                   this.slowmo = perfect ? 0.45 : 0.25;
                   this.zoomT = 0.6;
+                }
+                if (o.sw.ball.special && !this.reduceMotion) {
+                  this.hitStop = Math.max(this.hitStop, 0.16);
+                  this.slowmo = Math.max(this.slowmo, 0.55);
+                  this.zoomT = Math.max(this.zoomT, 0.5);
+                  this.flash = Math.max(this.flash, 0.45);
                 }
               }
             } else if (o.sw?.kind === "foul") this.foulPath(o.sw.e, o.sw.tip || o.sw.c < 0.18, o.at);
@@ -1661,6 +1699,7 @@ export class Match {
       ctx.fillRect(0, 0, DW, DH);
     }
     if (this.cutin) this.drawCutin(ctx);
+    if (this.sideCut) this.drawSideCut(ctx);
     this.drawBanner(ctx);
     for (const p of this.popups) {
       const a = 1 - smooth(0.9, 1.4, p.t);
@@ -2624,6 +2663,112 @@ export class Match {
     ctx.fillStyle = "#fff";
     ctx.fillText(`${ch.name} · ${c.side === "bat" ? "필살타법" : "마구"} — ${c.sub}`, 512, y + bh + 84);
     ctx.globalAlpha = 1;
+  }
+
+  /**
+   * 필살타법 사이드 컷인: 타자 반대쪽 화면 옆에서 비스듬한 판이 툭 튀어나와 1.3초 —
+   * 캐릭터 스윙 그림(없으면 서 있는 그림 위쪽) + 퍼스널 컬러 + 기술 이름. 화면을 덮지 않고 경기는 그대로 굴러감
+   */
+  private drawSideCut(ctx: CanvasRenderingContext2D) {
+    const c = this.sideCut!;
+    const ch = charById(c.id);
+    const t = c.t;
+    // 들어올 때 살짝 넘쳤다 돌아옴 · 나갈 땐 빠르게
+    const u = clamp(t / 0.16, 0, 1);
+    const inK = 1 + 2.2 * Math.pow(u - 1, 3) + 1.2 * Math.pow(u - 1, 2);
+    const outK = 1 - smooth(SIDE_CUT_DUR - 0.22, SIDE_CUT_DUR, t);
+    const k = Math.min(inK, outK);
+    const W = 300, H = 330, Y = 128, SL = 56;
+    const R = c.right;
+    // 판 바깥 끝은 화면 밖까지 (옆에서 나온 느낌)
+    const edge = R ? DW + 30 : -30;
+    const inner = R ? DW - W * k : W * k;
+    const pts = R
+      ? [[inner + SL, Y], [edge, Y], [edge, Y + H], [inner, Y + H]]
+      : [[edge, Y], [inner, Y], [inner - SL, Y + H], [edge, Y + H]];
+    ctx.save();
+    const path = () => {
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.closePath();
+    };
+    // 그림자
+    ctx.save();
+    ctx.translate(R ? -8 : 8, 8);
+    path();
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fill();
+    ctx.restore();
+    path();
+    const gx0 = R ? inner : edge;
+    const g = ctx.createLinearGradient(gx0, Y, gx0 + (R ? W : -W), Y + H);
+    g.addColorStop(0, ch.color);
+    g.addColorStop(1, "#120b1e");
+    ctx.fillStyle = g;
+    ctx.fill();
+    ctx.save();
+    ctx.clip();
+    // 속도선 (안쪽으로 흐름)
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 12; i++) {
+      const ly = Y + ((i * 41 + 17) % H);
+      const off = ((t * 1400 + i * 97) % (W + 200)) - 100;
+      const x0 = R ? DW - off : off;
+      ctx.beginPath();
+      ctx.moveTo(x0, ly);
+      ctx.lineTo(x0 + (R ? -90 : 90), ly);
+      ctx.stroke();
+    }
+    // 캐릭터 (스윙 그림 · 없으면 서 있는 그림 위 60%)
+    const sw = hasSwingArt(c.id) ? img(swingArtUrl(c.id)) : null;
+    const st = img(artUrl(c.id));
+    const cx = R ? DW - (W * k) / 2 + 6 : (W * k) / 2 - 6;
+    if (sw && sw.complete && sw.naturalWidth) {
+      const h = H + 20;
+      const w = (sw.naturalWidth / sw.naturalHeight) * h;
+      ctx.save();
+      if (!R) {
+        // 그림은 오른쪽을 보고 있음 → 왼쪽 판에선 안쪽(오른쪽)을 보게 그대로, 오른쪽 판에선 뒤집어 안쪽(왼쪽)을 보게
+      } else {
+        ctx.translate(cx * 2, 0);
+        ctx.scale(-1, 1);
+      }
+      ctx.drawImage(sw, cx - w / 2, Y - 10, w, h);
+      ctx.restore();
+    } else if (st.complete && st.naturalWidth) {
+      const sh = st.naturalHeight * 0.58;
+      const h = H - 20;
+      const w = (st.naturalWidth / sh) * h;
+      ctx.drawImage(st, 0, 0, st.naturalWidth, sh, cx - w / 2, Y + 6, w, h);
+    }
+    // 아래 이름 띠
+    const bandY = Y + H - 74;
+    const bg = ctx.createLinearGradient(0, bandY, 0, Y + H);
+    bg.addColorStop(0, "rgba(0,0,0,0)");
+    bg.addColorStop(0.35, "rgba(8,4,16,0.82)");
+    ctx.fillStyle = bg;
+    ctx.fillRect(R ? inner - SL : edge, bandY, W + SL + 40, 80);
+    ctx.restore();
+    // 테두리 빛
+    path();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.stroke();
+    // 글자
+    const tx = R ? inner + SL * 0.25 + (W - SL * 0.25) / 2 - 6 : inner - SL * 0.25 - (W - SL * 0.25) / 2 + 6;
+    ctx.globalAlpha = clamp(k * 1.4 - 0.2, 0, 1);
+    ctx.textAlign = "center";
+    ctx.font = '800 12px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    ctx.fillText(`${ch.name} · 필살타법`, tx, Y + H - 44);
+    ctx.font = '30px "Black Han Sans", sans-serif';
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "rgba(0,0,0,0.9)";
+    ctx.strokeText(ch.swing.name, tx, Y + H - 14);
+    ctx.fillStyle = ch.color;
+    ctx.fillText(ch.swing.name, tx, Y + H - 14);
+    ctx.restore();
   }
 
   /** 미션 주는 사람 얼굴 (인연 캐릭터 얼굴 · 팀 사람들 초상) */
