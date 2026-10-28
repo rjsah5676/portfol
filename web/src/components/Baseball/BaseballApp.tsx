@@ -5,7 +5,7 @@ import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
 import { DH, DW, useStage } from "./Stage";
 import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match";
 import { isMuted, setMuted } from "./sfx";
-import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
+import { ACCENT, Btn, MenuBg, Modal, font, useSpaceConfirm } from "./ui";
 import CareerMode from "./Career";
 import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./careerStore";
 import { CLUB_DEFS, clubDefById } from "@/lib/baseball/data";
@@ -31,6 +31,8 @@ const TEST_LV = [0, 300, 500, 700, 900] as const;
 type Screen = "title" | "setup" | "derby" | "howto" | "play" | "career" | "pick" | "club" | "online" | "shop";
 
 export default function BaseballApp() {
+  // 스페이스 = 지금 화면의 확인 · 계속 버튼
+  useSpaceConfirm();
   const [screen, setScreen] = useState<Screen>("title");
   const [save, setSave] = useState<Save>({ pt: 0, derbyBest: 0, games: 0, wins: 0 });
   const [diff, setDiff] = useState<Diff>(0);
@@ -738,7 +740,7 @@ function Play({
               </Btn>
             ))}
           </div>
-          <Btn className="mt-3 w-full py-2 text-sm" color="#8b93b8" onClick={() => setBullpen(false)}>
+          <Btn space className="mt-3 w-full py-2 text-sm" color="#8b93b8" onClick={() => setBullpen(false)}>
             닫기
           </Btn>
         </Modal>
@@ -748,7 +750,7 @@ function Play({
         <Modal>
           <div className={`${font.title} mb-4 text-3xl`}>일시정지</div>
           <div className="flex flex-col gap-2">
-            <Btn className="py-2.5 text-lg" onClick={() => pause(false)}>
+            <Btn space className="py-2.5 text-lg" onClick={() => pause(false)}>
               계속하기
             </Btn>
             {ui?.career && (
@@ -842,7 +844,7 @@ function Play({
           )}
           {cfg.career || cfg.bond ? (
             <div className="mt-4 flex justify-center">
-              <Btn className={`${font.title} px-10 py-3 text-xl`} onClick={() => m && onCareerDone(m)}>
+              <Btn space className={`${font.title} px-10 py-3 text-xl`} onClick={() => m && onCareerDone(m)}>
                 육성 화면으로 (결과 반영)
               </Btn>
             </div>
@@ -851,7 +853,7 @@ function Play({
           <div className="mt-2 text-[15px] text-[#ffd23f]">+{ui.over.pt} 코인</div>
           {note && <div className="mt-1 text-[14px] font-bold text-[#7dff9a]">{note}</div>}
           <div className="mt-4 flex justify-center gap-3">
-            <Btn className="px-6 py-2.5 text-lg" onClick={onAgain}>
+            <Btn space className="px-6 py-2.5 text-lg" onClick={onAgain}>
               {online ? "새 상대 찾기" : "다시 하기"}
             </Btn>
             <Btn className="px-6 py-2.5 text-lg" color="#8b93b8" onClick={onExit}>

@@ -106,6 +106,7 @@ export function VnScene({
     <div
       className="absolute inset-0 z-40 cursor-pointer overflow-hidden select-none"
       style={{ background: bg }}
+      data-space={end && choices ? undefined : "pointer"}
       onPointerDown={(e) => {
         e.stopPropagation();
         next();
@@ -300,7 +301,7 @@ export function BondsModal({ c, onClose }: { c: Career; onClose: () => void }) {
     <Modal w={720} onClose={onClose}>
       <div className="mb-1 flex items-center justify-between">
         <div className={`${font.title} text-[26px]`}>💞 인연</div>
-        <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={onClose}>
+        <Btn space className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={onClose}>
           닫기
         </Btn>
       </div>
@@ -724,7 +725,7 @@ export function GuideModal({ onClose }: { onClose: () => void }) {
     <Modal w={720} onClose={onClose}>
       <div className="mb-2 flex items-center justify-between">
         <div className={`${font.title} text-[26px]`}>❔ 도움말</div>
-        <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={onClose}>
+        <Btn space className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={onClose}>
           닫기
         </Btn>
       </div>

@@ -24,7 +24,7 @@ import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, batterSheets, drawBatter, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, batterSheets, drawable, drawBatter, sheetImage, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, type SpriteLook } from "@/lib/baseball/batterSprite";
 /** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
 const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
@@ -77,7 +77,8 @@ const PITCHER_STILL = { src: "/baseball/sprites/pitcher-set.webp", ax: 85, ay: 5
  * 영상 캔버스 = 세트 그림 × 520/506 × 1.1 이라 캔버스 1px = PITCHER_STILL.scale / 1.1304 게임 px, 줄 칸은 캔버스 × cell.
  * hand = 공 놓는 자리 (캔버스 px, 축발 기준)
  */
-const PITCHER_THROW = { src: "/baseball/sprites/pitcher-throw.webp", ...pitcherThrowData };
+const PITCHER_THROW_SRC = "/baseball/sprites/pitcher-throw.webp";
+const PITCHER_THROW = { src: PITCHER_THROW_SRC, ...pitcherThrowData };
 const PIT_CANVAS_PX = PITCHER_STILL.scale / ((520 / 506) * 1.1);
 const PIT_THROW_SEQ = pitcherThrowData.seq as [number, number][];
 
@@ -184,8 +185,9 @@ const imgCache = new Map<string, HTMLImageElement>();
 function img(url: string) {
   let im = imgCache.get(url);
   if (!im && typeof Image !== "undefined") {
-    im = new Image();
-    im.src = url;
+    // 큰 시트(투수 투구 48칸)는 ImageBitmap 으로 미리 풀어 둠 — drawable() 로 그림
+    im = url === PITCHER_THROW_SRC ? sheetImage(url) : new Image();
+    if (url !== PITCHER_THROW_SRC) im.src = url;
     imgCache.set(url, im);
   }
   return im!;
@@ -246,6 +248,9 @@ export class Match {
   /** 타석에 들어설 때 (또 2스트라이크 · 득점권 · 7회 이후처럼 상황이 맞을 때) 경기 능력치 특수능력 발동 연출 */
   boostFx: { t: number; items: { name: string; text: string }[]; bonus: { hit: number; power: number; run: number }; head: string } | null = null;
   private lastStrikes = 0;
+  /** 타자 · 투수 카드 보임 정도 (0 ~ 1) · 이번 타석에서 이미 빠졌는지 */
+  cardK = 0;
+  private cardsGone = false;
   /** 이번 타석 첫 공 전 (타자가 타석에 들어서는 숨 고르기 조금 더) */
   private paFirst = false;
   pitchInfo = "";
@@ -535,6 +540,7 @@ export class Match {
     this.updateSkins();
     this.lastStrikes = 0;
     this.paFirst = true;
+    this.cardsGone = false;
     this.boostFx = null;
     if (this.userBat) this.showBoosts("all");
     const m = this.cfg.mode !== "derby" ? s.mission ?? maybeMission(s, this.rng) : null;
@@ -610,6 +616,12 @@ export class Match {
   }
 
   /** 투구 시작 (CPU 투수면 여기서 정함) */
+  /** 타자 준비 → 와인드업까지 기다리는 시간 (특수능력 카드가 떠 있으면 그게 사라질 즈음까지) */
+  private readyWait() {
+    const base = this.cfg.mode === "derby" ? 0.8 : this.paFirst ? TEMPO.first : TEMPO.ready;
+    return this.boostFx ? Math.max(base, this.pt + (BOOST_DUR - 0.35 - this.boostFx.t)) : base;
+  }
+
   private startWindup() {
     this.paFirst = false;
     const p = this.pitcherNow;
@@ -1271,6 +1283,11 @@ export class Match {
       if ((this.boostFx.t += dt) > BOOST_DUR) this.boostFx = null;
     }
     if (this.userBat && this.s.strikes >= 2 && this.lastStrikes < 2) this.showBoosts("twoK");
+    // 카드: 타석 준비 화면에서만 · 첫 와인드업 0.5초 전(던지는 쪽이면 게이지 시작)부터 빠지고 그 타석 동안은 안 나옴
+    if (this.phase === "ready" && this.paFirst && this.pt > this.readyWait() - 0.5) this.cardsGone = true;
+    if (this.phase === "gauge" || this.phase === "windup" || this.phase === "cutin" || this.phase === "flight") this.cardsGone = true;
+    const cardOn = !this.cardsGone && (this.phase === "ready" || this.phase === "aim" || this.phase === "mission");
+    this.cardK = clamp(this.cardK + (cardOn ? dt / 0.3 : -dt / 0.25), 0, 1);
     this.lastStrikes = this.s.strikes;
     // 컨택존 · 타자 옮기기 (투구 전만, 초당 0.65m — 끝에서 끝까지 1초 남짓)
     if (this.userBat && (this.phase === "ready" || this.phase === "windup") && (this.czVel.x || this.czVel.y)) {
@@ -1307,7 +1324,7 @@ export class Match {
       case "ready":
         // 사용자 타자: 잠깐 숨 고르고 투구
         // 특수능력 발동 카드(왼쪽 위)가 떠 있으면 다 사라질 즈음까지 기다렸다 던짐 (투구 중에 떠 있으면 거슬림)
-        if (this.pt > (this.cfg.mode === "derby" ? 0.8 : this.paFirst ? TEMPO.first : TEMPO.ready) && !(this.boostFx && this.boostFx.t < BOOST_DUR - 0.35)) this.startWindup();
+        if (this.pt > this.readyWait() && !(this.boostFx && this.boostFx.t < BOOST_DUR - 0.35)) this.startWindup();
         break;
       case "aim":
       case "gauge":
@@ -1549,12 +1566,12 @@ export class Match {
   // ───────────── 그리기 ─────────────
   /** 큰 그림 시트 미리 데우기 (한 프레임에 하나, 투구 전 화면에서만) — 첫 투구 때 스트라이드 시트(1.6만 px)를
    *  처음 그리며 디코드 · GPU 업로드로 0.3초 멈칫하던 것 */
-  private warmed = new Set<HTMLImageElement>();
+  private warmed = new Set<CanvasImageSource>();
   private warmUp(ctx: CanvasRenderingContext2D) {
     if (this.phase !== "intro" && this.phase !== "mission" && this.phase !== "ready" && this.phase !== "aim" && this.phase !== "change") return;
-    const list = [
+    const list: CanvasImageSource[] = [
       ...batterSheets(),
-      img(PITCHER_THROW.src),
+      drawable(img(PITCHER_THROW.src)),
       img(FIELDER.inf),
       img(FIELDER.of),
       img(RUNNER.lead),
@@ -1565,8 +1582,10 @@ export class Match {
       img(UI.profile),
     ];
     for (const im of list) {
-      if (this.warmed.has(im) || !im.complete || !im.naturalWidth) continue;
+      // 아직 ImageBitmap 이 안 풀렸으면(그림 그대로면) 기다림 — 그림을 1px 로 그리면 작은 크기로만 디코드돼서 소용없음
+      if (this.warmed.has(im) || im instanceof HTMLImageElement) continue;
       this.warmed.add(im);
+      // GPU 로 올려 두기 (첫 그림 때 올리느라 멈칫하지 않게)
       ctx.drawImage(im, 0, 0, 1, 1);
       return;
     }
@@ -1638,7 +1657,7 @@ export class Match {
       ctx.imageSmoothingQuality = "high";
       ctx.translate(mp.x, mp.y);
       ctx.scale(pFlip ? -k : k, k);
-      ctx.drawImage(tim, c * T.CW, 0, T.CW, T.CH, -T.ax, -T.ay, T.CW, T.CH);
+      ctx.drawImage(drawable(tim), c * T.CW, 0, T.CW, T.CH, -T.ax, -T.ay, T.CW, T.CH);
       ctx.restore();
     } else if (pim.complete && pim.naturalWidth) {
       ctx.save();
@@ -2683,9 +2702,19 @@ export class Match {
     this.countBoard(ctx);
     // 타자 · 투수 카드는 타석 · 투구 화면에서만 (치고 난 뒤 수비 화면에선 가림)
     const fieldView = this.phase === "field" || (this.phase === "result" && this.frames.length > 0 && this.lastWasField());
-    if (!fieldView) {
-      this.batterCard(ctx);
-      this.pitcherCard(ctx);
+    if (!fieldView && this.cardK > 0.001) {
+      // 타자 · 투수 카드: 타석 시작에 옆에서 들어오고, 첫 와인드업 0.5초 전부터 옆으로 빠짐
+      const k = 1 - Math.pow(1 - this.cardK, 3);
+      const lefty = this.userBat && this.shownBatter.bats === "L";
+      const slide = (left: boolean, draw: () => void) => {
+        ctx.save();
+        ctx.globalAlpha = k;
+        ctx.translate((left ? -1 : 1) * (1 - k) * 330, 0);
+        draw();
+        ctx.restore();
+      };
+      slide(!lefty, () => this.batterCard(ctx));
+      slide(lefty, () => this.pitcherCard(ctx));
     }
     if (this.userBat && BOOST_PHASES.includes(this.phase)) this.drawBoosts(ctx);
     // 미션 진행 중

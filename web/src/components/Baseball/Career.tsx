@@ -654,7 +654,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
           <br />
           결과는 운 · 선택 · 실력에 따라 갈려요 (보통 450~550 · 잘 풀리면 600~700대).
         </div>
-        <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
+        <Btn space className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
           다음 ▶
         </Btn>
       </div>
@@ -1344,7 +1344,7 @@ function TurnModal({ out, onNext }: { out: TurnOut; onNext: () => void }) {
         ))}
       </div>
       <DeltaChips d={out.delta} />
-      <Btn className="mt-4 w-full py-2.5 text-lg" color={col === "#ffffff" ? ACCENT : col} onClick={onNext}>
+      <Btn space className="mt-4 w-full py-2.5 text-lg" color={col === "#ffffff" ? ACCENT : col} onClick={onNext}>
         확인
       </Btn>
     </Modal>
@@ -1555,7 +1555,7 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
           </div>
         )}
       </div>
-      <Btn className={`${font.title} mt-3 w-full py-2.5 text-[20px]`} onClick={onClose}>
+      <Btn space className={`${font.title} mt-3 w-full py-2.5 text-[20px]`} onClick={onClose}>
         {more ? `다음 경기 결과 ▶ (${more})` : "확인"}
       </Btn>
     </Modal>
@@ -1630,7 +1630,7 @@ function SeasonModal({ s, c, onClose, onReroll }: { s: SeasonSummary; c: Career;
           </div>
         ) : (
           <div className="mt-4 flex gap-2">
-            <Btn className={`${font.title} flex-[2] py-2.5 text-lg`} color="#ffd23f" onClick={onClose}>
+            <Btn space className={`${font.title} flex-[2] py-2.5 text-lg`} color="#ffd23f" onClick={onClose}>
               이 선수로 계속 ▶
             </Btn>
             <Btn className="flex-1 py-2.5 text-[13px]" color="#8b93b8" onClick={() => setAsk(true)}>
@@ -1721,7 +1721,7 @@ function ShopModal({
         })}
       </div>
       {c.charmNext && <div className="mt-2 text-[12px] text-[#ffd23f]">행운의 부적 효과 중 — 다음 훈련 대성공 ↑</div>}
-      <Btn className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
+      <Btn space className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
         닫기
       </Btn>
     </Modal>
@@ -1780,7 +1780,7 @@ function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
         {c.deck.map((id) => `${charById(id).name} ${c.bonds[id] ?? 0}/${BOND_MAX} · 호감 ${c.aff[id] ?? 0}`).join(" · ")}
       </div>
       {c.gp.length > 0 && <div className="mt-1 text-left text-[12px] text-[#7ad7ff]/80">코치진: {c.gp.map((g) => `${GP_BOOSTS[g]?.name ?? g} C`).join(" · ")}</div>}
-      <Btn className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
+      <Btn space className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
         닫기
       </Btn>
     </Modal>

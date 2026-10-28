@@ -286,16 +286,29 @@ let still: HTMLImageElement | null = null;
 let stillMask: HTMLImageElement | null = null;
 let kickImg: HTMLImageElement | null = null;
 let swingImg: HTMLImageElement | null = null;
+/**
+ * 큰 시트는 받자마자 ImageBitmap 으로 미리 풀어 둠 (다른 스레드에서 디코드) — <img> 를 바로 그리면 처음 그릴 때
+ * 그리는 크기에 맞춰 메인 스레드에서 디코드해서(16032px 스윙 시트 0.3초) 첫 투구가 멈칫했음
+ */
+const bitmaps = new Map<CanvasImageSource, ImageBitmap>();
+export function sheetImage(url: string) {
+  const im = new Image();
+  im.onload = () => {
+    if (typeof createImageBitmap === "function")
+      createImageBitmap(im).then((b) => bitmaps.set(im, b)).catch(() => {});
+  };
+  im.src = url;
+  return im;
+}
+/** 풀어 둔 ImageBitmap 이 있으면 그것, 아니면 그림 그대로 */
+export const drawable = (im: CanvasImageSource): CanvasImageSource => bitmaps.get(im) ?? im;
 function stillImg() {
   if (!still && typeof Image !== "undefined") {
-    still = new Image();
-    still.src = IDLE.src;
+    still = sheetImage(IDLE.src);
     stillMask = new Image();
     stillMask.src = IDLE.mask;
-    kickImg = new Image();
-    kickImg.src = KICKS.src;
-    swingImg = new Image();
-    swingImg.src = SWINGS.src;
+    kickImg = sheetImage(KICKS.src);
+    swingImg = sheetImage(SWINGS.src);
   }
   return still && still.complete && still.naturalWidth ? still : null;
 }
@@ -349,9 +362,9 @@ function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
 }
 
 /** 타자 시트 중 아직 한 번도 안 그린 것 (첫 그림 때 디코드 · GPU 업로드로 화면이 멈칫해서 미리 1px 로 한 번 그려 둠) */
-export function batterSheets(): HTMLImageElement[] {
+export function batterSheets(): CanvasImageSource[] {
   stillImg();
-  return [kickImg, swingImg].filter((x): x is HTMLImageElement => !!x);
+  return [still, kickImg, swingImg].filter((x): x is HTMLImageElement => !!x).map(drawable);
 }
 
 export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: SpriteLook, x: number, y: number, sc: number, flip = false, trail = 0): boolean {
@@ -367,7 +380,7 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
     const sw = swingImg;
     const swCell = (cell: number) => {
       const c = Math.min(cell, SWINGS.n - 1);
-      ctx.drawImage(sw!, (c % SWINGS.cols) * SWINGS.CW, Math.floor(c / SWINGS.cols) * SWINGS.CH, SWINGS.CW, SWINGS.CH, -SWINGS.ax, -SWINGS.ay, SWINGS.CW, SWINGS.CH);
+      ctx.drawImage(drawable(sw!), (c % SWINGS.cols) * SWINGS.CW, Math.floor(c / SWINGS.cols) * SWINGS.CH, SWINGS.CW, SWINGS.CH, -SWINGS.ax, -SWINGS.ay, SWINGS.CW, SWINGS.CH);
     };
     if (frame >= RETURN_BASE && sw && sw.complete && sw.naturalWidth) {
       // 착지 자세 → 대기 (겹쳐서)
@@ -376,21 +389,21 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
       swCell(STRIDE[STRIDE.length - 1][0]);
       ctx.globalAlpha = k;
       const cols = IDLE.cols ?? IDLE.n;
-      ctx.drawImage(tintedStill(st, lk), (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+      ctx.drawImage(drawable(tintedStill(st, lk)), (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
       ctx.globalAlpha = 1;
     } else if (frame >= SWING_BASE && sw && sw.complete && sw.naturalWidth) {
       swCell(frame - SWING_BASE);
     } else if (frame >= SWING_BASE && ki && ki.complete && ki.naturalWidth) {
-      ctx.drawImage(ki, KICK_TOP * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
+      ctx.drawImage(drawable(ki), KICK_TOP * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
     } else if (frame >= KICK_BASE && ki && ki.complete && ki.naturalWidth) {
       const cell = Math.min(frame - KICK_BASE, KICKS.n - 1);
-      ctx.drawImage(ki, cell * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
+      ctx.drawImage(drawable(ki), cell * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
     } else {
       const idle = frame === IDX.stance || frame === IDX.waggle;
       const cell = idle ? idleCell(typeof performance !== "undefined" ? performance.now() / 1000 : 0) : 0;
       // 대기 줄은 여러 줄 (한 줄에 cols 칸)
       const cols = IDLE.cols ?? IDLE.n;
-      ctx.drawImage(tintedStill(st, lk), (cell % cols) * IDLE.CW, Math.floor(cell / cols) * IDLE.CH, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+      ctx.drawImage(drawable(tintedStill(st, lk)), (cell % cols) * IDLE.CW, Math.floor(cell / cols) * IDLE.CH, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
     }
     ctx.restore();
     return true;
