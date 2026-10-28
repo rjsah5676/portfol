@@ -63,6 +63,8 @@ export function contactZone(hit: number) {
  * 타자 그림은 화면에서 좌우 40px · 아래 34px 까지 (위로는 거의 안 움직임 — match.batterPos)
  */
 export const CZ_RANGE = { x: 0.14, y0: ZONE.mid - 0.12, y1: ZONE.mid + 0.12 };
+/** 컨택존 옮기는 속도 (m/s) — 투구 전 · 공이 날아오는 동안 (파란 원 따라가기) */
+export const CZ_MOVE = { ready: 0.65, flight: 1 };
 /** 공이 스트라이크 존(공 반지름 포함 — 걸치면 스트라이크)에서 벗어난 거리 m. 스트라이크면 0 */
 export function offZone(at: { x: number; y: number }) {
   const dx = Math.max(0, Math.abs(at.x) - (ZONE.x + BALL_R));

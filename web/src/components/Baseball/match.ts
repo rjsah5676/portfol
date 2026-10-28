@@ -8,7 +8,7 @@
  * 홈런더비: 같은 타석 화면, 아웃 10개까지 비거리 합 (골든 보드)
  */
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
-import { CZ_RANGE, contactZone, timingLabel, timingWindow } from "@/lib/baseball/contact";
+import { CZ_MOVE, CZ_RANGE, contactZone, timingLabel, timingWindow } from "@/lib/baseball/contact";
 import { BP_PITCHER, TEAM_DEFS, artUrl, charById, cutinUrl, faceUrl, hasSwingArt, swingArtUrl, makeTeam, seasonOf, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
 import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import {
@@ -439,7 +439,7 @@ export class Match {
       mode: this.cfg.mode,
       userBat: ub,
       canSwing: ub && this.swingStart < 0 && (this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "call" || this.phase === "result"),
-      canMove: ub && (this.phase === "ready" || this.phase === "windup"),
+      canMove: ub && this.czMovable,
       bunt: this.buntArmed,
       spArmed: ub ? this.spArmed : this.useBallSp,
       spHero: hero && (this.cfg.mode !== "derby" || ub),
@@ -860,6 +860,10 @@ export class Match {
   setBatMove(x: number, y: number) {
     const l = Math.hypot(x, y);
     this.czVel = l > 1 ? { x: x / l, y: y / l } : { x, y };
+  }
+  /** 컨택존을 옮길 수 있나: 투구 전 · 공이 날아오는 동안 휘두르기 전까지 */
+  private get czMovable() {
+    return this.phase === "ready" || this.phase === "windup" || (this.phase === "flight" && !this.decision);
   }
   private czNow() {
     return this.userBat ? this.cz : this.cpuCz;
@@ -1404,10 +1408,12 @@ export class Match {
     if (cardOn !== this.ui.cards) this.pushUi();
     this.lastStrikes = this.s.strikes;
     // 컨택존 · 타자 옮기기 (투구 전만, 초당 0.65m — 끝에서 끝까지 1초 남짓)
-    if (this.userBat && (this.phase === "ready" || this.phase === "windup") && (this.czVel.x || this.czVel.y)) {
+    // 공이 날아오는 동안에도 (휘두르기 전까지) 옮길 수 있음 — 마구마구식: 파란 원을 보고 따라가서 맞힘
+    if (this.userBat && this.czMovable && (this.czVel.x || this.czVel.y)) {
+      const v = this.phase === "flight" ? CZ_MOVE.flight : CZ_MOVE.ready;
       this.cz = {
-        x: clamp(this.cz.x + this.czVel.x * 0.65 * dt, -CZ_RANGE.x, CZ_RANGE.x),
-        y: clamp(this.cz.y + this.czVel.y * 0.65 * dt, CZ_RANGE.y0, CZ_RANGE.y1),
+        x: clamp(this.cz.x + this.czVel.x * v * dt, -CZ_RANGE.x, CZ_RANGE.x),
+        y: clamp(this.cz.y + this.czVel.y * v * dt, CZ_RANGE.y0, CZ_RANGE.y1),
       };
     }
     // 리그 애니
@@ -1852,7 +1858,7 @@ export class Match {
       const a = ballProj(this.cz.x - hw, this.cz.y + hh, 0);
       const c = ballProj(this.cz.x + hw, this.cz.y - hh, 0);
       const fade = this.phase === "contact" || this.phase === "call" ? 0.45 : 1;
-      const moving = !!(this.czVel.x || this.czVel.y) && (this.phase === "ready" || this.phase === "windup");
+      const moving = !!(this.czVel.x || this.czVel.y) && this.czMovable;
       ctx.save();
       ctx.globalAlpha = fade;
       ctx.fillStyle = moving ? "rgba(255,190,90,0.2)" : "rgba(255,170,60,0.13)";
@@ -1932,9 +1938,9 @@ export class Match {
     // 공이 다가올수록 작아지며 공 크기로 모임. 거슬리지 않게 얇은 선 · 옅은 색. 마구는 안 보임 (안 읽혀야 마구)
     if (p && this.userBat && this.phase === "flight" && !p.special) {
       const u = this.tf / p.dur;
-      const show = smooth(0.16, 0.3, u) * (1 - smooth(0.96, 1, u));
+      const show = smooth(0.04, 0.14, u) * (1 - smooth(0.96, 1, u));
       if (show > 0.01) {
-        const h = p.dur * 0.04;
+        const h = Math.min(p.dur * 0.04, this.tf / 2.5);
         const P = [pitchAt(p, this.tf), pitchAt(p, this.tf - h), pitchAt(p, this.tf - 2 * h)];
         // 거리 z 에 대한 2차식으로 z = 0 (플레이트) 까지 늘려 봄 — 중력은 딱 맞고, 막판에 꺾이는 변화만큼 원이 움직임
         const at = { x: 0, y: 0 };
@@ -1945,7 +1951,7 @@ export class Match {
           at.y += P[i].y * w;
         }
         const c = ballProj(clamp(at.x, -0.6, 0.6), clamp(at.y, ZONE.y0 - 0.5, ZONE.y1 + 0.5), 0);
-        const R = Math.max(4, BALLR_PX(c.s)) * lerp(3, 1.15, smooth(0.16, 1, u));
+        const R = Math.max(4, BALLR_PX(c.s)) * lerp(3, 1.15, smooth(0.04, 1, u));
         ctx.save();
         ctx.globalAlpha = show * 0.6;
         ctx.fillStyle = "rgba(90,170,255,0.1)";

@@ -14,7 +14,7 @@ import { AUTO_CZ, PITCH_LV, TEAM_TUNE, type SwingHook, botHook, leadCz, careerSe
 import type { Diff } from "../src/lib/baseball/ai";
 import { makeRng } from "../src/lib/baseball/rng";
 import { humanSwing } from "../src/lib/baseball/ai";
-import { CZ_TUNE } from "../src/lib/baseball/contact";
+import { CZ_MOVE, CZ_RANGE, CZ_TUNE } from "../src/lib/baseball/contact";
 import { GROW } from "../src/lib/baseball/data";
 import { MOOD, ROOKIE, TYPES as TYPE_DEF } from "../src/lib/baseball/career";
 // 튜닝: GROW='{"base":300,"k":0.6}' · APT='{"contact":{"hit":1.3},"power":{"power":1.1}}'
@@ -32,9 +32,22 @@ if (process.env.TT) Object.assign(TEAM_TUNE, JSON.parse(process.env.TT));
  * 2026-10-28 실제 로그(1년차 직접 .18 ~ .20)에 맞춘 값. HCZ=off 면 예전처럼 컨택존 없이 (존 크기가 결과에 안 들어가 초반을 과하게 좋게 봄)
  */
 const HCZ = process.env.HCZ === "off" ? null : (JSON.parse(process.env.HCZ ?? '{"lead":0.6,"sd":0.05}') as { lead: number; sd: number });
+/**
+ * 공이 날아오는 동안 파란 원 따라가기 — FLY='{"react":0.25,"sd":0.06,"p":0.8}' (FLY=off 면 안 따라감)
+ * 원이 보이고(u 0.1) react 초 뒤부터 휘두르기 직전(도착 0.08초 전)까지 CZ_MOVE.flight 속도로 공 자리 쪽으로. p = 따라가는 타석 비율
+ */
+const FLY = process.env.FLY === "off" ? null : (JSON.parse(process.env.FLY ?? '{"react":0.25,"sd":0.06,"p":0.8}') as { react: number; sd: number; p: number });
+if (process.env.CZF) CZ_MOVE.flight = Number(process.env.CZF);
 const czHook = (sigma: number): SwingHook => (s, p, at, b, rng) => {
   const c = humanSwing(p, at, s.strikes, sigma, rng);
-  return { swing: c.swing, e: c.e, bunt: false, cz: leadCz(at, HCZ!.lead, HCZ!.sd, rng) };
+  let cz = leadCz(at, HCZ!.lead, HCZ!.sd, rng);
+  if (FLY && !p.special && rng() < FLY.p) {
+    const t = Math.max(0, p.dur - 0.08 - (0.1 * p.dur + FLY.react + rng.gauss() * FLY.sd));
+    const tx = Math.max(-CZ_RANGE.x, Math.min(CZ_RANGE.x, at.x)), ty = Math.max(CZ_RANGE.y0, Math.min(CZ_RANGE.y1, at.y));
+    const dx = tx - cz.x, dy = ty - cz.y, d = Math.hypot(dx, dy), m = Math.min(d, CZ_MOVE.flight * t);
+    if (d > 1e-6) cz = { x: cz.x + (dx / d) * m, y: cz.y + (dy / d) * m };
+  }
+  return { swing: c.swing, e: c.e, bunt: false, cz };
 };
 /** FMODE=direct|highlight|auto — 경기 방식을 다 이걸로 · AUTOCZ='{"lead":0.15,"sd":0.07}' */
 const FMODE = process.env.FMODE as Mode | undefined;
