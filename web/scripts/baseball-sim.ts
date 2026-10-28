@@ -19,6 +19,7 @@ const tot = { pa: 0, ab: 0, h: 0, hr: 0, bb: 0, k: 0, tb: 0, runs: 0, games: 0, 
 const results: Record<string, number> = {};
 const labels: Record<string, number> = {};
 let hbpN = 0;
+let diveN = 0;
 
 function play(s: GameState, humanSide: number) {
   let guard = 0;
@@ -39,6 +40,7 @@ function play(s: GameState, humanSide: number) {
     const o = evaluate(s, pitch, d, rng);
     tot.pitches++;
     if (o.call === "hbp" && (human || humanSide < 0)) hbpN++;
+    if (o.field?.events?.some((e) => e.kind === "dive")) diveN++;
     if (useSp) tot.specialPitch++;
     if (useSp && o.call === "bip" && o.field && /HR|1B|2B|3B/.test(o.field.result)) tot.specialHit++;
     if (o.field && !o.field.foul) { results[o.field.result] = (results[o.field.result] ?? 0) + 1; const lb = o.field.label.replace(/^(투수|포수|1루수|2루수|3루수|유격수) (라이너|팝플라이|플라이)$/, "내야 $2").replace(/^(좌익수|중견수|우익수) (라이너|팝플라이|플라이)$/, "외야 $2").replace(/^.* 땅볼$/, "땅볼").replace(/^.* (안타|2루타|3루타)$/, "$1"); labels[lb] = (labels[lb] ?? 0) + 1; }
@@ -92,3 +94,4 @@ console.log("인플레이 결과:", results);
 const lt = Object.values(labels).reduce((a, b) => a + b, 0);
 console.log("타구 결과 (%):", Object.entries(labels).sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k, v]) => `${k} ${(v / lt * 100).toFixed(1)}`).join(" · "));
 console.log(`사구/타석 ${(hbpN / tot.pa * 100).toFixed(2)}%`);
+console.log(`필살수비(다이빙 캐치) 경기당 ${(diveN / tot.games).toFixed(2)}개 · 인플레이 ${(diveN / Object.values(results).reduce((a, b) => a + b, 0) * 100).toFixed(2)}%`);

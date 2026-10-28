@@ -40,6 +40,8 @@ export const POS_NAME = ["투수", "포수", "1루수", "2루수", "3루수", "�
  * 아래 달리기 · 송구 · 반응 · 다이빙 식은 이 값으로만 돌아감
  */
 const FIELD_DEF = 520;
+/** 몸을 날려 잡은 공 중 「필살수비!」 연출을 보여 주는 몫 */
+const DIVE_SHOW = 0.28;
 /** 낮은 라이너(타구각 범위)에 내야수 · 투수 반응 늦음 (초) */
 const LINER_LA = [2, 18];
 const LINER_REACT = 0.25;
@@ -346,6 +348,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   let chaser = -1;
   let chaseIdx = pts.length;
   let diveCatch = false;
+  let diveShow = false;
   const assignChaser = (fromIdx: number, t0: number, exclude: number[] = []) => {
     chaser = -1;
     chaseIdx = pts.length * 2;
@@ -389,7 +392,9 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
       }
       if (best >= 0) break;
     }
+    // 잡는 확률은 그대로(0.18 + 수비 몫 0.3 — 줄이면 타율이 .03 넘게 뜀), 「필살수비!」 연출은 그중 일부만 (경기당 1.7개 → 0.5개쯤 · 나머지는 그냥 잡음)
     if (best >= 0 && rng.chance(0.18 + (FIELD_DEF / 1000) * 0.3)) {
+      diveShow = rng.chance(DIVE_SHOW);
       if (chaser !== best) F[chaser].role = "idle";
       chaser = best;
       chaseIdx = bestIdx;
@@ -742,7 +747,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
           f.readyAt = t + (p.air ? 0.45 : chaser >= 6 ? 0.75 : 0.3 + (1 - FIELD_DEF / 1000) * 0.12 + Math.abs(rng.gauss()) * 0.12);
           if (p.air) {
             caught = true;
-            if (diveCatch) events.push({ t, kind: "dive", x: f.x, y: f.y, text: "필살수비!" });
+            if (diveCatch && diveShow) events.push({ t, kind: "dive", x: f.x, y: f.y, text: "필살수비!" });
             else events.push({ t, kind: "catch", x: f.x, y: f.y, text: "잡았다" });
             markOut(bat, t, 1, false, ball.la > 50 ? "팝플라이 아웃" : ball.la < 12 ? "라이너 아웃" : "플라이 아웃");
             lastOutForce = false;
