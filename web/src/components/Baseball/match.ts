@@ -1928,6 +1928,37 @@ export class Match {
       }
     }
 
+    // 파란 원 (마구마구식): 공이 지금 궤적 그대로 오면 존에 닿을 자리 — 변화구는 휘는 만큼 원이 따라 움직임.
+    // 공이 다가올수록 작아지며 공 크기로 모임. 거슬리지 않게 얇은 선 · 옅은 색. 마구는 안 보임 (안 읽혀야 마구)
+    if (p && this.userBat && this.phase === "flight" && !p.special) {
+      const u = this.tf / p.dur;
+      const show = smooth(0.16, 0.3, u) * (1 - smooth(0.96, 1, u));
+      if (show > 0.01) {
+        const h = p.dur * 0.04;
+        const P = [pitchAt(p, this.tf), pitchAt(p, this.tf - h), pitchAt(p, this.tf - 2 * h)];
+        // 거리 z 에 대한 2차식으로 z = 0 (플레이트) 까지 늘려 봄 — 중력은 딱 맞고, 막판에 꺾이는 변화만큼 원이 움직임
+        const at = { x: 0, y: 0 };
+        for (let i = 0; i < 3; i++) {
+          let w = 1;
+          for (let j = 0; j < 3; j++) if (j !== i) w *= (0 - P[j].z) / (P[i].z - P[j].z);
+          at.x += P[i].x * w;
+          at.y += P[i].y * w;
+        }
+        const c = ballProj(clamp(at.x, -0.6, 0.6), clamp(at.y, ZONE.y0 - 0.5, ZONE.y1 + 0.5), 0);
+        const R = Math.max(4, BALLR_PX(c.s)) * lerp(3, 1.15, smooth(0.16, 1, u));
+        ctx.save();
+        ctx.globalAlpha = show * 0.6;
+        ctx.fillStyle = "rgba(90,170,255,0.1)";
+        ctx.strokeStyle = "#6ab8ff";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
     // 공
     // 홈 근처(마지막 8%)부터는 타자 앞에 그림 — 타자 옆을 지나는 몸쪽 공이 그림상 몸 뒤로 숨어 「맞았는데 볼」처럼 보였음
     const ballNear = !!p && this.phase === "flight" && this.tf >= p.dur * 0.92;
