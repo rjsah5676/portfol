@@ -55,6 +55,14 @@ const FIELDER_H = [1, 1, 1.03, 0.97, 1, 0.98, 1.02, 1, 0.99];
 const FIELDER_BOOST = 1.8;
 /** 특수능력 발동 연출 길이 · 시간이 흐르는 화면 */
 const BOOST_DUR = 2.8;
+/**
+ * 경기 템포 (초) — 컴프야 v24 · 마구마구 영상 프레임으로 잰 것에 맞춤 (2026-10-28):
+ *   공 도착 → 다음 공 도착: 컴프야 약 4.8초 · 마구마구 약 4초 · 우리(예전) 3.65초 → 4.3초쯤
+ *   타석 끝 → 다음 타자 첫 공: 컴프야 약 8초(타자 등장 컷 포함) · 마구마구 약 4초 · 우리(예전) 2.6초 → 4초쯤
+ * call: 볼 · 스트라이크 판정 보여 주는 시간 · ready: 다음 공 전 숨 고르기 · first: 타석 첫 공 전 ·
+ * result: 타석 결과 배너 · change: 공수 교대
+ */
+const TEMPO = { call: 1.1, ready: 1.4, first: 1.9, result: 2.0, change: 2.4 };
 const BOOST_PHASES: Phase[] = ["ready", "windup", "flight", "contact", "call"];
 /** HUD · 이펙트 그림 (GPT 이미지 → public/baseball/ui) */
 const UI = {
@@ -238,6 +246,8 @@ export class Match {
   /** 타석에 들어설 때 (또 2스트라이크 · 득점권 · 7회 이후처럼 상황이 맞을 때) 경기 능력치 특수능력 발동 연출 */
   boostFx: { t: number; items: { name: string; text: string }[]; bonus: { hit: number; power: number; run: number }; head: string } | null = null;
   private lastStrikes = 0;
+  /** 이번 타석 첫 공 전 (타자가 타석에 들어서는 숨 고르기 조금 더) */
+  private paFirst = false;
   pitchInfo = "";
   lastCall = "";
 
@@ -524,6 +534,7 @@ export class Match {
     this.hbpHit = false;
     this.updateSkins();
     this.lastStrikes = 0;
+    this.paFirst = true;
     this.boostFx = null;
     if (this.userBat) this.showBoosts("all");
     const m = this.cfg.mode !== "derby" ? s.mission ?? maybeMission(s, this.rng) : null;
@@ -600,6 +611,7 @@ export class Match {
 
   /** 투구 시작 (CPU 투수면 여기서 정함) */
   private startWindup() {
+    this.paFirst = false;
     const p = this.pitcherNow;
     if (this.userBat) {
       const plan = cpuPlan(p, this.s.balls, this.s.strikes, this.batterNow.bats, this.rng);
@@ -1295,7 +1307,7 @@ export class Match {
       case "ready":
         // 사용자 타자: 잠깐 숨 고르고 투구
         // 특수능력 발동 카드(왼쪽 위)가 떠 있으면 다 사라질 즈음까지 기다렸다 던짐 (투구 중에 떠 있으면 거슬림)
-        if (this.pt > (this.cfg.mode === "derby" ? 0.8 : 1.0) && !(this.boostFx && this.boostFx.t < BOOST_DUR - 0.35)) this.startWindup();
+        if (this.pt > (this.cfg.mode === "derby" ? 0.8 : this.paFirst ? TEMPO.first : TEMPO.ready) && !(this.boostFx && this.boostFx.t < BOOST_DUR - 0.35)) this.startWindup();
         break;
       case "aim":
       case "gauge":
@@ -1422,13 +1434,13 @@ export class Match {
         this.updateField(dt);
         break;
       case "call":
-        if (this.pt > 0.8) this.toPitchNext();
+        if (this.pt > (this.cfg.mode === "derby" ? 0.8 : TEMPO.call)) this.toPitchNext();
         break;
       case "result":
-        if (this.pt > (this.cfg.mode === "derby" ? 1.3 : 1.6)) this.afterResult();
+        if (this.pt > (this.cfg.mode === "derby" ? 1.3 : TEMPO.result)) this.afterResult();
         break;
       case "change":
-        if (this.pt > 1.6) {
+        if (this.pt > TEMPO.change) {
           nextHalf(this.s);
           this.beginPA();
         }
