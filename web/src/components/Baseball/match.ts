@@ -267,6 +267,7 @@ export class Match {
   contactShown = false;
   batTilt = 0;
   timingText = "";
+  timingPerfect = false;
   /** 판정 글자가 뜬 뒤 시간 (튀어나오는 연출) */
   timingT = 0;
   /** 그림 이펙트 (맞는 순간 섬광 · 충격파 링) */
@@ -835,6 +836,8 @@ export class Match {
     }
     const W = timingWindow(b.hit, this.buntArmed, !!this.decision.special);
     this.timingText = timingLabel(e, W);
+    // 글자는 PERFECT 만 (그것도 헛스윙이 아닐 때 — 컨택존이 빗나가면 타이밍이 좋아도 헛스윙이라 헷갈림)
+    this.timingPerfect = this.timingText === "PERFECT" && this.outcome.sw?.kind !== "whiff";
     this.timingT = 0;
     this.timingR = e / W;
     this.pushUi();
@@ -1906,60 +1909,27 @@ export class Match {
       ctx.fillText(inz ? "스트라이크 존" : "유인구", t.x, t.y + 34);
     }
 
-    // 이글아이 (초급 · 중급): 공이 들어올 자리 — 원 대신 작은 노란 점 + 십자 (공 둘레 원처럼 보이지 않게)
+    // 파란 원 (마구마구식): 공의 지금 위치(좌우 · 높이)를 존 면에 그대로 옮긴 원 — 공이 날아오는 동안 궤적을 따라 존 위를 움직임.
+    // 크기는 고정 (공 크기 정도). 난이도와 상관없이 다 보임 · 마구는 안 보임 (안 읽혀야 마구)
     if (p && this.userBat && this.phase === "flight" && !p.special) {
+      const v = pitchAt(p, this.tf);
       const u = this.tf / p.dur;
-      const show = this.cfg.diff === 0 ? 1 : this.cfg.diff === 1 ? smooth(0.45, 0.6, u) : 0;
-      if (show > 0) {
-        const at = plateCross(p);
-        const c = ballProj(at.x, at.y, 0);
-        ctx.globalAlpha = show * 0.8;
-        ctx.fillStyle = "rgba(255,210,63,0.35)";
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 6, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "#ffd23f";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(c.x - 10, c.y);
-        ctx.lineTo(c.x - 4, c.y);
-        ctx.moveTo(c.x + 4, c.y);
-        ctx.lineTo(c.x + 10, c.y);
-        ctx.moveTo(c.x, c.y - 10);
-        ctx.lineTo(c.x, c.y - 4);
-        ctx.moveTo(c.x, c.y + 4);
-        ctx.lineTo(c.x, c.y + 10);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // 파란 원 (마구마구식): 공이 지금 궤적 그대로 오면 존에 닿을 자리 — 변화구는 휘는 만큼 원이 따라 움직임.
-    // 공이 다가올수록 작아지며 공 크기로 모임. 거슬리지 않게 얇은 선 · 옅은 색. 마구는 안 보임 (안 읽혀야 마구)
-    if (p && this.userBat && this.phase === "flight" && !p.special) {
-      const u = this.tf / p.dur;
-      const show = smooth(0.04, 0.14, u) * (1 - smooth(0.96, 1, u));
+      const show = v.inHand ? 0 : smooth(0, 0.06, u) * (1 - smooth(0.97, 1, u));
       if (show > 0.01) {
-        const h = Math.min(p.dur * 0.04, this.tf / 2.5);
-        const P = [pitchAt(p, this.tf), pitchAt(p, this.tf - h), pitchAt(p, this.tf - 2 * h)];
-        // 거리 z 에 대한 2차식으로 z = 0 (플레이트) 까지 늘려 봄 — 중력은 딱 맞고, 막판에 꺾이는 변화만큼 원이 움직임
-        const at = { x: 0, y: 0 };
-        for (let i = 0; i < 3; i++) {
-          let w = 1;
-          for (let j = 0; j < 3; j++) if (j !== i) w *= (0 - P[j].z) / (P[i].z - P[j].z);
-          at.x += P[i].x * w;
-          at.y += P[i].y * w;
-        }
-        const c = ballProj(clamp(at.x, -0.6, 0.6), clamp(at.y, ZONE.y0 - 0.5, ZONE.y1 + 0.5), 0);
-        const R = Math.max(4, BALLR_PX(c.s)) * lerp(3, 1.15, smooth(0.04, 1, u));
+        const c = ballProj(v.x, v.y, 0);
+        const R = Math.max(7, BALLR_PX(c.s) * BLUE_R);
         ctx.save();
-        ctx.globalAlpha = show * 0.6;
-        ctx.fillStyle = "rgba(90,170,255,0.1)";
-        ctx.strokeStyle = "#6ab8ff";
-        ctx.lineWidth = 2;
+        ctx.globalAlpha = show;
+        ctx.fillStyle = "rgba(70,150,255,0.22)";
         ctx.beginPath();
         ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
         ctx.fill();
+        // 남색 펜스 · 파란 유니폼 위에서도 보이게 흰 테 + 파란 선
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.lineWidth = 4;
+        ctx.stroke();
+        ctx.strokeStyle = "#3d8bff";
+        ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
       }
@@ -2270,7 +2240,6 @@ export class Match {
     ctx.beginPath();
     ctx.ellipse(g.x, g.y, Math.max(3.5, 0.06 * g.s), Math.max(1.5, 0.022 * g.s), 0, 0, Math.PI * 2);
     ctx.fill();
-    // (예측 링은 뺌 — 공 둘레에 원이 생기는 건 실제 야구에 없음. 노리는 자리는 컨택존 · 초급 이글아이 점으로)
     // 꼬리 (속도감 + 휘는 길): 최근 TRAIL_SEC 자취를 가늘어지는 띠로 — 길게 남겨야 변화구가 휘는 곡선이 눈에 남음
     // (예전 0.05초는 거의 점이라 궤적이 안 읽혔음). 마구는 마지막 25% 꼬리를 꺼서 늦은 변화를 숨김
     if (!(sp && v.u > 0.75) && !v.inHand) {
@@ -3331,6 +3300,21 @@ export class Match {
     ctx.lineTo(mx, y - 5);
     ctx.closePath();
     ctx.fill();
+    if (this.timingPerfect) {
+      // PERFECT: 바 위에 노란 글자 — 톡 커졌다가 자리 잡음
+      const pop = 1 + 0.35 * (1 - Math.min(1, t / 0.12));
+      ctx.translate(cx, y - 26);
+      ctx.scale(pop, pop);
+      ctx.font = '900 26px "Nanum Gothic", sans-serif';
+      ctx.textAlign = "center";
+      ctx.shadowColor = "rgba(0,0,0,0.85)";
+      ctx.shadowBlur = 6;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "rgba(40,20,0,0.9)";
+      ctx.strokeText("PERFECT!", 0, 0);
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillText("PERFECT!", 0, 0);
+    }
     ctx.restore();
     ctx.textAlign = "left";
   }
@@ -3851,4 +3835,6 @@ export class Match {
 }
 
 const BALLR_PX = (s: number) => 0.055 * s;
+/** 파란 원 반지름 = 플레이트에서 공 크기 × 이만큼 */
+const BLUE_R = 1.4;
 export { DW, DH };

@@ -170,7 +170,7 @@ function BaseballMain() {
   const playOnline = (g: Ghost, inn: number, userHome: boolean) => {
     const c = loadClub();
     if (!c) return;
-    // 난이도(공 속도 · 이글아이)는 중급 고정 — 상대 강함은 상대 구단 능력치로만
+    // 난이도(공 속도)는 중급 고정 — 상대 강함은 상대 구단 능력치로만
     start({ mode: "game", diff: 1, innings: inn, userHome, teams: { mine: buildTeam(c), cpu: g.team } });
     setFoe(g);
   };
@@ -361,7 +361,7 @@ function BaseballMain() {
                 </Row>
               </div>
               <p className="text-[12px] text-white/50">
-                {diff === 0 ? "초급: 공이 느리고, 공이 들어올 자리가 처음부터 보임 (이글아이)" : diff === 1 ? "중급: 보통 속도 · 공이 반쯤 왔을 때 들어올 자리가 보임" : "고급: 빠름 · 표시 없음 · 봇이 잘 치고 잘 던짐"}
+                {diff === 0 ? "초급: 공이 느리고 봇이 순함" : diff === 1 ? "중급: 보통 속도" : "고급: 빠름 · 봇이 잘 치고 잘 던짐"}
               </p>
               {club ? (
                 <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
@@ -433,6 +433,9 @@ function BaseballMain() {
                   <div className={`${font.title} mb-2 text-lg text-[#ffd23f]`}>타격</div>
                   <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> · 마우스 클릭 (휴대폰은 <b>스윙 버튼</b>).</p>
                   <p>빠르면 당겨 치고(우타 → 왼쪽), 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
+                  <p>
+                    <Key>방향키</Key> · <Key>WASD</Key> (휴대폰은 <b>이동 패드</b>)로 <b className="text-[#ffbe5a]">주황 상자(컨택존)</b>를 옮겨요 — 공이 날아오는 동안에도. <b className="text-[#6ab8ff]">파란 원</b>이 지금 공이 존 어디쯤인지 보여 줘요. 원을 따라가 상자 안에 넣고 치면 정타.
+                  </p>
                   <p>존 밖 공(볼)은 휘두르면 빗맞아요 — 참으면 볼넷.</p>
                   <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 — 공이 날아올 때 스윙 대신 누르면 그 자리에서 특별한 스윙 (인연에서 배운 선수만, 경기당 1번 · 마스터하면 2번 · 앞으로 보내야 씀)</p>
                 </div>
