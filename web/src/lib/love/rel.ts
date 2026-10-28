@@ -4,8 +4,9 @@
  */
 import type { Vars } from "./types";
 
-export type Heroine = "amy" | "yeonseo";
-export const AFF: Record<Heroine, string> = { amy: "affA", yeonseo: "affY" };
+export type Heroine = "amy" | "yeonseo" | "sera";
+export const HEROINES: readonly Heroine[] = ["amy", "yeonseo", "sera"];
+export const AFF: Record<Heroine, string> = { amy: "affA", yeonseo: "affY", sera: "affS" };
 
 /**
  * 호감 단계 경계 (0 ~ 5단계) — 히로인마다 대본 수치 크기가 달라 따로 잡음.
@@ -15,8 +16,9 @@ export const AFF: Record<Heroine, string> = { amy: "affA", yeonseo: "affY" };
 export const STAGE_AT: Record<Heroine, readonly number[]> = {
   amy: [0, 5, 16, 32, 50, 70],
   yeonseo: [0, 4, 10, 20, 30, 40],
+  sera: [0, 3, 8, 15, 24, 34],
 };
-const ROUTE: Record<Heroine, string> = { amy: "routeA", yeonseo: "routeY" };
+const ROUTE: Record<Heroine, string> = { amy: "routeA", yeonseo: "routeY", sera: "routeS" };
 export const stageOf = (aff: number, who: Heroine = "amy"): number =>
   Math.max(0, STAGE_AT[who].filter((x) => aff >= x).length - 1);
 export const heroStage = (v: Vars, who: Heroine): number => {
@@ -28,6 +30,7 @@ export const heroStage = (v: Vars, who: Heroine): number => {
 export const STAGE_NAME: Record<Heroine, readonly string[]> = {
   amy: ["시끄러운 손님", "단골 손님", "편의점 친구", "신경 쓰이는 애", "내 편", "특별한 사람"],
   yeonseo: ["구석 자리 손님", "말을 거는 손님", "비밀을 아는 사이", "신경 쓰이는 사람", "기대는 사람", "특별한 사람"],
+  sera: ["마지막 판 손님", "안 접는 단골", "번호를 아는 사이", "신경 쓰이는 사람", "무서운데 웃긴 사람", "특별한 사람"],
 };
 /** 단계별 지금 그녀의 마음 (관계 화면 한 줄) */
 export const STAGE_LINE: Record<Heroine, readonly string[]> = {
@@ -46,6 +49,14 @@ export const STAGE_LINE: Record<Heroine, readonly string[]> = {
     "구석 자리에서 시선이 자꾸 딜러 쪽으로 온다.",
     "장갑 낀 손이 네 소매를 먼저 잡는다.",
     "7년 만에, 소리 내서 웃는다.",
+  ],
+  sera: [
+    "마지막 판에만 온다. 그리고 절대 안 접는다.",
+    "딜러 이름을 부르는 목소리가 묘하게 익숙하다.",
+    "메시지 끝에 꼭 하트가 붙는다. 답장이 늦으면 하나 더.",
+    "웃는 얼굴인데, 눈이 한 번도 웃지 않는다. 아니, 너를 볼 때만 웃는다.",
+    "무섭다. 그런데 오늘도 마지막 판이 기다려진다.",
+    "처음으로, 칩을 접는 법을 배우고 싶다고 한다.",
   ],
 };
 
@@ -80,7 +91,7 @@ export const tiltName = (v: Vars): string => {
  * 그 히로인 루트에 들어갔거나 호감이 0 이하면 안 깎음. _dcA · _dcY 는 깎인 횟수 (화면에서 금 간 하트 띄우는 신호)
  */
 export const DECAY_GAP = 3;
-const DK: Record<Heroine, [string, string, string]> = { amy: ["_lastA", "_pA", "_dcA"], yeonseo: ["_lastY", "_pY", "_dcY"] };
+const DK: Record<Heroine, [string, string, string]> = { amy: ["_lastA", "_pA", "_dcA"], yeonseo: ["_lastY", "_pY", "_dcY"], sera: ["_lastS", "_pS", "_dcS"] };
 export function dayDecay(v: Vars, day: number): Vars {
   if (!day || v._dd === day) return v;
   const o: Vars = { ...v, _dd: day };
@@ -100,4 +111,4 @@ export function dayDecay(v: Vars, day: number): Vars {
   }
   return o;
 }
-const ROUTE_V: Record<Heroine, string> = { amy: "routeA", yeonseo: "routeY" };
+const ROUTE_V: Record<Heroine, string> = { amy: "routeA", yeonseo: "routeY", sera: "routeS" };

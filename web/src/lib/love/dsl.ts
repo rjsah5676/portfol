@@ -21,6 +21,8 @@ export const say = (who: Who, text: string, m?: Mood | Face, f?: Face): Step => 
 export const N = (text: string): Step => say("narr", text);
 export const ME = (text: string, mood?: Mood): Step => say("me", text, mood);
 export const Y = (text: string, m?: Mood | Face, f?: Face): Step => say("yeonseo", text, m, f);
+/** 세라 */
+export const S = (text: string, m?: Mood | Face, f?: Face): Step => say("sera", text, m, f);
 export const A = (text: string, m?: Mood | Face, f?: Face): Step => say("amy", text, m, f);
 /** 말 안 하는 캐릭터 표정만 바꾸기 (리액션) */
 export const FACE = (who: CharKey, face: Face): Step => ({ t: "face", who, face });

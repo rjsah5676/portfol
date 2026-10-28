@@ -2,14 +2,14 @@
 
 /*
  * 올인 러브 미니게임 (전부 2~3분 안, 스킵 가능, 실패해도 이야기는 진행)
- *  DealMini — 딜링 근무: 돌아가는 불빛이 금색 자리에 올 때 「딜」
+ *  DealMini — 딜링 근무 (1일차 한 번): 테이블 둘레를 도는 불빛이 금색 자리에 올 때 카드를 보냄. 마지막 장은 새 손님(세라)에게
  *  TellMini — 텔 읽기: 히로인 말이 진심인지 블러프인지
  *  StoryPoker — 정해진 패 한 판 (결과는 단계별 연출)
  *  HeadsUp — 진짜 헤즈업 (무작위 카드 · 칩 싸움 · 버릇 단서)
  */
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import type { BgId, CharKey, Eff, Face, MatchSpec, Outfit, PokerAct, PokerSpec, SfxId, TellSpec, Vars } from "@/lib/love/types";
-import { BG, CARD_BACK, FACE_NEAR, NAME, OUTFITS, STAND } from "@/lib/love/assets";
+import { BG, CARD_BACK, FACE_ICON, FACE_NEAR, NAME, OUTFITS, STAND } from "@/lib/love/assets";
 import { bestFive, madeOf } from "@/lib/poker/cards";
 import { check } from "@/lib/love/engine";
 import { TELLS, tellById, tellKnown } from "@/lib/love/tells";
@@ -40,137 +40,209 @@ import { PlayingCard } from "@/components/Poker/parts";
 import { REACT_CLUES, cluesKnown, pairHit, reactOf } from "@/lib/love/clues";
 import { SKILL_ACC, SKILL_PRO, SKILL_SHOW, skillOf } from "@/lib/love/rel";
 
-const SEATS = [
-  { x: 50, y: 84 },
-  { x: 18, y: 66 },
-  { x: 22, y: 26 },
-  { x: 50, y: 14 },
-  { x: 78, y: 26 },
-  { x: 82, y: 66 },
+/** 딜링 근무 — 손님 자리 다섯 (테이블 둘레 순서, 불빛이 이 순서로 돎) · 딜러는 아래 가운데 */
+const DEAL_SEATS = [
+  { x: 13, y: 62 },
+  { x: 25, y: 22 },
+  { x: 50, y: 11 },
+  { x: 75, y: 22 },
+  { x: 87, y: 62 },
 ];
+const DEALER = { x: 50, y: 94 };
 const ROUNDS = 5;
+/** 마지막 라운드에 새 손님이 앉는 자리 (테이블 맨 끝 — 카드가 제일 길게 미끄러짐) */
+const FINALE_SEAT = 2;
+
+type DealShot = { seat: number; hit: boolean; n: number };
 
 export function DealMini({
   onDone,
   play,
+  seats = [],
+  finale,
 }: {
   onDone: (score: number) => void;
   play: (id: SfxId) => void;
+  /** 앉아 있는 손님 얼굴 (없으면 실루엣) */
+  seats?: (CharKey | null)[];
+  /** 마지막 라운드에 FINALE_SEAT 에 앉는 사람 — 그 판은 실패가 없음 (그 손님이 카드를 받아 냄) */
+  finale?: CharKey;
 }) {
   const [round, setRound] = useState(0);
   const [cur, setCur] = useState(0);
-  const [target, setTarget] = useState(() => 1 + Math.floor(Math.random() * 5));
+  const [target, setTarget] = useState(() => (FINALE_SEAT + 2 + Math.floor(Math.random() * 3)) % 5);
   const [score, setScore] = useState(0);
-  const [flash, setFlash] = useState<"hit" | "miss" | null>(null);
-  const [fly, setFly] = useState<number | null>(null);
+  const [shots, setShots] = useState<DealShot[]>([]);
   const [started, setStarted] = useState(false);
+  const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const done = round >= ROUNDS;
+  const isFinale = !!finale && round === ROUNDS - 1;
+  const goal = isFinale ? FINALE_SEAT : target;
+  // 불빛이 자리를 도는 속도: 라운드마다 빨라짐 (마지막 손님 판은 천천히 — 등장 연출)
+  const ms = isFinale ? 520 : 470 - round * 55;
 
-  // 불빛이 자리를 도는 속도: 라운드마다 빨라짐
   useEffect(() => {
     if (!started || done) return;
-    const ms = 420 - round * 45;
-    const id = window.setInterval(() => setCur((c) => (c + 1) % SEATS.length), ms);
+    const id = window.setInterval(() => setCur((c) => (c + 1) % DEAL_SEATS.length), ms);
     return () => window.clearInterval(id);
-  }, [started, round, done]);
+  }, [started, done, ms]);
 
   const hit = useCallback(() => {
     if (!started || done || lock.current) return;
     lock.current = true;
-    const ok = cur === target;
-    play(ok ? "deal" : "lose");
-    setFlash(ok ? "hit" : "miss");
-    setFly(cur);
+    setBusy(true);
+    const ok = isFinale || cur === goal;
+    play(ok ? "deal" : "chip");
+    setShots((l) => [...l, { seat: isFinale ? FINALE_SEAT : cur, hit: ok, n: Date.now() }]);
     if (ok) setScore((n) => n + 1);
     window.setTimeout(() => {
-      setFlash(null);
-      setFly(null);
       setRound((r) => r + 1);
       setTarget((t) => {
         let n = t;
-        while (n === t) n = 1 + Math.floor(Math.random() * 5);
+        while (n === t || n === FINALE_SEAT) n = Math.floor(Math.random() * 5);
         return n;
       });
       lock.current = false;
-    }, 650);
-  }, [started, done, cur, target, play]);
+      setBusy(false);
+    }, isFinale ? 1100 : 700);
+  }, [started, done, cur, goal, isFinale, play]);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.code === "Space" || e.code === "Enter") {
         e.preventDefault();
         e.stopPropagation();
-        if (!started) setStarted(true);
+        if (done) onDone(score);
+        else if (!started) setStarted(true);
         else hit();
       }
     };
     window.addEventListener("keydown", k, true);
     return () => window.removeEventListener("keydown", k, true);
-  }, [hit, started]);
+  }, [hit, started, done, score, onDone]);
+
+  const last = shots[shots.length - 1];
+  const sweep = DEAL_SEATS[cur];
+  const press = () => (done ? onDone(score) : started ? hit() : setStarted(true));
+  const finaleShown = !!finale && (round >= ROUNDS - 1 || done);
 
   return (
-    <div className="lv-mini absolute inset-0 z-40 flex flex-col items-center justify-center bg-black/70 backdrop-blur-[2px]">
-      <div className="lv-mini-title">딜링 근무</div>
-      <div
-        onClick={() => (started ? hit() : setStarted(true))}
-        className="relative mt-2 aspect-[16/10] w-[62%] cursor-pointer rounded-[50%] border-[6px] border-[#5a3a1c] bg-[radial-gradient(ellipse_at_center,#1f6b46,#0e3b26)] shadow-[0_0_0_3px_#c9a25a_inset,0_20px_50px_#0009]"
-      >
-        {SEATS.map((p, i) => (
-          <div
-            key={i}
-            className={`absolute grid h-[15%] w-[10%] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-2 text-[clamp(10px,1.2vw,15px)] font-bold transition-all duration-100 ${
-              i === 0
-                ? "border-white/40 bg-white/10 text-white/70"
-                : i === target
-                  ? "border-[#ffd27a] bg-[#ffd27a]/25 text-[#ffd27a] shadow-[0_0_18px_#ffd27a]"
-                  : "border-white/25 bg-black/20 text-white/50"
-            } ${i === cur && started && !done ? "scale-125 !bg-white/80 !text-black" : ""}`}
-            style={{ left: `${p.x}%`, top: `${p.y}%` }}
-          >
-            {i === 0 ? "딜러" : i}
-          </div>
-        ))}
-        {fly !== null && (
+    <div className="lv-mini lv-deal absolute inset-0 z-40 flex flex-col items-center justify-center" onClick={press}>
+      <div className="lv-deal-head">
+        <div className="lv-deal-title">
+          <span>첫 근무</span>딜링
+        </div>
+        <div className="lv-deal-pips">
+          {Array.from({ length: ROUNDS }, (_, i) => (
+            <i key={i} className={i < shots.length ? (shots[i].hit ? "on" : "off") : i === round && started ? "now" : ""} />
+          ))}
+        </div>
+      </div>
+
+      <div className="lv-deal-table">
+        <div className="lv-deal-felt">
+          <div className="lv-deal-logo">HOUSE</div>
+        </div>
+        {/* 불빛 — 자리를 따라 미끄러짐 */}
+        {started && !done && !busy && (
+          <div className={`lv-deal-sweep ${isFinale ? "pink" : ""}`} style={{ left: `${sweep.x}%`, top: `${sweep.y}%`, transitionDuration: `${ms * 0.85}ms` }} />
+        )}
+        {DEAL_SEATS.map((p, i) => {
+          const face = i === FINALE_SEAT ? (finaleShown ? finale : null) : (seats[i] ?? null);
+          const empty = i === FINALE_SEAT && !finaleShown;
+          const landed = shots.filter((t) => t.seat === i && t.hit).length;
+          return (
+            <div
+              key={i}
+              className={`lv-deal-seat ${i === goal && started && !done ? (isFinale ? "goal pink" : "goal") : ""} ${empty ? "empty" : ""} ${
+                i === FINALE_SEAT && finaleShown ? "arrive" : ""
+              }`}
+              style={{ left: `${p.x}%`, top: `${p.y}%` }}
+            >
+              {face && FACE_ICON[face] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={FACE_ICON[face]} alt="" />
+              ) : (
+                <svg viewBox="0 0 24 24" aria-hidden>
+                  <circle cx="12" cy="9" r="4.2" />
+                  <path d="M3.5 21c.8-4.4 4.2-7 8.5-7s7.7 2.6 8.5 7z" />
+                </svg>
+              )}
+              {i === FINALE_SEAT && finaleShown && <b className="lv-deal-tag">늦게 온 손님</b>}
+              {landed > 0 && (
+                <span className="lv-deal-stack">
+                  {Array.from({ length: Math.min(landed, 3) }, (_, k) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={k} src={CARD_BACK} alt="" style={{ transform: `translate(${k * 18}%, ${-k * 8}%) rotate(${-8 + k * 9}deg)` }} />
+                  ))}
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {/* 딜러 손 */}
+        <div className="lv-deal-dealer" style={{ left: `${DEALER.x}%`, top: `${DEALER.y}%` }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={CARD_BACK} alt="" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={CARD_BACK} alt="" />
+        </div>
+        {/* 날아가는 카드 */}
+        {last && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
+            key={last.n}
             src={CARD_BACK}
             alt=""
-            className="lv-fly absolute h-[16%] -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${SEATS[fly].x}%`, top: `${SEATS[fly].y}%` }}
+            className={`lv-deal-fly ${last.hit ? "" : "miss"}`}
+            style={
+              {
+                "--x0": `${DEALER.x}%`,
+                "--y0": `${DEALER.y}%`,
+                "--x1": `${DEAL_SEATS[last.seat].x}%`,
+                "--y1": `${DEAL_SEATS[last.seat].y}%`,
+              } as CSSProperties
+            }
           />
         )}
-        {flash && (
+        {last && (
           <div
-            className={`absolute inset-0 grid place-items-center text-[clamp(18px,3vw,40px)] font-black ${flash === "hit" ? "text-[#ffd27a]" : "text-[#ff6b6b]"}`}
+            key={`t${last.n}`}
+            className={`lv-deal-pop ${last.hit ? "" : "miss"} ${last.seat === FINALE_SEAT && finale ? "pink" : ""}`}
+            style={{ left: `${DEAL_SEATS[last.seat].x}%`, top: `${DEAL_SEATS[last.seat].y}%` }}
           >
-            {flash === "hit" ? "NICE DEAL" : "MISS"}
+            {last.seat === FINALE_SEAT && finale ? "탁." : last.hit ? "딜!" : "아깝다"}
           </div>
         )}
       </div>
-      <div className="mt-3 text-[clamp(11px,1.3vw,16px)] text-white/80">
-        {!started
-          ? "불빛이 금색 자리에 왔을 때 「딜」 (스페이스 · 화면 터치)"
-          : done
-            ? `결과 ${score} / ${ROUNDS}`
-            : `${round + 1} / ${ROUNDS} · ${target}번 자리에 카드를!`}
-      </div>
-      <div className="mt-3 flex gap-3">
-        {!done ? (
-          <button className="lv-btn-gold" onClick={() => (started ? hit() : setStarted(true))}>
-            {started ? "딜!" : "시작"}
-          </button>
+
+      <div className="lv-deal-foot">
+        {!started ? (
+          <>
+            <p>불빛이 금색 자리에 오면 눌러.</p>
+            <button className="lv-btn-gold" onClick={(e) => (e.stopPropagation(), setStarted(true))}>
+              시작
+            </button>
+          </>
+        ) : done ? (
+          <>
+            <p>
+              <b>{score}</b> / {ROUNDS} · {score >= 4 ? "손이 기억하고 있다." : score >= 2 ? "아직 조금 굳어 있다." : "3년은 길었다."}
+            </p>
+            <button className="lv-btn-gold" onClick={(e) => (e.stopPropagation(), onDone(score))}>
+              계속
+            </button>
+          </>
         ) : (
-          <button className="lv-btn-gold" onClick={() => onDone(score)}>
-            계속
-          </button>
-        )}
-        {!done && (
-          <button className="lv-btn-ghost" onClick={() => onDone(3)}>
-            건너뛰기
-          </button>
+          <p className="lv-deal-hint">{isFinale ? "마지막 한 장 — 끝자리 손님에게" : `${round + 1} / ${ROUNDS}`}</p>
         )}
       </div>
+      {!done && (
+        <button className="lv-deal-skip" onClick={(e) => (e.stopPropagation(), onDone(3))}>
+          건너뛰기 ›
+        </button>
+      )}
     </div>
   );
 }

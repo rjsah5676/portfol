@@ -13,6 +13,8 @@ import {
   BGM_ONCE,
   CG,
   CG_ORDER,
+  CG_SUIT,
+  CG_TONE,
   ENDINGS,
   FACE_ICON,
   NAME,
@@ -50,7 +52,7 @@ import {
   run,
 } from "@/lib/love/engine";
 import { type ReactLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
-import { type Heroine, SKILL_LINE, SKILL_NAME, SKILL_PRO, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
+import { HEROINES, type Heroine, SKILL_LINE, SKILL_NAME, SKILL_PRO, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
 import { voiceOf } from "@/lib/love/voices";
 import {
   type BgmId,
@@ -604,7 +606,8 @@ export default function LoveApp() {
     if (b?.k === "phone") {
       setPhoneShown(0);
       setPhoneOpen(false);
-      play("phone");
+      // 세라 메시지는 전용 알림음 (오르골 두 음)
+      play(b.step.from === "sera" ? "seraMsg" : "phone");
     }
     if (b?.k === "goTitle") {
       voice(null);
@@ -759,7 +762,7 @@ export default function LoveApp() {
       markSeen();
       play("click");
       setS(next(s));
-    } else if (b.k === "day" || b.k === "title") {
+    } else if (b.k === "day" || b.k === "title" || b.k === "look") {
       setS(next(s));
     } else if (b.k === "montage" || b.k === "recall") {
       play("click");
@@ -776,8 +779,8 @@ export default function LoveApp() {
 
   // 날짜 · 제목 카드는 잠깐 보여 주고 자동으로 넘어감
   useEffect(() => {
-    if (block?.k !== "day" && block?.k !== "title") return;
-    const id = window.setTimeout(advance, skip ? 200 : block.k === "day" ? 1500 : 2300);
+    if (block?.k !== "day" && block?.k !== "title" && block?.k !== "look") return;
+    const id = window.setTimeout(advance, skip ? 200 : block.k === "day" ? 1500 : block.k === "look" ? 3200 : 2300);
     return () => window.clearTimeout(id);
   }, [block, advance, skip]);
 
@@ -1096,22 +1099,23 @@ export default function LoveApp() {
   const stageRef = useRef<Record<Heroine, number> | null>(null);
   const affA = s?.vars.affA ?? 0;
   const affY = s?.vars.affY ?? 0;
+  const affS = s?.vars.affS ?? 0;
   useEffect(() => {
     if (phase !== "game" || !s) {
       stageRef.current = null;
       return;
     }
-    const now = { amy: heroStage(s.vars, "amy"), yeonseo: heroStage(s.vars, "yeonseo") };
+    const now = { amy: heroStage(s.vars, "amy"), yeonseo: heroStage(s.vars, "yeonseo"), sera: heroStage(s.vars, "sera") };
     const prev = stageRef.current;
     stageRef.current = now;
     if (!prev) return;
-    for (const who of ["amy", "yeonseo"] as Heroine[])
+    for (const who of HEROINES)
       if (now[who] > prev[who]) {
         setStageUp({ who, stage: now[who], n: Date.now() });
         play("heart");
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [affA, affY, phase]);
+  }, [affA, affY, affS, phase]);
   // 마음 읽기: 날이 바뀌면 어제 알게 된 것 한 줄씩 (그날 새로 켜진 마음 플래그만)
   const [mindDay, setMindDay] = useState<{ day: number; items: typeof MIND; n: number } | null>(null);
   const dayNoRef = useRef<number | null>(null);
@@ -2151,7 +2155,7 @@ export default function LoveApp() {
             {rb?.k === "mini" && (
               <div onClick={(e) => e.stopPropagation()}>
                 {rb.step.kind === "deal" ? (
-                  <DealMini play={play} onDone={(n) => setS(miniDone(s, rb.step.key, n))} />
+                  <DealMini play={play} seats={rb.step.seats} finale={rb.step.finale} onDone={(n) => setS(miniDone(s, rb.step.key, n))} />
                 ) : rb.step.kind === "poker" ? (
                   <StoryPoker
                     spec={rb.step.poker}
@@ -2211,7 +2215,7 @@ export default function LoveApp() {
                 <div className="lv-fadein text-center">
                   <div className="text-[4.5cqw] font-black text-white">{rb.text}</div>
                   {rb.sub && (
-                    <div className="mt-[0.6cqw] text-[1.6cqw] text-white/60">{rb.sub}</div>
+                    <div className="mt-[0.6cqw] whitespace-pre-line text-[1.6cqw] leading-[1.7] text-white/60 [word-break:keep-all]">{rb.sub}</div>
                   )}
                 </div>
               </div>
@@ -2657,7 +2661,7 @@ function CgView({
       {!c.tight && <div className="lv-cg-bar lv-cg-bar-t" />}
       <div className="lv-cg-bar lv-cg-bar-b" />
       <div className="lv-cg-title">
-        <span className={c.who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>♥</span> EVENT ·{" "}
+        <span style={{ color: CG_TONE[c.who] }}>♥</span> EVENT ·{" "}
         {c.title}
       </div>
       <div className="lv-cg-flash" />
@@ -2992,6 +2996,7 @@ function RelHud({ vars, onOpen, dot }: { vars: Record<string, number>; onOpen: (
       {dot && <i className="lv-new-dot lv-new-dot-hud" />}
       <span className="lv-heart-a">{hearts(heroStage(vars, "amy"))}</span>
       <span className="lv-heart-y">{hearts(heroStage(vars, "yeonseo"))}</span>
+      <span className="lv-heart-s">{hearts(heroStage(vars, "sera"))}</span>
       <span className="text-[#ffd27a]">{"✦".repeat(skillOf(vars) + 1)}</span>
     </button>
   );
@@ -3001,7 +3006,8 @@ function RelHud({ vars, onOpen, dot }: { vars: Record<string, number>; onOpen: (
 function RelPanel({ vars }: { vars: Record<string, number> }) {
   return (
     <div className="grid flex-1 grid-cols-2 gap-[1.6cqw] overflow-y-auto">
-      {(["amy", "yeonseo"] as Heroine[]).map((who) => {
+      <div className="col-span-2 grid grid-cols-3 gap-[1.6cqw]">
+      {HEROINES.map((who) => {
         const st = heroStage(vars, who);
         return (
           <div key={who} className="lv-relcard">
@@ -3010,7 +3016,7 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
             <div className="text-[1.9cqw] font-bold" style={{ color: NAME_COLOR[who] }}>
               {NAME[who]}
             </div>
-            <div className={`text-[2cqw] tracking-[0.2em] ${who === "amy" ? "lv-heart-a" : "lv-heart-y"}`}>
+            <div className={`text-[2cqw] tracking-[0.2em] ${who === "amy" ? "lv-heart-a" : who === "sera" ? "lv-heart-s" : "lv-heart-y"}`}>
               {hearts(st)}
             </div>
             <div className="text-[1.5cqw] text-[#ffd27a]">「{STAGE_NAME[who][st]}」</div>
@@ -3018,6 +3024,7 @@ function RelPanel({ vars }: { vars: Record<string, number> }) {
           </div>
         );
       })}
+      </div>
       <MindNotes vars={vars} />
       <TellNotes vars={vars} />
       <div className="lv-relcard col-span-2 !flex-row !justify-around">
@@ -3498,6 +3505,9 @@ const MUSIC: [BgmId, string][] = [
   ["finale", "새벽 네 시, 마지막 판"],
   ["ending", "비 그친 다음 날 아침"],
   ["morning", "젖은 골목, 맑은 하늘"],
+  ["sera", "세라 — 마지막 판의 손님"],
+  ["sera_pink", "분홍 간판"],
+  ["sera_dark", "세라 — 눈을 떼면"],
   ["amy_ace", "에이미 — 처음 듣는 목소리"],
   ["yeon_ace", "연서 — 장갑을 벗은 손"],
   ["credits", "엔딩 크레딧"],
@@ -3657,7 +3667,7 @@ function Gallery({
   const [view, setView] = useState<CgId | null>(null);
   const [page, setPage] = useState(0);
   // 회상 CG: 히로인별로 거르고 4x3 씩 페이지 넘김
-  const [who, setWho] = useState<"all" | "amy" | "yeonseo">("all");
+  const [who, setWho] = useState<"all" | "amy" | "yeonseo" | "sera">("all");
   const [gp, setGp] = useState(0);
   const PER = 12;
   const list = CG_ORDER.filter((id) => who === "all" || CG[id].who === who);
@@ -3742,17 +3752,18 @@ function Gallery({
                 ["all", "전체", CG_ORDER],
                 ["amy", "에이미", CG_ORDER.filter((id) => CG[id].who === "amy")],
                 ["yeonseo", "연서", CG_ORDER.filter((id) => CG[id].who === "yeonseo")],
+                ["sera", "세라", CG_ORDER.filter((id) => CG[id].who === "sera")],
               ] as const
             ).map(([k, label, ids]) => (
               <button
                 key={k}
-                className={`lv-gal-chip ${k === "amy" ? "lv-gal-chip-a" : k === "yeonseo" ? "lv-gal-chip-y" : ""} ${who === k ? "lv-gal-chip-on" : ""}`}
+                className={`lv-gal-chip ${k === "amy" ? "lv-gal-chip-a" : k === "yeonseo" ? "lv-gal-chip-y" : k === "sera" ? "lv-gal-chip-s" : ""} ${who === k ? "lv-gal-chip-on" : ""}`}
                 onClick={() => {
                   setWho(k);
                   setGp(0);
                 }}
               >
-                {k !== "all" && <span className="lv-gal-chip-suit">{k === "amy" ? "♥" : "♠"}</span>}
+                {k !== "all" && <span className="lv-gal-chip-suit">{CG_SUIT[k]}</span>}
                 {label}
                 <i>
                   {seenIn([...ids])}/{ids.length}
@@ -3778,8 +3789,8 @@ function Gallery({
                     <span className="lv-gal-cg-img" style={{ backgroundImage: `url("${CG[id].src}")` }} />
                   ) : (
                     <span className="lv-gal-cg-q">
-                      <span className={CG[id].who === "amy" ? "text-[#7fd3ff]/25" : "text-[#8fa8ff]/25"}>
-                        {CG[id].who === "amy" ? "♥" : "♠"}
+                      <span style={{ color: CG_TONE[CG[id].who], opacity: 0.25 }}>
+                        {CG_SUIT[CG[id].who]}
                       </span>
                     </span>
                   )}
@@ -3795,8 +3806,8 @@ function Gallery({
                     </span>
                   )}
                   <span className="lv-gal-cg-cap">
-                    <span className={CG[id].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
-                      {CG[id].who === "amy" ? "♥" : "♠"}
+                    <span style={{ color: CG_TONE[CG[id].who] }}>
+                      {CG_SUIT[CG[id].who]}
                     </span>{" "}
                     {ok ? CG[id].title : "아직 못 본 장면"}
                   </span>
@@ -3872,8 +3883,8 @@ function Gallery({
             )}
           </ZoomMedia>
           <div className="lv-gal-view-bar" onClick={(e) => e.stopPropagation()}>
-            <span className={CG[view].who === "amy" ? "text-[#7fd3ff]" : "text-[#8fa8ff]"}>
-              {CG[view].who === "amy" ? "♥" : "♠"}
+            <span style={{ color: CG_TONE[CG[view].who] }}>
+              {CG_SUIT[CG[view].who]}
             </span>
             <span className="lv-gal-view-title">{CG[view].title}</span>
             {pages.length > 1 && (
@@ -4299,7 +4310,7 @@ const statsOf = (st: GState, cgs: CgId[], endings: EndingId[]): RollStats => ({
 });
 /** 그 엔딩 루트에서 본 CG (앨범 사진) — 다른 엔딩의 엔딩 CG 는 빼고 */
 function rollPhotos(id: EndingId, seen: CgId[]): { src: string; title: string }[] {
-  const who = id.startsWith("amy") ? "amy" : id.startsWith("yeon") ? "yeonseo" : null;
+  const who = id.startsWith("amy") ? "amy" : id.startsWith("yeon") ? "yeonseo" : id.startsWith("sera") ? "sera" : null;
   const own = `end_${id}`;
   return CG_ORDER.filter(
     (c) => seen.includes(c) && (!who || CG[c].who === who) && (!c.startsWith("end_") || c === own)

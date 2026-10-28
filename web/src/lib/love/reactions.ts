@@ -13,7 +13,7 @@ export interface ReactLine {
 }
 type Tiered = [low: ReactLine[], mid: ReactLine[], high: ReactLine[]];
 
-const AFF: Partial<Record<CharKey, string>> = { yeonseo: "affY", amy: "affA" };
+const AFF: Partial<Record<CharKey, string>> = { yeonseo: "affY", amy: "affA", sera: "affS" };
 /** 호감 단계: 0 낮음 · 1 보통(7 이상) · 2 높음(12 이상) — rel.ts 관계 단계와 맞춤 */
 const tier = (who: CharKey, v: Vars) => {
   const n = v[AFF[who] ?? ""] ?? 0;
@@ -22,6 +22,20 @@ const tier = (who: CharKey, v: Vars) => {
 const pickOne = <T,>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 
 const TOUCH_HEAD: Partial<Record<CharKey, Tiered>> = {
+  sera: [
+    [
+      { text: "어? 쓰다듬어 주는 거예요? …한 번 더요.", face: "blush" },
+      { text: "손님 머리 만지면 안 되는 거 아니에요? 저는 좋지만요.", face: "smile" },
+    ],
+    [
+      { text: "…지금 거 기억해 둘게요. 오늘 날짜랑 같이.", face: "smile", heart: true },
+      { text: "더 해 주면, 저 오늘 안 갈 거예요.", face: "smile" },
+    ],
+    [
+      { text: "…딜러님 손, 역시 예뻐요.", face: "heart", heart: true },
+      { text: "이거, 저한테만 해요. 약속.", face: "smile", heart: true },
+    ],
+  ],
   yeonseo: [
     [
       { text: "…손 치워요.", face: "cold" },
@@ -53,6 +67,20 @@ const TOUCH_HEAD: Partial<Record<CharKey, Tiered>> = {
 };
 
 const TOUCH_BODY: Partial<Record<CharKey, Tiered>> = {
+  sera: [
+    [
+      { text: "앗. 딜러님 먼저 만졌어요. 이제 저도 만져도 되는 거죠?", face: "surprise" },
+      { text: "…지금 제 쪽으로 온 거죠? 그렇게 알게요.", face: "smile" },
+    ],
+    [
+      { text: "도망 안 가요. 딜러님이 밀어도요.", face: "smile" },
+      { text: "후후. 심장 소리 들려요? 저 지금 콜이에요.", face: "smile", heart: true },
+    ],
+    [
+      { text: "……조금만 더 이러고 있어요.", face: "blush", heart: true },
+      { text: "놓으면 안 돼요. 놓으면, 제가 잡을 거예요.", face: "smile", heart: true },
+    ],
+  ],
   yeonseo: [
     [
       { text: "용건 있으면 말로 해요.", face: "cold" },
@@ -84,6 +112,21 @@ const TOUCH_BODY: Partial<Record<CharKey, Tiered>> = {
 };
 
 const IDLE: Partial<Record<CharKey, Tiered>> = {
+  // 세라: 존댓말 · 늘 웃음 · 집요함 (3주차 전엔 '모르는 걸 아는' 대사 금지)
+  sera: [
+    [
+      { text: "…저 보고 있었죠? 괜찮아요. 저도 보고 있었어요.", face: "smug" },
+      { text: "기다리는 거 잘해요. 3분이든, 3년이든.", face: "smile" },
+    ],
+    [
+      { text: "딜러님, 지금 몇 초째 저만 보는지 세고 있어요.", face: "smile" },
+      { text: "가만히 있으면, 저 그냥 계속 볼 거예요?", face: "smile" },
+    ],
+    [
+      { text: "…이대로 시간 멈추면 좋겠다.", face: "heart", heart: true },
+      { text: "딜러님이 아무 말 안 해도, 저는 안 가요.", face: "smile", heart: true },
+    ],
+  ],
   yeonseo: [
     [
       { text: "…듣고 있어요?", face: "base" },
@@ -115,7 +158,7 @@ const IDLE: Partial<Record<CharKey, Tiered>> = {
 };
 
 /** 방치 · 터치 반응은 가벼운 장면에서만 (CG · 무거운 BGM · 무음 연출 중엔 끔) */
-const LIGHT: BgmId[] = ["pub", "amy", "yeonseo", "daily", "comic", "summer"];
+const LIGHT: BgmId[] = ["pub", "amy", "yeonseo", "sera", "daily", "comic", "summer"];
 export const lightMood = (s: { disp: { cg?: unknown; bgm: BgmId | null } }) =>
   !s.disp.cg && !!s.disp.bgm && LIGHT.includes(s.disp.bgm);
 

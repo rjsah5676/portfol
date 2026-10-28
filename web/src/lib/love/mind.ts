@@ -1,14 +1,14 @@
 /*
  * 올인 러브 — 마음 읽기 (그 사람을 알아본 순간)
  * 호감(하트)은 설렘, 마음은 이해. 그 히로인만의 정답을 고르면 플래그(mA01~ · mY01~)가 켜지고,
- * mindA · mindY 는 켜진 플래그 수로 엔진이 계산함 (대본은 플래그만 켬 — 두 번 세지지 않음)
+ * mindA · mindY · mindS 는 켜진 플래그 수로 엔진이 계산함 (대본은 플래그만 켬 — 두 번 세지지 않음)
  * 화면: 숫자 없음. 그 자리 반응 + 연필 소리, 다음 날 아침 "알게 된 것" 한 줄, 관계 화면 「그녀에 대해 아는 것」,
  * 결정적 순간에 열리는 ✎ 선택지, 엔딩 직전 「네가 알아준 것들」
  */
 import type { Vars } from "./types";
 
 /** both = 그랜드(셋이서) 루트: 두 사람을 동시에 읽어야 맞히는 순간 (mG01~ → mindG, 히로인 문턱과 따로 셈) */
-export type MindWho = "amy" | "yeonseo" | "both";
+export type MindWho = "amy" | "yeonseo" | "sera" | "both";
 export interface MindMoment {
   id: string;
   who: MindWho;
@@ -23,16 +23,16 @@ export interface MindMoment {
 export const MIND: MindMoment[] = [
   { id: "mA01", who: "amy", week: 1, note: "장난을 걸면, 진지하게 맞혀 주는 걸 좋아한다.", cap: "불닭은 3번." },
   { id: "mA02", who: "amy", week: 1, note: "목소리가 커지면 허세. 아빠 얘기 앞에서 제일 시끄럽다.", cap: "아빠, 같이 찾아보자." },
-  { id: "mA03", who: "amy", week: 2, note: "돈을 빌려주면 싫어한다. 같이 버는 길은 좋아한다.", cap: "야간 알바 구함." },
+  { id: "mA03", who: "amy", week: 2, note: "돈을 빌려주면 싫어한다. 같이 버는 길은 좋아한다.", cap: "날짜부터 같이." },
   { id: "mA04", who: "amy", week: 2, note: "울 때 '괜찮아'는 싫어한다. 옆에 있어 주면 된다.", cap: "차양 아래, 나란히." },
-  { id: "mA05", who: "amy", week: 2, note: "대신 해 주면 화낸다. 혼자 해내는 걸 봐 주길 바란다.", cap: "혼자 뽑은 곰." },
+  { id: "mA05", who: "amy", week: 3, note: "대신 해 주면 화낸다. 혼자 해낸 걸 끝까지 봐 주길 바란다.", cap: "혼자 모은 20만." },
   { id: "mA13", who: "amy", week: 2, note: "삼각김밥은 참치마요. 그거 하나면 기분이 풀린다.", cap: "참치마요 두 개." },
   { id: "mA14", who: "amy", week: 2, note: "사탕은 딸기 맛. 받으면 꼭 갚겠다고 한다.", cap: "딸기 사탕 한 봉지." },
   { id: "mA06", who: "amy", week: 3, note: "돈을 대신 내주면 싫어한다. 같이 있을 곳이면 된다.", cap: "걸어서 십 분." },
-  { id: "mA07", who: "amy", week: 3, note: "'괜찮아'를 두 번 하면, 안 괜찮은 거다.", cap: "차용증 위의 손." },
+  { id: "mA07", who: "amy", week: 3, note: "'괜찮아'를 두 번 하면, 안 괜찮은 거다.", cap: "괜찮아, 괜찮아." },
   { id: "mA08", who: "amy", week: 4, note: "숫자는 적어 두면 덜 무섭다. 같이 세면 더.", cap: "스물여섯 주." },
-  { id: "mA09", who: "amy", week: 4, note: "바나나우유보다 딸기우유를 더 좋아한다.", cap: "딸기우유 두 개." },
-  { id: "mA10", who: "amy", week: 4, note: "숨을 때도 주소는 흘린다. 찾으러 와 주길 바란다.", cap: "두 번 말하면, 안 괜찮은 거." },
+  { id: "mA09", who: "amy", week: 4, note: "바나나우유보다 딸기우유를 더 좋아한다.", cap: "레일 밑, 딸기우유." },
+  { id: "mA10", who: "amy", week: 3, note: "숨을 때도 주소는 흘린다. 찾으러 와 주길 바란다.", cap: "비 새는 파라솔." },
   { id: "mA11", who: "amy", week: 4, note: "리스트 4번은 비워 둔다. 같이 채울 사람 몫으로.", cap: "리스트 4번." },
   { id: "mA12", who: "amy", week: 4, note: "어깨를 두 번 두드리면, 이제 일어나라는 뜻이다.", cap: "어깨 두 번." },
   { id: "mY01", who: "yeonseo", week: 1, note: "캐물으면 닫힌다. 대답 대신 손이 말하는 걸 좋아한다.", cap: "대답 대신 돌린 카드." },
@@ -49,14 +49,29 @@ export const MIND: MindMoment[] = [
   { id: "mY11", who: "yeonseo", week: 3, note: "비 그친 다음 날 아침을 제일 좋아한다.", cap: "비 그친 다음 날 아침." },
   { id: "mY12", who: "yeonseo", week: 3, note: "말할 준비가 될 때까지, 기다려 주길 바란다.", cap: "수요일 두 시까지." },
   { id: "mY13", who: "yeonseo", week: 4, note: "목소리보다 카드 소리가 먼저 안심시킨다.", cap: "수화기 너머 셔플." },
-  { id: "mG01", who: "both", week: 4, note: "말없이 따라와 주길 바라는 사람과, 스스로는 칩을 못 집는 사람.", cap: "가운데 남은 칩." },
-  { id: "mG02", who: "both", week: 4, note: "미워할 시간이 필요한 사람과, 용서받을 생각이 없는 사람.", cap: "같이 앉는 것과 용서는 별개." },
-  { id: "mG03", who: "both", week: 4, note: "한 사람은 공평한 걸, 한 사람은 온전한 걸 좋아한다.", cap: "부서지지 않은 두부." },
-  { id: "mG04", who: "both", week: 4, note: "둘 다, 같이 먹는 저녁을 오래 못 가져 봤다.", cap: "셋이서 김치찌개." },
+  // 세라 규칙: 거짓말을 바로 앎 · 선물 · 돈 싫어함 · "기억나?"를 먼저 안 물음 · 두 번 두드리기는 진심일 때만
+  { id: "mS01", who: "sera", week: 1, note: "약속을 받아 주면 웃는다. 다음엔 접으라는 말은, 아직 이르다.", cap: "내일 봬요." },
+  { id: "mS02", who: "sera", week: 1, note: "거짓말은 바로 안다. 솔직하게 말하면 웃는다.", cap: "번호 카드, 봤어요." },
+  { id: "mS03", who: "sera", week: 2, note: "작은 진짜를 좋아한다. 꾸민 대답은 손을 보고 안다.", cap: "자고, 셔플하고, 출근." },
+  { id: "mS04", who: "sera", week: 2, note: "이유를 캐면 웃음으로 닫는다. 기다려 주면 조금 연다.", cap: "말해 줄 때까지." },
+  { id: "mS05", who: "sera", week: 2, note: "선물은 갚아야 해서 싫어한다. 같이 하는 건 좋아한다.", cap: "빈손, 설거지." },
+  { id: "mS06", who: "sera", week: 2, note: "'기억나?'는 절대 먼저 안 묻는다. 그녀가 꺼낼 때까지 기다린다.", cap: "다리 하나 더." },
+  { id: "mS07", who: "sera", week: 2, note: "감싸 주는 거짓말보다, 아픈 진짜를 고른다.", cap: "좀 무섭대요." },
+  { id: "mS08", who: "sera", week: 2, note: "돈은 싫어한다. 다 잃은 밤엔 옆에 있어 주면 된다.", cap: "마감은 딜러가." },
+  { id: "mS09", who: "sera", week: 3, note: "이기는 법은 이미 안다. 혼자 해내는 걸 옆에서 세어 주면 된다.", cap: "하나, 둘, 지금." },
+  { id: "mS10", who: "sera", week: 3, note: "주는 건 좋아하지만, 3년을 통째로 넘기면 무너진다. '같이'가 정답.", cap: "곰 옆에 두고, 같이 펴요." },
+  { id: "mS12", who: "sera", week: 4, note: "혼자 주면 빚이 되고, 같이 주면 그냥 전해 주는 것.", cap: "같이 갖다줘요." },
+  { id: "mS13", who: "sera", week: 4, note: "대단한 이유보다, 이유 없이 먼저 움직인 손을 믿는다.", cap: "손이 먼저 움직였어요." },
+  { id: "mS14", who: "sera", week: 4, note: "돈도 칩도 아니다. 그날 두드린 손을 걸면 된다.", cap: "내 손이요." },
+  { id: "mS11", who: "sera", week: 3, note: "'접어요'는 허락이 아니라 끝이다. 아직 살아야 할 때는 '아직'.", cap: "아직요." },
+  { id: "mG01", who: "both", week: 4, note: "미워할 시간이 필요한 사람과, 용서받을 생각이 없는 사람. 가운데 앉아 있으면 된다.", cap: "같이 앉는 것과 용서는 별개." },
+  { id: "mG02", who: "both", week: 4, note: "한 사람은 자기 손으로 끝내고 싶고, 한 사람은 뒤에서 읽어 주고 싶다.", cap: "컷은 에이미, 눈은 연서." },
+  { id: "mG03", who: "both", week: 4, note: "한 사람의 기록은 낙서지만, 두 사람의 기록은 증거가 된다.", cap: "공책과 수첩, 나란히." },
+  { id: "mG04", who: "both", week: 4, note: "둘 다, 누구랑 같이 먹는 저녁을 오래 못 가져 봤다.", cap: "컵라면 넷." },
 ];
 
-export const MIND_VAR: Record<MindWho, string> = { amy: "mindA", yeonseo: "mindY", both: "mindG" };
-const IS_MIND = /^m[AYG]\d\d$/;
+export const MIND_VAR: Record<MindWho, string> = { amy: "mindA", yeonseo: "mindY", sera: "mindS", both: "mindG" };
+const IS_MIND = /^m[AYGS]\d\d$/;
 export const isMindKey = (k: string) => IS_MIND.test(k);
 export const mindOf = (v: Vars, who: MindWho) => v[MIND_VAR[who]] ?? 0;
 export const mindTotal = (who: MindWho) => MIND.filter((m) => m.who === who).length;
@@ -103,9 +118,9 @@ export const MIND_HINT: Record<string, string> = {
   mY12: "연서가 '묻지 마요'라고 할 때, 서두르지 말 것.",
   mY13: "연서를 안심시키는 건 목소리보다 다른 소리다.",
   mY14: "연서가 좋아하는 사탕이 있다. 이모가 계산하다 말고 옆 가게에서 집어 주던 맛.",
-  mG01: "둘이 엇갈릴 때, 한 사람은 따라와 주길, 한 사람은 누가 집어 주길 기다린다.",
-  mG02: "에이미는 용서를 남이 정해 주는 걸 싫어하고, 연서는 용서받을 생각이 없다.",
-  mG03: "두 사람이 '좋다'고 하는 기준이 다르다. 하나는 나누는 쪽, 하나는 지키는 쪽.",
+  mG01: "둘 사이에 무언가를 끼워 넣지 않아도 되는 순간이 있다.",
+  mG02: "두 사람이 판에서 원하는 자리는 처음부터 정해져 있다.",
+  mG03: "기록은 한쪽 것만으로는 힘이 없다.",
   mG04: "둘 다 오래 못 가져 본 게 있다. 아주 평범한 것.",
 };
 const IS_HINT = /^mHint[AYG]?$/;
@@ -164,6 +179,7 @@ export function withMind(prev: Vars, next: Vars): Vars {
   if (!changed) return next;
   next.mindA = mindGot(next, "amy").length;
   next.mindY = mindGot(next, "yeonseo").length;
+  next.mindS = mindGot(next, "sera").length;
   next.mindG = mindGot(next, "both").length;
   return next;
 }
