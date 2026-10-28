@@ -1284,11 +1284,12 @@ export class Match {
         const ln = this.s.sides[batSide(this.s)].bat[this.cfg.career.myIdx];
         this.myPAs.push({ inning: this.s.inning, text: res.text, kind: res.kind, rbi: ln.rbi - this.rbiBefore, mission: res.mission ? { ok: res.mission.ok, pt: 0, partial: res.mission.partial, char: res.mission.char } : undefined });
       }
-      if (res.missionVoid) this.popup(DW / 2, 150, "미션은 없던 걸로 (칠 공이 없었음)", "#bcd3ff");
       if (res.mission) {
         if (res.mission.ok) this.missionsOk++;
         const r = res.mission.ok ? "ok" : res.mission.partial ? "partial" : "fail";
-        if (this.lastMission) this.missionFx = { m: this.lastMission, r, t: 0 };
+        // 아쉬움 판 제목: 안타 / 볼넷 / 몸에 맞는 공 (결과 문구에서 코인 부분만 뺌)
+        const label = r === "partial" ? res.mission.text.replace(/\s*\+\d+ 코인$/, "") : undefined;
+        if (this.lastMission) this.missionFx = { m: this.lastMission, r, t: 0, label };
         else this.popup(DW / 2, 150, res.mission.text, res.mission.ok ? "#ffd23f" : res.mission.partial ? "#ffcf9a" : "#ff9a7a");
         (res.mission.ok || res.mission.partial ? sfx.missionOk : sfx.missionNg)();
         // 성공: 금색 꽃가루
@@ -3222,7 +3223,7 @@ export class Match {
     ctx.restore();
   }
 
-  missionFx: { m: Mission; r: "ok" | "partial" | "fail"; t: number } | null = null;
+  missionFx: { m: Mission; r: "ok" | "partial" | "fail"; t: number; label?: string } | null = null;
   private lastMission: Mission | null = null;
   private drawMissionFx(ctx: CanvasRenderingContext2D) {
     const f = this.missionFx;
@@ -3231,7 +3232,7 @@ export class Match {
     const a = Math.min(1, t / 0.1) * (1 - smooth(2.1, 2.5, t));
     const ok = f.r !== "fail";
     const col = f.r === "ok" ? "#ffd23f" : f.r === "partial" ? "#d8e2f0" : "#ff6b6b";
-    const label = f.r === "ok" ? "MISSION CLEAR!" : f.r === "partial" ? "아쉽지만 안타!" : "MISSION FAILED";
+    const label = f.r === "ok" ? "MISSION CLEAR!" : f.r === "partial" ? (f.label ?? "아쉽지만 안타!") : "MISSION FAILED";
     const cy = 340;
     ctx.save();
     ctx.globalAlpha = a;

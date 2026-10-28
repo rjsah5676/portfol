@@ -197,8 +197,6 @@ export interface PAResult {
   /** 이 타석으로 이닝 · 경기가 끝났나 */
   halfOver: boolean;
   gameOver: boolean;
-  /** 볼넷 · 몸에 맞는 공이라 미션이 없던 걸로 됨 */
-  missionVoid?: boolean;
   mission?: { ok: boolean; text: string; /** 빡센 미션(홈런 · 장타)에서 안타는 쳤음 — 코인 조금 · 실패 패널티 없음 */ partial?: boolean; char?: CharId };
 }
 
@@ -338,16 +336,15 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
         else if (s.outs >= 3) done = true;
         break;
     }
-    // 볼넷 · 몸에 맞는 공은 칠 기회가 없었던 거라 미션 무효 (실패 · 패널티 없음) — 밀어내기로 점수 났으면 위에서 성공
-    if (r.kind === "BB" && !done && m.kind !== "zero" && m.kind !== "k") {
-      s.mission = null;
-      res.missionVoid = true;
-    } else if (done !== null) {
+    // 볼넷 · 몸에 맞는 공은 칠 기회가 없었던 거라 「아쉬움」(홈런 미션에 안타처럼 — 코인 조금 · 실패 패널티 없음). 밀어내기로 점수 났으면 위에서 성공
+    const walk = r.kind === "BB" && !done && m.kind !== "zero" && m.kind !== "k";
+    if (walk || done !== null) {
       s.mission = null;
       // 홈런 · 장타 미션은 빡세니까 안타라도 치면 살짝 보상 (코인 1/4 · 실패 패널티 없음)
-      const partial = !done && (m.kind === "hr" || m.kind === "xbh") && (r.kind === "HIT" || r.kind === "HR");
+      const partial = walk || (!done && (m.kind === "hr" || m.kind === "xbh") && (r.kind === "HIT" || r.kind === "HR"));
       const partPt = Math.round(m.pt / 4);
-      res.mission = { ok: done, partial, char: m.char, text: done ? `미션 성공! +${m.pt} 코인` : partial ? `아쉽지만 안타! +${partPt} 코인` : "미션 실패…" };
+      const partTxt = walk ? (/몸에/.test(r.text) ? "아쉽지만 몸에 맞는 공!" : "아쉽지만 볼넷!") : "아쉽지만 안타!";
+      res.mission = { ok: !!done, partial, char: m.char, text: done ? `미션 성공! +${m.pt} 코인` : partial ? `${partTxt} +${partPt} 코인` : "미션 실패…" };
       if (partial) s.pt += partPt;
       if (done) {
         s.pt += m.pt;
