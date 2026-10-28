@@ -89,7 +89,45 @@ export interface GameState {
   pt: number;
   /** 이번 타석 동안 유지할 표시 (돌발미션 결과 등) */
   notes: string[];
+  /** 타석 기록 (결승타 · 역전 · 끝내기 · 병살 판정용) */
+  plays?: Play[];
 }
+export interface Play {
+  /** 공격 팀 0 원정 · 1 홈 */
+  side: number;
+  /** 타순 번호 */
+  ord: number;
+  kind: PAKind;
+  /** 타석 전 · 후 점수 [원정, 홈] */
+  before: [number, number];
+  after: [number, number];
+  walkoff?: boolean;
+}
+
+/**
+ * 한 타자의 영양가 (경기 끝난 뒤): 결승타 · 역전타 · 끝내기 · 병살.
+ * 결승타 = 이긴 팀이 마지막으로 리드를 잡은 타석 (그 뒤로 동점 · 역전 안 당함)
+ */
+export function clutchOf(s: GameState, side: number, ord: number) {
+  const P = s.plays ?? [];
+  const mine = (p: Play) => p.side === side && p.ord === ord;
+  const lead = (sc: [number, number]) => sc[side] - sc[1 - side];
+  let gw = false;
+  if (s.over && s.winner === side) {
+    let last = -1;
+    P.forEach((p, i) => {
+      if (p.side === side && lead(p.before) <= 0 && lead(p.after) > 0) last = i;
+    });
+    gw = last >= 0 && mine(P[last]);
+  }
+  return {
+    gw,
+    comeback: P.filter((p) => mine(p) && lead(p.before) < 0 && lead(p.after) > 0).length,
+    walkoff: P.some((p) => mine(p) && p.walkoff),
+    gidp: P.filter((p) => mine(p) && p.kind === "DP").length,
+  };
+}
+export type Clutch = ReturnType<typeof clutchOf>;
 
 const emptyBat = (): BatLine => ({ pa: 0, ab: 0, h: 0, d2: 0, d3: 0, hr: 0, rbi: 0, bb: 0, k: 0, r: 0 });
 const emptyPit = (): PitLine => ({ pitches: 0, outs: 0, h: 0, r: 0, bb: 0, k: 0, hr: 0 });
@@ -130,6 +168,7 @@ export function newGame(opts: GameOpts): GameState {
     mission: null,
     pt: 0,
     notes: [],
+    plays: [],
   };
 }
 
@@ -254,6 +293,8 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
   const bi = batSide(s);
   const bs = s.sides[bi];
   const fs = s.sides[fieldSide(s)];
+  const before: [number, number] = [s.score[0], s.score[1]];
+  const ord = bs.order;
   for (const id of scored) bs.bat[id].r++;
   fs.pit[fs.pitcher].r += runs;
   if (runs) drainStamina(s, runs * STAMINA_COST.run);
@@ -267,6 +308,8 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
   s.strikes = 0;
   bs.order = (bs.order + 1) % 9;
   const res: PAResult = { ...r, halfOver: false, gameOver: false };
+  const play: Play = { side: bi, ord, kind: r.kind, before, after: [s.score[0], s.score[1]] };
+  (s.plays ??= []).push(play);
 
   // 돌발미션 판정
   const m = s.mission;
@@ -311,6 +354,7 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
 
   // 끝내기
   if (!s.top && lastInning(s) && s.score[1] > s.score[0]) {
+    play.walkoff = runs > 0;
     s.over = true;
     s.winner = 1;
     res.gameOver = true;

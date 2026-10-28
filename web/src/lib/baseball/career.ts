@@ -19,7 +19,7 @@
 import type { Diff } from "./ai";
 import { PITCH_LV } from "./careerGame";
 import { TEAM_DEFS, charById, type Batter, type Boost, type CharId } from "./data";
-import type { BatLine } from "./game";
+import type { BatLine, Clutch } from "./game";
 import { clamp, makeRng, type Rng } from "./rng";
 import { DEFAULT_LOOK, type Look } from "./look";
 import { BOND_IDS, BOONS, DUOS, EPILOGUE, ROLE, SPECIAL_DAY, STORY, isBond, type BondId, type Choice, type Role } from "./bonds";
@@ -1825,7 +1825,11 @@ export interface GameIn {
   results?: { ok: boolean; partial?: boolean; char?: CharId }[];
   /** 직접 쳤나 (자동이면 false) */
   direct: boolean;
+  /** 영양가 — 결승타 · 역전타 · 끝내기 · 병살 */
+  clutch?: Clutch;
 }
+/** 영양가 점수: 결승타 +1 · 역전타 +1 · 끝내기 +1.5 · 병살 −0.5 (경기 4.8% · 0.8% · 0.6% · 18% 에 나옴) */
+export const CLUTCH_W = { gw: 1, comeback: 1, walkoff: 1.5, gidp: -0.5 };
 /**
  * 경기 평가 S ~ D (성장 배율). 분포 목표 S 6 · A 20 · B 32 · C 25 · D 17% (scratchpad grade.ts 로 맞춤 — 사람 σ50ms · 능력 150~600 · 타입 4개 1920경기).
  * 예전엔 S 20%라 4타수 2안타 0타점에도 S 가 떴음 → 단타 몫 낮추고 아웃 수 · 타점 · 홈런 비중 올림, 미션 성공은 +0.5 만.
@@ -1849,11 +1853,12 @@ const GRADE_W: Record<BatType, { s: number; xb: number; hr: number; bb: number; 
 };
 /** S · A · B · C 문턱 (그 아래는 D) */
 const GRADE_CUT = [6.4, 3.1, 0.95, -0.4];
-export function gameGrade(l: BatLine, missions: number, type: BatType = "all") {
+export function gameGrade(l: BatLine, missions: number, type: BatType = "all", cl?: Clutch) {
   const w = GRADE_W[type];
   const singles = l.h - l.d2 - l.d3 - l.hr;
   const sc =
-    singles * w.s + (l.d2 + l.d3 * 1.3) * w.xb + l.hr * w.hr + l.bb * w.bb + l.rbi * 0.8 + l.r * w.r + missions * 0.5 - l.k * 0.25 - (l.ab - l.h) * 0.3;
+    singles * w.s + (l.d2 + l.d3 * 1.3) * w.xb + l.hr * w.hr + l.bb * w.bb + l.rbi * 0.8 + l.r * w.r + missions * 0.5 - l.k * 0.25 - (l.ab - l.h) * 0.3 +
+    (cl ? (cl.gw ? CLUTCH_W.gw : 0) + cl.comeback * CLUTCH_W.comeback + (cl.walkoff ? CLUTCH_W.walkoff : 0) + cl.gidp * CLUTCH_W.gidp : 0);
   const i = GRADE_CUT.findIndex((c) => sc >= c);
   return i < 0 ? 4 : i;
 }
@@ -1897,7 +1902,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     L.g++;
     for (const k of ["pa", "ab", "h", "d2", "d3", "hr", "rbi", "bb", "k", "r"] as const) L[k] += l[k];
     // 경기 평가 — 능력치 대신 행동력 · 체력 · 컨디션 (잘 칠수록 다음 훈련 · 활동을 더 할 수 있게)
-    grade = gameGrade(l, g.missions, c.type);
+    grade = gameGrade(l, g.missions, c.type, g.clutch);
     const G = GAME_GRADES[grade];
     act = ACTIVE_PER_GAME + G.act + fx.gameAct;
     const tr = l.h * 2.5 + l.hr * 4 + l.rbi * 1 + l.bb * 1 - l.k * 1.5 - Math.max(0, l.ab - l.h - l.k) * 1.2 + g.missions * 4 - 0.5;
@@ -1915,6 +1920,16 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     else if (l.h >= 3) lines.push("맹타! 감독이 엄지를 들었다.");
     else if (l.h === 0) lines.push("오늘은 안 풀렸다…");
     if (g.missions) lines.push(`돌발미션 ${g.missions}개 성공!`);
+    // 영양가: 끝내기 · 결승타 · 역전타는 감독 신뢰 · 인기 조금, 병살은 신뢰 ↓
+    const cl = g.clutch;
+    if (cl) {
+      if (cl.walkoff) lines.push("🎉 끝내기! 동료들이 물을 뿌리며 달려왔다.");
+      else if (cl.gw) lines.push("결승타! 오늘 승리는 내 방망이로.");
+      if (cl.comeback && !cl.walkoff) lines.push(cl.comeback > 1 ? `역전타 ${cl.comeback}번!` : "역전타!");
+      if (cl.gidp) lines.push(cl.gidp > 1 ? `병살 ${cl.gidp}번… 흐름을 끊었다.` : "병살타… 흐름을 끊었다.");
+      addTrust(c, (cl.gw ? 1 : 0) + (cl.walkoff ? 1.5 : 0) + cl.comeback * 0.8 - cl.gidp * 1);
+      addFame(c, (cl.gw ? 3 : 0) + (cl.walkoff ? 10 : 0) + cl.comeback * 3);
+    }
     // 미션 실패 패널티: 감독 신뢰 ↓ (안타라도 친 빡센 미션은 봐줌) · 인연 미션은 그 사람 호감 ↑↓
     const fails = (g.results ?? []).filter((r) => !r.ok && !r.partial).length;
     if (fails) {

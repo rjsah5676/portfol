@@ -93,7 +93,7 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}, extra: S
           ps.mode === "auto"
             ? playCareerGame(setup, bot, makeRng(c.seed + c.turn * 101))
             : playCareerGame(setup, me, makeRng(c.seed + c.turn * 101), ps.mode === "highlight" ? bot : undefined);
-        applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: g.pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char })), direct: ps.mode !== "auto" });
+        applyGame(c, { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: g.pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char })), direct: ps.mode !== "auto", clutch: g.clutch });
       } else applyGame(c, null);
     } else if (st === "seasonEnd") endSeason(c);
   }

@@ -6,7 +6,7 @@ import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, humanSwing, SPEED_SCALE, ty
 import { TEAM_DEFS, makeTeam, playStat, swingOf, type Batter, type CharId, type Team } from "./data";
 import {
   batSide, batter as curBatter, callPitch, cpuManage, fieldSide, maybeMission, newGame, nextHalf, pitchThrown, pitcher as curPitcher,
-  stamina01, applyPlay, type BatLine, type GameState, type PAResult,
+  stamina01, applyPlay, clutchOf, type BatLine, type Clutch, type GameState, type PAResult,
 } from "./game";
 import { makePitch, plateCross, type Pitch } from "./pitch";
 import type { FieldOut } from "./play";
@@ -254,6 +254,7 @@ export interface CareerGameOut {
   pas: MyPA[];
   /** 돌발미션으로 번 코인 */
   missionPt: number;
+  clutch: Clutch;
 }
 
 /** 하이라이트 타석: 득점권 · 7회부터 2점 차 이내 · 돌발미션 */
@@ -314,5 +315,5 @@ export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng, autoM
     if (pa.halfOver && !s.over) nextHalf(s);
   }
   const ms = mySide(s);
-  return { s, line: s.sides[ms].bat[st.myIdx], win: s.winner < 0 ? null : s.winner === ms, pas, missionPt };
+  return { s, line: s.sides[ms].bat[st.myIdx], win: s.winner < 0 ? null : s.winner === ms, pas, missionPt, clutch: clutchOf(s, ms, st.myIdx) };
 }

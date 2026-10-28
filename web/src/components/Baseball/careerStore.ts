@@ -174,7 +174,7 @@ export function autoGame(c: Career, note?: string): GameReport {
   const st = setupOf(c);
   const g = playCareerGame(st, botHook(c.diff), makeRng((c.seed * 7 + c.turn * 131) >>> 0));
   c.inGame = false;
-  const gin: GameIn = { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false };
+  const gin: GameIn = { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false, clutch: g.clutch };
   const sum = applyGame(c, gin);
   logGame(c, gin, sum, "auto", g.pas);
   const s = g.s;

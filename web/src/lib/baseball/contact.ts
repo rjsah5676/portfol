@@ -100,7 +100,11 @@ export function locQuality(at: { x: number; y: number }, cz: { x: number; y: num
 /** 덮어 친 땅볼 확률 (기본 + 일찍 휘두른 정도 + 낮은 공) × (1 − 정타 몫) · 그때 타구각 */
 export const ROLL = { base: 0.22, early: 0.35, low: 0.2, pf: 0.85, la: -2, sd: 6 };
 /** 필살타법 손잡이 (play.ts 의 수비 쪽 효과는 SP_FIELD) */
-export const SP_TUNE = { ivanC: 0.66, ivanEv0: 42, ivanEvC: 8, meiEv: 8, violetEv: 6 };
+/**
+ * 맞힌 공(앞으로 보낸 공) 하나의 득점가치를 다 0.6 ~ 0.7 로 (보통 스윙 0.19) — 모양만 다르게:
+ * 카이 2루타 라이너 · 이반 · 릴리 홈런 · 메이 빈틈 · 바이올렛 · 소영 장타 · 이그나 · 건모 · 제나는 수비 방해 (scratchpad spsw2.ts, σ50ms)
+ */
+export const SP_TUNE = { kaiEv: 5.2, ignaEv: 1, soyEv: 2.1, ivanC: 0.7, ivanEv0: 40, ivanEvC: 8, meiEv: 9, violetEv: 6.8 };
 export const EV = { base: 22, c: 16.3, pow: 4.2, pf: 4.7, laMid: 14, la0: 15, laPow: 7, laSd: 7, laCurve: 3, pfT0: 0.15, pfT1: 0.45 };
 
 /** 타이밍 창 (초) */
@@ -191,14 +195,14 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   switch (sp) {
     case "kai":
       la = clamp(la, 4, 16);
-      ev += 4;
+      ev += SP_TUNE.kaiEv;
       break;
     case "igna":
-      ev += 2;
+      ev += SP_TUNE.ignaEv;
       break;
     case "soyoung":
       la = lerp(la, 24, 0.55);
-      ev += 1.5;
+      ev += SP_TUNE.soyEv;
       break;
     case "ivan":
       if (c > SP_TUNE.ivanC) {

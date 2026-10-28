@@ -11,6 +11,7 @@ import { SPEEDS, finishBond, finishDirect, loadSpeed, saveSpeed } from "./career
 import { CLUB_DEFS, clubDefById } from "@/lib/baseball/data";
 import { buildTeam, findGhosts, veloKmh, ghostTeam, gradeOf, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
 import { makeRng } from "@/lib/baseball/rng";
+import { clutchOf } from "@/lib/baseball/game";
 import { createClub, loadClub, recordOnline, saveClub } from "./clubStore";
 import ClubScreen from "./Club";
 import { Emblem, GradeChip } from "./clubUi";
@@ -152,7 +153,7 @@ export default function BaseballApp() {
             const s = mm.s;
             const me = s.opts.userHome ? 1 : 0;
             finishDirect(
-              { line: s.sides[me].bat[cfg.career!.myIdx], win: s.winner < 0 ? null : s.winner === me, missionPt: s.pt, missions: mm.missionsOk, direct: true },
+              { line: s.sides[me].bat[cfg.career!.myIdx], win: s.winner < 0 ? null : s.winner === me, missionPt: s.pt, missions: mm.missionsOk, direct: true, clutch: clutchOf(s, me, cfg.career!.myIdx) },
               mm.myPAs,
               `${s.opts.away.short} ${s.score[0]} : ${s.score[1]} ${s.opts.home.short}`
             );
