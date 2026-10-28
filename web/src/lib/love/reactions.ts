@@ -172,3 +172,40 @@ export function idleLine(who: CharKey, v: Vars): ReactLine {
   const t = IDLE[who];
   return t ? pickOne(t[tier(who, v)]) : FALLBACK;
 }
+
+/** 자리 비운 시간 → "3분 12초" */
+const awayTime = (sec: number) => {
+  const s = Math.round(sec);
+  if (s < 60) return `${s}초`;
+  if (s < 3600) return s % 60 ? `${Math.floor(s / 60)}분 ${s % 60}초` : `${Math.floor(s / 60)}분`;
+  const m = Math.floor((s % 3600) / 60);
+  return m ? `${Math.floor(s / 3600)}시간 ${m}분` : `${Math.floor(s / 3600)}시간`;
+};
+/**
+ * 세라 전용 — 게임 화면을 떠났다 돌아오면 (탭 전환 · 창 내림) 몇 분 몇 초였는지 안다
+ * 2주차까지는 가볍게, 3주차부터(또는 집착이 높으면) 웃는 얼굴 그대로 더 집요하게
+ */
+export function awayLine(sec: number, v: Vars): ReactLine {
+  const t = awayTime(sec);
+  const day = v.dayNo ?? 1;
+  const heat = v.heat ?? 0;
+  if (sec >= 1800 && day >= 15)
+    return pickOne([
+      { text: `한참 걸렸네요. ${t}. …괜찮아요, 다시 왔으니까.`, face: "smile" },
+      { text: `${t}. 저 그동안 한 번도 안 일어났어요.`, face: "empty" },
+    ]);
+  if (day >= 15 && heat >= 8)
+    return pickOne([
+      { text: `${t}. …다음엔 말하고 가요.`, face: "empty" },
+      { text: `${t} 동안 어디 있었어요? 다른 사람 만났어요?`, face: "empty" },
+    ]);
+  if (day >= 15 || heat >= 4)
+    return pickOne([
+      { text: `어디 갔다 왔어요? ${t}.`, face: "smile" },
+      { text: `${t}. 세고 있었어요. 별 뜻은 없어요.`, face: "smile" },
+    ]);
+  return pickOne([
+    { text: `어, 왔다. ${t} 동안 어디 갔다 왔어요?`, face: "smile" },
+    { text: `${t}. 저 그동안 칩 세고 있었어요.`, face: "smile" },
+  ]);
+}

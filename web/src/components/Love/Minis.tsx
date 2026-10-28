@@ -856,6 +856,9 @@ export function HeadsUp({
   const who = spec.opp;
   const bgUrl = (bg && BG[bg]) || BG.pub;
   const known = PERSONA[who] ? tellKnown(PERSONA[who]!.tellId, vars) : false;
+  /** 세라: 패를 처음부터 보여 주고, 칩이 떨어지면 다시 삼 */
+  const open = !!PERSONA[who]?.open;
+  const [rebuys, setRebuys] = useState(0);
   const [phase, setPhase] = useState<HuPhase>("intro");
   const [stacks, setStacks] = useState<Record<Seat, number>>({ me: spec.stack, opp: spec.stack });
   const [handNo, setHandNo] = useState(0);
@@ -918,6 +921,10 @@ export function HeadsUp({
     }
   };
   const talkOpen = phase === "play" && !!h && h.toAct === "me" && !busy && !talked && !h.acted.me && talks.length > 0;
+  useEffect(() => {
+    if (open && phase === "play") coach?.("openhand");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, phase]);
   useEffect(() => {
     if (talkOpen) coach?.("talk");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1032,7 +1039,14 @@ export function HeadsUp({
       // 판마다는 칩 쓸어 오는 소리 · 대결 전체를 이겼을 때만 승리 징글
       if (w === "me") play("potwin");
       else if (w === "opp") play("lose");
-      setStacks(settle(x));
+      const st = settle(x);
+      if (open && st.opp <= 0) {
+        st.opp = spec.stack;
+        setRebuys((n) => n + 1);
+        setFace("smile");
+        setSay(pick(["리바이요. 한 판 더 해요.", "다 잃었다. 다시 살게요. 칩은 많으니까요.", "또 살게요. 딜러님 판은 끝까지 앉고 싶어요."]) ?? "");
+      }
+      setStacks(st);
     });
     later(t + SD.btn, () => {
       setSd(5);
@@ -1072,11 +1086,11 @@ export function HeadsUp({
   // ---- 화면 ----
   const board = h?.board ?? [];
   const shown = h ? (phase === "showdown" || phase === "handEnd" ? (h.over?.by === "showdown" ? vis : h.shown) : h.shown) : 0;
-  const oppOpen = !!h && h.over?.by === "showdown" && sd >= 1;
+  const oppOpen = !!h && (open || (h.over?.by === "showdown" && sd >= 1));
   const w = h?.over && sd >= 4 ? h.over.winner : null;
   const hi = h && w && h.over?.by === "showdown" ? (w === "me" ? winCards(h.me, board) : w === "opp" ? winCards(h.opp, board) : null) : null;
   const myName = h ? nameOf(h.me, board.slice(0, shown)) : "";
-  const oppName = h && oppOpen && sd >= 3 ? nameOf(h.opp, board) : "";
+  const oppName = h && oppOpen && (sd >= 3 || (open && !h.over)) ? nameOf(h.opp, sd >= 3 ? board : board.slice(0, shown)) : "";
   const ops = h && phase === "play" && h.toAct === "me" && !busy ? options(h, "me") : [];
   const call = h ? toCall(h, "me") : 0;
   const pot = h ? h.pot + h.bet.me + h.bet.opp : 0;
@@ -1103,7 +1117,7 @@ export function HeadsUp({
       <img src="/poker/card/chip-blue-stack.webp" alt="" className="lv-sp-chip right-[14%] top-[61%]" style={{ width: `${3 + Math.min(4, (stacks.opp / spec.stack) * 2.5)}cqw` }} />
       {/* 상대 카드 */}
       {h && (
-        <div className="absolute left-1/2 top-[57.5%] flex -translate-x-1/2 gap-[0.4cqw]">
+        <div className="absolute left-1/2 top-[57.5%] flex -translate-x-1/2 gap-[0.4cqw]" data-coach="opphand">
           {h.opp.map((n, i) => (
             <Card key={`${handNo}-o${i}`} n={n} back={!oppOpen} w={oppOpen ? 4.6 : 3.6} win={!!hi?.has(n)} dim={!!hi && !hi.has(n)} />
           ))}
@@ -1128,6 +1142,7 @@ export function HeadsUp({
       </div>
       <div className="lv-sp-stack right-[3%] top-[47%] text-right">
         {NAME[who]} <b>{h && phase === "play" ? h.stack.opp : stacks.opp}</b> {unit}
+        {rebuys > 0 && <span className="text-[#ff8cc0]"> · 리바이 {rebuys}</span>}
         {h && h.bet.opp > 0 && phase === "play" && <span className="text-white/60"> · 건 것 {h.bet.opp}</span>}
       </div>
       {/* 내 패 */}

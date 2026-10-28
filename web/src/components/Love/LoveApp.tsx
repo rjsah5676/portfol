@@ -51,7 +51,7 @@ import {
   pick,
   run,
 } from "@/lib/love/engine";
-import { type ReactLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
+import { type ReactLine, awayLine, idleLine, lightMood, touchLine } from "@/lib/love/reactions";
 import { HEROINES, type Heroine, SKILL_LINE, SKILL_NAME, SKILL_PRO, STAGE_LINE, STAGE_NAME, heroStage, skillOf, tiltName } from "@/lib/love/rel";
 import { voiceOf } from "@/lib/love/voices";
 import {
@@ -619,6 +619,8 @@ export default function LoveApp() {
       // 크레딧 롤이 있는 엔딩은 롤이 끝난 뒤 카드가 나오므로 도장 소리도 그때 (CreditRoll onDone)
       if (!ROLL_KINDS.includes(ENDINGS.find((e) => e.id === b.id)?.kind ?? ""))
         window.setTimeout(() => play("stamp"), 4400);
+      // 회차 기억: 엔딩을 하나라도 봤다는 것 · 어떤 엔딩이었는지 (세라가 다음 회차에 기억함)
+      LS.set(KEY.meta, JSON.stringify({ ...readMeta(), meta_runs: 1, [`meta_end_${b.id}`]: 1 }));
       setEndings((e) => {
         if (e.includes(b.id)) return e;
         const n = [...e, b.id];
@@ -851,7 +853,7 @@ export default function LoveApp() {
       return;
     if (!lightMood(s)) return;
     const on: CharKey[] = (Object.keys(s.disp.chars) as CharKey[]).filter(
-      (k) => k === "yeonseo" || k === "amy"
+      (k) => k === "yeonseo" || k === "amy" || k === "sera"
     );
     if (!on.length) return;
     const who = on.includes(block.who as CharKey) ? (block.who as CharKey) : on[0];
@@ -866,7 +868,7 @@ export default function LoveApp() {
       const w = (el as HTMLElement).closest?.("[data-who]") as HTMLElement | null;
       if (!w) continue;
       const who = w.dataset.who as CharKey;
-      if (who !== "yeonseo" && who !== "amy") continue;
+      if (who !== "yeonseo" && who !== "amy" && who !== "sera") continue;
       const r = w.getBoundingClientRect();
       // 그림 가장자리 투명한 곳은 빼고 가운데 몸통 쪽만
       if (Math.abs(x - (r.left + r.width / 2)) > r.width * 0.32) continue;
@@ -877,6 +879,45 @@ export default function LoveApp() {
     }
     return false;
   };
+
+  // 세라: 게임 화면을 떠났다 돌아오면 몇 분 몇 초였는지 안다 (30초 이상 · 5분에 한 번 · 세라를 만난 뒤)
+  const [seraPing, setSeraPing] = useState<{ text: string; n: number } | null>(null);
+  const awayRef = useRef<{ at: number; last: number }>({ at: 0, last: 0 });
+  const awayCtx = useRef({ phase, s, panel, askExit, block });
+  useEffect(() => {
+    awayCtx.current = { phase, s, panel, askExit, block };
+  });
+  useEffect(() => {
+    const vis = () => {
+      const a = awayRef.current;
+      if (document.hidden) {
+        a.at = Date.now();
+        return;
+      }
+      if (!a.at) return;
+      const sec = (Date.now() - a.at) / 1000;
+      a.at = 0;
+      const c = awayCtx.current;
+      if (c.phase !== "game" || !c.s || c.panel || c.askExit || c.block?.k === "end") return;
+      const v = c.s.vars;
+      if (sec < 30 || Date.now() - a.last < 300000) return;
+      if (!((v.affS ?? 0) >= 1 || (v.dayNo ?? 0) >= 2)) return;
+      a.last = Date.now();
+      const line = awayLine(sec, v);
+      if (c.s.disp.chars.sera && !c.s.disp.cg) showReact("sera", line, c.s.seq);
+      else {
+        setSeraPing({ text: line.text, n: Date.now() });
+        play("seraMsg");
+      }
+    };
+    document.addEventListener("visibilitychange", vis);
+    return () => document.removeEventListener("visibilitychange", vis);
+  }, [play, showReact]);
+  useEffect(() => {
+    if (!seraPing) return;
+    const id = window.setTimeout(() => setSeraPing(null), 4200);
+    return () => window.clearTimeout(id);
+  }, [seraPing]);
 
   // 키보드: 스페이스 · 엔터 = 다음, Ctrl 누르는 동안 스킵, Esc = 창 닫기
   useEffect(() => {
@@ -1417,6 +1458,11 @@ export default function LoveApp() {
   useEffect(() => {
     if (tellOpen) coach("tell");
   }, [tellOpen, coach]);
+  // 세라 메시지: 답장 고르기가 처음 뜰 때
+  const seraReplyOpen = block?.k === "phone" && block.step.from === "sera" && (phoneOpen || skip) && phoneShown >= block.step.msgs.length;
+  useEffect(() => {
+    if (seraReplyOpen) coach("seramsg");
+  }, [seraReplyOpen, coach]);
   // 서브 캐릭터를 먼저 그려서(뒤쪽) 히로인이 앞에 오게
   const chars = disp
     ? (Object.entries(disp.chars) as [CharKey, NonNullable<(typeof disp.chars)[CharKey]>][]).sort(
@@ -1730,6 +1776,15 @@ export default function LoveApp() {
                 dist={disp.chars[liveReact.who]!.dist}
                 text={sub(liveReact.text)}
               />
+            )}
+            {seraPing && (
+              <div key={`sp-${seraPing.n}`} className="lv-seraping">
+                <img src={FACE_ICON.sera} alt="" className="lv-seraping-icon" />
+                <span>
+                  <b>세라</b>
+                  {sub(seraPing.text)}
+                </span>
+              </div>
             )}
             {disp.day && !hideUi && (
               <div className="lv-day">
@@ -2455,10 +2510,10 @@ export default function LoveApp() {
           <div key={recap.n} className="lv-recap" onClick={(e) => (e.stopPropagation(), setRecap(null))}>
             <small>지난 이야기</small>
             <b>{recap.s.disp.day ? `DAY ${recap.s.disp.day.d} · ${recap.s.disp.day.slot}` : "프롤로그"}</b>
-            {(["amy", "yeonseo"] as const).map((h) => (
+            {(["amy", "yeonseo", "sera"] as const).map((h) => (
               <p key={h}>
                 <em style={{ color: NAME_COLOR[h] }}>{NAME[h]}</em>
-                <span className={h === "amy" ? "lv-heart-a" : "lv-heart-y"}>{hearts(heroStage(recap.s.vars, h))}</span>
+                <span className={h === "amy" ? "lv-heart-a" : h === "sera" ? "lv-heart-s" : "lv-heart-y"}>{hearts(heroStage(recap.s.vars, h))}</span>
                 「{STAGE_NAME[h][heroStage(recap.s.vars, h)]}」
               </p>
             ))}
@@ -3162,7 +3217,7 @@ function Phone({
   if (!open)
     return (
       <div
-        className={`lv-phone lv-phone-lock ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : ""}`}
+        className={`lv-phone lv-phone-lock ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : from === "sera" ? "lv-phone-s" : ""}`}
         onClick={onOpen}
       >
         <div className="lv-phone-island" />
@@ -3186,7 +3241,7 @@ function Phone({
     );
   return (
     <div
-      className={`lv-phone ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : ""} ${buzz ? "lv-phone-buzz" : ""}`}
+      className={`lv-phone ${from === "amy" ? "lv-phone-a" : from === "yeonseo" ? "lv-phone-y" : from === "sera" ? "lv-phone-s" : ""} ${buzz ? "lv-phone-buzz" : ""}`}
     >
       <div className="lv-phone-island" />
       <div className="lv-phone-status">
@@ -3372,8 +3427,8 @@ function MindNotes({ vars }: { vars: Record<string, number> }) {
   return (
     <div className="lv-relcard col-span-2 !items-stretch !text-left" data-coach="mindnotes">
       <div className="text-[1.6cqw] font-bold text-[#ffd27a]">✎ 그녀에 대해 아는 것</div>
-      <div className="mt-[0.6cqw] grid grid-cols-2 gap-x-[2cqw] gap-y-[0.8cqw]">
-        {(["amy", "yeonseo"] as const).map((who) => (
+      <div className="mt-[0.6cqw] grid grid-cols-3 gap-x-[2cqw] gap-y-[0.8cqw]">
+        {(["amy", "yeonseo", "sera"] as const).map((who) => (
           <div key={who}>
             <div className="flex items-baseline justify-between">
               <span className="text-[1.25cqw] font-bold" style={{ color: NAME_COLOR[who] }}>
@@ -3401,7 +3456,7 @@ function MindNotes({ vars }: { vars: Record<string, number> }) {
           </div>
         ))}
         {(mindGot(vars, "both").length > 0 || ((vars.meta_trueA ?? 0) >= 1 && (vars.meta_trueY ?? 0) >= 1)) && (
-          <div className="col-span-2">
+          <div className="col-span-3">
             <div className="flex items-baseline justify-between">
               <span className="text-[1.25cqw] font-bold text-[#ffd27a]">두 사람</span>
               <span className="text-[1.05cqw] text-white/50">
@@ -4643,7 +4698,7 @@ const GUIDE: Record<string, CoachGuide> = {
     img: `${G}/relpanel.webp`,
     steps: () => [
       "왼쪽 위 하트 줄을 누르면 관계 화면이 열려. (PC는 R 키)",
-      "파란 하트는 에이미, 보라 하트는 연서, 금색 ✦ 는 딜러 실력이야.",
+      "파란 하트는 에이미, 보라 하트는 연서, 분홍 하트는 세라, 금색 ✦ 는 딜러 실력이야.",
       "빨간 점이 붙으면 노트에 새로 적힌 게 있다는 뜻이야.",
     ],
   },
@@ -4738,9 +4793,9 @@ const GUIDE: Record<string, CoachGuide> = {
     title: "딜러 실력이 올랐어",
     img: `${G}/skill.webp`,
     steps: (v) => [
-      `지금은 ${skillOf(v) + 1}단계 「${SKILL_NAME[skillOf(v)]}」. 셔플 연습 · 복기 같은 혼자 준비로 올라.`,
-      "단계가 오를수록 매치에서 상대 버릇이 더 정확하게, 더 많이 보여.",
-      "4단계 「예전의 손」부터 ✦ 고급 한마디와 결전 보험(첫 실수 한 번)이 생겨.",
+      `지금은 ${skillOf(v) + 1}단계 「${SKILL_NAME[skillOf(v)]}」. 셔플 연습 같은 혼자 준비로 올라.`,
+      "단계가 오를수록 판에서 상대 버릇이 더 정확하게, 더 많이 보여.",
+      "실력이 높으면 마지막 사장전에서, 모르는 수도 손이 먼저 알아챌 때가 있어.",
     ],
   },
   hint: {
@@ -4771,6 +4826,27 @@ const GUIDE: Record<string, CoachGuide> = {
       const has = ITEMS.filter((k) => (v[k] ?? 0) >= 1).map((k) => ICON[k].name);
       return has.length ? `지금 주머니: ${has.join(" · ")}` : null;
     },
+  },
+  seramsg: {
+    sel: ".lv-phone-s .lv-phone-input",
+    title: "세라의 메시지",
+    img: `${G}/seramsg.webp`,
+    steps: () => [
+      "세라는 답장을 기다려. 내용은 짧아도 괜찮아. '응' 한 마디도 답장이야.",
+      "「읽고 답장 안 하기」를 고르면 세라는 그걸 기억해. 여러 번 쌓이면 일이 생겨.",
+      "다정한 답, 선 긋는 답, 무시. 세라에겐 셋 다 다르게 남아.",
+    ],
+  },
+  openhand: {
+    sel: '[data-coach="opphand"]',
+    title: "세라의 판 — 패를 다 보여 준다",
+    img: `${G}/openhand.webp`,
+    steps: () => [
+      "세라는 자기 패 두 장을 처음부터 펼쳐 놓고 쳐. 족보도 위에 떠.",
+      "절대 안 접고, 블러프도 안 해. 좋은 패면 걸고, 아니면 따라와.",
+      "그러니까 블러프는 안 통해. 이길 패면 크게 걸고, 질 패면 일찍 접어.",
+      "칩이 떨어져도 세라는 다시 사(리바이). 판이 다 끝났을 때 내 칩으로 승부가 나.",
+    ],
   },
   prep: {
     sel: ".lv-choice-prep, .lv-dlg-gate",

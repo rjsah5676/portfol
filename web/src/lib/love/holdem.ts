@@ -22,6 +22,8 @@ export interface Persona {
   acc: number;
   /** 읽기 노트 버릇 id */
   tellId: string;
+  /** 세라: 패를 처음부터 보여 줌 · 절대 안 접음 · 블러프 없음 · 칩이 떨어지면 다시 삼(무한 리바이) */
+  open?: boolean;
 }
 
 export const PERSONA: Partial<Record<CharKey, Persona>> = {
@@ -30,6 +32,7 @@ export const PERSONA: Partial<Record<CharKey, Persona>> = {
   boss: { aggr: 0.6, bluff: 0.12, loose: 0.4, acc: 0.9, tellId: "bossGlass" },
   taeyang: { aggr: 0.3, bluff: 0.12, loose: 0.85, acc: 0.9, tellId: "tyHum" },
   jeongmin: { aggr: 0.45, bluff: 0.25, loose: 0.35, acc: 0.85, tellId: "jmRecord" },
+  sera: { aggr: 0.6, bluff: 0, loose: 1, acc: 1, tellId: "seraOpen", open: true },
 };
 
 /** 버릇 단서: 겉으로 보이는 모습 (strong / bluff). mid 는 단서 없음 */
@@ -174,6 +177,16 @@ export const CHAT: Partial<Record<CharKey, Partial<Record<ActKind | "winHand" | 
     allin: ["올인! 인생 한 방!", "다 걸어요!"],
     winHand: ["이겼다! 형 이겼어요!", "봤죠? 정민아 기록해!"],
     loseHand: ["형 너무해요…", "아니 그게 왜 나와요."],
+  },
+  sera: {
+    bet: ["걸게요. 보이죠? 이 패요.", "이만큼요. 숨길 거 없어요."],
+    raise: ["올려요. 저 이거 좋아요.", "레이즈. 좋은 건 좋다고 해야죠."],
+    call: ["콜이요. 저 안 접어요.", "따라갈게요. 끝까지."],
+    check: ["체크. 딜러님 차례예요.", "넘길게요."],
+    fold: ["……"],
+    allin: ["올인이요.", "전부요. 저 원래 이렇게 해요."],
+    winHand: ["어, 이겼다.", "오늘은 카드가 저 좋아하나 봐요."],
+    loseHand: ["아하하. 졌다.", "또 졌다. 그래도 재밌어요."],
   },
   jeongmin: {
     bet: ["베팅합니다.", "이 정도 걸겠습니다."],
@@ -373,6 +386,18 @@ export function aiAct(h: Hand, who: CharKey, r = Math.random, mod?: Mod): { k: A
   const ops = options(h, "opp");
   const has = (k: ActKind) => ops.find((o) => o.k === k);
   const call = toCall(h, "opp");
+  // 세라: 안 접고 블러프도 없음. 좋은 패면 걸고 · 올리고, 아니면 체크 · 콜 (버릇은 없음 — 패가 이미 보이니까)
+  if (p.open) {
+    if (call === 0) {
+      const b = has("bet");
+      if (eq > 0.55 && b && r() < p.aggr + 0.2) return { ...b, read: "mid" };
+      if (eq > 0.85 && has("allin") && r() < 0.3) return { k: "allin", read: "mid" };
+      return { k: "check", read: "mid" };
+    }
+    const rr = has("raise");
+    if (eq > 0.7 && rr && r() < p.aggr) return { ...rr, read: "mid" };
+    return { k: "call", read: "mid" };
+  }
   const pot = potNow(h);
   const odds = call / (pot + call || 1);
   const strong = eq > 0.68;

@@ -598,6 +598,10 @@
   --acc: #c9b6ff;
   --head: linear-gradient(180deg, #2c2744, #1c1930);
 }
+.lv-phone-s {
+  --acc: #ff9fcb;
+  --head: linear-gradient(180deg, #4a2340, #2a1426);
+}
 @keyframes lv-phone-in {
   from {
     transform: translateY(10%) rotate(3deg);
@@ -4068,3 +4072,30 @@
 /* 가이드가 이 알림을 가리키는 동안: 애니메이션 없이 그대로 보이게 (일시정지하면 첫 프레임=투명에서 멈춤) */
 .lv-hold { animation: none !important; }
 .lv-icon-emoji { display: inline-grid; place-items: center; width: auto !important; height: auto !important; }
+/* 세라: 자리 비웠다 돌아오면 — 오른쪽 위 메시지 알림 */
+@keyframes lv-seraping-in {
+  from { opacity: 0; transform: translateY(-1.2cqw); }
+  to { opacity: 1; transform: none; }
+}
+.lv-seraping {
+  position: absolute;
+  top: 6.5cqw;
+  right: 2cqw;
+  z-index: 29;
+  display: flex;
+  align-items: center;
+  gap: 0.9cqw;
+  max-width: 34cqw;
+  border: 0.12cqw solid #ff8cc099;
+  border-radius: 1cqw;
+  background: #1a0f1af2;
+  padding: 0.8cqw 1.4cqw 0.8cqw 0.8cqw;
+  color: #ffe6f1;
+  font-size: 1.25cqw;
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: 0 0.6cqw 2cqw #0008;
+  animation: lv-seraping-in 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.lv-seraping-icon { height: 3.2cqw; width: 3.2cqw; flex: none; border-radius: 50%; object-fit: cover; border: 0.12cqw solid #ff8cc0; }
+.lv-seraping b { display: block; font-size: 0.95cqw; color: #ff8cc0; letter-spacing: 0.04em; }

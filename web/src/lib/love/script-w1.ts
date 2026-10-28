@@ -185,6 +185,33 @@ export const W1: Scenes = {
     S("손이 예쁘네요.", "smile"),
     ME("…감사합니다. 처음 오셨어요?"),
     S("네. 오늘은요."),
+    // 회차 기억: 엔딩을 하나라도 본 회차면 세라만 어렴풋이 기억한다
+    { t: "when", cond: { v: "meta_runs", op: ">=", n: 1 }, to: "d1_sera_m", else: "d1_sera2" },
+  ],
+  d1_sera_m: [
+    { t: "when", cond: { v: "meta_trueS", op: ">=", n: 1 }, to: "d1_sera_mt" },
+    { t: "when", cond: { v: "meta_end_sera_lock", op: ">=", n: 1 }, to: "d1_sera_ml" },
+    { t: "when", cond: { v: "meta_end_clash", op: ">=", n: 1 }, to: "d1_sera_mc" },
+    S("…근데 이상하다. 딜러님은 처음 보는데, 이 손은 두 번째 같아요.", "smile"),
+    { t: "goto", to: "d1_sera_m2" },
+  ],
+  d1_sera_mt: [
+    S("…이상하다. 처음 오는 데서, 오늘은 접는 법을 아는 것 같은 기분이에요.", "smile"),
+    { t: "goto", to: "d1_sera_m2" },
+  ],
+  d1_sera_ml: [
+    S("목이 허전하네요. …아, 아무것도 아니에요. 그냥 그런 기분.", "empty"),
+    { t: "goto", to: "d1_sera_m2" },
+  ],
+  d1_sera_mc: [
+    S("이번엔 한 사람만 봐요. …네? 저 방금 뭐라고 했어요?", "smile"),
+    { t: "goto", to: "d1_sera_m2" },
+  ],
+  d1_sera_m2: [
+    TH("처음 보는 손님이다. 그런데 저 웃음을, 어디선가 끝까지 본 것 같다."),
+    { t: "goto", to: "d1_sera2" },
+  ],
+  d1_sera2: [
     { t: "sfx", id: "cardflip" },
     { t: "cg", id: "s_open", look: true },
     N("그녀는 패를 보지도 않고 테이블에 뒤집어 펼쳤다. 3과 8. 아무것도 아닌 패."),
