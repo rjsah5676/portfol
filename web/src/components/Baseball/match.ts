@@ -3194,7 +3194,15 @@ export class Match {
     ctx.font = '700 11.5px "Nanum Gothic", sans-serif';
     ctx.fillStyle = "rgba(255,255,255,0.7)";
     if (this.cfg.mode !== "derby") ctx.fillText(`오늘 ${ln.ab}타수 ${ln.h}안타${ln.hr ? ` ${ln.hr}홈런` : ""}`, tx, y + 50);
-    const se = seasonOf(b);
+    // 시즌 기록 + 이번 경기 (타율은 타수 · 안타를 합쳐 다시)
+    const se0 = seasonOf(b);
+    const today = this.cfg.mode !== "derby";
+    const ab = (se0.ab ?? 0) + (today ? ln.ab : 0);
+    const se = {
+      avg: se0.ab !== undefined ? (ab ? ((se0.h ?? 0) + (today ? ln.h : 0)) / ab : 0) : se0.avg,
+      hr: se0.hr + (today ? ln.hr : 0),
+      rbi: se0.rbi + (today ? ln.rbi : 0),
+    };
     ctx.fillStyle = "#ffd98a";
     ctx.font = '800 11.5px "JetBrains Mono", monospace';
     ctx.fillText(`시즌 ${se.avg.toFixed(3).replace(/^0/, "")} · ${se.hr}HR · ${se.rbi}타점`, tx, y + 67);

@@ -169,6 +169,9 @@ export interface SeasonLine {
   avg: number;
   hr: number;
   rbi: number;
+  /** 타수 · 안타 (있으면 경기 중 오늘 기록을 더해 타율을 다시 냄) */
+  ab?: number;
+  h?: number;
 }
 /**
  * 타석 화면 「시즌 기록」: 육성 선수는 진짜 시즌 기록, 그 밖의 선수(구단 카드 · 상대 팀)는 아직 시즌 기록을 안 쌓아서
@@ -182,7 +185,8 @@ export function seasonOf(b: Batter): SeasonLine {
   const avg = Math.max(0.18, Math.min(0.39, 0.205 + (b.hit / 1000) * 0.13 + j(0) * 0.018));
   const hr = Math.max(0, Math.round(Math.pow(b.power / 1000, 2) * 42 + j(10) * 3));
   const rbi = Math.max(hr, Math.round(hr * 2.3 + avg * 140 + j(20) * 8));
-  return { avg, hr, rbi };
+  const ab = 220 + Math.round((j(5) + 1) * 110);
+  return { avg, hr, rbi, ab, h: Math.round(avg * ab) };
 }
 
 /**
