@@ -19,6 +19,7 @@ import Online from "./Online";
 import Shop from "./Shop";
 import TeamPick from "./TeamPick";
 import { useAuth } from "@/lib/AuthContext";
+import { CloudSync, type Conflict } from "./cloudSave";
 
 /** 개발 서버에서만 주소 옵션 (?admin=1) */
 const devAdmin = () => process.env.NODE_ENV !== "production" && typeof window !== "undefined" && new URLSearchParams(window.location.search).get("admin") === "1";
@@ -31,7 +32,79 @@ const TEST_LV = [0, 300, 500, 700, 900] as const;
 
 type Screen = "title" | "setup" | "derby" | "howto" | "play" | "career" | "pick" | "club" | "online" | "shop";
 
+/**
+ * 클라우드 세이브: 로그인했으면 서버 저장과 먼저 맞춘 뒤 화면을 띄움 (게스트는 바로).
+ * 서버 것을 받아 덮어쓰면 화면을 새로 그려서 저장을 다시 읽게 함.
+ */
 export default function BaseballApp() {
+  const auth = useAuth();
+  const uid = auth.account?.uid ?? null;
+  const [ready, setReady] = useState(false);
+  const [gen, setGen] = useState(0);
+  const [conflict, setConflict] = useState<(Conflict & { done: (p: "local" | "remote") => void }) | null>(null);
+  useEffect(() => {
+    if (auth.loading) return;
+    if (!uid) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 게스트는 맞출 것 없음
+      setReady(true);
+      return;
+    }
+    const cs = new CloudSync(uid, {
+      applied: () => setGen((g) => g + 1),
+      conflict: (c) => new Promise((done) => setConflict({ ...c, done })),
+    });
+    let alive = true;
+    void cs.start().finally(() => alive && setReady(true));
+    return () => {
+      alive = false;
+      cs.stop();
+    };
+  }, [uid, auth.loading]);
+  return (
+    <div className={`relative h-full w-full overflow-hidden bg-[#0b0e1c] text-white ${font.body}`} style={{ width: DW, height: DH }}>
+      {ready && !conflict ? (
+        <BaseballMain key={gen} />
+      ) : (
+        <MenuBg>
+          <div className={`${font.title} flex h-full items-center justify-center text-[22px] text-white/60`}>{conflict ? "" : "저장 불러오는 중…"}</div>
+        </MenuBg>
+      )}
+      {conflict && (
+        <Modal w={620}>
+          <div className={`${font.title} text-[24px]`}>어느 저장으로 할까요?</div>
+          <p className="mt-1 text-[13px] text-white/60">이 기기와 계정(서버)에 서로 다른 진행이 있어요. 고른 쪽으로 맞추고, 다른 쪽은 지워져요.</p>
+          <div className="mt-4 grid grid-cols-2 gap-3 text-left">
+            {(
+              [
+                ["local", "📱 이 기기", conflict.local, "#7ad7ff"],
+                ["remote", `☁️ 계정 (${new Date(conflict.remoteAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 저장)`, conflict.remote, ACCENT],
+              ] as const
+            ).map(([k, title, lines, col]) => (
+              <Btn
+                key={k}
+                color={col}
+                className="flex flex-col items-start gap-1 px-4 py-3"
+                onClick={() => {
+                  conflict.done(k);
+                  setConflict(null);
+                }}
+              >
+                <span className={`${font.title} text-[17px]`}>{title}</span>
+                {lines.map((l) => (
+                  <span key={l} className="text-[12.5px] font-normal opacity-85">
+                    {l}
+                  </span>
+                ))}
+              </Btn>
+            ))}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function BaseballMain() {
   // 스페이스 = 지금 화면의 확인 · 계속 버튼
   useSpaceConfirm();
   const [screen, setScreen] = useState<Screen>("title");

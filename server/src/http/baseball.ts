@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { Deps } from "../deps";
+import { AppError, unauthenticated } from "../errors";
 import { orderedId } from "../ids";
 import { cleanIp } from "../traffic";
 import { h, ms, requireAdmin, userOf } from "./util";
@@ -13,6 +14,12 @@ import { h, ms, requireAdmin, userOf } from "./util";
  *   GET  /api/admin/baseball/logs?kind=&since=&limit= → 최근 것부터 (최대 2000)
  *   GET  /api/admin/baseball/export?kind=&since= → NDJSON 파일 (한 줄 = 기록 하나)
  * 컬렉션 baseball_logs { _id(시간순), at, pid, uid?, kind, v, data }
+ *
+ * 클라우드 세이브 (로그인 계정마다 하나): 브라우저 localStorage 의 야구 저장(pxb:…)을 통째로.
+ *   GET /api/baseball/save                → { save: { rev, at, data } | null }
+ *   PUT /api/baseball/save { data, prev } → { rev, at }  (prev = 마지막으로 받은 rev, 처음이면 0)
+ *     다른 기기가 그 사이 올렸으면 409 SAVE_CONFLICT { rev, at } → 브라우저가 다시 받아서 고르게 함
+ * 컬렉션 baseball_saves { _id: uid, rev, at, data: { [키]: 문자열 } }
  */
 
 export interface BaseballLog {
@@ -32,6 +39,18 @@ const logSchema = z.strictObject({
   data: z.record(z.string(), z.unknown()),
 });
 const MAX_DATA = 8_000;
+const saveSchema = z.strictObject({
+  data: z.record(z.string().regex(/^pxb:[a-z0-9:_-]{1,40}$/), z.string()).refine((d) => Object.keys(d).length <= 24),
+  prev: z.number().int().min(0),
+});
+/** 세이브 하나 크기 (글자 수) */
+const MAX_SAVE = 1_000_000;
+export interface BaseballSave {
+  _id: string;
+  rev: number;
+  at: Date;
+  data: Record<string, string>;
+}
 /** IP 당 1분에 이만큼까지 (넘으면 조용히 버림) */
 const PER_MIN = 60;
 
@@ -41,7 +60,45 @@ export function baseballRouters({ auth, db }: Deps): { pub: Router; admin: Route
   void col.createIndex({ pid: 1, at: -1 }).catch(() => {});
   const hits = new Map<string, { n: number; t: number }>();
 
+  const saves = db.col<Omit<BaseballSave, "_id">>("baseball_saves");
+  const member = async (req: Parameters<typeof userOf>[1]) => {
+    const u = await userOf(auth, req);
+    if (!u || u.anonymous) throw unauthenticated();
+    return u;
+  };
+  const conflict = (cur: { rev: number; at: Date } | null) =>
+    new AppError("SAVE_CONFLICT", "다른 기기에서 먼저 저장했어요.", 409, { rev: cur?.rev ?? 0, at: cur ? ms(cur.at) : null });
+
   const pub = Router();
+  pub.get(
+    "/save",
+    h(async (req) => {
+      const u = await member(req);
+      const d = await saves.findOne({ _id: u.uid });
+      return { save: d ? { rev: d.rev, at: ms(d.at), data: d.data } : null };
+    })
+  );
+  pub.put(
+    "/save",
+    h(async (req) => {
+      const u = await member(req);
+      const input = saveSchema.parse(req.body);
+      if (Object.values(input.data).reduce((a, v) => a + v.length, 0) > MAX_SAVE) throw new AppError("SAVE_TOO_BIG", "저장 데이터가 너무 커요.", 413);
+      const at = new Date();
+      if (input.prev === 0) {
+        try {
+          await saves.insertOne({ _id: u.uid, rev: 1, at, data: input.data });
+        } catch (e) {
+          if ((e as { code?: number }).code !== 11000) throw e;
+          throw conflict(await saves.findOne({ _id: u.uid }));
+        }
+        return { rev: 1, at: at.getTime() };
+      }
+      const r = await saves.findOneAndUpdate({ _id: u.uid, rev: input.prev }, { $set: { data: input.data, at }, $inc: { rev: 1 } }, { returnDocument: "after" });
+      if (!r) throw conflict(await saves.findOne({ _id: u.uid }));
+      return { rev: r.rev, at: at.getTime() };
+    })
+  );
   pub.post(
     "/log",
     h(async (req) => {
