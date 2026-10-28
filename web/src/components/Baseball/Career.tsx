@@ -1169,7 +1169,7 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
               { kind: "train", key: k },
               t.name,
               t.desc,
-              k === "special" ? `체력 -${t.cost} · 필살 Lv${spLv(c) || "-"}` : `체력 -${t.cost} · Lv${trainLv(c, k)} · 효율 ×${mul.toFixed(2)}`,
+              k === "special" ? spLv(c) >= 5 ? "필살 마스터 (Lv5)" : `체력 -${t.cost} · 필살 Lv${spLv(c) || "-"}` : `체력 -${t.cost} · Lv${trainLv(c, k)} · 효율 ×${mul.toFixed(2)}`,
               k === "special" ? "#ff5fb4" : STAT_COLOR[k as StatKey],
               mate ? (
                 <span className="mt-0.5 flex items-center gap-1 text-[11px] font-bold" style={{ color: charById(mate).color }}>

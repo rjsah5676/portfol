@@ -1681,6 +1681,7 @@ export function whyNot(c: Career, a: Action): string | null {
   if (c.injury && !(a.kind === "rest" || a.kind === "clinic" || a.kind === "care")) return "부상 중엔 숙소 · 병원만";
   if (c.active < costOf(a)) return `행동력이 모자라요 (⚡${costOf(a)} 필요)`;
   if (a.kind === "train" && a.key === "special" && !c.learned) return "필살타법을 배워야 열려요 (인연 「필살 전수 대결」)";
+  if (a.kind === "train" && a.key === "special" && spLv(c) >= 5) return "필살타법 마스터 (Lv5) — 더 오를 게 없어요";
   if (a.kind === "clinic" && c.money < CLINIC_PRICE) return "자금이 모자라요";
   if (a.kind === "clinic" && !c.injury && c.stamina >= 70) return "아픈 데가 없어요";
   const spots = spotsOf(c);
