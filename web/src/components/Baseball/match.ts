@@ -67,8 +67,8 @@ const BOOST_DUR = 2.8;
  */
 const TEMPO = { call: 1.1, ready: 1.4, first: 1.9, result: 2.0, change: 2.4 };
 /** 타석에 걸어 들어오기 재생 속도 · 다 들어온 뒤 첫 공까지 숨 고르기 */
-const WALK_SPEED = 0.9;
-const WALK_SETTLE = 0.5;
+const WALK_SPEED = WALKIN_LEN / 3.3;
+const WALK_SETTLE = 0.7;
 const BOOST_PHASES: Phase[] = ["ready", "windup", "flight", "contact", "call"];
 /** HUD · 이펙트 그림 (GPT 이미지 → public/baseball/ui) */
 const UI = {
@@ -1412,7 +1412,7 @@ export class Match {
     }
     // 리그 애니
     this.batAnimT += dt;
-    // 걸어 들어오기: 2.36초 줄을 조금 느리게 (≈2.6초) · 스윙 · 레그킥이 시작되면 바로 끝
+    // 걸어 들어오기: 3.3초 · 스윙 · 레그킥이 시작되면 바로 끝
     if (this.walkPending && this.phase === "ready") {
       this.walkPending = false;
       this.walkT = 0;
