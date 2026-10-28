@@ -8,7 +8,7 @@
  */
 import {
   act, advance, applyGame, autoBattle, botChoose, botDeck, botTurn, botPick, botShop, canPlay, careerBatter, choose, choosePick, decideRetire, endSeason, finishBattle, newCareer, ovrOf, spUses, stepOf,
-  BONDS, TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy,
+  BONDS, TALENTS, GP_IDS, TUNE, type BatType, type Career, type GpId, type Policy, type SkillId,
 } from "../src/lib/baseball/career";
 import { botHook, careerSetup, humanHook, playCareerGame } from "../src/lib/baseball/careerGame";
 import type { Diff } from "../src/lib/baseball/ai";
@@ -59,9 +59,11 @@ function persona(i: number): Persona {
   };
 }
 
-export function run(i: number, gp: GpId[], over: Partial<Persona> = {}) {
+export function run(i: number, gp: GpId[], over: Partial<Persona> = {}, extra: SkillId[] = []) {
   const ps = { ...persona(i), ...over };
   const c: Career = newCareer({ name: `봇${i}`, num: 10, bats: i % 3 ? "R" : "L", type: ps.type, diff, gp, seed: 777 + i * 1013, deck: botDeck(ps.type, makeRng(55 + i)) });
+  // 처음부터 특수능력(축복 등) 하나 쥐여 주고 비교할 때 (BOON=1)
+  for (const id of extra) if (!c.skills.includes(id)) c.skills.push(id);
   const rng = makeRng(31337 + i * 7);
   const talent0 = c.talent;
   let injuries = 0;
@@ -172,6 +174,8 @@ function coachShare() {
 
 if (process.env.SHARE) share();
 else if (process.env.COACH) coachShare();
+else if (process.env.BOON) boonValue();
+else if (process.env.DIST) statDist();
 else main();
 
 function main() {
@@ -234,4 +238,48 @@ function main() {
     console.log("PCT_TABLE", cuts.map((v) => `[${v}, ${+(o0.filter((x) => x >= v).length / N).toFixed(4)}]`).join(", "));
   }
 
+}
+
+/**
+ * 축복 값어치 (BOON=b_mei_palm,b_mei_gap,...): 같은 선수 N명에게 처음부터 그 축복 하나를 쥐여 줬을 때 은퇴 종합 · 통산 타율 · 홈런이 없을 때보다 얼마나 오르나
+ *   (축복 고르기에서 「정답」이 정해져 있는지 보려고 — 비슷하면 고를 맛이 있음)
+ */
+function boonValue() {
+  const ids = process.env.BOON!.split(",") as SkillId[];
+  const M = N;
+  const stat = (rs: ReturnType<typeof run>[]) => {
+    const o = rs.reduce((a, r) => a + r.ovr, 0) / rs.length;
+    const avg = rs.reduce((a, r) => a + r.c.total.h / Math.max(1, r.c.total.ab), 0) / rs.length;
+    const hr = rs.reduce((a, r) => a + r.c.total.hr, 0) / rs.length;
+    return { o, avg, hr };
+  };
+  const base = stat(Array.from({ length: M }, (_, i) => run(i, [])));
+  console.log(`없음: 종합 ${base.o.toFixed(1)} 타율 ${base.avg.toFixed(3)} HR ${base.hr.toFixed(1)}`);
+  for (const id of ids) {
+    const r = stat(Array.from({ length: M }, (_, i) => run(i, [], {}, [id])));
+    console.log(`${id.padEnd(18)} 종합 ${(r.o - base.o >= 0 ? "+" : "") + (r.o - base.o).toFixed(1)}  타율 ${(r.avg - base.avg >= 0 ? "+" : "") + (r.avg - base.avg).toFixed(3)}  HR ${(r.hr - base.hr >= 0 ? "+" : "") + (r.hr - base.hr).toFixed(1)}`);
+  }
+}
+
+/**
+ * 능력치 쏠림 · 연차별 타율 (DIST=1): 은퇴 때 가장 높은 능력치 · 타격 · 파워 · 주루 백분위, 몰빵 성향(focus ≥ 0.8)만 따로,
+ * 직접 출전 사람 타율(시즌별 중앙값)
+ */
+function statDist() {
+  const rs = Array.from({ length: N }, (_, i) => run(i, []));
+  const q = (a: number[], p: number) => [...a].sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(p * a.length))];
+  const row = (name: string, a: number[]) => console.log(name.padEnd(14), [0.1, 0.5, 0.9, 0.97, 0.99].map((p) => Math.round(q(a, p))).join(" / "), " max", Math.round(Math.max(...a)));
+  console.log("백분위 p10 / p50 / p90 / p97 / p99");
+  row("종합", rs.map((r) => r.ovr));
+  row("최고 능력치", rs.map((r) => Math.max(r.c.stats.hit, r.c.stats.power, r.c.stats.run)));
+  row("타격", rs.map((r) => r.c.stats.hit));
+  row("파워", rs.map((r) => r.c.stats.power));
+  row("주루", rs.map((r) => r.c.stats.run));
+  const foc = rs.filter((r) => r.pol.focus >= 0.8);
+  row(`몰빵(${foc.length}) 최고`, foc.map((r) => Math.max(r.c.stats.hit, r.c.stats.power, r.c.stats.run)));
+  for (let y = 0; y < 4; y++) {
+    const av = rs.filter((r) => r.mode !== "auto" && r.c.seasons[y]).map((r) => r.c.seasons[y].line.h / Math.max(1, r.c.seasons[y].line.ab));
+    const all = rs.filter((r) => r.c.seasons[y]).map((r) => r.c.seasons[y].line.h / Math.max(1, r.c.seasons[y].line.ab));
+    console.log(`${y + 1}년차 타율 (직접·하이라이트) p25 ${q(av, 0.25).toFixed(3)} 중앙 ${q(av, 0.5).toFixed(3)} p75 ${q(av, 0.75).toFixed(3)}  · 전체 중앙 ${q(all, 0.5).toFixed(3)}`);
+  }
 }
