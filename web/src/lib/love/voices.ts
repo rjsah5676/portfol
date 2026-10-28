@@ -77,8 +77,8 @@ export const VOICE_REVIEW: VoiceLine[] = [
 export const voiceFile = (v: { id: string; gen?: boolean; file?: string }, take: "a" | "b" = VOICE_TAKE[v.id] ?? "a") =>
   v.file ?? (v.gen ? `${v.id}${take === "b" ? "b" : ""}` : `${v.id}${take}`);
 
-/** 대사 텍스트 → 음성 파일. 감정 소리 + 2차 대사 음성(V2) — 같은 대사면 감정 소리가 먼저 */
-const PLAYED: VoiceLine[] = [...V2_LINES, ...EMO_LINES];
+/** 대사 텍스트 → 음성 파일. v4: 감정 소리만 재생 (옛 2차 대사 음성 V2 는 검수 화면에서만 들을 수 있음) */
+const PLAYED: VoiceLine[] = [...EMO_LINES];
 export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(
   PLAYED.map((v) => [v.text, `/love/voice/${v.file ?? v.id}.mp3`])
 );
