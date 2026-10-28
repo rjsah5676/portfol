@@ -10,7 +10,7 @@ import {
   ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
   CAREER_DIFF, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
-  awardRace, costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
+  awardRace, costOf, fmtAvg, gameNo, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type FieldPos, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
   type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
@@ -1605,9 +1605,26 @@ function SeasonModal({ s, c, onClose, onReroll }: { s: SeasonSummary; c: Career;
           ))}
         </div>
       )}
+      {/* 이번 시즌 성적 평가 (OPS 기준) — 숨은 재능(타고난 성장 속도)과 헷갈리지 않게 따로 */}
+      {L.ab > 0 && (() => {
+        const sg = seasonGrade(L);
+        return (
+          <div className="mt-3 flex items-center justify-center gap-3 rounded-xl border-2 py-2" style={{ borderColor: `${sg.color}80`, background: `${sg.color}14` }}>
+            <div className="text-[12px] text-white/60">이번 시즌 성적</div>
+            <div className={`${font.title} text-[40px] leading-none`} style={{ color: sg.color }}>
+              {sg.g}
+            </div>
+            <div className="text-left text-[11px] text-white/50">
+              OPS {ops(L).toFixed(3)}
+              <br />
+              S .950 · A .820 · B .700 · C .600
+            </div>
+          </div>
+        );
+      })()}
       {s.talentReveal && (
         <div className="mt-3 rounded-xl border-2 border-[#ffd23f]/50 bg-[#ffd23f]/10 py-2">
-          <div className="text-[12px] text-white/60">스카우트 평가 — 숨은 재능</div>
+          <div className="text-[12px] text-white/60">스카우트 — 숨은 재능 (타고난 성장 속도 · 이번 시즌 성적과는 따로)</div>
           <div className={`${font.title} text-[40px] leading-none text-[#ffd23f]`}>{s.talentReveal}</div>
           <div className="text-[11px] text-white/50">F · D · C · B · A · S (각성하면 한 단계 위로)</div>
         </div>

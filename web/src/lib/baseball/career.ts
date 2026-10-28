@@ -1807,6 +1807,15 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
 
 export const avg = (l: { h: number; ab: number }) => (l.ab ? l.h / l.ab : 0);
 export const fmtAvg = (v: number) => v.toFixed(3).replace(/^0/, "");
+/** 시즌 성적 평가 (OPS) — 시즌 결산 화면. 숨은 재능 공개와 같은 화면이라 따로 보여 줌 */
+export function seasonGrade(l: BatLine) {
+  const v = ops(l);
+  const L = [
+    [0.95, "S", "#ff7ae0"], [0.82, "A", "#ffcf4a"], [0.7, "B", "#7dff9a"], [0.6, "C", "#7ad7ff"], [0, "D", "#9a9a9a"],
+  ] as const;
+  const r = L.find((x) => v >= x[0])!;
+  return { g: r[1], color: r[2] };
+}
 export const ops = (l: BatLine) => {
   const obp = l.pa ? (l.h + l.bb) / l.pa : 0;
   const tb = l.h + l.d2 + l.d3 * 2 + l.hr * 3;
