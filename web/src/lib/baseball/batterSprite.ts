@@ -373,7 +373,7 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
     const s = sc * IDLE.scale;
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
+    ctx.imageSmoothingQuality = "medium";
     ctx.translate(x, y + FOOT_Y * sc);
     ctx.scale(flip ? -s : s, s);
     const ki = kickImg;
@@ -415,7 +415,7 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
   const src = strip(im, lk);
   ctx.save();
   ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = "high";
+  ctx.imageSmoothingQuality = "medium";
   ctx.translate(x, y + FOOT_Y * sc);
   ctx.scale(flip ? -s : s, s);
   if (trail > 0 && frame > TRAIL_FROM && frame <= TRAIL_TO + 1) swoosh(ctx, frame, trail);

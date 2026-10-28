@@ -429,6 +429,9 @@ function Play({
   const [menu, setMenu] = useState(false);
   const [bullpen, setBullpen] = useState(false);
   const [muted, setMute] = useState(isMuted());
+  // 캔버스 해상도 상한 (느린 기기면 자동으로 낮춤)
+  const [qCap, setQCap] = useState(2);
+  const qCapRef = useRef(2);
   // 터치 화면에서만 스윙 · 번트 버튼 · 이동 패드 (PC 는 단축키: Space · B · 방향키)
   const [touch, setTouch] = useState(false);
   useEffect(() => {
@@ -456,9 +459,22 @@ function Play({
     if (process.env.NODE_ENV !== "production") (window as unknown as { __pxb?: Match }).__pxb = m;
     let raf = 0;
     let last = performance.now();
+    // 느린 기기: 프레임이 계속 늦으면(평균 22ms 넘게 1.5초) 캔버스 해상도를 한 단계씩 낮춤 (2 → 1.75 → … → 1)
+    let ema = 16;
+    let slowFor = 0;
     const loop = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
+      if (dt < 0.25 && !document.hidden) {
+        ema = ema * 0.92 + dt * 1000 * 0.08;
+        slowFor = ema > 22 ? slowFor + dt : 0;
+        if (slowFor > 1.5 && qCapRef.current > 1) {
+          qCapRef.current = Math.max(1, qCapRef.current - 0.25);
+          slowFor = 0;
+          ema = 16;
+          setQCap(qCapRef.current);
+        }
+      }
       m.update(dt);
       const cv = canvasRef.current;
       if (cv) {
@@ -480,10 +496,11 @@ function Play({
   useEffect(() => {
     const cv = canvasRef.current;
     if (!cv || !k) return;
-    const q = Math.min(3, Math.max(1, k * (window.devicePixelRatio || 1)));
+    // 해상도 상한 2배 (3배면 1440p 전체화면에서 3072×1728 — 내장 그래픽에서 프레임이 떨어짐) · 느리면 qCap 이 더 낮아짐
+    const q = Math.min(qCap, Math.max(1, k * (window.devicePixelRatio || 1)));
     cv.width = Math.round(DW * q);
     cv.height = Math.round(DH * q);
-  }, [k]);
+  }, [k, qCap]);
 
   const toDesign = useCallback((e: { clientX: number; clientY: number }) => {
     const r = canvasRef.current!.getBoundingClientRect();

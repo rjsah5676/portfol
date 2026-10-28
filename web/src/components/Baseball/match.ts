@@ -1692,14 +1692,14 @@ export class Match {
       const c = (PIT_THROW_SEQ.find(([, e]) => this.pitAnimT < e) ?? PIT_THROW_SEQ[PIT_THROW_SEQ.length - 1])[0];
       const k = PIT_CANVAS_PX / T.cell;
       ctx.save();
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingQuality = "medium";
       ctx.translate(mp.x, mp.y);
       ctx.scale(pFlip ? -k : k, k);
       ctx.drawImage(drawable(tim), c * T.CW, 0, T.CW, T.CH, -T.ax, -T.ay, T.CW, T.CH);
       ctx.restore();
     } else if (pim.complete && pim.naturalWidth) {
       ctx.save();
-      ctx.imageSmoothingQuality = "high";
+      ctx.imageSmoothingQuality = "medium";
       ctx.translate(mp.x, mp.y);
       ctx.scale(pFlip ? -PITCHER_STILL.scale : PITCHER_STILL.scale, PITCHER_STILL.scale);
       ctx.drawImage(pim, -PITCHER_STILL.ax, -PITCHER_STILL.ay);
