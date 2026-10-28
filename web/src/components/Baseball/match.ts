@@ -10,7 +10,7 @@
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { CZ_MOVE, CZ_RANGE, contactZone, timingLabel, timingWindow } from "@/lib/baseball/contact";
 import { BP_PITCHER, TEAM_DEFS, artUrl, charById, cutinUrl, faceUrl, hasSwingArt, swingArtUrl, makeTeam, seasonOf, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
-import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, slotName, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
+import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, slotName, type CareerSetup, type MyPA, type RecapLine } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_RIG_RELEASE_T, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
   SKIN_TONES, SWING_HIT_T, baseSkin,
@@ -117,7 +117,7 @@ export interface MatchCfg {
 
 export type Phase =
   | "intro" | "mission" | "ready" | "aim" | "gauge" | "cutin" | "windup" | "flight" | "contact"
-  | "call" | "field" | "result" | "change" | "over";
+  | "call" | "field" | "result" | "change" | "over" | "recap";
 
 export interface UiState {
   phase: Phase;
@@ -386,7 +386,7 @@ export class Match {
     this.pitSkin = baseSkin();
     // 육성: 첫 내 타석까지 미리 진행해 둠 — 인트로 동안 1번 타자가 서 있다가 내 선수로 휙 바뀌던 문제
     if (cfg.career) {
-      this.careerAdvance(false);
+      this.careerAdvance(false, this.pendingLines);
       this.preAdvanced = true;
       this.updateSkins();
     }
@@ -450,7 +450,7 @@ export class Match {
       spChar: sp ? sp.id : null,
       lefty: b.bats === "L",
       cards: !this.cardsGone && (this.phase === "ready" || this.phase === "aim"),
-      canCancel: !!this.cfg.career && !this.s.over && this.paCount <= 1 && !this.myPAs.some((x) => !x.auto) && this.s.balls === 0 && this.s.strikes === 0 && ["intro", "mission", "ready"].includes(this.phase),
+      canCancel: !!this.cfg.career && !this.s.over && this.paCount <= 1 && !this.myPAs.some((x) => !x.auto) && this.s.balls === 0 && this.s.strikes === 0 && ["intro", "recap", "mission", "ready"].includes(this.phase),
       kinds: p.rep.map((k) => ({ id: k, name: PITCHES[k].name })),
       kind: this.kindIdx,
       aiming: !ub && this.phase === "aim",
@@ -497,10 +497,15 @@ export class Match {
   // ───────────── 타석 준비 ─────────────
   /** 육성: 다음 내 타석까지 빠르게 진행 → 그 사이 내 자동 타석들 */
   private preAdvanced = false;
-  private careerAdvance(allAuto: boolean): MyPA[] {
+  /** 건너뛴 타석들 (다음 beginPA 에서 「경기 요약」으로 보여 줌) */
+  private pendingLines: RecapLine[] = [];
+  /** 경기 요약 (문자중계): 건너뛴 타석을 한 줄씩 — 탭 · Space 로 건너뛰기 */
+  recap: { lines: RecapLine[]; shown: number; t: number; step: number; hold: number } | null = null;
+  private recapJustShown = false;
+  private careerAdvance(allAuto: boolean, log?: RecapLine[]): MyPA[] {
     const s = this.s;
     const c = this.cfg.career!;
-    const autos = advanceToMyPA(s, c.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff, allAuto) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto);
+    const autos = advanceToMyPA(s, c.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff, allAuto) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto, log);
     this.myPAs.push(...autos);
     if (!s.over) {
       cpuManage(s, fieldSide(s));
@@ -523,10 +528,25 @@ export class Match {
       // 내 타석까지 빠르게 진행 (남은 경기 자동이면 끝까지) — 첫 타석은 생성자에서 이미 진행해 둠
       const sc = [...s.score];
       const inn = s.inning;
-      const autos = this.preAdvanced ? [] : this.careerAdvance(allAuto);
+      const autos = this.preAdvanced ? [] : this.careerAdvance(allAuto, this.pendingLines);
       this.preAdvanced = false;
+      // 건너뛴 타석이 있으면 먼저 「경기 요약」(문자중계)으로 보여 주고 다시 여기로 (그땐 진행 없이)
+      if (this.pendingLines.length) {
+        this.startRecap(this.pendingLines);
+        this.pendingLines = [];
+        this.preAdvanced = true;
+        return;
+      }
       if (s.over) return this.finish();
-      if (this.paCount++ > 0) {
+      const recapped = this.recapJustShown;
+      this.recapJustShown = false;
+      if (recapped) {
+        // 요약을 봤으면 배너는 짧게 (그 사이 점수 · 내 자동 타석은 요약에 다 나옴)
+        if (this.paCount++ > 0 || this.cfg.highlight) {
+          const runners = s.bases.filter((x) => x !== null).length;
+          this.setBanner(`${s.inning}회${s.top ? "초" : "말"} · ${this.cfg.highlight ? "찬스!" : "내 타석"}`, `${s.outs}아웃${runners ? ` · 주자 ${runners}명` : ""}`, "#ffcf4a", 1.2, true);
+        }
+      } else if (this.paCount++ > 0) {
         const me = mySide(s);
         const got = s.score[me] - sc[me];
         const lost = s.score[1 - me] - sc[1 - me];
@@ -807,6 +827,7 @@ export class Match {
   pressSwing(special = false) {
     if (this.paused) return;
     if (this.phase === "mission") return this.skipMission();
+    if (this.phase === "recap") return this.skipRecap();
     // 공이 나온 뒤 한 번 휘둘렀으면 그 공은 끝
     if (!this.userBat || this.swingStart >= 0) return;
     const b = this.batterNow;
@@ -982,6 +1003,7 @@ export class Match {
   tap(sx: number, sy: number, swing = true) {
     if (this.paused) return;
     if (this.phase === "mission") return this.skipMission();
+    if (this.phase === "recap") return this.skipRecap();
     if (this.phase === "field") {
       this.fast = true;
       this.pushUi();
@@ -1453,6 +1475,23 @@ export class Match {
       case "intro":
         if (this.pt > 1.6) this.beginPA();
         break;
+      case "recap": {
+        const r = this.recap;
+        if (!r) break;
+        r.t += dt * (this.cfg.speed ?? 1);
+        while (r.shown < r.lines.length && r.t >= r.step) {
+          r.t -= r.step;
+          r.shown++;
+          const l = r.lines[r.shown - 1];
+          if (l.kind === "HR") sfx.ui();
+        }
+        if (r.shown >= r.lines.length && r.t >= r.hold) {
+          this.recap = null;
+          this.recapJustShown = true;
+          this.beginPA();
+        }
+        break;
+      }
       case "mission":
         if (this.pt > 2.6) this.toPitch();
         break;
@@ -1757,7 +1796,8 @@ export class Match {
     else if (this.pitcherView) this.drawPitching(ctx, q);
     else this.drawBatting(ctx, q);
     ctx.restore();
-    this.drawHud(ctx);
+    // 경기 요약 중엔 HUD(점수판 · 미션 띠) 숨김 — 요약보다 앞선 최종 점수가 먼저 보여 김샘
+    if (this.phase !== "recap") this.drawHud(ctx);
     if (this.flash > 0) {
       ctx.fillStyle = `rgba(255,255,255,${this.flash * 0.6})`;
       ctx.fillRect(0, 0, DW, DH);
@@ -1779,6 +1819,7 @@ export class Match {
     }
     if (this.phase === "mission" && this.s.mission) this.drawMission(ctx);
     this.drawMissionFx(ctx);
+    if (this.phase === "recap") this.drawRecap(ctx);
   }
 
   private lastWasField() {
@@ -3048,6 +3089,139 @@ export class Match {
   }
 
   /** 미션 결과 연출 — 도장(MISSION CLEAR! / 아쉽지만 안타! / MISSION FAILED) + 얼굴 + 실제로 바뀐 것 칩 */
+  private startRecap(lines: RecapLine[]) {
+    // 한 줄 0.12 ~ 0.45초 — 많으면 빨리. 다 해서 하이라이트(몇 이닝 건너뜀) 6초 · 직접(내 타석 사이 몇 타석) 2.5초 안팎
+    const step = clamp((this.cfg.highlight ? 6 : 2.5) / lines.length, 0.12, 0.45);
+    this.recap = { lines: [...lines], shown: 0, t: step * 0.6, step, hold: this.cfg.highlight ? 1 : 0.6 };
+    this.setPhase("recap");
+  }
+  skipRecap() {
+    const r = this.recap;
+    if (!r) return;
+    if (r.shown < r.lines.length) {
+      r.shown = r.lines.length;
+      r.t = r.hold - 0.35;
+    } else r.t = r.hold;
+  }
+
+  /** 경기 요약 (문자중계) — 건너뛴 타석을 한 줄씩: 점수판 · 아웃 · 주자 + 최근 7줄 */
+  private drawRecap(ctx: CanvasRenderingContext2D) {
+    const r = this.recap;
+    if (!r) return;
+    const s = this.s;
+    const last = r.shown ? r.lines[r.shown - 1] : null;
+    ctx.save();
+    ctx.fillStyle = "rgba(4,6,16,0.55)";
+    ctx.fillRect(0, 0, DW, DH);
+    const x = 222, y = 74, w = 580, h = 410;
+    this.panel(ctx, x, y, w, h);
+    ctx.textBaseline = "alphabetic";
+    // 머리: 제목 · 회
+    ctx.font = '24px "Black Han Sans", sans-serif';
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#ffcf4a";
+    ctx.fillText("경기 요약", x + 22, y + 38);
+    if (last) {
+      ctx.font = '800 15px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      ctx.fillText(`${last.inning}회${last.top ? "초" : "말"} · ${last.ours ? "우리 공격" : "상대 공격"}`, x + 140, y + 37);
+    }
+    // 점수판
+    const sc = last ? last.score : [s.score[0], s.score[1]];
+    const me = mySide(s);
+    const team = (i: number) => (i === 0 ? s.opts.away : s.opts.home);
+    const bx = x + w - 250;
+    for (let i = 0; i < 2; i++) {
+      const ty = y + 22 + i * 22;
+      ctx.font = `${i === me ? "900" : "700"} 15px "Nanum Gothic", sans-serif`;
+      ctx.fillStyle = i === me ? "#ffcf4a" : "rgba(255,255,255,0.85)";
+      ctx.textAlign = "left";
+      ctx.fillText(`${team(i).short}${i === me ? " (우리)" : ""}`, bx, ty + 4);
+      ctx.textAlign = "right";
+      ctx.font = '22px "Black Han Sans", sans-serif';
+      ctx.fillText(String(sc[i]), bx + 130, ty + 6);
+    }
+    // 아웃 · 주자 (작은 다이아몬드)
+    const outs = last ? Math.min(3, last.outs) : s.outs;
+    const bases = last ? last.bases : [false, false, false];
+    const dx = x + w - 70, dy = y + 36;
+    const base = (bx2: number, by2: number, on: boolean) => {
+      ctx.beginPath();
+      ctx.moveTo(bx2, by2 - 8);
+      ctx.lineTo(bx2 + 8, by2);
+      ctx.lineTo(bx2, by2 + 8);
+      ctx.lineTo(bx2 - 8, by2);
+      ctx.closePath();
+      ctx.fillStyle = on ? "#ffcf4a" : "rgba(255,255,255,0.12)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    };
+    base(dx + 14, dy, bases[0]);
+    base(dx, dy - 14, bases[1]);
+    base(dx - 14, dy, bases[2]);
+    for (let i = 0; i < 2; i++) {
+      ctx.beginPath();
+      ctx.arc(dx - 7 + i * 14, dy + 22, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i < Math.min(2, outs) || outs >= 3 ? "#ff6a5a" : "rgba(255,255,255,0.15)";
+      ctx.fill();
+    }
+    // 줄들 (최근 7줄 · 새 줄은 미끄러져 들어옴)
+    ctx.strokeStyle = "rgba(255,255,255,0.1)";
+    ctx.beginPath();
+    ctx.moveTo(x + 16, y + 76);
+    ctx.lineTo(x + w - 16, y + 76);
+    ctx.stroke();
+    const N = 7, rowH = 40;
+    const from = Math.max(0, r.shown - N);
+    const enter = Math.min(1, r.t / 0.12);
+    for (let i = from; i < r.shown; i++) {
+      const l = r.lines[i];
+      const row = i - from;
+      const isNew = i === r.shown - 1 && r.shown < r.lines.length + 1;
+      const ry = y + 92 + row * rowH;
+      const slide = isNew ? (1 - enter) * 24 : 0;
+      ctx.globalAlpha = isNew ? 0.3 + 0.7 * enter : 1;
+      if (l.me) {
+        ctx.fillStyle = "rgba(255,207,74,0.14)";
+        ctx.beginPath();
+        ctx.roundRect(x + 12, ry - 4, w - 24, rowH - 6, 6);
+        ctx.fill();
+      }
+      const good = l.kind === "HR" ? "#ffd23f" : l.kind === "HIT" ? "#7dff9a" : l.kind === "BB" ? "#7ad7ff" : "rgba(255,255,255,0.55)";
+      // 우리 공격 줄은 결과 색 그대로, 상대 공격은 반대로 (상대 안타 = 붉게)
+      const col = l.ours ? good : l.kind === "HR" || l.kind === "HIT" ? "#ff8a7a" : l.kind === "BB" ? "#ffb07a" : "rgba(255,255,255,0.55)";
+      ctx.textAlign = "left";
+      ctx.font = '700 12px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      ctx.fillText(`${l.inning}회${l.top ? "초" : "말"}`, x + 22 + slide, ry + 20);
+      ctx.fillStyle = l.ours ? "#ffcf4a" : "#7ad7ff";
+      ctx.beginPath();
+      ctx.arc(x + 78 + slide, ry + 15, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.font = `${l.me ? "900" : "800"} 16px "Nanum Gothic", sans-serif`;
+      ctx.fillStyle = l.me ? "#ffcf4a" : "#fff";
+      ctx.fillText(l.me ? `${l.name} (나)` : l.name, x + 92 + slide, ry + 21);
+      ctx.font = '900 16px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = col;
+      const tx = x + 250 + slide;
+      ctx.fillText(l.text, tx, ry + 21);
+      if (l.runs > 0) {
+        const tw = ctx.measureText(l.text).width;
+        ctx.fillStyle = l.ours ? "#ffcf4a" : "#ff6a5a";
+        ctx.fillText(`  ${l.runs}점`, tx + tw, ry + 21);
+      }
+      ctx.globalAlpha = 1;
+    }
+    // 아래: 건너뛰기 안내 · 진행
+    ctx.textAlign = "center";
+    ctx.font = '700 12px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.fillText(`${r.shown} / ${r.lines.length} 타석 · 탭 · Space 로 건너뛰기`, x + w / 2, y + h - 14);
+    ctx.restore();
+  }
+
   missionFx: { m: Mission; r: "ok" | "partial" | "fail"; t: number } | null = null;
   private lastMission: Mission | null = null;
   private drawMissionFx(ctx: CanvasRenderingContext2D) {

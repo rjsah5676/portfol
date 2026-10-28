@@ -298,9 +298,32 @@ export function isKeyPA(s: GameState) {
  * 내 타석 전까지 빠르게 진행 (내 타석이 오면 멈춤) — 화면 직접 출전에서도 씀.
  * autoMine 을 주면 하이라이트 모드: 내 타석이라도 찬스가 아니면 그 훅으로 자동으로 치고 계속 (결과는 돌려줌)
  */
-export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0, allAuto = false): MyPA[] {
+/** 건너뛴 타석 하나 (화면의 「경기 요약」 문자중계) */
+export interface RecapLine {
+  inning: number;
+  top: boolean;
+  /** 우리 팀 공격 */
+  ours: boolean;
+  /** 내 선수 (하이라이트 자동 타석) */
+  me: boolean;
+  name: string;
+  text: string;
+  kind: PAResult["kind"];
+  runs: number;
+  /** 이 타석 뒤 아웃 · 주자 · 점수 */
+  outs: number;
+  bases: [boolean, boolean, boolean];
+  score: [number, number];
+}
+
+function recapOf(s: GameState, before: { inning: number; top: boolean; ours: boolean; me: boolean; name: string }, pa: PAResult): RecapLine {
+  return { ...before, text: pa.text, kind: pa.kind, runs: pa.runs, outs: pa.halfOver ? 3 : s.outs, bases: [s.bases[0] !== null, s.bases[1] !== null, s.bases[2] !== null], score: [s.score[0], s.score[1]] };
+}
+
+export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0, allAuto = false, log?: RecapLine[]): MyPA[] {
   const autoPAs: MyPA[] = [];
   let guard = 0;
+  const head = (me: boolean) => ({ inning: s.inning, top: s.top, ours: batSide(s) === mySide(s), me, name: curBatter(s).name });
   while (!s.over && guard++ < 600) {
     if (isMyPA(s, myIdx)) {
       if (!autoMine) break;
@@ -313,13 +336,17 @@ export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: 
       if (!allAuto && (isKeyPA(s) || (s.inning >= 7 && directSoFar === 0))) break;
       const before = s.sides[mySide(s)].bat[myIdx].rbi;
       const inning = s.inning;
+      const h = head(true);
       const pa = enginePA(s, rng, autoMine);
+      log?.push(recapOf(s, h, pa));
       autoPAs.push({ inning, text: pa.text, kind: pa.kind, rbi: s.sides[mySide(s)].bat[myIdx].rbi - before, auto: true });
       if (pa.halfOver && !s.over) nextHalf(s);
       continue;
     }
     cpuManage(s, fieldSide(s));
+    const h = head(false);
     const pa = quickPA(s, rng);
+    log?.push(recapOf(s, h, pa));
     if (pa.halfOver && !s.over) nextHalf(s);
   }
   return autoPAs;

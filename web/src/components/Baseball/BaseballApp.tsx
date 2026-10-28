@@ -695,7 +695,7 @@ function Play({
           {/* 오른쪽 조작 칸 (필드 화면 · 결과 문구 동안은 숨김) */}
           <div
             className="absolute top-[112px] right-3 flex w-[164px] flex-col items-stretch gap-2 transition-opacity"
-            style={{ opacity: ["field", "result", "change", "contact", "intro"].includes(ui.phase) ? 0 : 1, pointerEvents: ["field", "result", "change", "contact", "intro"].includes(ui.phase) ? "none" : undefined }}
+            style={{ opacity: ["field", "result", "change", "contact", "intro", "recap"].includes(ui.phase) ? 0 : 1, pointerEvents: ["field", "result", "change", "contact", "intro", "recap"].includes(ui.phase) ? "none" : undefined }}
           >
             {ui.userBat && (
               <>
@@ -754,14 +754,14 @@ function Play({
           </div>
 
           {/* 필살타법 (PC): 타자 반대쪽 아래 — 컷인이 나오는 쪽 */}
-          {!touch && ui.userBat && ui.spHero && ui.spChar && !["field", "result", "change", "intro"].includes(ui.phase) && (
+          {!touch && ui.userBat && ui.spHero && ui.spChar && !["field", "result", "change", "intro", "recap"].includes(ui.phase) && (
             <div className="absolute bottom-4 transition-opacity duration-200" style={{ ...(ui.lefty ? { left: 16 } : { right: 16 }), opacity: ui.cards ? 0 : 1, pointerEvents: ui.cards ? "none" : undefined }}>
               <SpecialBtn ui={ui} onPress={() => m?.toggleSpecial()} />
             </div>
           )}
 
           {/* 타자 이동 패드 (터치) — 투구 전에 끌어서 타자 · 컨택존 옮기기 */}
-          {touch && ui.userBat && !["field", "result", "change"].includes(ui.phase) && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
+          {touch && ui.userBat && !["field", "result", "change", "recap"].includes(ui.phase) && <MovePad active={ui.canMove} onMove={(x, y) => m?.setBatMove(x, y)} />}
 
           {/* 아래: 메뉴 · 빨리감기 (필드 화면에선 홈플레이트를 안 가리게 오른쪽 위로) */}
           {ui.fieldPlaying && (
