@@ -25,7 +25,7 @@ import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
-import { batterFrame, batterSheets, drawable, drawBatter, sheetImage, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, type SpriteLook } from "@/lib/baseball/batterSprite";
+import { batterFrame, batterSheets, drawable, drawBatter, sheetImage, KICK_HOLD_T, KICK_STEP_T, preloadBatter, strideProg, strideStartFor, type SpriteLook } from "@/lib/baseball/batterSprite";
 /** 빈 스윙 한 번 길이 (이 시간 지나면 다시 휘두를 수 있고, 하던 자세로 돌아감) */
 const FREE_SWING_T = 0.5;
 import { BATCOL } from "@/lib/baseball/look";
@@ -240,6 +240,10 @@ export class Match {
   /** 사용자 입력 */
   buntArmed = false;
   spArmed = false;
+  /** 이번 공에 필살타법을 맞혀서 썼는지 */
+  spSpent = false;
+  /** 타자 내딛기 시작 (레그킥 시계 · 공 놓을 때 정함) */
+  strideAt = Infinity;
   kindIdx = 0;
   target = { x: 0, y: ZONE.mid };
   gaugeT = 0;
@@ -454,7 +458,7 @@ export class Match {
   /** 스윙 버튼 때 스트라이드(디딤발 내딛기) 진행도 — 1 이면 배트만 돌림 */
   private swingSp = 1;
   private playBat(a: Anim) {
-    if (a === BAT_SWING) this.swingSp = this.batAnim === BAT_LOAD ? strideProg(this.batAnimT) : 0;
+    if (a === BAT_SWING) this.swingSp = this.batAnim === BAT_LOAD ? strideProg(this.batAnimT, this.strideAt) : 0;
     this.batFrom = { a: this.batAnim, t: this.batAnimT, k: 0 };
     this.batAnim = a;
     this.batAnimT = 0;
@@ -697,6 +701,7 @@ export class Match {
     // 타자는 내가 치든 CPU 가 치든 와인드업에 맞춰 레그킥
     if (this.swingStart < 0 && !this.buntArmed && !this.freeSwing) {
       this.playBat(BAT_LOAD);
+      this.strideAt = Infinity;
       // 실투로 0.5초 쉬면 레그킥 시계도 같이 늦춤 (안 그러면 타자만 먼저 다리 들고 내딛어 버림)
       if (this.mistakeNext) this.batAnimT = -MISTAKE_TELL;
     }
@@ -709,6 +714,8 @@ export class Match {
     const st = this.cfg.mode === "derby" ? 1 : stamina01(this.s);
     // 실투 (마구마구식 「!」): 가운데 느린 직구 — 치는 쪽엔 기회, 던지는 쪽엔 경고 (goWindup 에서 미리 정하고 띄움)
     this.pitch = makePitch(p, { kind, target: this.target, quality: this.quality, special, mistake: this.mistakeNext }, this.speedScale, this.rng, st);
+    // 타자 내딛기: 공 도착 직전에 착지 (레그킥 시계 기준)
+    if (this.batAnim === BAT_LOAD) this.strideAt = strideStartFor(this.batAnimT, this.pitch.dur);
     if (special) this.specialSound(special, "start");
     this.tf = 0;
     this.setPhase("flight");
@@ -761,6 +768,9 @@ export class Match {
     this.swingStart = this.tf;
     this.freeSwing = false;
     this.outcome = evaluate(this.s, p, this.decision, this.rng);
+    // 필살타법은 공을 앞으로 보냈을 때만 1회 소모 (헛스윙 · 파울이면 다음 공까지 유지)
+    this.spSpent = !!this.decision.special && this.outcome.sw?.kind === "bip";
+    if (this.spSpent && (this.cfg.mode !== "derby" || !!this.cfg.bond)) this.userSide().swingLeft--;
     this.computeTilt();
     if (!this.buntArmed) {
       this.playBat(BAT_SWING);
@@ -832,7 +842,6 @@ export class Match {
       const counted = this.cfg.mode !== "derby" || !!this.cfg.bond;
       if (counted && us.swingLeft <= 0) return;
       this.spArmed = true;
-      if (counted) us.swingLeft--;
       const c = charById(sw);
       this.showCutin(c.id, c.swing.name, c.swing.desc, "bat");
       this.afterCutin = "ready";
@@ -1515,8 +1524,9 @@ export class Match {
     this.contactShown = false;
     this.timingText = "";
     this.buntArmed = false;
-    // 필살타법은 휘둘렀을 때만 소모 (그냥 보낸 공이면 다음 공에 그대로)
-    if (this.cfg.mode !== "derby" && swung) this.spArmed = false;
+    // 필살타법은 맞혀서 앞으로 보냈을 때만 풀림 (그냥 보낸 공 · 헛스윙 · 파울이면 다음 공에 그대로)
+    if (this.cfg.mode !== "derby" && swung && this.spSpent) this.spArmed = false;
+    this.spSpent = false;
     this.useBallSp = false;
     this.batAnim = BAT_IDLE;
     this.batAnimT = 0;
@@ -1878,7 +1888,7 @@ export class Match {
       ctx.restore();
     }
     // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
-    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT, this.swingSp), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
+    if (!drawBatter(ctx, batterFrame(this.batAnim, this.batAnimT, this.swingSp, this.strideAt), this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
     if (ballNear && p) this.drawPitchBall(ctx, p, hand);
     // 몸에 맞은 공: 맞은 자리에서 튕겨 나가 떨어짐
     if (this.hbpBall) {
@@ -2630,7 +2640,7 @@ export class Match {
     const career = !!this.cfg.career;
     if (r === "ok") {
       out.push(career ? { t: `자금 +${Math.round(m.pt / 3)}만`, good: true } : { t: `+${m.pt} 코인`, good: true });
-      out.push({ t: this.userBat ? "필살타법 +1" : "마구 +1", good: true });
+      if (!this.userBat) out.push({ t: "마구 +1", good: true });
       if (career) out.push({ t: "감독 신뢰 ↑", good: true }, { t: "인기도 +2", good: true }, { t: "경기 평가 ↑", good: true });
       if (bond && career) out.push({ t: `${bond} 호감 +6`, good: true });
     } else if (r === "partial") {

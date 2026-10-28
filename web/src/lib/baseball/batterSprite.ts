@@ -158,6 +158,7 @@ export const STRIDE_AT = PITCH_RELEASE_T + 0.02;
 export const STRIDE_T = 0.22;
 /** 안 치고 보낸 뒤 든 다리 내리기 */
 const KICK_DOWN_T = 0.24;
+const RETURN_T = 0.16;
 /** 착지 전에 스윙하면 남은 내딛기를 이 시간에 몰아서 (예전 방식) */
 const STRIDE_RUSH = 0.05;
 const STRIDE = swingData.stride as [number, number][];
@@ -170,10 +171,13 @@ const strideCell = (p: number) => {
   return c;
 };
 /** 로드(레그킥) 시계 t 에서 스트라이드 진행도 0 ~ 1 */
-export function strideProg(_t: number) {
-  // 공이 날아오는 동안은 레그킥 최고점에서 버팀 → 스윙 버튼 때 내딛기부터 (사용자 요청: 착지 자세로 기다리면 저자세처럼 보임)
-  return 0;
+export function strideProg(t: number, at = Infinity) {
+  // 공이 날아오는 동안은 레그킥 최고점에서 버티다가 공이 거의 다 왔을 때(at) 내딛음 — 일찍 착지해서 기다리면 저자세처럼 보임
+  return ease((t - at) / STRIDE_T);
 }
+/** 내딛기 시작 시각 (로드 시계) — 공 도착 STRIDE_LAND 초 전에 착지가 끝나게 */
+export const STRIDE_LAND = 0.03;
+export const strideStartFor = (releaseT: number, dur: number) => Math.max(releaseT + 0.02, releaseT + dur - STRIDE_LAND - STRIDE_T);
 const kickCell = (t: number) => Math.min(KICK_TOP, Math.max(0, Math.round(ease((t - LIFT_AT) / LIFT_TOTAL) * KICK_TOP)));
 /**
  * 스윙 줄 — 레그킥 최고점에서 바로: 발 내림 → 배트 끌고 나옴 → 임팩트(SWING_HIT_T) → 뻗음 → 팔로스루.
@@ -191,7 +195,7 @@ const pick = (tbl: [string, number][], t: number) => IDX[(tbl.find(([, e]) => t 
 /**
  * 애니 + 시간 → 프레임. sp = 스윙 버튼 누를 때의 스트라이드 진행도 (1 = 착지 끝, 배트만 돌림)
  */
-export function batterFrame(a: Anim, t: number, sp = 1): number {
+export function batterFrame(a: Anim, t: number, sp = 1, strideAt = Infinity): number {
   if (a === BAT_SWING && stillImg()) {
     const HIT = SWING_HIT_T;
     // 남은 내딛기는 임팩트 시간의 60% 안에서 (STRIDE_RUSH 가 SWING_HIT_T 보다 길면 배트 돌 시간이 0 이 됨)
@@ -206,9 +210,13 @@ export function batterFrame(a: Anim, t: number, sp = 1): number {
   if (a === BAT_LOAD) {
     // 다리 들기 전엔 대기 동작 그대로 (와인드업 동안 멈춰 있지 않게)
     if (t < LIFT_AT) return IDX.stance;
-    // 최고점까지 들고 판정 날 때까지 그대로 버팀
-    if (t < KICK_STEP_T) return KICK_BASE + kickCell(t);
-    // 안 치고 보냄 → 든 다리를 거꾸로 천천히 내려 대기 자세로
+    // 최고점까지 들고 공이 거의 올 때까지 버팀 → 내딛어 착지 자세로 (공 안 던졌으면 그대로 최고점)
+    if (t < KICK_STEP_T) return t < strideAt ? KICK_BASE + kickCell(t) : SWING_BASE + strideCell(strideProg(t, strideAt));
+    // 안 치고 보냄 → 착지했으면 착지 → 대기 겹치기, 다리 든 채면 거꾸로 내림
+    if (strideAt < KICK_STEP_T) {
+      const q = (t - KICK_STEP_T) / RETURN_T;
+      return q >= 1 ? IDX.stance : RETURN_BASE + Math.round(q * 100);
+    }
     const q = (t - KICK_STEP_T) / KICK_DOWN_T;
     return q >= 1 ? IDX.stance : KICK_BASE + Math.round((1 - ease(q)) * KICK_TOP);
   }

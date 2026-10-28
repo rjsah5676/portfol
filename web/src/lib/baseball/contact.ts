@@ -99,6 +99,8 @@ export function locQuality(at: { x: number; y: number }, cz: { x: number; y: num
 /** 타구 속도 (m/s) = base + c^1.3 × (c + 파워/1000 × pow) + 구속 몫 + 정타 덤 pf */
 /** 덮어 친 땅볼 확률 (기본 + 일찍 휘두른 정도 + 낮은 공) × (1 − 정타 몫) · 그때 타구각 */
 export const ROLL = { base: 0.22, early: 0.35, low: 0.2, pf: 0.85, la: -2, sd: 6 };
+/** 필살타법 손잡이 (play.ts 의 수비 쪽 효과는 SP_FIELD) */
+export const SP_TUNE = { ivanC: 0.66, ivanEv0: 42, ivanEvC: 8, meiEv: 8, violetEv: 6 };
 export const EV = { base: 22, c: 16.3, pow: 4.2, pf: 4.7, laMid: 14, la0: 15, laPow: 7, laSd: 7, laCurve: 3, pfT0: 0.15, pfT1: 0.45 };
 
 /** 타이밍 창 (초) */
@@ -184,23 +186,25 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
   // 컨택존 정가운데일수록 세게 (존 안에서만, 최대 +2.5m/s)
   if (dn < 1) ev += 2.5 * (1 - dn * dn) * c;
 
+  // 필살타법 (scratchpad spsw.ts 로 맞춤 — 예전엔 이반 홈런 91% · 이그나 안타 93% · 건모 84% 로 「치면 홈런」, 바이올렛 · 메이는 30 ~ 40% 로 약했음)
+  //   목표: 안타 55 ~ 65%, 홈런은 힘 캐릭터(이반 · 릴리)만 30 ~ 40%
   switch (sp) {
     case "kai":
       la = clamp(la, 4, 16);
-      ev += 5;
+      ev += 4;
       break;
     case "igna":
-      ev += 3;
-      break;
-    case "soyoung":
-      la = lerp(la, 26, 0.6);
       ev += 2;
       break;
+    case "soyoung":
+      la = lerp(la, 24, 0.55);
+      ev += 1.5;
+      break;
     case "ivan":
-      if (c > 0.45) {
-        ev = Math.max(ev, 52);
-        la = clamp(lerp(la, 30, 0.7), 22, 38);
-        spray = clamp(spray, -38, 38);
+      if (c > SP_TUNE.ivanC) {
+        ev = Math.max(ev, SP_TUNE.ivanEv0 + SP_TUNE.ivanEvC * c);
+        la = clamp(lerp(la, 28, 0.6), 18, 38);
+        spray = clamp(spray, -40, 40);
       }
       break;
     case "mei": {
@@ -208,13 +212,13 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
       la = clamp(lerp(la, 13, 0.6), 5, 22);
       const gaps = [-24, -9, 9, 24];
       const g = gaps.reduce((a, b) => (Math.abs(b - spray) < Math.abs(a - spray) ? b : a));
-      spray = lerp(spray, g, 0.75) + rng.gauss() * 2;
-      ev += 3;
+      spray = lerp(spray, g, 0.8) + rng.gauss() * 2;
+      ev += SP_TUNE.meiEv;
       break;
     }
     case "violet":
       la = clamp(lerp(la, 15, 0.55), 6, 24);
-      ev += 3;
+      ev += SP_TUNE.violetEv;
       break;
     default:
       if (sp) ev += 2;

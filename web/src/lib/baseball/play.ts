@@ -40,6 +40,8 @@ export const POS_NAME = ["투수", "포수", "1루수", "2루수", "3루수", "�
  * 아래 달리기 · 송구 · 반응 · 다이빙 식은 이 값으로만 돌아감
  */
 const FIELD_DEF = 520;
+/** 필살타법 수비 쪽 효과 (예전: 릴리 중력 5.6 · 공기 0.0026, 건모 멈춤 1.5초, 제나 느려짐 2초, 카이 반응 +0.45, 이그나 화상 100%) */
+export const SP_FIELD = { lilyG: 7.4, lilyDrag: 0.0034, gunmoFreeze: 0.8, zenaSlow: 1.5, kaiReact: 0.3, ignaStunP: 0.5, ignaStun: 1.0 };
 /** 몸을 날려 잡은 공 중 「필살수비!」 연출을 보여 주는 몫 */
 const DIVE_SHOW = 0.28;
 /** 낮은 라이너(타구각 범위)에 내야수 · 투수 반응 늦음 (초) */
@@ -129,8 +131,8 @@ export function predictBall(b: BattedBall): { pts: BallPt[]; hr: boolean; foul: 
   let x = 0;
   let y = 0.8;
   let h = 0.9;
-  const g = b.special === "lily" ? 5.6 : 9.8;
-  const k = b.special === "lily" ? 0.0026 : 0.0042;
+  const g = b.special === "lily" ? SP_FIELD.lilyG : 9.8;
+  const k = b.special === "lily" ? SP_FIELD.lilyDrag : 0.0042;
   let air = true;
   let land = -1;
   let wallHit = false;
@@ -293,9 +295,9 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   }
 
   // 필살타법 효과
-  const freezeUntil = sp === "gunmo" ? 1.5 : 0;
-  const slowUntil = sp === "zena" ? 2.0 : 0;
-  const reactAdd = sp === "kai" ? 0.45 : 0;
+  const freezeUntil = sp === "gunmo" ? SP_FIELD.gunmoFreeze : 0;
+  const slowUntil = sp === "zena" ? SP_FIELD.zenaSlow : 0;
+  const reactAdd = sp === "kai" ? SP_FIELD.kaiReact : 0;
 
   const F: Fielder[] = HOME_POS.map(([x, y], i) => {
     const d = FIELD_DEF;
@@ -483,7 +485,8 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   let extraFrames = 0;
   let batMax = 0;
   let ended = false;
-  let stunDone = sp !== "igna";
+  // 업화: 처음 잡으려는 수비가 화상으로 놓침 — 매번은 아님
+  let stunDone = sp !== "igna" || rng() >= SP_FIELD.ignaStunP;
 
   /** 공이 베이스 b 에 닿는 예상 시각 */
   const ballEta = (b: number, now: number) => {
@@ -734,7 +737,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
         if (!stunDone) {
           // 업화 스윙: 처음 잡으려는 수비는 화상으로 놓침
           stunDone = true;
-          f.stunUntil = t + 1.3;
+          f.stunUntil = t + SP_FIELD.ignaStun;
           events.push({ t, kind: "stun", x: f.x, y: f.y, text: "앗 뜨거!" });
           const ex = [chaser];
           assignChaser(ballIdx + 1, t, ex);

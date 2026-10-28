@@ -52,7 +52,7 @@ export interface Mission {
   char?: CharId;
   kind: MissionKind;
   text: string;
-  /** 성공하면 마구 · 필살 +1 과 코인 */
+  /** 성공하면 마구 +1 과 코인 (필살타법은 안 채움) */
   pt: number;
   /** 투수 미션(무실점)은 이닝 끝까지 */
   untilInningEnd: boolean;
@@ -304,7 +304,7 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
         s.pt += m.pt;
         const us = s.sides[s.opts.userHome ? 1 : 0];
         us.ballLeft++;
-        us.swingLeft++;
+        // 필살타법은 경기당 무조건 1번 — 미션 성공해도 안 채워 줌
       }
     }
   }
