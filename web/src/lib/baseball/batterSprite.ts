@@ -156,7 +156,8 @@ const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
  */
 export const STRIDE_AT = PITCH_RELEASE_T + 0.02;
 export const STRIDE_T = 0.22;
-const RETURN_T = 0.16;
+/** 안 치고 보낸 뒤 든 다리 내리기 */
+const KICK_DOWN_T = 0.24;
 /** 착지 전에 스윙하면 남은 내딛기를 이 시간에 몰아서 (예전 방식) */
 const STRIDE_RUSH = 0.05;
 const STRIDE = swingData.stride as [number, number][];
@@ -169,9 +170,9 @@ const strideCell = (p: number) => {
   return c;
 };
 /** 로드(레그킥) 시계 t 에서 스트라이드 진행도 0 ~ 1 */
-export function strideProg(t: number) {
-  if (t >= KICK_STEP_T) return 1;
-  return ease((t - STRIDE_AT) / STRIDE_T);
+export function strideProg(_t: number) {
+  // 공이 날아오는 동안은 레그킥 최고점에서 버팀 → 스윙 버튼 때 내딛기부터 (사용자 요청: 착지 자세로 기다리면 저자세처럼 보임)
+  return 0;
 }
 const kickCell = (t: number) => Math.min(KICK_TOP, Math.max(0, Math.round(ease((t - LIFT_AT) / LIFT_TOTAL) * KICK_TOP)));
 /**
@@ -205,10 +206,11 @@ export function batterFrame(a: Anim, t: number, sp = 1): number {
   if (a === BAT_LOAD) {
     // 다리 들기 전엔 대기 동작 그대로 (와인드업 동안 멈춰 있지 않게)
     if (t < LIFT_AT) return IDX.stance;
-    if (t < STRIDE_AT) return KICK_BASE + kickCell(t);
-    if (t < KICK_STEP_T) return SWING_BASE + strideCell(strideProg(t));
-    const q = (t - KICK_STEP_T) / RETURN_T;
-    return q >= 1 ? IDX.stance : RETURN_BASE + Math.round(q * 100);
+    // 최고점까지 들고 판정 날 때까지 그대로 버팀
+    if (t < KICK_STEP_T) return KICK_BASE + kickCell(t);
+    // 안 치고 보냄 → 든 다리를 거꾸로 천천히 내려 대기 자세로
+    const q = (t - KICK_STEP_T) / KICK_DOWN_T;
+    return q >= 1 ? IDX.stance : KICK_BASE + Math.round((1 - ease(q)) * KICK_TOP);
   }
   if (a === BAT_BUNT) return IDX.bunt;
   // 대기: 방망이 까딱
