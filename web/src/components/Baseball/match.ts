@@ -1559,7 +1559,8 @@ export class Match {
       case "recap": {
         const r = this.recap;
         if (!r) break;
-        r.t += dt * (this.cfg.speed ?? 1);
+        // 실제 흐른 시간 × 배속 — 프레임 상한(1/20초) · 앞 타구의 슬로모션이 남아 있으면 느려지던 것
+        r.t += Math.min(dtRaw, 0.25) * (this.cfg.speed ?? 1);
         while (r.shown < r.lines.length && r.t >= r.step) {
           r.t -= r.step;
           this.revealRecap();
@@ -3185,9 +3186,9 @@ export class Match {
     };
   }
   private startRecap(lines: RecapLine[]) {
-    // 한 줄 0.24 ~ 0.8초 (×1 기준 — 배속으로 줄임) · 많으면 빨리. 다 해서 하이라이트(몇 이닝 건너뜀) 12초 · 직접(내 타석 사이 몇 타석) 5초 안팎
+    // 한 줄 0.4초 (×1 기준 — 배속으로 줄임). 줄 수에 따라 속도를 바꾸면 판마다 빠르기가 달라 배속이 안 먹는 것처럼 보였음
     // 건너뛴 타석이 없으면 (첫 타석이 1회 첫 타자) 양 팀 타순만 잠깐
-    const step = lines.length ? clamp((this.cfg.highlight ? 12 : 5) / lines.length, 0.24, 0.8) : 0;
+    const step = lines.length ? 0.4 : 0;
     this.recap = { lines: [...lines], shown: 0, t: step * 0.6, step, hold: !lines.length ? 2 : this.cfg.highlight ? 1.4 : 1 };
     this.setPhase("recap");
   }
@@ -3771,7 +3772,11 @@ export class Match {
     ctx.fill();
     ctx.fillStyle = fg;
     ctx.textAlign = "center";
-    ctx.fillText(text, x + w / 2, y + h / 2 + 4);
+    // 기준선을 늘 같게 (중계 화면처럼 middle 로 그리던 중이면 글씨가 아래로 처졌음)
+    const tb = ctx.textBaseline;
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
+    ctx.textBaseline = tb;
     ctx.textAlign = "left";
     return w;
   }
