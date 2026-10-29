@@ -578,8 +578,8 @@ export default function SettingsModal({
                       type="button"
                       className={chip(settings.hitSound === h.key)}
                       onClick={() => {
-                        set({ hitSound: h.key, hit: settings.hit || 0.3 });
-                        previewHit(h.key, settings.hit || 0.3);
+                        set({ hitSound: h.key, hit: settings.hit || 1 });
+                        previewHit(h.key, settings.hit || 1);
                       }}
                     >
                       {h.label}

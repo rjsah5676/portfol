@@ -239,7 +239,7 @@ export default function RhythmGame() {
   const [settings, setSettings] = useState<Settings>({
     speed: 3,
     sync: 0,
-    hit: 0.3,
+    hit: 1,
     music: 1,
     sfx: 0.7,
     hitSound: "punch",
@@ -557,7 +557,7 @@ export default function RhythmGame() {
         setSettings({
           speed: clamp(Number(s.speed) || 3, 1, 8),
           sync: clamp(Number(s.sync) || 0, -400, 400),
-          hit: typeof s.hit === "number" ? clamp(s.hit, 0, 1) : 0.3,
+          hit: typeof s.hit === "number" ? clamp(s.hit, 0, 1) : 1,
           music: typeof s.music === "number" ? clamp(s.music, 0, 1) : 1,
           sfx: typeof s.sfx === "number" ? clamp(s.sfx, 0, 1) : 0.7,
           hitSound: HIT_SOUNDS.some((h) => h.key === s.hitSound) ? s.hitSound : "punch",
