@@ -21,7 +21,7 @@ import {
 } from "@/lib/baseball/game";
 import { logPlay, logUi } from "@/lib/baseball/telemetry";
 import { BALL_R, PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
-import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
+import { predictBall, type FieldEvent, type FieldOut, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
 import { batterShift, commit, effectiveHit, evaluate, hitByPitch, type Outcome, type SwingDecision } from "@/lib/baseball/resolve";
 import { lookColors, lookSkin, uniColors } from "@/lib/baseball/look";
@@ -35,7 +35,8 @@ import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 const SIDE_CUT_DUR = 1.35;
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
-import { DH, DW, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
+import { DH, DW, PITCHER_FEET, PROJ3D, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
+import type { World3D } from "./three/world3d";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
 
 /** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
@@ -257,6 +258,10 @@ export class Match {
   spSpent = false;
   /** 타자 내딛기 시작 (레그킥 시계 · 공 놓을 때 정함) */
   strideAt = Infinity;
+  /** 3D 경기 화면 (불러온 뒤 BaseballApp 이 넣어 줌 — 없으면 2D 그림) · 이번 프레임에 3D 로 그렸는지 */
+  w3d: World3D | null = null;
+  private on3d = false;
+  private fieldOut: FieldOut | null = null;
   kindIdx = 0;
   target = { x: 0, y: ZONE.mid };
   gaugeT = 0;
@@ -1190,6 +1195,7 @@ export class Match {
     // 인플레이 · 수비가 쫓아간 파울 · 라인 바로 밖 큰 파울은 필드 화면으로 (파울은 끝나면 「파울」)
     if ((o.call === "bip" || (o.call === "foul" && this.cfg.mode !== "derby")) && o.field && o.field.frames.length) {
       const f = o.field;
+      this.fieldOut = f;
       this.frames = f.frames;
       this.events = f.events;
       this.evIdx = 0;
@@ -1816,9 +1822,51 @@ export class Match {
     }
   }
 
+  /**
+   * 3D 장면을 지금 상태에 맞춤 (update 뒤 · draw 전에 매 프레임). 타석 · 수비 화면이면 3D 로 그리고 true,
+   * 투수 시점(내가 던질 때)은 아직 2D 라 false. 존 · 공 · 팝업 투영도 3D 카메라로 바꿔 끼움
+   */
+  sync3d(dt: number): boolean {
+    const w = this.w3d;
+    const fieldView = this.phase === "field" || (this.phase === "result" && this.frames.length > 0 && this.lastWasField());
+    this.on3d = !!w && !this.pitcherView && (!fieldView || !!this.fieldOut);
+    PROJ3D.bat = PROJ3D.field = PROJ3D.unbat = null;
+    if (!w || !this.on3d) return false;
+    const fsd = this.s.sides[fieldSide(this.s)], bsd = this.s.sides[batSide(this.s)];
+    const colors = { field: fsd.team.color, bat: bsd.team.color };
+    if (fieldView) {
+      w.field({ out: this.fieldOut!, t: this.ft, colors, ballOnly: this.cfg.mode === "derby", night: this.night }, dt);
+      PROJ3D.field = w.projectField;
+      return true;
+    }
+    const lefty = this.shownBatter.bats === "L";
+    const a = this.batAnim;
+    const dy = this.cz.y - ZONE.mid;
+    const inward = lefty ? this.cz.x < 0 : this.cz.x > 0;
+    w.batting(
+      {
+        lefty,
+        pitLefty: this.pitcherNow.throws === "L",
+        bat: { anim: a === BAT_SWING ? "swing" : a === BAT_LOAD ? "load" : a === BAT_BUNT ? "bunt" : "idle", t: this.batAnimT, sp: this.swingSp, strideAt: this.strideAt },
+        walk: this.walkPending ? 0 : this.walkT < WALKIN_LEN ? this.walkT / WALKIN_LEN : null,
+        pit: { throwing: this.pitAnim === PIT_THROW, t: this.pitAnimT },
+        runners: [this.s.bases[0] !== null, this.s.bases[1] !== null, this.s.bases[2] !== null],
+        shift: this.userBat ? { x: this.cz.x * (inward ? 0.35 : 1), z: dy * (dy > 0 ? 0.25 : 1) } : { x: 0, z: 0 },
+        colors,
+        night: this.night,
+      },
+      dt,
+    );
+    PROJ3D.bat = w.project;
+    PROJ3D.unbat = w.unprojectPlate;
+    return true;
+  }
+
   draw(ctx: CanvasRenderingContext2D, q: number) {
     // 배경보다 먼저 1px 로 그려 가려짐
     this.warmUp(ctx);
+    // 3D 화면 위에 겹쳐 그림: 2D 판은 투명하게 비우고 시작
+    if (this.on3d) ctx.clearRect(0, 0, DW, DH);
     ctx.save();
     if (this.shake > 0) ctx.translate((this.rng() - 0.5) * this.shake * 30, (this.rng() - 0.5) * this.shake * 30);
     if (this.zoomT > 0) {
@@ -1864,11 +1912,14 @@ export class Match {
   }
 
   private drawBatting(ctx: CanvasRenderingContext2D, q: number) {
-    ctx.drawImage(battingBg(q, this.night), 0, 0, DW, DH);
+    const d3 = this.on3d && !!this.w3d;
+    // 3D: 타석 들어서기 연출 동안은 겹쳐 그릴 것 없음
+    if (d3 && (this.walkPending || this.walkT < WALKIN_LEN)) return;
+    if (!d3) ctx.drawImage(battingBg(q, this.night), 0, 0, DW, DH);
     const p = this.pitch;
     // 투수
     // 수비수 (내야 4 · 외야 3): 구장 그림 땅 위 실제 수비 위치 — 먼 쪽부터 그리고 투수는 그 앞
-    this.drawFielders(ctx);
+    if (!d3) this.drawFielders(ctx);
     // 투수판(높이 0.25m) 위 · 크기는 구장 그림 목업 기준 (키 ≈ 135px)
     const mp = PITCHER_FEET;
     const pitcherScale = 0.77;
@@ -1878,7 +1929,9 @@ export class Match {
     const pim = img(PITCHER_STILL.src);
     const tim = img(PITCHER_THROW.src);
     const throwSprite = tim.complete && tim.naturalWidth > 0;
-    if (this.pitAnim === PIT_THROW && throwSprite) {
+    if (d3) {
+      // 3D 투수
+    } else if (this.pitAnim === PIT_THROW && throwSprite) {
       const T = PITCHER_THROW;
       const c = (PIT_THROW_SEQ.find(([, e]) => this.pitAnimT < e) ?? PIT_THROW_SEQ[PIT_THROW_SEQ.length - 1])[0];
       const k = PIT_CANVAS_PX / T.cell;
@@ -1899,8 +1952,9 @@ export class Match {
     // 손 위치 (공 놓는 점)
     const relPs = pose(PITCHER_RIG, PIT_THROW, PIT_RIG_RELEASE_T);
     const [hx, hy] = boneTip(PITCHER_RIG, relPs, "handT", 1);
-    const hand =
-      throwSprite && PITCHER_THROW.hand
+    const hand = d3
+      ? this.w3d!.pitcherHand()
+      : throwSprite && PITCHER_THROW.hand
         ? { x: mp.x + (pFlip ? -1 : 1) * PITCHER_THROW.hand[0] * PIT_CANVAS_PX, y: mp.y + PITCHER_THROW.hand[1] * PIT_CANVAS_PX }
         : { x: mp.x + (pFlip ? -hx : hx) * pitcherScale, y: mp.y - 56 * pitcherScale + hy * pitcherScale };
     // 이반 기모으기 · 손에 든 공
@@ -2019,7 +2073,7 @@ export class Match {
     // 홈 근처(마지막 8%)부터는 타자 앞에 그림 — 타자 옆을 지나는 몸쪽 공이 그림상 몸 뒤로 숨어 「맞았는데 볼」처럼 보였음
     const ballNear = !!p && this.phase === "flight" && this.tf >= p.dur * 0.92;
     if (p && this.phase === "flight" && !ballNear) this.drawPitchBall(ctx, p, hand);
-    if (this.phase === "windup" && this.pitAnimT > 0.2 && !img(PITCHER_THROW.src).naturalWidth) {
+    if (!d3 && this.phase === "windup" && this.pitAnimT > 0.2 && !img(PITCHER_THROW.src).naturalWidth) {
       // 손에 든 공 (코드 리그일 때만 — 투구 줄 그림엔 공이 그려져 있음)
       const ps = pose(PITCHER_RIG, this.pitAnim, (this.pitAnimT * PIT_RIG_RELEASE_T) / PITCH_RELEASE_T);
       const [ax, ay] = boneTip(PITCHER_RIG, ps, "handT", 1);
@@ -2053,7 +2107,7 @@ export class Match {
     }
     const bps = pose(BATTER_RIG, anim, this.batAnimT, this.batFrom);
     // 그림자: 발바닥 바로 밑에 작고 옅게 (떠 보이지 않게)
-    {
+    if (!d3) {
       const fy = by + 58 * sc;
       const g = ctx.createRadialGradient(bx, fy, 0, bx, fy, 70);
       g.addColorStop(0, "rgba(0,0,0,0.28)");
@@ -2071,7 +2125,7 @@ export class Match {
     // 픽셀 타자 (그림 불러오기 전엔 코드 리그)
     // 걸어 들어오기 (미션 카드 동안은 출발 자리에서 기다림)
     const bFrame = this.walkPending ? walkinFrame(0) : this.walkT < WALKIN_LEN ? walkinFrame(this.walkT) : batterFrame(this.batAnim, this.batAnimT, this.swingSp, this.strideAt);
-    if (!drawBatter(ctx, bFrame, this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
+    if (!d3 && !drawBatter(ctx, bFrame, this.batLook, bx, by, sc, lefty, this.batAnim === BAT_SWING && !this.reduceMotion ? 1 : 0)) drawRig(ctx, BATTER_RIG, bps, this.batSkin, this.batColors, bx, by, sc, lefty);
     if (ballNear && p) this.drawPitchBall(ctx, p, hand);
     // 몸에 맞은 공: 맞은 자리에서 튕겨 나가 떨어짐
     if (this.hbpBall) {
@@ -2678,7 +2732,8 @@ export class Match {
   }
 
   private drawField(ctx: CanvasRenderingContext2D, q: number) {
-    ctx.drawImage(fieldBg(q, this.night), 0, 0, DW, DH);
+    const d3 = this.on3d && !!this.w3d;
+    if (!d3) ctx.drawImage(fieldBg(q, this.night), 0, 0, DW, DH);
     const fr = this.frameAt(this.ft);
     if (!fr) return;
     const fsd = this.s.sides[fieldSide(this.s)];
@@ -2690,6 +2745,7 @@ export class Match {
     if (deriv) {
       // 홈런더비: 수비 없이 공만
       const b = fproj(fr.bx, fr.by, fr.bh);
+      if (!d3) {
       const sh = fproj(fr.bx, fr.by);
       ctx.fillStyle = "rgba(0,0,0,0.35)";
       ctx.beginPath();
@@ -2708,6 +2764,7 @@ export class Match {
       ctx.beginPath();
       ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
       ctx.fill();
+      }
       // 골든 보드
       const gb = fproj(0, 128, 6);
       ctx.fillStyle = "#ffd23f";
@@ -2716,7 +2773,7 @@ export class Match {
       ctx.font = '800 10px "JetBrains Mono", monospace';
       ctx.textAlign = "center";
       ctx.fillText("GOLD", gb.x, gb.y + 2);
-    } else {
+    } else if (!d3) {
       drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, this.trail, sp, this.flightArc(this.ft));
     }
     if (this.hr) {
