@@ -595,7 +595,9 @@ export class Match {
     } else if (this.cfg.mode === "game") {
       if (cpuManage(s, fieldSide(s))) {
         const p = curPitcher(s);
-        this.setBanner("투수 교체", `${p.name}${p.special ? " — 마투수 등판!" : ""}`, p.special ? charById(p.special).color : "#7ad7ff", 1.4);
+        // 방금 띄운 「N회 상대 공격 (자동)」 배너가 있으면 덮지 말고 밑줄에 붙임
+        if (this.banner && this.banner.t === 0) this.banner.sub = `${this.banner.sub ? `${this.banner.sub} · ` : ""}투수 교체: ${p.name}${p.special ? " (마투수!)" : ""}`;
+        else this.setBanner("투수 교체", `${p.name}${p.special ? " — 마투수 등판!" : ""}`, p.special ? charById(p.special).color : "#7ad7ff", 1.4);
         if (p.special) sfx.cutin();
       }
     }
@@ -631,6 +633,8 @@ export class Match {
     if (this.userBat) this.showBoosts("all");
     const m = this.cfg.mode !== "derby" ? s.mission ?? maybeMission(s, this.rng) : null;
     if (m) {
+      // 앞 타석 미션 결과판이 아직 떠 있으면 새 카드 밑에 깔려 겹쳐 보였음 → 치움
+      this.missionFx = null;
       s.mission = m;
       sfx.mission();
       this.setPhase("mission");
@@ -1127,7 +1131,7 @@ export class Match {
   }
 
   private skipMission() {
-    if (this.phase === "mission" && this.pt > 0.35) this.toPitch();
+    if (this.phase === "mission" && this.pt > 0.6) this.toPitch();
   }
 
   // ───────────── 판정 · 결과 ─────────────
@@ -1565,7 +1569,8 @@ export class Match {
         break;
       }
       case "mission":
-        if (this.pt > 2.6) this.toPitch();
+        // 미션 카드: 읽을 시간 — 누르면 시작 (안 누르면 7초 뒤 자동). 예전 2.6초 자동은 보상 · 패널티를 다 못 읽었음
+        if (this.pt > 7) this.toPitch();
         break;
       case "ready":
         // 사용자 타자: 잠깐 숨 고르고 투구
@@ -3160,7 +3165,8 @@ export class Match {
     ctx.fillStyle = "rgba(255,255,255,0.45)";
     ctx.font = "12px \"Nanum Gothic\", sans-serif";
     ctx.textAlign = "right";
-    ctx.fillText("누르면 바로 시작 · Space", x + W - 18, y + H - 12);
+    ctx.globalAlpha *= 0.6 + 0.4 * Math.sin(this.time * 5);
+    ctx.fillText("탭 · Space 로 시작", x + W - 18, y + H - 12);
     ctx.textAlign = "left";
     ctx.restore();
   }

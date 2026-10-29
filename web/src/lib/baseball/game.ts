@@ -341,7 +341,8 @@ function endPA(s: GameState, r: Omit<PAResult, "halfOver" | "gameOver">, outs: n
     if (walk || done !== null) {
       s.mission = null;
       // 홈런 · 장타 미션은 빡세니까 안타라도 치면 살짝 보상 (코인 1/4 · 실패 패널티 없음)
-      const partial = walk || (!done && (m.kind === "hr" || m.kind === "xbh") && (r.kind === "HIT" || r.kind === "HR"));
+      // 타점 미션도 안타는 쳤으면 아쉬움 (실패 72% — 칠 만큼 쳤는데 실패로 신뢰가 깎이던 것)
+      const partial = walk || (!done && (m.kind === "hr" || m.kind === "xbh" || m.kind === "rbi") && (r.kind === "HIT" || r.kind === "HR"));
       const partPt = Math.round(m.pt / 4);
       const partTxt = walk ? (/몸에/.test(r.text) ? "아쉽지만 몸에 맞는 공!" : "아쉽지만 볼넷!") : "아쉽지만 안타!";
       res.mission = { ok: !!done, partial, char: m.char, text: done ? `미션 성공! +${m.pt} 코인` : partial ? `${partTxt} +${partPt} 코인` : "미션 실패…" };

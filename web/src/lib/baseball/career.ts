@@ -2015,7 +2015,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     // 미션 실패 패널티: 감독 신뢰 ↓ (안타라도 친 빡센 미션은 봐줌) · 인연 미션은 그 사람 호감 ↑↓
     const fails = (g.results ?? []).filter((r) => !r.ok && !r.partial).length;
     if (fails) {
-      addTrust(c, -1.5 * fails);
+      addTrust(c, -0.8 * fails);
       lines.push(`미션 실패 ${fails}개… 감독 신뢰가 조금 떨어졌다.`);
     }
     for (const r of g.results ?? []) {
