@@ -742,8 +742,13 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     F[recv].ty = y;
     F[recv].role = "cover";
     F[recv].coverBase = base;
-    const t0 = Math.max(now, f.readyAt) + (fi >= 6 ? 0.2 : 0);
-    thrown = { from: [f.x, f.y, 1.8], to: recv, t0, t1: t0 + own / f.arm, base, receiver: recv };
+    let t0 = Math.max(now, f.readyAt) + (fi >= 6 ? 0.2 : 0);
+    // 받을 사람이 베이스에 닿기 전에 빈 베이스로 던지지 않게: 공이 도착하는 때 = 받는 사람이 닿는 때로 늦춤 (잡히는 시각은 그대로)
+    const rf = F[recv];
+    const flight = own / f.arm;
+    const recvAt = now + runTime(rf, Math.max(0, dist(rf.x, rf.y, x, y) - 1.2), now);
+    t0 = Math.max(t0, recvAt - flight);
+    thrown = { from: [f.x, f.y, 1.8], to: recv, t0, t1: t0 + flight, base, receiver: recv };
     ballHolder = -1;
     events.push({ t: t0, kind: "throw", x: f.x, y: f.y, text: "" });
   };

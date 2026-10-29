@@ -283,6 +283,9 @@ export class Match {
   /** 타석에 걸어 들어오는 시간 (WALKIN_LEN 넘으면 끝 · Infinity = 안 함) */
   walkT = Infinity;
   private walkPending = false;
+  private get walking() {
+    return this.walkPending || this.walkT < WALKIN_LEN;
+  }
   /** 다 걸어 들어온 시각 (this.time · 없으면 -1) */
   private walkDoneAt = -1;
   pitchInfo = "";
@@ -440,7 +443,7 @@ export class Match {
       phase: this.phase,
       mode: this.cfg.mode,
       userBat: ub,
-      canSwing: ub && this.swingStart < 0 && (this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "call" || this.phase === "result"),
+      canSwing: ub && this.swingStart < 0 && !this.walking && (this.phase === "ready" || this.phase === "windup" || this.phase === "flight" || this.phase === "call" || this.phase === "result"),
       canMove: ub && this.czMovable,
       bunt: this.buntArmed,
       spArmed: ub ? this.spArmed : this.useBallSp,
@@ -843,6 +846,8 @@ export class Match {
     if (this.paused) return;
     if (this.phase === "mission") return this.skipMission();
     if (this.phase === "recap") return this.skipRecap();
+    // 타석으로 걸어 들어오는 동안엔 못 휘두름
+    if (this.walking) return;
     // 공이 나온 뒤 한 번 휘둘렀으면 그 공은 끝
     if (!this.userBat || this.swingStart >= 0) return;
     const b = this.batterNow;
@@ -2278,28 +2283,22 @@ export class Match {
     if (this.phase === "gauge" || this.phase === "aim") this.drawGauge(ctx, lefty ? z.x1 + 26 : z.x0 - 62);
   }
 
-  /** 미트에 꽂힌 자리 표시: 공 크기 원 + 스트라이크는 노랑 · 볼은 하늘색 테 · 꽂힐 때 살짝 커졌다 줄어듦 */
+  /** 미트에 꽂힌 자리 표시: 공 크기 테두리 원 (스트라이크 노랑 · 볼 하늘색) · 꽂힐 때 살짝 커졌다 줄어듦 · 1초 보이고 사라짐 */
   private drawPitchMark(ctx: CanvasRenderingContext2D, pj: (x: number, y: number, z: number) => { x: number; y: number; s: number }) {
     const m = this.pitchMark;
     if (!m || !(this.phase === "call" || this.phase === "result" || this.phase === "ready" || this.phase === "aim" || this.phase === "gauge")) return;
     const c = pj(m.x, m.y, 0);
     const R = Math.max(5, BALLR_PX(c.s));
     const age = this.time - m.at;
+    const a = 1 - smooth(1.0, 1.3, age);
+    if (a <= 0) return;
     const pop = 1 + 0.6 * (1 - smooth(0, 0.18, age));
-    const col = m.strike ? "#ffd23f" : "#7ad7ff";
     ctx.save();
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = m.strike ? "#ffd23f" : "#7ad7ff";
+    ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.55)";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, R * pop + 3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = col;
-    ctx.lineWidth = 2.5;
+    ctx.arc(c.x, c.y, R * pop, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }
@@ -2670,7 +2669,8 @@ export class Match {
       this.arcCache = { frames: F, idx, landI: peak > 2 ? landI : -1 };
     }
     const c = this.arcCache;
-    if (c.landI < 0) return undefined;
+    // 떨어지거나 잡힌 뒤(송구 중)엔 낙하 표시 없음
+    if (c.landI < 0 || t > F[c.landI].t) return undefined;
     const pts = c.idx.filter((i) => F[i].t > t).map((i) => ({ x: F[i].bx, y: F[i].by, h: F[i].bh }));
     return { pts, land: { x: F[c.landI].bx, y: F[c.landI].by } };
   }
