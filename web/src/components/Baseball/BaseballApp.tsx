@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
 import { DH, DW, useStage } from "./Stage";
-import { FIELD_VIEW, PROJ3D, setFieldView } from "./view";
-import type { World3D } from "./three/world3d";
+import { FIELD_VIEW, setFieldView } from "./view";
 import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match";
 import { isMuted, setMuted } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font, useSpaceConfirm } from "./ui";
@@ -499,9 +498,6 @@ function Play({
 }) {
   const { k, fs, canFs, toggleFs } = useStage();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const w3dRef = useRef<World3D | null>(null);
-  const resRef = useRef(1);
   const matchRef = useRef<Match | null>(null);
   const [m, setM] = useState<Match | null>(null);
   const [ui, setUi] = useState<UiState | null>(null);
@@ -557,14 +553,6 @@ function Play({
         }
       }
       m.update(dt);
-      // 3D 장면 (타석 · 수비 화면) — 2D 판은 그 위에 투명하게 겹침
-      const on3d = m.sync3d(Math.min(dt, 0.1));
-      const w = w3dRef.current;
-      if (w) {
-        const vis = on3d ? "visible" : "hidden";
-        if (w.canvas.style.visibility !== vis) w.canvas.style.visibility = vis;
-        if (on3d) w.render();
-      }
       const cv = canvasRef.current;
       if (cv) {
         const ctx = cv.getContext("2d");
@@ -578,26 +566,7 @@ function Play({
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
-    // 3D 화면 붙이기 (불러오는 동안은 2D 그대로)
-    let gone = false;
-    getWorld3D().then((w) => {
-      if (gone || !w || !wrapRef.current) return;
-      w.canvas.className = "absolute inset-0 block";
-      Object.assign(w.canvas.style, { width: `${DW}px`, height: `${DH}px`, pointerEvents: "none", visibility: "hidden" });
-      w.setSize(DW, DH, resRef.current);
-      wrapRef.current.prepend(w.canvas);
-      w3dRef.current = w;
-      m.w3d = w;
-    });
-    return () => {
-      gone = true;
-      cancelAnimationFrame(raf);
-      const w = w3dRef.current;
-      if (w) w.canvas.remove();
-      w3dRef.current = null;
-      m.w3d = null;
-      PROJ3D.bat = PROJ3D.field = PROJ3D.unbat = null;
-    };
+    return () => cancelAnimationFrame(raf);
   }, [cfg]);
 
   // 캔버스 해상도 = 화면 픽셀
@@ -608,8 +577,6 @@ function Play({
     const q = Math.min(qCap, Math.max(1, k * (window.devicePixelRatio || 1)));
     cv.width = Math.round(DW * q);
     cv.height = Math.round(DH * q);
-    resRef.current = q;
-    w3dRef.current?.setSize(DW, DH, q);
   }, [k, qCap]);
 
   const toDesign = useCallback((e: { clientX: number; clientY: number }) => {
@@ -698,7 +665,7 @@ function Play({
   };
 
   return (
-    <div ref={wrapRef} className="relative h-full w-full">
+    <div className="relative h-full w-full">
       <canvas
         ref={canvasRef}
         width={DW}
@@ -1217,15 +1184,4 @@ function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: n
 }
 
 /** 이번 접속 동안의 캔버스 해상도 상한 (Play 가 다시 열려도 유지) */
-/** 3D 경기 화면: 한 번만 불러와 경기마다 같이 씀 (모델 · 텍스처 ≈ 7MB, three.js 는 경기 들어갈 때 따로 받음) */
-let world3d: Promise<World3D | null> | null = null;
-const getWorld3D = () =>
-  (world3d ??= import("./three/world3d")
-    .then((m) => m.createWorld3D())
-    .catch((e) => {
-      console.warn("3D 화면 못 불러옴 — 2D 로", e);
-      world3d = null;
-      return null;
-    }));
-
 let sessionQCap = 2;

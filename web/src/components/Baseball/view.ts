@@ -34,15 +34,7 @@ export const BC = { F: 2015.3, Dc: 6.635, camH: 1.0555, Y0: 229 };
 export const PITCHER_FEET = { x: 512, y: 339.15 };
 const SB_HOME = BC.F / BC.Dc;
 const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
-/**
- * 3D 경기 화면이 켜져 있으면 타석 · 수비 투영을 3D 카메라로 바꿔 끼움 (존 · 공 · 팝업이 3D 장면 위에 정확히 겹치게).
- * bat: (x 옆, y 높이, z 홈에서 투수 쪽) · field: (x, y 경기장, h 높이) · unbat: 홈플레이트 면 화면 → (x, 높이)
- */
-type PJ = (x: number, y: number, z: number) => { x: number; y: number; s: number };
-export const PROJ3D: { bat: PJ | null; field: PJ | null; unbat: ((sx: number, sy: number) => { x: number; y: number }) | null } = { bat: null, field: null, unbat: null };
-
 export function proj(x: number, y: number, z: number) {
-  if (PROJ3D.bat) return PROJ3D.bat(x, y, z);
   const s = CAM.F / (z + CAM.Dc);
   const gx = CAM.cx + x * s;
   const gy = CAM.Y0 - (y - CAM.camH) * s;
@@ -62,7 +54,6 @@ export const MOUND = proj(0, 0, 18.4);
  * proj 는 0.43m 아래에서 땅 카메라와 섞어서(타구 · 땅볼용) 낮게 빠지는 투구가 그 구간에서 휘는 방향이 뒤집히고 꺾였음.
  */
 export function ballProj(x: number, y: number, z: number) {
-  if (PROJ3D.bat) return PROJ3D.bat(x, y, z);
   const sb = BC.F / (Math.max(z, -3) + BC.Dc);
   const sv = Math.min(sb, SB_HOME);
   return { x: CAM.cx + x * sb, y: BC.Y0 - (y - BC.camH) * sv, s: sb };
@@ -83,13 +74,11 @@ const SHC = (() => {
   return { camH, Y0: g0 - camH * s0 };
 })();
 export function shadowProj(x: number, z: number) {
-  if (PROJ3D.bat) return PROJ3D.bat(x, 0, z);
   const s = BC.F / (Math.max(z, -3) + BC.Dc);
   return { x: CAM.cx + x * s, y: SHC.Y0 + SHC.camH * Math.min(s, SB_HOME), s };
 }
 /** 홈플레이트 면(z 0)의 화면 좌표 → 월드 (x, 높이) — 공 · 존 카메라 기준 (코스 정하기) */
 export function unprojPlate(sx: number, sy: number) {
-  if (PROJ3D.unbat) return PROJ3D.unbat(sx, sy);
   const sb = BC.F / BC.Dc;
   return { x: (sx - CAM.cx) / sb, y: BC.camH - (sy - BC.Y0) / sb };
 }
@@ -119,7 +108,6 @@ export function setFieldView(persp: boolean) {
 }
 /** 필드 좌표(x 좌우 · y 홈에서 앞 · h 높이, m) → 화면. s = 그 자리 크기 배율 (탑뷰는 1) */
 export function fproj(x: number, y: number, h = 0) {
-  if (PROJ3D.field) return PROJ3D.field(x, y, h);
   if (!FIELD_VIEW.persp) return { x: FV.ox + x * FV.S, y: FV.oy - y * FV.S * FV.k - h * FV.S * FV.kh, s: 1 };
   const ry = y + PC.cy;
   const rz = h * PC.hk - PC.ch;

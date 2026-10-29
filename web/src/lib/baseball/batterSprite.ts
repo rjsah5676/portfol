@@ -144,9 +144,9 @@ export const KICK_STEP_T = 5;
 /** 레그킥 최고점에서 버티는 구간 안의 아무 시각 (빈 스윙 끝나고 공이 날아오는 중이면 여기로 돌아옴) */
 export const KICK_HOLD_T = 2;
 /** 들기 시작 = 공 놓기(PITCH_RELEASE_T) 0.45초 전 (투수 디딤발 내딛을 즈음) */
-export const LIFT_AT = PITCH_RELEASE_T - 0.45;
+const LIFT_AT = PITCH_RELEASE_T - 0.45;
 /** 대기 → 최고점 (공 놓기 직전에 닿음) */
-export const LIFT_TOTAL = 0.43;
+const LIFT_TOTAL = 0.43;
 const KICK_TOP = loadData.n - 1;
 /** 처음 · 끝 느리게 (0..1 → 0..1) */
 const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
@@ -158,8 +158,8 @@ const ease = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 export const STRIDE_AT = PITCH_RELEASE_T + 0.02;
 export const STRIDE_T = 0.22;
 /** 안 치고 보낸 뒤 든 다리 내리기 */
-export const KICK_DOWN_T = 0.24;
-export const RETURN_T = 0.16;
+const KICK_DOWN_T = 0.24;
+const RETURN_T = 0.16;
 /** 착지 전에 스윙하면 남은 내딛기를 이 시간에 몰아서 (예전 방식) */
 const STRIDE_RUSH = 0.05;
 const STRIDE = swingData.stride as [number, number][];
