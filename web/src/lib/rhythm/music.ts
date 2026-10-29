@@ -502,28 +502,31 @@ const FREEDOMDIVE = audioSong(
 );
 
 /*
- * 채보 다시 뽑기 (npm run rhythm-chart -- <id> ...) — --levels는 직접 쳐 보고 정한 레벨 (쉬움부터)
- *   fullcombo   --bpm-label 180 --boss '{"loud":0.48,"full":0.78}' --levels 3,6,9,13,16   (NIGHTMARE는 15)
- *   jilju       --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16   (나이트메어 자동 15)
- *   natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 2,4,7,12   (나이트메어 자동 15)
- *   newdim      --boss '{"loud":0.55,"full":0.85,"burstEvery":8}' --tweak '{"expert":{"fill":0.4}}' --levels 3,6,10,13,15
- *   monarch     --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,6,11,13,16   (NIGHTMARE는 15)
- *   velocity    --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,11,14,17,20   (NIGHTMARE는 15)
- *   anima       --boss '{}' --explus '{}' --levels 3,6,9,13,17,20   (NIGHTMARE는 16)
- *   aragami     --boss '{}' --explus '{}' --levels 3,6,9,13,17,21   (NIGHTMARE 16 · ULTIMA 19 — 185 BPM 넘는 곡은 16분을 덜 엶)
- *   crimsoncadenza --double --boss '{}' --explus '{}'   (자동 레벨 3,6,10,12,14,17 — 절반 템포 100으로 잡혀서 --double)
- *   hwimori     --boss '{}' --explus '{}'   (자동 레벨 3,6,9,12,16,20)
- *   luckyseven  --double --boss '{}' --explus '{}' --levels 3,6,9,13,16,19   (NIGHTMARE는 15 — 절반 템포 88로 잡혀서 --double)
- *   pixelfighting --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE는 15)
- *   freedomdive --boss '{}' --explus '{}' --levels 3,5,9,12,14,17 --keep nightmare   (NIGHTMARE는 10/8~10/14 의 Lv15 채보 고정 — 직접 쳐 보고 제일 재밌던 것)   (도입부만 빽빽하던 것 고르게 한 뒤 레벨 그대로 둠 — 222 BPM이라 16분 스트림이 한계)   (222 BPM 8분·16분이 꽉 차도 별점 12·15 — 그 위는 24분·잭이 필요)
- *   midnight    --single --bpm-label 111 --levels 3,5,8,11   (2배 템포 222로 잡혀서 --single · 잔잔한 곡이라 나이트메어 없음)
- *   starlight   --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE는 13)
- *   sugarcloud  --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
- *   overload    --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19   (ULTIMA는 18 — 하프타임이라 280으로 잡혀서 --single)
- *   etude       --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20   (NIGHTMARE는 16)
- *   highlight   --bpm-label 192 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (EX 12 · NIGHTMARE 15 · ULTIMA 16)
- *   tomeinauso  --bpm-label 149 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 15)
- *   picopico    --bpm-label 188 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (EX 13 · NIGHTMARE 14 · ULTIMA 15 — 위로는 타격이 모자라 더 안 오름)
+ * 채보 다시 뽑기 (npm run rhythm-chart -- <id> ...) — --levels 는 목표 레벨(쉬움부터). 괄호는 실제로 나온 레벨 (목표보다 낮으면 곡의 타격이 모자란 것)
+ * v2.15: 21곡 × 난이도마다 목표 레벨을 3~18 에 고르게 나누고, 같은 곡에서 레벨 후보마다 osu·Quaver 참조(레벨±1 · BPM±9%) 와의
+ *   지표 거리(60개 지표 백분위)를 재서 가장 가까운 레벨을 골랐음 (research/rhythm/tools/cmds2.txt 와 같게 유지)
+ *   — 목표를 못 미치는 레벨을 높게 두면 튜너가 문턱을 끝까지 내려 8분·16분 벽이 되므로, 닿는 레벨을 목표로 둠
+ *   fullcombo      --bpm-label 180 --boss '{"loud":0.48,"full":0.78}' --levels 3,5,9,13,14
+ *   jilju          --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16   (NM 15)
+ *   natsukasumi    --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 3,4,7,11,14
+ *   newdim         --boss '{"loud":0.55,"full":0.85,"burstEvery":8}' --tweak '{"expert":{"fill":0.4}}' --levels 3,5,8,12,15   (NM 14)
+ *   monarch        --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,5,8,12,15   (NM 14)
+ *   velocity       --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,10,14,17,17   (NM 16)
+ *   anima          --boss '{}' --explus '{}' --levels 3,6,9,13,17,20   (NM 16 · ULT 18) (ULTIMA 18 은 목표 20 으로 뽑아야 나옴 (21곡 중 유일한 18))
+ *   aragami        --boss '{}' --explus '{}' --levels 3,6,11,14,16,18   (HA 10 · ULT 17)
+ *   crimsoncadenza --double --boss '{}' --explus '{}' --levels 3,6,9,12,16,17   (NM 15) (절반 템포 100으로 잡혀서 --double · 200 BPM 이라 매우 어려움은 16분(75ms)이 안 들어가 12 가 천장)
+ *   hwimori        --boss '{}' --explus '{}' --levels 3,6,10,13,16,18   (NM 15 · ULT 17)
+ *   luckyseven     --double --boss '{}' --explus '{}' --levels 3,6,9,11,15,17   (NM 14 · ULT 16) (절반 템포 88로 잡혀서 --double)
+ *   pixelfighting  --boss '{}' --explus '{}' --levels 3,6,8,13,15,16
+ *   freedomdive    --boss '{}' --explus '{}' --levels 3,5,9,13,15,17 --keep nightmare   (NM 15) (NIGHTMARE는 10/8~10/14 의 Lv15 채보 고정 — 직접 쳐 보고 제일 재밌던 것)
+ *   midnight       --single --bpm-label 111 --levels 3,4,7,11   (2배 템포 222로 잡혀서 --single · 잔잔한 곡이라 나이트메어 없음)
+ *   starlight      --boss '{}' --explus '{}' --levels 3,4,7,10,13,16   (ULT 14)
+ *   sugarcloud     --boss '{}' --explus '{}' --levels 3,5,7,12,15,16   (NM 14 · ULT 15)
+ *   overload       --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,5,8,11,13,15   (ULT 14) (하프타임이라 280으로 잡혀서 --single)
+ *   etude          --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,16,17   (NM 15 · ULT 16)
+ *   highlight      --bpm-label 192 --boss '{}' --explus '{}' --levels 3,6,8,12,15,18   (ULT 16)
+ *   tomeinauso     --bpm-label 149 --boss '{}' --explus '{}' --levels 3,5,7,11,15,17   (NM 14 · ULT 15)
+ *   picopico       --bpm-label 188 --boss '{}' --explus '{}' --levels 3,6,9,13,16,16   (NM 14) (나이트메어 14 · ULTIMA 16 이 천장 — 그 위는 타격이 모자람)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로

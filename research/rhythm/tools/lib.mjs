@@ -17,29 +17,29 @@ export async function loadLib() {
   const load = (n) => import(pathToFileURL(path.join(tmp, `${n}.mjs`)).href);
   return { analyze: await load("analyze"), auto: await load("autochart"), stars: await load("stars"), tmp };
 }
-// 내장곡 채보 명령 (music.ts 주석과 같게)
+// 내장곡 채보 명령 (music.ts 주석 · cmds2.txt 와 같게)
 export const BUILTIN = {
-  fullcombo: { boss: { loud: 0.48, full: 0.78 }, levels: [3, 6, 9, 13, 16] },
+  fullcombo: { boss: { loud: 0.48, full: 0.78 }, levels: [3, 5, 9, 13, 14] },
   jilju: { boss: {}, tweak: { hard: { fill: 0.3 }, expert: { fill: 0.15 } }, levels: [3, 5, 8, 12, 16] },
-  natsukasumi: { boss: {}, tweak: { hard: { fill: 0.9 }, expert: { fill: 1.3 } }, levels: [2, 4, 7, 12] },
-  newdim: { boss: { loud: 0.55, full: 0.85, burstEvery: 8 }, tweak: { expert: { fill: 0.4 } }, levels: [3, 6, 10, 13, 15] },
-  monarch: { boss: { burstEvery: 2 }, tweak: { hard: { fill: 0.35 }, expert: { fill: 0.3 }, nightmare: { fill: 0.4 } }, levels: [3, 6, 11, 13, 16] },
-  velocity: { boss: { loud: 0.45, full: 0.72, burstEvery: 4, burstSub: 6 }, explus: {}, levels: [3, 6, 11, 14, 17, 20] },
+  natsukasumi: { boss: {}, tweak: { hard: { fill: 0.9 }, expert: { fill: 1.3 } }, levels: [3, 4, 7, 11, 14] },
+  newdim: { boss: { loud: 0.55, full: 0.85, burstEvery: 8 }, tweak: { expert: { fill: 0.4 } }, levels: [3, 5, 8, 12, 15] },
+  monarch: { boss: { burstEvery: 2 }, tweak: { hard: { fill: 0.35 }, expert: { fill: 0.3 }, nightmare: { fill: 0.4 } }, levels: [3, 5, 8, 12, 15] },
+  velocity: { boss: { loud: 0.45, full: 0.72, burstEvery: 4, burstSub: 6 }, explus: {}, levels: [3, 6, 10, 14, 17, 17] },
   anima: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 17, 20] },
-  aragami: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 17, 21] },
-  crimsoncadenza: { double: true, boss: {}, explus: {} },
-  hwimori: { boss: {}, explus: {} },
-  luckyseven: { double: true, boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 19] },
-  pixelfighting: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
-  freedomdive: { boss: {}, explus: {}, levels: [3, 5, 9, 12, 14, 17] },
-  midnight: { single: true, levels: [3, 5, 8, 11] },
-  starlight: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
-  sugarcloud: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 18] },
-  overload: { single: true, boss: {}, explus: {}, levels: [3, 6, 10, 13, 16, 19] },
-  etude: { boss: {}, explus: {}, levels: [3, 6, 10, 13, 17, 20] },
-  highlight: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
-  tomeinauso: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
-  picopico: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
+  aragami: { boss: {}, explus: {}, levels: [3, 6, 11, 14, 16, 18] },
+  crimsoncadenza: { double: true, boss: {}, explus: {}, levels: [3, 6, 9, 12, 16, 17] },
+  hwimori: { boss: {}, explus: {}, levels: [3, 6, 10, 13, 16, 18] },
+  luckyseven: { double: true, boss: {}, explus: {}, levels: [3, 6, 9, 11, 15, 17] },
+  pixelfighting: { boss: {}, explus: {}, levels: [3, 6, 8, 13, 15, 16] },
+  freedomdive: { boss: {}, explus: {}, levels: [3, 5, 9, 13, 15, 17], keep: ["nightmare"] },
+  midnight: { single: true, levels: [3, 4, 7, 11] },
+  starlight: { boss: {}, explus: {}, levels: [3, 4, 7, 10, 13, 16] },
+  sugarcloud: { boss: {}, explus: {}, levels: [3, 5, 7, 12, 15, 16] },
+  overload: { single: true, boss: {}, explus: {}, levels: [3, 5, 8, 11, 13, 15] },
+  etude: { boss: {}, explus: {}, levels: [3, 6, 10, 13, 16, 17] },
+  highlight: { boss: {}, explus: {}, levels: [3, 6, 8, 12, 15, 18] },
+  tomeinauso: { boss: {}, explus: {}, levels: [3, 5, 7, 11, 15, 17] },
+  picopico: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 16] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];
