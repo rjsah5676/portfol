@@ -44,6 +44,10 @@ function normalize(c: Career): Career {
   c.table ??= TEAM_DEFS.map(() => [0, 0] as [number, number]);
   // 없어진 특수능력 (수비 세트 「골든 글러브」 등) 은 지움
   c.skills = (c.skills ?? []).filter((id) => id in SKILLS);
+  // 고르기 · 축복 레벨 · 계승에 남은 없어진 id 도 (남아 있으면 그리다 죽음 — 새로고침해도 계속)
+  if (c.pick) c.pick.options = c.pick.options.filter((id) => id in SKILLS);
+  for (const k of Object.keys(c.blv)) if (!(k in SKILLS)) delete (c.blv as Record<string, unknown>)[k];
+  if (c.legacy?.skill && !(c.legacy.skill in SKILLS)) c.legacy.skill = undefined;
   // 육성 모드 코치는 뺌
   c.gp = [];
   // 육성 난이도는 중급 하나로 통일
@@ -60,7 +64,10 @@ export function saveCareer(c: Career | null) {
 export function loadHof(): HofEntry[] {
   try {
     const h = JSON.parse(mig(localStorage.getItem(HOF)) ?? "[]");
-    return Array.isArray(h) ? h : [];
+    if (!Array.isArray(h)) return [];
+    // 없어진 특수능력 id 는 지움 (계승 고를 때 죽음)
+    for (const e of h as HofEntry[]) e.skills = (e.skills ?? []).filter((id) => id in SKILLS);
+    return h;
   } catch {
     return [];
   }
@@ -178,7 +185,8 @@ export function autoGame(c: Career, note?: string): GameReport {
   const sum = applyGame(c, gin);
   logGame(c, gin, sum, "auto", g.pas);
   const s = g.s;
-  const r: GameReport = { sum, pas: g.pas, score: `${s.opts.away.short} ${s.score[0]} : ${s.score[1]} ${s.opts.home.short}`, auto: true, note };
+  // 자동 경기는 타석이 다 자동 (리포트에 「직접」 배지가 붙던 것)
+  const r: GameReport = { sum, pas: g.pas.map((p) => ({ ...p, auto: true })), score: `${s.opts.away.short} ${s.score[0]} : ${s.score[1]} ${s.opts.home.short}`, auto: true, note };
   saveCareer(c);
   return r;
 }

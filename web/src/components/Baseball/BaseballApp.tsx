@@ -902,6 +902,12 @@ function Play({
               className="py-2 text-sm"
               color="#ff7a7a"
               onClick={() => {
+                if (cfg.career && !cfg.bond && m) {
+                  // 친 건 그대로 · 남은 경기만 자동
+                  m.autoRest();
+                  onCareerDone(m);
+                  return;
+                }
                 if (m) onAbandon?.(m);
                 onExit();
               }}

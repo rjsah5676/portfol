@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Diff } from "@/lib/baseball/ai";
 import {
-  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER, GP_BOOSTS,
+  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
   CAREER_DIFF, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
   awardRace, costOf, fmtAvg, gameNo, myRank, postName, standings, MOOD, moodName, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
@@ -65,8 +65,19 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     let cur = loadCareer();
     let rep = takeReport();
     if (cur?.inGame) {
-      rep = autoGame(cur, "경기 중에 나가서 나머지는 자동으로 진행됐어요");
-      cur = loadCareer();
+      // 경기 차례가 아닌데 「경기 중」이 남아 있으면 (저장 꼬임) 끄기만 — 예전엔 여기서 던져서 육성 화면이 영영 안 열렸음
+      if (stepOf(cur) !== "game") {
+        cur.inGame = false;
+        saveCareer(cur);
+      } else {
+        try {
+          rep = autoGame(cur, "경기 중에 나가서 나머지는 자동으로 진행됐어요");
+        } catch {
+          cur.inGame = false;
+          saveCareer(cur);
+        }
+        cur = loadCareer();
+      }
     }
     if (cur?.phase === "retired") addHof(cur);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장값 불러오기
@@ -989,7 +1000,7 @@ function SideStatus({ c }: { c: Career }) {
           ))}
         </div>
       </div>
-      <Gauge label="감독 신뢰" value={slotName(slot)} pct={c.trust} color="#7ad7ff" />
+      <Gauge label="감독 신뢰" value={`${Math.round(c.trust)} · ${slotName(slot)} 타순`} pct={c.trust} color="#7ad7ff" />
       <Gauge label="인기도" value={Math.round(c.fame).toLocaleString()} pct={Math.min(100, (c.fame / 3000) * 100)} color="#ff7ae0" />
       {st && (
         <div className="rounded-xl border border-[#FF8A3D]/40 bg-black/30 px-2.5 py-1.5 text-[12px]">
@@ -1620,21 +1631,7 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
               </span>
             )}
           </div>
-          {STAT_KEYS.map((k) => {
-            const v = Math.round(c.stats[k]);
-            const dv = d.stats[k] ?? 0;
-            return (
-              <div key={k} className="flex items-center gap-2 text-[12.5px]">
-                <span className="w-[42px] text-white/65">{STAT_NAME[k]}</span>
-                <div className="relative h-[9px] flex-1 overflow-hidden rounded-full bg-white/10">
-                  <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${((v - dv) / 999) * 100}%`, background: STAT_COLOR[k] }} />
-                  {dv > 0 && <div className="absolute inset-y-0 rounded-full bg-white" style={{ left: `${((v - dv) / 999) * 100}%`, width: `${Math.max(0.6, (dv / 999) * 100)}%` }} />}
-                </div>
-                <span className="w-[30px] text-right font-mono">{v}</span>
-                <span className="w-[34px] font-mono text-[#7dff9a]">{dv > 0 ? `+${dv}` : ""}</span>
-              </div>
-            );
-          })}
+          {/* (능력치 막대는 뺌 — 경기로는 능력치가 안 올라서 늘 +0 이었음) */}
           <div className="mt-1 flex flex-wrap gap-1.5 text-[11.5px] font-bold">
             {<span className="rounded-md bg-[#ffd23f22] px-2 py-0.5 text-[#ffd23f]">⚡ 행동력 +{r.sum.act ?? ACTIVE_PER_GAME}</span>}
             {d.stamina !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5" style={{ color: d.stamina > 0 ? "#7dff9a" : "#ffb37a" }}>체력 {d.stamina > 0 ? "+" : ""}{d.stamina}</span>}
@@ -1921,7 +1918,6 @@ function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
         인연:{" "}
         {c.deck.map((id) => `${charById(id).name} ${c.bonds[id] ?? 0}/${BOND_MAX} · 호감 ${c.aff[id] ?? 0}`).join(" · ")}
       </div>
-      {c.gp.length > 0 && <div className="mt-1 text-left text-[12px] text-[#7ad7ff]/80">코치진: {c.gp.map((g) => `${GP_BOOSTS[g]?.name ?? g} C`).join(" · ")}</div>}
       <Btn space className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
         닫기
       </Btn>
@@ -2027,7 +2023,7 @@ function Hof({ list, onBack }: { list: HofEntry[]; onBack: () => void }) {
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-[#11152a] text-[11px] text-white/50">
             <tr>
-              {["#", "등급", "종합", "이름", "타입", "별명", "타격", "파워", "주루", "통산", ""].map((h, i) => (
+              {["#", "등급", "종합", "이름", "타입", "별명", "타격", "파워", "주루", "통산"].map((h, i) => (
                 <th key={i} className="px-2 py-2 text-left font-normal">
                   {h}
                 </th>
@@ -2055,13 +2051,12 @@ function Hof({ list, onBack }: { list: HofEntry[]; onBack: () => void }) {
                   <td className="px-2 font-mono text-white/65">
                     {e.seasons ?? "-"}년 · {fmtAvg(e.avg)} · {e.hr}HR
                   </td>
-                  <td className="px-2 text-[11px] text-[#ffd23f]/70">{e.gp ? "GP" : ""}</td>
                 </tr>
               );
             })}
             {!list.length && (
               <tr>
-                <td colSpan={11} className="py-10 text-center text-white/45">
+                <td colSpan={10} className="py-10 text-center text-white/45">
                   아직 은퇴한 선수가 없어요. 선수를 끝까지 키우면 여기에 올라가요.
                 </td>
               </tr>

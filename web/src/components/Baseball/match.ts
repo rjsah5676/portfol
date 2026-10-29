@@ -1040,6 +1040,14 @@ export class Match {
     this.pushUi();
   }
   /** 육성: 다음 타석부터 진행 방식 (같은 걸 다시 누르면 취소) */
+  /** 육성: 경기 도중 나가기 — 지금까지 친 건 그대로 두고 남은 경기만 자동으로 끝냄 (예전엔 경기를 처음부터 다시 돌려 친 기록이 사라졌음) */
+  autoRest() {
+    if (!this.cfg.career || this.s.over) return;
+    this.recap = null;
+    this.pendingLines = [];
+    this.careerAdvance(true);
+  }
+
   setAfterMode(m: "direct" | "highlight" | "auto") {
     if (!this.cfg.career) return;
     const cur = this.cfg.highlight ? "highlight" : "direct";
@@ -1482,7 +1490,8 @@ export class Match {
 
     switch (this.phase) {
       case "intro":
-        if (this.pt > 1.6) this.beginPA();
+        // 육성은 인트로 없이 바로 경기 요약(중계 화면) → 그다음 내 타자가 걸어 들어옴
+        if (this.pt > (this.cfg.career && !this.cfg.bond ? 0 : 1.6)) this.beginPA();
         break;
       case "recap": {
         const r = this.recap;
@@ -3103,10 +3112,10 @@ export class Match {
     };
   }
   private startRecap(lines: RecapLine[]) {
-    // 한 줄 0.12 ~ 0.45초 — 많으면 빨리. 다 해서 하이라이트(몇 이닝 건너뜀) 6초 · 직접(내 타석 사이 몇 타석) 2.5초 안팎
+    // 한 줄 0.36 ~ 1.2초 (×1 기준 — 배속으로 줄임) · 많으면 빨리. 다 해서 하이라이트(몇 이닝 건너뜀) 18초 · 직접(내 타석 사이 몇 타석) 7.5초 안팎
     // 건너뛴 타석이 없으면 (첫 타석이 1회 첫 타자) 양 팀 타순만 잠깐
-    const step = lines.length ? clamp((this.cfg.highlight ? 6 : 2.5) / lines.length, 0.12, 0.45) : 0;
-    this.recap = { lines: [...lines], shown: 0, t: step * 0.6, step, hold: !lines.length ? 1.8 : this.cfg.highlight ? 1.1 : 0.7 };
+    const step = lines.length ? clamp((this.cfg.highlight ? 18 : 7.5) / lines.length, 0.36, 1.2) : 0;
+    this.recap = { lines: [...lines], shown: 0, t: step * 0.6, step, hold: !lines.length ? 2 : this.cfg.highlight ? 1.4 : 1 };
     this.setPhase("recap");
   }
   /** 요약 한 줄 드러내기 (타순표의 오늘 기록에도 붙음) */
