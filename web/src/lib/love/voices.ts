@@ -7,6 +7,7 @@ import type { CharKey } from "./types";
 import { GEN_LINES } from "./voices-gen";
 import { EMO_LINES } from "./voices-emo";
 import { V2_LINES } from "./voices-v2";
+import { V4_LINES, V2_KEEP } from "./voices-v4";
 
 export interface VoiceLine {
   id: string;
@@ -69,6 +70,7 @@ export const VOICE_ALL: VoiceLine[] = [...VOICE_LINES, ...GEN_LINES.map((g) => (
 /** 검수 화면용: 지금 쓰는 감정 소리 먼저, 그다음 대사 음성 전부 */
 export const VOICE_REVIEW: VoiceLine[] = [
   ...EMO_LINES.map((e) => ({ ...e, gen: true })),
+  ...V4_LINES.map((e) => ({ ...e, gen: true })),
   ...V2_LINES.map((e) => ({ ...e, gen: true })),
   ...VOICE_ALL,
 ];
@@ -77,8 +79,8 @@ export const VOICE_REVIEW: VoiceLine[] = [
 export const voiceFile = (v: { id: string; gen?: boolean; file?: string }, take: "a" | "b" = VOICE_TAKE[v.id] ?? "a") =>
   v.file ?? (v.gen ? `${v.id}${take === "b" ? "b" : ""}` : `${v.id}${take}`);
 
-/** 대사 텍스트 → 음성 파일. v4: 감정 소리만 재생 (옛 2차 대사 음성 V2 는 검수 화면에서만 들을 수 있음) */
-const PLAYED: VoiceLine[] = [...EMO_LINES];
+/** 대사 텍스트 → 음성 파일. v4: 일반 장면은 감정 소리만, 핵심 CG 장면은 대사 음성(V4 · 남긴 V2)이 감정 소리보다 먼저 */
+const PLAYED: VoiceLine[] = [...EMO_LINES, ...V2_LINES.filter((v) => V2_KEEP.has(v.id)), ...V4_LINES];
 export const VOICE_BY_TEXT: Record<string, string> = Object.fromEntries(
   PLAYED.map((v) => [v.text, `/love/voice/${v.file ?? v.id}.mp3`])
 );
