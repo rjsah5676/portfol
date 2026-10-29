@@ -62,7 +62,8 @@ export default function BaseballApp() {
   }, [uid, auth.loading]);
   return (
     <div className={`relative h-full w-full overflow-hidden bg-[#0b0e1c] text-white ${font.body}`} style={{ width: DW, height: DH }}>
-      {ready && !conflict ? (
+      {/* 충돌 창은 위에 띄우기만 (예전엔 경기 · 장면 중에 뜨면 화면이 통째로 내려가 진행이 날아감) */}
+      {ready ? (
         <BaseballMain key={gen} />
       ) : (
         <MenuBg>
@@ -72,7 +73,7 @@ export default function BaseballApp() {
       {conflict && (
         <Modal w={620}>
           <div className={`${font.title} text-[24px]`}>어느 저장으로 할까요?</div>
-          <p className="mt-1 text-[13px] text-white/60">이 기기와 계정(서버)에 서로 다른 진행이 있어요. 고른 쪽으로 맞추고, 다른 쪽은 지워져요.</p>
+          <p className="mt-1 text-[13px] text-white/60">이 기기와 계정에 서로 다른 진행이 있어요. 고른 쪽으로 맞추고, 다른 쪽은 지워져요.</p>
           <div className="mt-4 grid grid-cols-2 gap-3 text-left">
             {(
               [
@@ -288,7 +289,7 @@ function BaseballMain() {
                 </Btn>
                 <Btn className={`${font.title} w-[330px] py-3.5 text-[28px]`} color="#7dff9a" onClick={() => setScreen(club ? "online" : "pick")}>
                   온라인 대전
-                  <span className="block font-['Nanum_Gothic'] text-[12px] font-normal opacity-80">내 구단으로 다른 구단과 한판 (알파)</span>
+                  <span className="block font-['Nanum_Gothic'] text-[12px] font-normal opacity-80">내 구단으로 다른 구단과 한판 · 알파</span>
                 </Btn>
               </div>
               <div className="flex gap-3">
@@ -309,7 +310,7 @@ function BaseballMain() {
               {(save.games > 0 || save.pt > 0 || save.derbyBest > 0 || !!club) && (
                 <div className="font-mono text-[13px] text-white/50">
                   코인 {save.pt.toLocaleString()} · {save.games}경기 {save.wins}승 · 더비 최고 {save.derbyBest.toLocaleString()}m
-                  {club && ` · 대전 ${club.record.w}승 ${club.record.l}패 (${club.record.rating}점)`}
+                  {club && ` · 대전 ${club.record.w}승 ${club.record.l}패 · ${club.record.rating}점`}
                 </div>
               )}
             </div>
@@ -341,7 +342,7 @@ function BaseballMain() {
                   ))}
                 </Row>
                 <Row label="직접 할 것">
-                  {([[undefined, "공격 · 수비 둘 다"], ["bat", "공격만 (타격)"], ["pit", "수비만 (투구)"]] as const).map(([v, label]) => (
+                  {([[undefined, "공격 · 수비 둘 다"], ["bat", "공격만 · 타격"], ["pit", "수비만 · 투구"]] as const).map(([v, label]) => (
                     <Btn key={label} active={only === v} className="px-4 py-1.5 text-sm" onClick={() => setOnly(v)}>
                       {label}
                     </Btn>
@@ -349,10 +350,10 @@ function BaseballMain() {
                 </Row>
                 <Row label="홈 / 원정">
                   <Btn active={!home} className="px-4 py-1.5 text-sm" onClick={() => setHome(false)}>
-                    원정 (먼저 공격)
+                    원정 · 먼저 공격
                   </Btn>
                   <Btn active={home} className="px-4 py-1.5 text-sm" onClick={() => setHome(true)}>
-                    홈 (먼저 수비)
+                    홈 · 먼저 수비
                   </Btn>
                 </Row>
               </div>
@@ -394,11 +395,11 @@ function BaseballMain() {
                 </Btn>
               </div>
               <p className="text-[13px] leading-relaxed text-white/70">
-                홈런이 아니면 전부 아웃 (스트라이크를 그냥 보내도 아웃) · 아웃 10개까지 비거리 합계.
+                홈런이 아니면 전부 아웃 · 스트라이크를 그냥 보내도 아웃 · 아웃 10개까지 비거리 합계.
                 <br />
                 가운데 담장 너머 <b className="text-[#ffd23f]">GOLD 보드</b>를 넘기면 +300m.
               </p>
-              <Row label="봇 난이도(공 속도)">
+              <Row label="봇 난이도">
                 {([0, 1, 2] as Diff[]).map((d) => (
                   <Btn key={d} active={diff === d} className="px-4 py-1.5 text-sm" onClick={() => setDiff(d)}>
                     {DIFF_NAME[d]}
@@ -428,12 +429,12 @@ function BaseballMain() {
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#ffd23f]`}>타격</div>
                   <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> · 마우스 클릭 (휴대폰은 <b>스윙 버튼</b>).</p>
-                  <p>빠르면 당겨 치고(우타 → 왼쪽), 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
+                  <p>빠르면 당겨 치고, 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
                   <p>
-                    <Key>방향키</Key> · <Key>WASD</Key> (휴대폰은 <b>이동 패드</b>)로 <b className="text-[#ffbe5a]">주황 상자(컨택존)</b>를 옮겨요 — 공이 날아오는 동안에도. <b className="text-[#6ab8ff]">파란 원</b>이 지금 공이 존 어디쯤인지 보여 줘요. 원을 따라가 상자 안에 넣고 치면 정타.
+                    <Key>방향키</Key> · <Key>WASD</Key> · 폰은 <b>이동 패드</b>로 <b className="text-[#ffbe5a]">주황 상자</b>를 옮겨요 — 공이 날아오는 동안에도. <b className="text-[#6ab8ff]">파란 원</b>이 지금 공이 존 어디쯤인지 보여 줘요. 원을 따라가 상자 안에 넣고 치면 정타.
                   </p>
-                  <p>존 밖 공(볼)은 휘두르면 빗맞아요 — 참으면 볼넷.</p>
-                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 — 공이 날아올 때 스윙 대신 누르면 그 자리에서 특별한 스윙 (인연에서 배운 선수만, 경기당 1번 · 마스터하면 2번 · 앞으로 보내야 씀)</p>
+                  <p>존 밖 공은 휘두르면 빗맞아요 — 참으면 볼넷.</p>
+                  <p><Key>B</Key> 번트 자세 · <Key>K</Key> 필살타법 — 공이 날아올 때 스윙 대신 누르면 그 자리에서 특별한 스윙 — 인연에서 배운 선수만 · 경기당 1번, 마스터하면 2번 · 앞으로 보내야 씀</p>
                 </div>
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#7ad7ff]`}>투구</div>
@@ -444,7 +445,7 @@ function BaseballMain() {
                 </div>
                 <div className="col-span-2 rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#FF8A3D]`}>그 밖에</div>
-                  <p>수비 · 주루는 자동 (물리로 판정 — 타구 속도 · 각도 · 수비 위치 · 주자 발). 필드 화면은 터치하면 빨리감기.</p>
+                  <p>수비 · 주루는 자동 — 타구 속도 · 각도 · 수비 위치 · 주자 발로 판정. 필드 화면은 터치하면 빨리감기.</p>
                   <p>돌발미션: 감독 · 주장 · 선배가 갑자기 미션을 줘요. 성공하면 보상.</p>
                   <p>인연 대결의 마구는 궤적이 정해져 있어요 — 컷인에 나오는 힌트대로 치면 칠 수 있어요.</p>
                 </div>
@@ -503,8 +504,9 @@ function Play({
   const [bullpen, setBullpen] = useState(false);
   const [muted, setMute] = useState(isMuted());
   // 캔버스 해상도 상한 (느린 기기면 자동으로 낮춤)
-  const [qCap, setQCap] = useState(2);
-  const qCapRef = useRef(2);
+  // 느린 기기에서 낮춘 해상도 상한은 다음 경기에도 이어서 (예전엔 경기마다 2배로 돌아가 초반 몇 초씩 버벅임)
+  const [qCap, setQCap] = useState(() => sessionQCap);
+  const qCapRef = useRef(sessionQCap);
   // 터치 화면에서만 스윙 · 번트 버튼 · 이동 패드 (PC 는 단축키: Space · B · 방향키)
   const [touch, setTouch] = useState(false);
   useEffect(() => {
@@ -546,6 +548,7 @@ function Play({
           slowFor = 0;
           ema = 16;
           setQCap(qCapRef.current);
+          sessionQCap = qCapRef.current;
         }
       }
       m.update(dt);
@@ -774,7 +777,7 @@ function Play({
           {/* (경기 요약 화면에선 점수표를 가리지 않게 오른쪽 아래로) */}
           <div className={`absolute flex gap-1.5 ${ui.phase === "recap" ? "right-4 bottom-[6px]" : "top-[14px] left-1/2 -translate-x-1/2"}`}>
             <Btn
-              className="px-3 py-1 font-mono text-[13px]"
+              className={`${touch ? "px-4 py-2 text-[16px]" : "px-3 py-1 text-[13px]"} font-mono`}
               color="#7dff9a"
               onClick={() => {
                 const i = SPEEDS.indexOf(ui.speed as (typeof SPEEDS)[number]);
@@ -786,15 +789,15 @@ function Play({
               배속 ×{ui.speed}
             </Btn>
             {ui.career && (
-              <Btn className="px-3 py-1.5 text-[13px]" color={ui.career.next ? "#ffd23f" : "#8b93b8"} active={!!ui.career.next} onClick={() => pause(true)}>
+              <Btn className={touch ? "px-4 py-2 text-[16px]" : "px-3 py-1.5 text-[13px]"} color={ui.career.next ? "#ffd23f" : "#8b93b8"} active={!!ui.career.next} onClick={() => pause(true)}>
                 {ui.career.next ? `다음 타석부터 ${ui.career.next === "auto" ? "자동" : ui.career.next === "highlight" ? "하이라이트" : "직접"}` : ui.career.mode === "highlight" ? "하이라이트 중" : "직접 출전 중"}
               </Btn>
             )}
-            <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={() => pause(true)}>
+            <Btn className={touch ? "px-4 py-2 text-[16px]" : "px-3 py-1 text-[13px]"} color="#8b93b8" onClick={() => pause(true)}>
               ❚❚ 메뉴
             </Btn>
             {canFs && (
-              <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={toggleFs}>
+              <Btn className={touch ? "px-4 py-2 text-[16px]" : "px-3 py-1 text-[13px]"} color="#8b93b8" onClick={toggleFs}>
                 {fs ? "창 모드" : "⛶"}
               </Btn>
             )}
@@ -891,7 +894,7 @@ function Play({
                   onExit();
                 }}
               >
-                ↩ 경기 시작 취소 (아직 첫 공 전 · 육성 화면으로)
+                ↩ 경기 시작 취소 — 육성 화면으로
               </Btn>
             )}
             <Btn
@@ -908,7 +911,7 @@ function Play({
                 onExit();
               }}
             >
-              {cfg.career ? "나가기 (남은 경기는 자동 진행으로 반영)" : cfg.bond ? "나가기 (다음에 다시 도전)" : online ? "나가기 (던진 공이 있으면 패배로 기록)" : "메뉴로 나가기 (기록 안 남음)"}
+              {cfg.career ? "나가기 — 남은 경기는 자동" : cfg.bond ? "나가기 — 다음에 다시 도전" : online ? "나가기 — 던진 공이 있으면 패배" : "메뉴로 나가기"}
             </Btn>
           </div>
         </Modal>
@@ -948,7 +951,7 @@ function Play({
           {cfg.career || cfg.bond ? (
             <div className="mt-4 flex justify-center">
               <Btn space className={`${font.title} px-10 py-3 text-xl`} onClick={() => m && onCareerDone(m)}>
-                육성 화면으로 (결과 반영)
+                육성 화면으로
               </Btn>
             </div>
           ) : (
@@ -1173,3 +1176,6 @@ function MovePad({ active, onMove }: { active: boolean; onMove: (x: number, y: n
     </div>
   );
 }
+
+/** 이번 접속 동안의 캔버스 해상도 상한 (Play 가 다시 열려도 유지) */
+let sessionQCap = 2;

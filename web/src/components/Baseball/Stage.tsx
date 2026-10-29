@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import GameLoader from "@/components/GameLoader";
 import { baseballTasks } from "./loadTasks";
 import { unlockAudio } from "./sfx";
+import { installErrorLog } from "@/lib/baseball/telemetry";
 
 /*
  * 야구 무대 — 1024 × 576 디자인을 화면에 맞춰 통째로 키우고 줄임 (PC = 폰, 배치가 늘 같음).
@@ -52,6 +53,7 @@ export default function Stage({ children }: { children: ReactNode }) {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
     setCanFs(canFullscreen());
+    installErrorLog();
     const on = () => setScr({ w: window.innerWidth, h: window.innerHeight, touch: matchMedia("(pointer: coarse)").matches });
     on();
     window.addEventListener("resize", on);
@@ -137,7 +139,7 @@ export default function Stage({ children }: { children: ReactNode }) {
           >
             <span className="shrink-0 rounded-md bg-[#FF8A3D] px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">⛶</span>
             <b className="shrink-0 font-bold whitespace-nowrap text-white">전체화면 플레이 권장</b>
-            <span className="min-w-0 truncate text-white/55">— 누르면 전체화면 (게임 안 오른쪽 아래 버튼으로도)</span>
+            <span className="min-w-0 truncate text-white/55">— 누르면 전체화면</span>
           </button>
         )}
         <div

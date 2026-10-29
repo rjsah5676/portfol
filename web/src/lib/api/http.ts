@@ -15,6 +15,8 @@ interface Options {
   next?: { revalidate?: number; tags?: string[] };
   /** 이 시간(ms) 안에 응답이 없으면 포기 */
   timeoutMs?: number;
+  /** 탭을 닫거나 숨길 때도 끝까지 보냄 (본문 64KB 까지) */
+  keepalive?: boolean;
   /** 더 보낼 헤더 (사람 확인 토큰 등) */
   headers?: Record<string, string>;
 }
@@ -30,7 +32,7 @@ async function bearer(): Promise<Record<string, string>> {
 /** 백엔드 REST 호출. 2xx가 아니면 ApiError (서버에 못 닿으면 code = "NETWORK") */
 export async function api<T = void>(
   path: string,
-  { method = "GET", body, blob, auth = false, next, timeoutMs, headers: extra }: Options = {}
+  { method = "GET", body, blob, auth = false, next, timeoutMs, headers: extra, keepalive }: Options = {}
 ): Promise<T> {
   const headers: Record<string, string> = { ...(auth ? await bearer() : {}), ...extra };
   if (blob) headers["Content-Type"] = blob.type;
@@ -43,6 +45,7 @@ export async function api<T = void>(
       body: blob ?? (body === undefined ? undefined : JSON.stringify(body)),
       ...(next ? { next } : {}),
       ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
+      ...(keepalive ? { keepalive } : {}),
     });
   } catch (e) {
     throw new ApiError("NETWORK", `서버에 연결할 수 없습니다. (${API_URL || "같은 주소"})`, 0, e);

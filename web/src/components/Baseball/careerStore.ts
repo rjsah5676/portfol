@@ -167,7 +167,8 @@ export function careerSnap(c: Career) {
 function logGame(c: Career, g: GameIn, sum: GameSummary, mode: "direct" | "auto", pas: MyPA[]) {
   logPlay("game", {
     ...careerSnap(c),
-    mode,
+    // 하이라이트는 직접 경기 안에 자동 타석이 섞인 것
+    mode: mode === "direct" && pas.some((p) => p.auto) ? "highlight" : mode,
     line: g.line,
     win: g.win,
     grade: sum.grade ?? null,

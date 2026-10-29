@@ -63,7 +63,7 @@ export default function Online({
       <ClubHeader club={club} coin={coin} title="온라인 대전" onBack={onBack} />
       <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg border border-[#7ad7ff]/40 bg-[#7ad7ff]/[0.08] px-3 py-1.5 text-[12px] text-white/80">
         <span className="rounded bg-[#7ad7ff] px-1.5 text-[10.5px] font-bold text-[#111]">알파</span>
-        실시간 매칭 준비 중 — 지금은 다른 구단 기록과 대결 (상대 구단은 봇이 운영해요)
+        실시간 매칭 준비 중 — 지금은 다른 구단 기록과 대결 · 상대 구단은 봇이 운영해요
       </div>
 
       <div className="flex min-h-0 flex-1 gap-3 px-3 pt-2 pb-3">
@@ -103,7 +103,7 @@ export default function Online({
             )}
           </div>
           <Btn className="py-1.5 text-[13px]" color="#8b93b8" onClick={onManage}>
-            타선 · 투수진 바꾸기 (구단 관리)
+            타선 · 투수진 바꾸기
           </Btn>
         </div>
 

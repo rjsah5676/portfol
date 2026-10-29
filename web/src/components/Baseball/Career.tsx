@@ -9,7 +9,7 @@ import type { Diff } from "@/lib/baseball/ai";
 import {
   ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
-  CAREER_DIFF, ROOKIE, careerGameStats, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
+  CAREER_DIFF, ROOKIE, SET_NEED, careerGameStats, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
   awardRace, costOf, fmtAvg, gameNo, myRank, postName, standings, MOOD, moodName, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type FieldPos, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
@@ -28,9 +28,11 @@ import { BATCOL } from "@/lib/baseball/look";
 import {
   SPEEDS, addHof, affStart, autoGame, bondLevel, careerSnap, loadBondXp, loadCareer, loadHof, loadMode, loadSpeed, saveCareer, saveMode, saveSpeed, setupOf, takeBackToHub, takeBattle, takeReport, type GameReport, type PlayMode,
 } from "./careerStore";
-import { logPlay } from "@/lib/baseball/telemetry";
+import { logPlay, logUi } from "@/lib/baseball/telemetry";
 import type { MatchCfg } from "./match";
 import { sfx } from "./sfx";
+import { useStage } from "./Stage";
+import { prefetchBondArt } from "./loadTasks";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 
 type View = "home" | "create" | "hub" | "hof";
@@ -42,7 +44,7 @@ const MODE_NAME: Record<PlayMode, string> = { direct: "직접 출전", highlight
 const MODE_DESC: Record<PlayMode, string> = {
   direct: "내 타석 전부 직접 · 경기당 2분쯤",
   highlight: "찬스 · 돌발미션 · 7회부터 접전 타석만 직접 · 경기당 1분 안쪽",
-  auto: "결과만 (봇 실력) · 바로",
+  auto: "결과만 · 바로",
 };
 
 const clone = (c: Career): Career => JSON.parse(JSON.stringify(c));
@@ -62,6 +64,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const [mode, setMode] = useState<PlayMode>("highlight");
 
   useEffect(() => {
+    prefetchBondArt();
     let cur = loadCareer();
     let rep = takeReport();
     if (cur?.inGame) {
@@ -203,11 +206,17 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const changeSpeed = (v: number) => {
     setSpeed(v);
     saveSpeed(v);
+    logUi("speed", { v });
   };
   const changeMode = (m: PlayMode) => {
     setMode(m);
     saveMode(m);
+    logUi("mode", { m });
   };
+  // 어떤 창을 여는지 (안 쓰는 기능 찾기)
+  useEffect(() => {
+    if (modal) logUi(`modal:${typeof modal === "string" ? modal : `place:${modal.place}`}`);
+  }, [modal]);
 
   const playGame = () => {
     if (!c) return;
@@ -406,7 +415,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
       {modal === "newConfirm" && (
         <Modal>
           <div className={`${font.title} mb-2 text-2xl`}>새로 시작할까요?</div>
-          <p className="text-[14px] text-white/70">키우던 선수({c?.name})는 사라져요. 명예의 전당엔 은퇴한 선수만 남아요.</p>
+          <p className="text-[14px] text-white/70">키우던 선수 {c?.name}의 기록은 사라져요. 명예의 전당엔 은퇴한 선수만 남아요.</p>
           <div className="mt-4 flex justify-center gap-2">
             <Btn
               className="px-5 py-2"
@@ -567,7 +576,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
               {nm}
             </Btn>
           ))}
-          <span className="flex w-[90px] items-center justify-center rounded-xl border-2 border-dashed border-white/15 py-1.5 text-[11.5px] text-white/35" title="스킨 (나중에)">
+          <span className="flex w-[90px] items-center justify-center rounded-xl border-2 border-dashed border-white/15 py-1.5 text-[11.5px] text-white/35" title="스킨 · 준비 중">
             🔒 스킨
           </span>
         </div>
@@ -687,7 +696,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
         <div className="text-[12.5px] leading-relaxed text-white/60">
           19세 입단 · 한 해 {GAMES}경기 · {RETIRE_FROM}년차부터 은퇴를 고를 수 있고 {MAX_SEASONS}년차엔 은퇴. 숨은 재능은 1년차가 끝나면 알려 줘요.
           <br />
-          결과는 운 · 선택 · 실력에 따라 갈려요 (10년 뒤 종합 보통 400~500 · 잘 풀리면 600~700대).
+          결과는 운 · 선택 · 실력에 따라 갈려요 — 10년 뒤 종합 보통 400~500 · 잘 풀리면 600~700대.
         </div>
         <Btn space className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
           다음 ▶
@@ -799,38 +808,38 @@ function Hub(p: {
 }) {
   const { c } = p;
   const step = stepOf(c);
+  // 폰(무대 배율 0.68)에선 머리 버튼이 손가락보다 작았음 → 크게 · 배속은 한 버튼으로 돌림
+  const { phone } = useStage();
+  const hb = `${phone ? "px-3 py-1.5 text-[16px]" : "px-2.5 py-1 text-[13px]"} whitespace-nowrap`;
   return (
     <div className="flex h-full flex-col">
       {/* 위 */}
       <div className="flex h-[50px] items-center gap-3 border-b border-white/10 bg-black/40 px-3">
-        <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={p.onBack}>
+        <Btn className={hb} color="#8b93b8" onClick={p.onBack}>
           ←
         </Btn>
         <div className={`${font.title} text-[20px] whitespace-nowrap`}>{whenText(c)}</div>
         <Schedule c={c} />
         <div className="ml-auto flex items-center gap-1.5">
-          <span className="mr-0.5 text-[11px] whitespace-nowrap text-white/50">배속</span>
-          {SPEEDS.map((v) => (
-            <Btn key={v} active={p.speed === v} className="px-1.5 py-0.5 font-mono text-[11.5px] whitespace-nowrap" color="#7dff9a" onClick={() => p.onSpeed(v)}>
-              ×{v}
-            </Btn>
-          ))}
+          <Btn className={`${hb} font-mono`} color="#7dff9a" onClick={() => p.onSpeed(SPEEDS[(SPEEDS.indexOf(p.speed as (typeof SPEEDS)[number]) + 1) % SPEEDS.length])}>
+            배속 ×{p.speed}
+          </Btn>
           <span className="ml-1.5 font-mono text-[13px] font-bold whitespace-nowrap text-[#ffd23f]">₩{c.money.toLocaleString()}만</span>
-          <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#ffd23f" onClick={p.onShop}>
+          <Btn className={hb} color="#ffd23f" onClick={p.onShop}>
             상점
           </Btn>
-          <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#ff7ae0" onClick={p.onBonds}>
+          <Btn className={hb} color="#ff7ae0" onClick={p.onBonds}>
             인연
           </Btn>
-          <Btn className="px-2 py-1 text-[13px] whitespace-nowrap" color="#8b93b8" onClick={p.onGuide}>
+          <Btn className={hb} color="#8b93b8" onClick={p.onGuide}>
             ?
           </Btn>
           {(c.phase === "season" || c.phase === "post" || c.phase === "seasonEnd") && (
-            <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#7dff9a" onClick={p.onStandings}>
+            <Btn className={hb} color="#7dff9a" onClick={p.onStandings}>
               순위
             </Btn>
           )}
-          <Btn className="px-2.5 py-1 text-[13px] whitespace-nowrap" color="#7ad7ff" onClick={p.onRecords}>
+          <Btn className={hb} color="#7ad7ff" onClick={p.onRecords}>
             기록
           </Btn>
         </div>
@@ -882,7 +891,7 @@ function Hub(p: {
       {/* 힌트는 한 번에 하나씩 (안 본 것 중 앞에서부터 — 예전엔 첫 행동 뒤엔 허브 힌트가 영영 안 떴음) */}
       {!p.quiet && step === "turn" && !seenHint("hub") && (
         <Hint k="hub" title="관리 턴 — 지도에서 장소를 눌러요">
-          ⚡ 행동력이 남아 있는 동안 훈련 · 휴식 · 만남을 해요. 다 쓰면(또는 그만하려면) 오른쪽 위 「{c.phase === "season" ? "경기 진행" : "다음 날"} ▶」. 체력 40 아래로 훈련하면 부상이 확 늘어요.
+          ⚡ 행동력이 남아 있는 동안 훈련 · 휴식 · 만남을 해요. 다 쓰면 오른쪽 위 「{c.phase === "season" ? "경기 진행" : "다음 날"} ▶」. 체력 40 아래로 훈련하면 부상이 확 늘어요.
         </Hint>
       )}
       {!p.quiet && step === "turn" && seenHint("hub") && !seenHint("bond") && spotsOf(c).some((s) => s.char) && (
@@ -964,8 +973,8 @@ function PlayerCard({ c }: { c: Career }) {
         {(Object.keys(TAG_NAME) as Tag[])
           .filter((t) => tc[t])
           .map((t) => (
-            <span key={t} className="rounded px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: `${TAG_COLOR[t]}22`, color: TAG_COLOR[t] }} title="같은 태그 3장이면 세트 효과">
-              {TAG_NAME[t]} {Math.min(3, tc[t] ?? 0)}/3
+            <span key={t} className="rounded px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: `${TAG_COLOR[t]}22`, color: TAG_COLOR[t] }} title={`같은 태그 ${SET_NEED}장이면 세트 효과`}>
+              {TAG_NAME[t]} {Math.min(SET_NEED, tc[t] ?? 0)}/{SET_NEED}
             </span>
           ))}
       </div>
@@ -1196,7 +1205,7 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
               { kind: "train", key: k },
               t.name,
               t.desc,
-              k === "special" ? spLv(c) >= 5 ? "필살 마스터 (Lv5)" : `체력 -${t.cost} · 필살 Lv${spLv(c) || "-"}` : `체력 -${t.cost} · Lv${trainLv(c, k)} · 효율 ×${mul.toFixed(2)}`,
+              k === "special" ? spLv(c) >= 5 ? "필살 마스터 Lv5" : `체력 -${t.cost} · 필살 Lv${spLv(c) || "-"}` : `체력 -${t.cost} · Lv${trainLv(c, k)} · 효율 ×${mul.toFixed(2)}`,
               k === "special" ? "#ff5fb4" : STAT_COLOR[k as StatKey],
               mate ? (
                 <span className="mt-0.5 flex items-center gap-1 text-[11px] font-bold" style={{ color: charById(mate).color }}>
@@ -1224,12 +1233,12 @@ function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; o
   } else if (place === "dorm") {
     body = (
       <div className="grid grid-cols-2 gap-2">
-        {opt({ kind: "rest" }, c.injury ? "요양" : "휴식", "체력 크게 회복 · 가끔 컨디션 ↑", "체력 +45 (부상 중 +30)", "#b6ffb0")}
+        {opt({ kind: "rest" }, c.injury ? "요양" : "휴식", "체력 크게 회복 · 가끔 컨디션 ↑", "체력 +45 · 부상 중 +30", "#b6ffb0")}
         {opt({ kind: "care" }, "개인정비", "장비 손질 · 스트레칭 · 영상 복기", "체력 +20 · 컨디션 +1", "#7ad7ff")}
       </div>
     );
   } else if (place === "hospital") {
-    body = <div className="grid grid-cols-1 gap-2">{opt({ kind: "clinic" }, "치료", c.injury ? "부상 남은 기간 -2턴" : "피로 회복 (체력 70 아래일 때)", `자금 -${CLINIC_PRICE}만 · 체력 +30`, "#ff9a9a")}</div>;
+    body = <div className="grid grid-cols-1 gap-2">{opt({ kind: "clinic" }, "치료", c.injury ? "부상 남은 기간 -2턴" : "피로 회복 · 체력 70 아래일 때", `자금 -${CLINIC_PRICE}만 · 체력 +30`, "#ff9a9a")}</div>;
   } else if (spot?.char) {
     const bid = spot.char;
     const ch = charById(bid);
@@ -1523,7 +1532,7 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
   return (
     <Modal w={760}>
       <div className={`${font.title} text-[28px] text-[#ffd23f]`}>{p.from}</div>
-      <div className="text-[13px] text-white/60">특수능력 하나를 골라요 · 같은 태그 3장이면 세트 효과 · 주황 테두리는 양날 카드</div>
+      <div className="text-[13px] text-white/60">특수능력 하나를 골라요 · 같은 태그 {SET_NEED}장이면 세트 효과 · 주황 테두리는 양날 카드</div>
       {!p.options.length && <div className="mt-4 text-[14px] text-white/70">더 고를 수 있는 특수능력이 없어요. 넘기기를 눌러 주세요.</div>}
       <div className="mt-3 grid grid-cols-3 gap-3">
         {p.options.map((id, i) => {
@@ -1548,7 +1557,7 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
                 {s.name}
               </span>
               <span className="text-[13px] text-white/80">{s.desc}</span>
-              <span className="text-[11px] text-white/45">{s.tag && !s.risk ? `${TAG_NAME[s.tag]} ${have} → ${have + 1}/3${have + 1 >= 3 ? " · 세트 완성!" : ""}` : `종합 +${s.val}`}</span>
+              <span className="text-[11px] text-white/45">{s.tag && !s.risk ? `${TAG_NAME[s.tag]} ${have} → ${have + 1}/${SET_NEED}${have + 1 >= SET_NEED ? " · 세트 완성!" : ""}` : `종합 +${s.val}`}</span>
             </button>
           );
         })}
@@ -1557,7 +1566,7 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
         안 고르고 넘기기
       </button>
       <Hint k="pick" title="특수능력 고르기">
-        3장 중 1장! 카드 위 태그(찬스 · 컨택 · 파워 …)가 같은 걸 3장 모으면 세트 효과가 붙어요. 주황 테두리 양날 카드는 강하지만 대가가 있어요.
+        3장 중 1장! 카드 위 태그가 같은 걸 4장 모으면 세트 효과가 붙어요. 주황 테두리 양날 카드는 강하지만 대가가 있어요.
       </Hint>
     </Modal>
   );
@@ -1572,7 +1581,7 @@ function RetireAskModal({ c, onAnswer }: { c: Career; onAnswer: (yes: boolean) =
         {age(c)}세 · 종합 {ovr} ({gradeOf(ovr).g}) · 통산 {c.total.g}경기 {c.total.hr}홈런
       </div>
       <div className="mt-2 text-[13px] text-white/60">
-        여기서 은퇴할 수 있어요. 한 해 더 뛰면 기록은 쌓이지만, 8년차부터는 노쇠로 주루부터 조금씩 떨어져요. 은퇴 종합은 은퇴하는 순간 능력치로 정해져요.
+        여기서 은퇴할 수 있어요. 은퇴 종합은 은퇴하는 순간 능력치로 정해져요 — 보통은 한 해 더 뛰면 훈련으로 종합이 더 오르고 기록 · 수상도 더 쌓여요. 노쇠는 8년차부터 주루부터 조금씩.
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         <Btn className={`${font.title} py-3 text-xl`} color="#ffd23f" onClick={() => onAnswer(true)}>
@@ -1684,7 +1693,7 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
         )}
       </div>
       <Btn space className={`${font.title} mt-3 w-full py-2.5 text-[20px]`} onClick={onClose}>
-        {more ? `다음 경기 결과 ▶ (${more})` : "확인"}
+        {more ? `다음 경기 결과 ▶ ${more}` : "확인"}
       </Btn>
     </Modal>
   );
@@ -1749,9 +1758,9 @@ function SeasonModal({ s, c, onClose, onReroll }: { s: SeasonSummary; c: Career;
       })()}
       {s.talentReveal && (
         <div className="mt-3 rounded-xl border-2 border-[#ffd23f]/50 bg-[#ffd23f]/10 py-2">
-          <div className="text-[12px] text-white/60">스카우트 — 숨은 재능 (타고난 성장 속도 · 이번 시즌 성적과는 따로)</div>
+          <div className="text-[12px] text-white/60">스카우트 — 숨은 재능 — 타고난 성장 속도</div>
           <div className={`${font.title} text-[40px] leading-none text-[#ffd23f]`}>{s.talentReveal}</div>
-          <div className="text-[11px] text-white/50">F · D · C · B · A · S (각성하면 한 단계 위로)</div>
+          <div className="text-[11px] text-white/50">F · D · C · B · A · S · 각성하면 한 단계 위로</div>
         </div>
       )}
       {s.decline && (
@@ -1815,7 +1824,7 @@ function ShopModal({
           <div className="text-[11px] text-white/50">인기도 {Math.round(c.fame).toLocaleString()} · 턴 안 써요</div>
         </div>
       </div>
-      <div className="mt-2 text-left text-[13px] font-bold text-white/70">장비 (계속) — 그 훈련 효율 + 경기 능력치 · 단계마다 인기도 조건</div>
+      <div className="mt-2 text-left text-[13px] font-bold text-white/70">장비 — 그 훈련 효율 + 경기 능력치 · 단계마다 인기도 조건</div>
       <div className="mt-1 grid grid-cols-2 gap-2">
         {GEAR_IDS.map((id) => {
           const g = GEAR[id];
@@ -1886,7 +1895,7 @@ function ShopModal({
 function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
   const rows = [
     ...c.seasons.map((s) => ({ k: `${s.season}년차`, l: s.line, aw: [s.post === "우승" ? "🏆우승" : s.post === "준우승" ? "준우승" : "", ...s.awards].filter(Boolean).join(" · "), ovr: s.ovr })),
-    ...(c.line.g ? [{ k: `${c.season}년차 (진행)`, l: c.line, aw: "", ovr: ovrOf(c) }] : []),
+    ...(c.line.g ? [{ k: `${c.season}년차 · 진행 중`, l: c.line, aw: "", ovr: ovrOf(c) }] : []),
   ];
   return (
     <Modal w={700} onClose={onClose}>
@@ -1997,7 +2006,7 @@ function Retire({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: ()
           통산 {t.g}경기 · 타율 {fmtAvg(avg(t))} · {t.h}안타 · {t.hr}홈런 · {t.rbi}타점 · OPS {ops(t).toFixed(3)}
           {r.awards.length > 0 && <div className="font-['Nanum_Gothic'] text-[12px] text-[#ffd23f]">수상: {awardText}</div>}
           <div className="font-['Nanum_Gothic'] text-[12px] text-white/55">
-            특수능력 {c.skills.length}개 (세트 {c.skills.filter((s) => skill(s).set).length}){c.learned ? ` · 필살 「${charById(c.learned).swing.name}」 Lv${spLv(c)} (+${LEARNED_VAL}~)` : ""} · 최종 연봉{" "}
+            특수능력 {c.skills.length}개 (세트 {c.skills.filter((s) => skill(s).set).length}){c.learned ? ` · 필살 「${charById(c.learned).swing.name}」 Lv${spLv(c)} +${LEARNED_VAL}~` : ""} · 최종 연봉{" "}
             {c.salary.toLocaleString()}만원
           </div>
         </div>

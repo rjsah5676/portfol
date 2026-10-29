@@ -47,6 +47,20 @@ function fp(s: Snap): string {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
+/** 이 기기 저장이 어느 계정 것인지 (로그인해서 한 번이라도 맞춘 계정) */
+const OWNER = "pxb-cloud:owner";
+function getOwner() {
+  try {
+    return localStorage.getItem(OWNER);
+  } catch {
+    return null;
+  }
+}
+function setOwner(uid: string) {
+  try {
+    localStorage.setItem(OWNER, uid);
+  } catch {}
+}
 const isEmpty = (s: Snap) => !s["pxb:career:v3"] && !s["pxb:club:v1"] && !s["pxb:hof:v1"];
 
 /** 고르기 화면에 띄울 요약 한 줄씩 */
@@ -84,8 +98,12 @@ export class CloudSync {
   private busy = false;
   private lastPut = 0;
   private stopped = false;
+  private hiding = false;
   private onHide = () => {
-    if (document.visibilityState === "hidden") void this.guard(() => this.push());
+    if (document.visibilityState !== "hidden") return;
+    // 폰에서 탭을 넘기거나 닫을 때 마지막 진행이 잘리지 않게 keepalive 로
+    this.hiding = true;
+    void this.guard(() => this.push()).finally(() => (this.hiding = false));
   };
 
   constructor(
@@ -132,8 +150,16 @@ export class CloudSync {
   private async resolve() {
     const { save } = await api<{ save: Remote | null }>("/api/baseball/save", { auth: true, timeoutMs: 8000 });
     if (this.stopped) return;
-    const local = snapshot();
+    let local = snapshot();
+    // 같은 브라우저에서 다른 계정으로 로그인: 이 기기 저장은 앞 계정 것 → 새 계정에 올리거나 「이 기기」로 고르게 하지 않음
+    const owner = getOwner();
+    if (owner && owner !== this.uid && !isEmpty(local)) {
+      for (const k of SYNC_KEYS) localStorage.removeItem(k);
+      local = snapshot();
+      this.on.applied();
+    }
     const lf = fp(local);
+    setOwner(this.uid);
     if (!save) {
       this.ready = true;
       if (isEmpty(local)) this.setMeta(0, lf);
@@ -168,7 +194,7 @@ export class CloudSync {
     const f = fp(s);
     this.lastPut = Date.now();
     try {
-      const r = await api<{ rev: number }>("/api/baseball/save", { method: "PUT", auth: true, body: { data: s, prev }, timeoutMs: 15000 });
+      const r = await api<{ rev: number }>("/api/baseball/save", { method: "PUT", auth: true, body: { data: s, prev }, timeoutMs: 15000, keepalive: this.hiding });
       this.setMeta(r.rev, f);
     } catch (e) {
       // 다른 기기가 먼저 올림 → 다시 판단 (둘 다 바뀌었으면 고르기)

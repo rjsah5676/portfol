@@ -19,7 +19,7 @@ import {
   batSide, batter as curBatter, changePitcher, cpuManage, fieldSide, maybeMission, mvp, newGame, nextHalf, pitcher as curPitcher,
   stamina01, staminaMax, userBatting, type GameState, type Mission, type PAKind, type PAResult,
 } from "@/lib/baseball/game";
-import { logPlay } from "@/lib/baseball/telemetry";
+import { logPlay, logUi } from "@/lib/baseball/telemetry";
 import { BALL_R, PITCHES, ZONE, inZone, makePitch, mistakeChance, pitchAt, plateCross, type Pitch, type PitchKind } from "@/lib/baseball/pitch";
 import { predictBall, type FieldEvent, type Frame } from "@/lib/baseball/play";
 import { veloKmh } from "@/lib/baseball/club";
@@ -395,7 +395,7 @@ export class Match {
     this.ui = this.makeUi();
     this.setBanner(
       cfg.bond ? cfg.bond.title : cfg.mode === "derby" ? "HOME RUN DERBY" : "PLAY BALL!",
-      cfg.bond ? `${charById(cfg.bond.char).name}의 공 ${cfg.bond.pitches}개 · ${cfg.bond.need}점이면 승리 (안타 1 · 홈런 2)` : cfg.mode === "derby" ? "아웃 10개까지 · 비거리 합" : cfg.career ? `${slotName(cfg.career.myIdx)} 타자로 출전 · 내 타석만 직접 쳐요` : `${this.s.opts.away.name} vs ${this.s.opts.home.name}`,
+      cfg.bond ? `${charById(cfg.bond.char).name}의 공 ${cfg.bond.pitches}개 · ${cfg.bond.need}점이면 승리 · 안타 1점 · 홈런 2점` : cfg.mode === "derby" ? "아웃 10개까지 · 비거리 합" : cfg.career ? `${slotName(cfg.career.myIdx)} 타자로 출전 · 내 타석만 직접 쳐요` : `${this.s.opts.away.name} vs ${this.s.opts.home.name}`,
       "#ffcf4a",
       1.6,
       true
@@ -589,7 +589,7 @@ export class Match {
         const free = sd.team.pitchers.findIndex((_, i) => !sd.used.includes(i));
         if (free >= 0) {
           changePitcher(s, fieldSide(s), free);
-          this.setBanner("투수 교체", `${sd.team.pitchers[free].name} 등판 (체력 소진)`, "#7ad7ff", 1.3);
+          this.setBanner("투수 교체", `${sd.team.pitchers[free].name} 등판 — 체력 소진`, "#7ad7ff", 1.3);
         }
       }
     } else if (this.cfg.mode === "game") {
@@ -739,8 +739,8 @@ export class Match {
     ctx.fillStyle = "#ffcf4a";
     ctx.fillText("첫 타석!", x + w / 2, y + 30);
     const rows: [string, string, string][] = [
-      ["#ffffff", "스윙", "Space · 클릭  (폰: 오른쪽 스윙 버튼) — 공이 홈에 올 때"],
-      ["#ffbe5a", "주황 상자", "노리는 자리. 방향키 · WASD (폰: 왼쪽 패드)로 옮겨요"],
+      ["#ffffff", "스윙", "Space · 클릭 · 폰은 스윙 버튼 — 공이 홈에 올 때"],
+      ["#ffbe5a", "주황 상자", "노리는 자리. 방향키 · WASD · 폰은 패드로 옮겨요"],
       ["#6ab8ff", "파란 원", "지금 공이 존 어디쯤인지 — 따라가서 상자 안에 넣고 치면 정타"],
       ["#7ad7ff", "볼", "존 밖 공은 참으면 볼넷. 휘두르면 빗맞아요"],
     ];
@@ -3158,9 +3158,9 @@ export class Match {
     const fail = this.missionRewards(m, "fail");
     ctx.font = '800 11px "Nanum Gothic", sans-serif';
     ctx.fillStyle = "#ff9a9a";
-    ctx.fillText(m.kind === "hr" || m.kind === "xbh" ? "실패하면 (안타면 봐줌)" : "실패하면", tx, y + 125);
+    ctx.fillText(m.kind === "hr" || m.kind === "xbh" ? "실패하면" : "실패하면", tx, y + 125);
     ctx.font = '800 11px "Nanum Gothic", sans-serif';
-    const fx = tx + ctx.measureText(m.kind === "hr" || m.kind === "xbh" ? "실패하면 (안타면 봐줌)" : "실패하면").width + 10;
+    const fx = tx + ctx.measureText(m.kind === "hr" || m.kind === "xbh" ? "실패하면" : "실패하면").width + 10;
     this.rewardChips(ctx, fx, y + 112, fail, Math.min(1, Math.max(0, (t - 0.5) / 0.4)), true, tx + maxW - fx);
     ctx.fillStyle = "rgba(255,255,255,0.45)";
     ctx.font = "12px \"Nanum Gothic\", sans-serif";
@@ -3194,6 +3194,7 @@ export class Match {
   skipRecap() {
     const r = this.recap;
     if (!r) return;
+    logUi("recapSkip");
     if (r.shown < r.lines.length) {
       while (r.shown < r.lines.length) this.revealRecap();
       r.t = r.hold - 0.4;

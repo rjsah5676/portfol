@@ -7,7 +7,7 @@
  *   외출 장소(번화가 · 공원 · 강변 · 도서관 · 방송국) — 이번 주에 나타난 픽셀파이트 캐릭터(❗)나 장소 이벤트만 만날 수 있음.
  * 로그라이크 양념: 특수능력은 3장 중 1장 고르기(시즌 끝 · S 평가 · 도서관 퀴즈) · 같은 태그 3장이면 세트 효과 · 양날 카드.
  *
- * 결과 분포(종합 0 ~ 999, 코치 C 기준): 중앙값 ~485 · 하위 10% ~390 · 상위 10% ~585 · 최고 ~730 (촘촘하게)
+ * 결과 분포(종합 0 ~ 999): 중앙값 ~450 · 하위 10% ~370 · 상위 10% ~600 · 최고 ~750 (2026-10-29 시뮬)
  *   코치 S 풀강: 중앙값 ~590 · 운까지 다 터지면 ~870~900. 999 는 사실상 불가 (scripts/baseball-career-sim.ts)
  *   결과 몫(SHARE=1): 실력 ~40 · 운 ~60 (코치 C = 효과 없음) · 코치 S 풀강 ~20% < 인연 ~29% (COACH=1)
  *   흔들림 세 갈래 — 운(숨은 재능 · 대성공 · 부상 · 각성 · 고르기 패) · 선택(훈련 몰빵 · 체력 관리 · 인연 · 상점 · 은퇴 시점) · 실력(직접 친 타석)
@@ -51,7 +51,7 @@ export const CAREER_DIFF = 1;
 export const TYPES: Record<BatType, { name: string; desc: string; pos: string; apt: Stats; start: Stats }> = {
   // 교타자 · 거포 성장 비율은 육성 시뮬로 맞춤 (타입별 종합 평균이 비슷하게 — 홈런이 경기 평가를 많이 올려서 거포 쪽 성장은 작게)
   contact: { name: "교타자", desc: "타격 ↑ · 파워 ↓", pos: "2B", apt: { hit: 1.35, power: 0.82, run: 1.0 }, start: { hit: 150, power: 90, run: 125 } },
-  power: { name: "거포", desc: "파워 ↑ · 타격 ↓", pos: "1B", apt: { hit: 0.78, power: 1.08, run: 1.0 }, start: { hit: 100, power: 130, run: 125 } },
+  power: { name: "거포", desc: "파워 ↑ · 타격 ↓", pos: "1B", apt: { hit: 0.95, power: 1.35, run: 1.0 }, start: { hit: 100, power: 130, run: 125 } },
   speed: { name: "준족", desc: "주루가 잘 자람", pos: "CF", apt: { hit: 1.12, power: 0.88, run: 1.5 }, start: { hit: 125, power: 75, run: 180 } },
   defense: { name: "수비형", desc: "(예전 타입)", pos: "SS", apt: { hit: 1.02, power: 0.88, run: 1.08 }, start: { hit: 115, power: 85, run: 125 } },
   all: { name: "만능", desc: "고르게 자람", pos: "3B", ...EVEN },
@@ -92,10 +92,10 @@ const AGE_GROW = [1.0, 1.05, 1.12, 1.12, 1.12, 1.06, 1.0, 0.88, 0.76, 0.64];
 
 export type TrainKey = "hit" | "power" | "run" | "special";
 export const TRAINS: Record<TrainKey, { name: string; desc: string; cost: number; gain: Partial<Stats> }> = {
-  hit: { name: "타격 훈련", desc: "타격 ↑ (파워 조금)", cost: 18, gain: { hit: 1, power: 0.18 } },
-  power: { name: "근력 훈련", desc: "파워 ↑ (타격 조금)", cost: 22, gain: { power: 1, hit: 0.15 } },
+  hit: { name: "타격 훈련", desc: "타격 ↑ · 파워 조금", cost: 18, gain: { hit: 1, power: 0.18 } },
+  power: { name: "근력 훈련", desc: "파워 ↑ · 타격 조금", cost: 22, gain: { power: 1, hit: 0.15 } },
   run: { name: "주루 훈련", desc: "주루 ↑", cost: 19, gain: { run: 1 } },
-  special: { name: "필살타법 훈련", desc: "필살 레벨 ↑ (종합 · Lv5 마스터면 경기당 2번) — 배운 뒤에만", cost: 26, gain: { hit: 0.25, power: 0.25 } },
+  special: { name: "필살타법 훈련", desc: "필살 레벨 ↑ · Lv5 마스터면 경기당 2번 — 배운 뒤에만", cost: 26, gain: { hit: 0.25, power: 0.25 } },
 };
 export const TRAIN_KEYS: TrainKey[] = ["hit", "power", "run", "special"];
 /** 훈련 한 번 기본 성장 (재능 · 타입 · 컨디션 · 높을수록 덜 오름 반영 전) */
@@ -278,6 +278,8 @@ export const LEARNED_VAL = 6;
 export const SP_LV_VAL = 2;
 
 /** 태그 장수 (세트 · 나쁜 것 · 양날 빼고) */
+/** 세트 효과에 필요한 같은 태그 장수 — 3장이면 10년에 세트 3 ~ 5개가 거의 자동으로 다 완성돼서(시뮬 98%) 노리는 맛이 없었음 */
+export const SET_NEED = 4;
 export function tagCount(c: Pick<Career, "skills">) {
   const n: Partial<Record<Tag, number>> = {};
   for (const id of c.skills) {
@@ -334,17 +336,17 @@ export function fxOf(c: Pick<Career, "skills"> & { blv?: Partial<Record<SkillId,
 /** 특수능력 얻기 (세트 완성 확인) — 새로 생긴 줄 */
 function gainSkill(c: Career, id: SkillId): string[] {
   if (c.skills.includes(id)) return [];
-  const out = [`특수능력 「${skill(id).name}」 획득! (${skill(id).desc})`];
+  const out = [`특수능력 「${skill(id).name}」 획득! ${skill(id).desc}`];
   // 반대되는 것 지우기
   if (id === "clutch") c.skills = c.skills.filter((s) => s !== "clutchBad");
   if (id === "iron") c.skills = c.skills.filter((s) => s !== "fragile");
   c.skills.push(id);
   const tag = skill(id).tag;
-  if (tag && (tagCount(c)[tag] ?? 0) >= 3) {
+  if (tag && (tagCount(c)[tag] ?? 0) >= SET_NEED) {
     const set = `set_${tag}` as SkillId;
     if (!c.skills.includes(set)) {
       c.skills.push(set);
-      out.push(`★ 세트 완성 — 「${skill(set).name}」 (${skill(set).desc})`);
+      out.push(`★ 세트 완성 — 「${skill(set).name}」 · ${skill(set).desc}`);
     }
   }
   return out;
@@ -356,8 +358,8 @@ export type PlaceId = "ground" | "dorm" | "hospital" | "mall" | "downtown" | "pa
 export const PLACES: Record<PlaceId, { name: string; icon: string; desc: string; x: number; y: number; spot?: boolean }> = {
   ground: { name: "운동장", icon: "🏟️", desc: "훈련 · 필살타법 훈련", x: 50, y: 30 },
   dorm: { name: "숙소", icon: "🏠", desc: "휴식 · 개인정비", x: 20, y: 30 },
-  hospital: { name: "병원", icon: "🏥", desc: "치료 (부상 기간 줄이기)", x: 80, y: 30 },
-  mall: { name: "쇼핑몰", icon: "🛍️", desc: "상점 (턴 안 씀)", x: 82, y: 72 },
+  hospital: { name: "병원", icon: "🏥", desc: "치료 · 부상 기간 줄이기", x: 80, y: 30 },
+  mall: { name: "쇼핑몰", icon: "🛍️", desc: "상점 · 턴 안 씀", x: 82, y: 72 },
   downtown: { name: "번화가", icon: "🌃", desc: "외식 · 만남", x: 18, y: 72, spot: true },
   park: { name: "공원", icon: "🌳", desc: "산책 · 만남", x: 36, y: 56, spot: true },
   river: { name: "강변", icon: "🌊", desc: "산책 · 만남", x: 64, y: 56, spot: true },
@@ -470,9 +472,10 @@ export const GEAR: Record<GearId, { name: string; stat: StatKey; train: TrainKey
 };
 export const GEAR_IDS = Object.keys(GEAR) as GearId[];
 export const GEAR_TIER = [
-  { price: 1200, fame: 0, train: 0.1, game: 15 },
-  { price: 3500, fame: 800, train: 0.2, game: 35 },
-  { price: 8000, fame: 2500, train: 0.3, game: 60 },
+  // 1단계는 시작 자금(1,000만)으로 바로 살 수 있게 · 3단계 인기도는 평균 은퇴 인기도(2,500)라 사실상 못 사던 것
+  { price: 900, fame: 0, train: 0.1, game: 15 },
+  { price: 3500, fame: 500, train: 0.2, game: 35 },
+  { price: 8000, fame: 1500, train: 0.3, game: 60 },
 ] as const;
 
 /* ─────────────── 코치 (BM — 나중에 뽑기 · 등급 · 지금은 판 시작 때 고름) ───────────────
@@ -811,8 +814,9 @@ export function statGrade(v: number) {
  * [종합, 그 이상인 비율]
  */
 export const PCT_TABLE: [number, number][] = [
-  [950, 0.00002], [900, 0.0001], [850, 0.0005], [800, 0.002], [750, 0.005], [700, 0.01], [650, 0.03], [600, 0.07], [550, 0.19],
-  [500, 0.47], [450, 0.74], [400, 0.95], [350, 0.995], [300, 0.999], [0, 1],
+  // 2026-10-29 시뮬(120명 · 사람 흉내에 컨택존) — 예전 표는 중앙값 선수가 「상위 71%」로 나왔음
+  [950, 0.00002], [900, 0.0002], [850, 0.001], [800, 0.003], [750, 0.01], [700, 0.033], [650, 0.058], [600, 0.1], [550, 0.158],
+  [500, 0.25], [450, 0.483], [400, 0.717], [350, 0.933], [300, 1], [0, 1],
 ];
 export function topPct(ovr: number) {
   for (let i = 0; i < PCT_TABLE.length - 1; i++) {
@@ -1001,7 +1005,7 @@ export const MOOD = { d: [2, 1, 0, -0.5, -1], gw: 0.5, walkoff: 1, keep: 0.85, m
 function moodAfter(c: Career, d: number, lines: string[]) {
   const before = c.mood ?? 0;
   c.mood = Math.round(clamp(before * MOOD.keep + d, MOOD.min, MOOD.max) * 100) / 100;
-  if (before < MOOD.hot && c.mood >= MOOD.hot) lines.push("🔥 네 활약에 팀 분위기가 달아올랐다! (동료들 타격 · 투구 ↑)");
+  if (before < MOOD.hot && c.mood >= MOOD.hot) lines.push("🔥 네 활약에 팀 분위기가 달아올랐다! 동료들 타격 · 투구 ↑");
   else if (before >= 0 && c.mood < -1) lines.push("팀 분위기가 가라앉았다… 한 방이 필요하다.");
 }
 export const moodName = (m: number) => (m >= 4.5 ? "최고조" : m >= MOOD.hot ? "뜨거움" : m >= 1 ? "좋음" : m > -1 ? "보통" : "가라앉음");
@@ -1023,7 +1027,7 @@ function prize(c: Career, k: keyof typeof POST_PRIZE) {
 function startPost(c: Career, rng: Rng, lines: string[]) {
   const st = standings(c);
   const me = st.find((r) => r.i === 0)!;
-  lines.push(`정규시즌 끝 — 우리 팀 ${me.rank}위 (${me.w}승 ${me.l}패)`);
+  lines.push(`정규시즌 끝 — 우리 팀 ${me.rank}위 · ${me.w}승 ${me.l}패`);
   if (me.rank > 3) {
     c.postRes = "진출 실패";
     c.phase = "seasonEnd";
@@ -1214,7 +1218,7 @@ function hurt(c: Career, rng: Rng, worse: boolean): string[] {
   left *= Math.max(0.3, 1 + fxOf(c).injuryDur);
   left = Math.max(1, Math.round(left));
   c.injury = { kind, left };
-  const out = [`${INJURY_NAME[kind]}! ${left}턴 동안 쉬어야 한다. (경기도 1턴으로 셈)`];
+  const out = [`${INJURY_NAME[kind]}! ${left}턴 동안 쉬어야 한다.`];
   if (kind >= 1) {
     const loss = kind === 2 ? 0.06 : 0.02;
     for (const k of STAT_KEYS) c.stats[k] *= 1 - loss;
@@ -1435,7 +1439,7 @@ function meet(c: Career, id: BondId, place: PlaceId, rng: Rng): TurnOut {
   // 대결 (이기면 다음 줄기)
   const B = BATTLES[nb.kind];
   c.battle = { char: id, kind: nb.kind, pitches: B.pitches, need: B.need, magic: B.magic, tries: c.battle?.char === id ? c.battle.tries : 0 };
-  return { title, tone: "event", lines: [`${ch.name}의 공 ${B.pitches}개 · ${B.need}점 이상이면 승리 (안타 1 · 홈런 2)`], delta: diffOf(c, a), char: id, vn: { char: id, lines: beat.lines, place, key: `${id}:${v}` } };
+  return { title, tone: "event", lines: [`${ch.name}의 공 ${B.pitches}개 · ${B.need}점 이상이면 승리 · 안타 1점 · 홈런 2점`], delta: diffOf(c, a), char: id, vn: { char: id, lines: beat.lines, place, key: `${id}:${v}` } };
 }
 
 /** 특별한 날 (비시즌 첫날, 호감 1위) */
@@ -1560,7 +1564,7 @@ export function choosePick(c: Career, i: number): TurnOut {
   let lines: string[];
   if (skill(id).boon && c.skills.includes(id)) {
     c.blv[id] = Math.min(3, boonLv(c, id) + 1);
-    lines = [`축복 「${skill(id).name}」 Lv${c.blv[id]}! (효과 ×${BOON_MUL[c.blv[id]! - 1]})`];
+    lines = [`축복 「${skill(id).name}」 Lv${c.blv[id]}! 효과 ×${BOON_MUL[c.blv[id]! - 1]}`];
   } else {
     lines = gainSkill(c, id);
     // 이해가 깊으면 새 축복이 Lv2 로 시작
@@ -1596,7 +1600,7 @@ export function finishBattle(c: Career, pts: number, auto = false): TurnOut {
     grow(c, b.stat, 5);
     aff = addAff(c, id, 3);
     lines.push(`${ch.name}: "아직이야. 다음에 또 와."`, "(다음에 만나면 다시 도전)");
-    pushLog(c, `${ch.name}와 대결 패배 (${pts}점)`);
+    pushLog(c, `${ch.name}와 대결 패배 · ${pts}점`);
     return { title: `${ch.name}와 대결 — 패배`, tone: "fail", lines, delta: diffOf(c, a), char: id, aff };
   }
   c.bonds[id] = (c.bonds[id] ?? 0) + 1;
@@ -1619,7 +1623,7 @@ export function finishBattle(c: Career, pts: number, auto = false): TurnOut {
     }
     extra = tryAwaken(c, rng, 0.02);
   }
-  pushLog(c, `${ch.name}와 대결 승리 (${pts}점)`);
+  pushLog(c, `${ch.name}와 대결 승리 · ${pts}점`);
   return { title: `${ch.name}와 대결 — 승리!`, tone: "great", lines, delta: diffOf(c, a), char: id, aff, extra };
 }
 
@@ -1687,7 +1691,7 @@ function randomEvent(c: Career, rng: Rng): TurnOut | undefined {
     return { title: "부모님 택배", tone: "event", lines: ["집에서 보양식이 왔다."], delta: diffOf(c, a) };
   }
   c.bag.charm = (c.bag.charm ?? 0) + 1;
-  return { title: "길에서 주운 것", tone: "event", lines: ["반짝이는 부적을 주웠다. (행운의 부적 +1)"], delta: diffOf(c, a) };
+  return { title: "길에서 주운 것", tone: "event", lines: ["반짝이는 부적을 주웠다. 행운의 부적 +1"], delta: diffOf(c, a) };
 }
 
 /* ─────────────── 턴 행동 ─────────────── */
@@ -1707,9 +1711,9 @@ export const CLINIC_PRICE = 250;
 export function whyNot(c: Career, a: Action): string | null {
   if (stepOf(c) !== "turn") return "지금은 관리 차례가 아니에요";
   if (c.injury && !(a.kind === "rest" || a.kind === "clinic" || a.kind === "care")) return "부상 중엔 숙소 · 병원만";
-  if (c.active < costOf(a)) return `행동력이 모자라요 (⚡${costOf(a)} 필요)`;
-  if (a.kind === "train" && a.key === "special" && !c.learned) return "필살타법을 배워야 열려요 (인연 「필살 전수 대결」)";
-  if (a.kind === "train" && a.key === "special" && spLv(c) >= 5) return "필살타법 마스터 (Lv5) — 더 오를 게 없어요";
+  if (c.active < costOf(a)) return `행동력이 모자라요 — ⚡${costOf(a)} 필요`;
+  if (a.kind === "train" && a.key === "special" && !c.learned) return "필살타법을 배워야 열려요 — 인연 「필살 전수 대결」에서";
+  if (a.kind === "train" && a.key === "special" && spLv(c) >= 5) return "필살타법 마스터 Lv5 — 더 오를 게 없어요";
   if (a.kind === "clinic" && c.money < CLINIC_PRICE) return "자금이 모자라요";
   if (a.kind === "clinic" && !c.injury && c.stamina >= 70) return "아픈 데가 없어요";
   const spots = spotsOf(c);
@@ -1793,7 +1797,7 @@ export function choose(c: Career, pick: number): TurnOut {
     aff = addAff(c, id, o.aff);
     if (o.know) c.know[id] = (c.know[id] ?? 0) + 1;
     grow(c, BONDS[id].stat, 8 + o.aff * 0.8);
-    lines.push(`호감 ${aff >= 0 ? "+" : ""}${aff}${o.know ? " · 마음이 통했다 (이해 +1)" : ""}`);
+    lines.push(`호감 ${aff >= 0 ? "+" : ""}${aff}${o.know ? " · 마음이 통했다 · 이해 +1" : ""}`);
     pushLog(c, `${p.title}: ${o.text}`);
     return { title: p.title, tone: o.know ? "great" : "event", lines, delta: diffOf(c, a), char: id, aff, vn: { char: id, lines: [`▶ ${o.text}`, o.reply] } };
   } else if (p.kind === "coach") {
@@ -1971,7 +1975,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
   else if (win === false) c.losses++;
   const fx = fxOf(c);
   if (!g) {
-    title = `결장 (${INJURY_NAME[c.injury?.kind ?? 0]}) · 팀 ${win ? "승리" : win === false ? "패배" : "무승부"}`;
+    title = `결장 · ${INJURY_NAME[c.injury?.kind ?? 0]} · 팀 ${win ? "승리" : win === false ? "패배" : "무승부"}`;
     lines.push("벤치에서 동료들을 응원했다.");
     moodAfter(c, 0, lines);
     addTrust(c, -0.6);
@@ -1987,7 +1991,8 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     const G = GAME_GRADES[grade];
     act = ACTIVE_PER_GAME + G.act + fx.gameAct;
     moodAfter(c, MOOD.d[grade] + (g.clutch?.walkoff ? MOOD.walkoff : g.clutch?.gw ? MOOD.gw : 0), lines);
-    const tr = l.h * 2.5 + l.hr * 4 + l.rbi * 1 + l.bb * 1 - l.k * 1.5 - Math.max(0, l.ab - l.h - l.k) * 1.2 + g.missions * 4 - 0.5;
+    // 감독 신뢰: 4타수 1안타 1삼진(보통)이면 조금 ↓ · 잘 치면 ↑ — 예전엔 보통이 −0.85 라 10년 내내 7번 타자(은퇴 때 평균 신뢰 30)
+    const tr = l.h * 2.5 + l.hr * 4 + l.rbi * 1 + l.bb * 1 - l.k * 1.5 - Math.max(0, l.ab - l.h - l.k) * 1.0 + g.missions * 4 + 0.3;
     addTrust(c, tr * 0.45);
     addStamina(c, G.sta + fx.gameSta);
     // 컨디션: S · A 가끔 ▲ · D 가끔 ▼ · 홈런 치면 장타 특능 확률로 ▲
@@ -2102,7 +2107,8 @@ export interface SeasonSummary {
 export function leagueBest(c: Pick<Career, "seed" | "season">) {
   const r = makeRng((c.seed * 31 + c.season * 977 + 5) >>> 0);
   // 초반 연차는 상대 투수가 약해서(PITCH_LV) 기록이 잘 나오니 1위 기준도 그만큼 높게 — 1년차 +.04 · 홈런 +3 · 타점 +8
-  const e = (560 - PITCH_LV[Math.min(PITCH_LV.length - 1, Math.max(0, c.season - 1))]) / 260;
+  // (초반 1위 기준을 더 높이던 것은 뺌 — 1 ~ 6년차 수상이 거의 0 이었음)
+  const e = 0 * ((560 - PITCH_LV[Math.min(PITCH_LV.length - 1, Math.max(0, c.season - 1))]) / 260);
   return { avg: 0.35 + r() * 0.05 + 0.04 * e, hr: 11 + Math.floor(r() * 6) + Math.round(3 * e), rbi: 34 + Math.floor(r() * 10) + Math.round(8 * e) };
 }
 /** 수상 레이스 — 지금까지 경기 수 기준 1위 페이스와 내 기록 */
@@ -2132,7 +2138,7 @@ export function endSeason(c: Career): SeasonSummary {
   if (pa >= 80 && avg(L) >= best.avg) awards.push("타격왕");
   if (L.hr >= best.hr) awards.push("홈런왕");
   if (L.rbi >= best.rbi) awards.push("타점왕");
-  if (c.season === 1 && pa >= 50 && ops(L) >= 0.78) awards.push("신인왕");
+  if (c.season === 1 && pa >= 50 && ops(L) >= 0.7) awards.push("신인왕");
   if (awards.length >= 2 || (pa >= 80 && ops(L) >= 1.0)) awards.push("MVP");
   if (awards.length) {
     addTrust(c, 6 * awards.length);
@@ -2146,7 +2152,7 @@ export function endSeason(c: Career): SeasonSummary {
   c.salary = Math.max(2700, Math.round((3000 + ovr * 18 + perf * 8000 + awards.length * 3000 + c.fame * 0.15) / 100) * 100);
   const pay = Math.round(c.salary / 10);
   addMoney(c, pay);
-  lines.push(`연봉 ${prev.toLocaleString()} → ${c.salary.toLocaleString()}만원 (생활비 빼고 자금 +${pay.toLocaleString()}만원)`);
+  lines.push(`연봉 ${prev.toLocaleString()} → ${c.salary.toLocaleString()}만원 · 생활비 빼고 자금 +${pay.toLocaleString()}만원`);
   let talentReveal: string | undefined;
   if (!c.talentKnown) {
     c.talentKnown = true;

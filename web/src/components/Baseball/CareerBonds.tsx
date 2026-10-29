@@ -306,7 +306,7 @@ export function BondsModal({ c, onClose }: { c: Career; onClose: () => void }) {
         </Btn>
       </div>
       <div className="mb-2 text-left text-[12px] text-white/55">
-        만남마다 한 칸씩: 💬 이야기(고르기) · ✨ 인연 축복 · ⚾ 가벼운 대결 · 🔥 필살 전수 대결. 그 사람다운 답을 고르면 「이해」가 쌓여서 특별한 답 · 축복 Lv2 시작이 열려요.
+        만남마다 한 칸씩: 💬 이야기 · ✨ 인연 축복 · ⚾ 가벼운 대결 · 🔥 필살 전수 대결. 그 사람다운 답을 고르면 「이해」가 쌓여서 특별한 답 · 축복 Lv2 시작이 열려요.
       </div>
       <div className="flex flex-col gap-2">
         {c.deck.map((id) => (
@@ -358,7 +358,7 @@ export function BoonPickModal({ c, onPick }: { c: Career; onPick: (i: number) =>
           {p.from}
         </div>
       </div>
-      <div className="text-[12.5px] text-white/60">하나를 골라요 · 이미 가진 축복은 레벨 업 (Lv3 = 효과 ×2) · 💫 듀오는 두 사람 축복이 다 있어야 나와요</div>
+      <div className="text-[12.5px] text-white/60">하나를 골라요 · 이미 가진 축복은 레벨 업 · Lv3 = 효과 ×2 · 💫 듀오는 두 사람 축복이 다 있어야 나와요</div>
       <div className="mt-3 flex gap-3">
       <div className="grid flex-1 grid-cols-3 gap-3">
         {p.options.map((id, i) => {
@@ -391,7 +391,7 @@ export function BoonPickModal({ c, onPick }: { c: Career; onPick: (i: number) =>
               </span>
               <span className="text-[13px] text-white/80">{s.desc}</span>
               <span className="text-[11.5px] font-bold" style={{ color: owned ? "#7dff9a" : "rgba(255,255,255,0.5)" }}>
-                {owned ? `Lv${lv} → Lv${lv + 1} (×${BOON_MUL[lv - 1]} → ×${BOON_MUL[lv]})` : `새 축복${s.tag ? ` · ${TAG_NAME[s.tag]} ${have}→${have + 1}/3${have + 1 >= 3 ? " 세트!" : ""}` : ""}`}
+                {owned ? `Lv${lv} → Lv${lv + 1} · ×${BOON_MUL[lv - 1]} → ×${BOON_MUL[lv]}` : `새 축복${s.tag ? ` · ${TAG_NAME[s.tag]} ${have}→${have + 1}/3${have + 1 >= 3 ? " 세트!" : ""}` : ""}`}
               </span>
             </button>
           );
@@ -401,7 +401,7 @@ export function BoonPickModal({ c, onPick }: { c: Career; onPick: (i: number) =>
       </div>
       <div className="mt-2 text-[12px] text-[#ff9ad5]">고르면 {who.name} 호감 +2</div>
       <Hint k="boon" title="인연 축복">
-        그 사람만의 능력 카드예요. 같은 축복을 또 고르면 레벨 업(최대 Lv3 = 효과 ×2). 두 사람 축복을 하나씩 가지면 둘을 묶는 💫 듀오 축복이 나오기 시작해요. 축복도 태그가 있어서 같은 태그 3장이면 세트 효과!
+        그 사람만의 능력 카드예요. 같은 축복을 또 고르면 레벨 업 — 최대 Lv3 = 효과 ×2. 두 사람 축복을 하나씩 가지면 둘을 묶는 💫 듀오 축복이 나오기 시작해요. 축복도 태그가 있어서 같은 태그 4장이면 세트 효과!
       </Hint>
     </Modal>
   );
@@ -549,7 +549,7 @@ export function DeckStep({
             추천으로 채우기
           </Btn>
         </div>
-        <div className="mt-0.5 text-[11.5px] text-white/50">덱에 넣은 사람만 지도에 나타나고 · 자기 훈련에 「함께 훈련」 하러 와요 (효율 ×1.3~1.6). 만날수록 이야기가 이어지고 축복(특수능력) · 마지막엔 필살타법을 전수해 줘요. 썸 = 연애 · 친구 = 우정 · 동생 = 조력자 이야기. ▲ = 내 타입과 잘 맞는 능력치. 듀오 축복은 덱 조합으로 열려요.</div>
+        <div className="mt-0.5 text-[11.5px] text-white/50">덱에 넣은 사람만 지도에 나타나고 · 자기 훈련에 「함께 훈련」 하러 와요 · 효율 ×1.3~1.6. 만날수록 이야기가 이어지고 축복(특수능력) · 마지막엔 필살타법을 전수해 줘요. 썸 = 연애 · 친구 = 우정 · 동생 = 조력자 이야기. ▲ = 내 타입과 잘 맞는 능력치. 듀오 축복은 덱 조합으로 열려요.</div>
         <div className="mt-1.5 grid grid-cols-4 gap-2">
           {BOND_IDS.map((bid) => {
             const ch = charById(bid);
@@ -614,7 +614,7 @@ export function DeckStep({
             })()}
           </div>
         </div>
-        <span className="text-[13px] font-bold text-white/75">선배의 유산 (선택)</span>
+        <span className="text-[13px] font-bold text-white/75">선배의 유산 · 선택</span>
         <div className="mt-0.5 text-[11.5px] text-white/50">은퇴한 선수 한 명에게서 특수능력 1개 + 시작 능력치 조금</div>
         <div className="mt-1.5 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
           <Btn className="py-1.5 text-[12.5px]" color="#8b93b8" active={!legacy} onClick={() => setLegacy(null)}>
@@ -718,12 +718,12 @@ export function Hint({ k, title, children }: { k: string; title: string; childre
 
 const GUIDE: [string, string][] = [
   ["하루 흐름", "캠프 · 비시즌은 하루마다, 시즌은 2경기마다 관리 턴이 와요. 지도에서 장소를 눌러 행동하고, 다 했으면 「경기 진행 ▶ / 다음 날 ▶」."],
-  ["⚡ 행동력", "행동마다 행동력을 써요 (훈련 4 · 필살 훈련 5 · 만남 5 · 쉬기 3). 경기마다 +3, 캠프 · 비시즌 하루마다 +6. 남은 건 다음으로 넘어가요 (최대 10)."],
+  ["⚡ 행동력", "행동마다 행동력을 써요 — 훈련 4 · 필살 훈련 5 · 만남 5 · 쉬기 3. 경기마다 +3, 캠프 · 비시즌 하루마다 +6. 남은 건 다음으로 넘어가요 · 최대 10."],
   ["훈련 · 부상", "훈련 버튼에 대성공 · 실패 · 부상 확률이 나와요. 체력 40 아래부터 부상이 확 늘어요. 얼굴이 붙은 훈련은 「함께 훈련」 — 효율 ×1.3 이상."],
   ["인연", "덱 3명이 지도에 ❗ 로 나와요. 만남마다 이야기 → 축복 → 대결 → … → 필살 전수 대결. 대답이 그 사람답다면 「이해」가 쌓여 특별한 답 · 축복 Lv2 시작이 열려요."],
-  ["특수능력 · 세트 · 양날", "시즌 끝 · S 평가 · 퀴즈쇼에서 3장 중 1장. 같은 태그 3장이면 세트 효과. 주황 테두리 = 좋은 점과 나쁜 점이 같이 있는 양날 카드."],
-  ["경기", "직접 · 하이라이트(찬스 타석만) · 자동. 능력치는 경기로 안 오르고 훈련 · 활동으로만 — 잘 칠수록 경기 평가(S ~ D)가 높아져 다음 관리 턴 행동력 · 체력 · 컨디션을 더 받아요. 건너뛴 타석은 중계 화면으로 보여 줘요. 경기 중에도 방식을 바꿀 수 있어요 (다음 타석부터)."],
-  ["은퇴 · 다음 선수", "7년차부터 은퇴를 고를 수 있어요. 은퇴하면 명예의 전당 · 인연 레벨이 쌓이고, 다음 선수에게 「선배의 유산」(특수능력 1개 + 능력치 조금)을 물려줄 수 있어요."],
+  ["특수능력 · 세트 · 양날", "시즌 끝 · S 평가 · 퀴즈쇼에서 3장 중 1장. 같은 태그 4장이면 세트 효과. 주황 테두리 = 좋은 점과 나쁜 점이 같이 있는 양날 카드."],
+  ["경기", "직접 · 하이라이트 · 자동. 하이라이트는 찬스 타석만 직접. 능력치는 경기로 안 오르고 훈련 · 활동으로만 — 잘 칠수록 경기 평가 S ~ D 가 높아져 다음 관리 턴 행동력 · 체력 · 컨디션을 더 받아요. 건너뛴 타석은 중계 화면으로 보여 줘요. 경기 중에도 다음 타석부터 방식을 바꿀 수 있어요."],
+  ["은퇴 · 다음 선수", "7년차부터 은퇴를 고를 수 있어요. 은퇴하면 명예의 전당 · 인연 레벨이 쌓이고, 다음 선수에게 「선배의 유산」 — 특수능력 1개 + 능력치 조금 — 을 물려줄 수 있어요."],
 ];
 export function GuideModal({ onClose }: { onClose: () => void }) {
   return (
