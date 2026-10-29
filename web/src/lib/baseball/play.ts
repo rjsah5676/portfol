@@ -1061,6 +1061,9 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
       r.s += (dir * r.speed * DT) / BASE_LEN;
       if ((dir > 0 && r.s >= r.target) || (dir < 0 && r.s <= r.target)) {
         r.s = r.target;
+        // 아슬아슬 세이프 (송구가 그 베이스로 오는 중) — 화면 「SAFE」 도장
+        const sb = r.s >= 4 ? 0 : Math.round(r.s);
+        if (dir > 0 && thrown && thrown.base === sb && thrown.t1 - t < 0.7) events.push({ t, kind: "safe", x: B[sb][0], y: B[sb][1], text: "세이프" });
         if (r.s >= 4) {
           r.st = "scored";
           r.scoredAt = t;

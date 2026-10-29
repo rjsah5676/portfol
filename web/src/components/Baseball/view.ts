@@ -324,163 +324,317 @@ export function battingBg(q: number, night: boolean): HTMLCanvasElement {
 }
 
 /** 필드 배경 */
-export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
-  const key = `${q}:${night}:${FIELD_VIEW.persp}`;
+/** 필드 배경 한 픽셀 = 화면 몇 px (픽셀 그림처럼 낮은 해상도로 그려서 키움 — 수비 스프라이트 · 타석 그림과 맞춤) */
+export const FIELD_BG_PX = 1.6;
+/** 필드 배경 색 (저녁 구장) */
+const FC = {
+  sky: "#141a36",
+  stand: ["#262e57", "#2f3866", "#232a50"],
+  standEdge: "#11152c",
+  crowd: ["#c9b8a6", "#e6d6c2", "#8f7f72", "#d76a5a", "#e9b04f", "#6f9fd6", "#f2f2f2", "#9c86c9", "#5fb27a"],
+  wall: "#1f4a3c",
+  wallDark: "#173a2f",
+  wallTop: "#ffd23f",
+  pole: "#ffe14a",
+  grassA: "#3f9a46",
+  grassB: "#48a84f",
+  foulA: "#36823e",
+  foulB: "#3b8b43",
+  dirt: "#c48a52",
+  dirtDark: "#a96f3e",
+  dirtLight: "#d9a26a",
+  track: "#9c6a3e",
+  line: "#f3f3ee",
+  base: "#ffffff",
+};
+
+/** 필드 배경 (관중석 · 펜스 · 워닝 트랙 · 잔디 무늬 · 내야 흙 · 베이스) — 낮은 해상도로 한 번 그려 캐시, 그릴 땐 픽셀 그대로 키움 */
+export function fieldBg(_q: number, night: boolean): HTMLCanvasElement {
+  const key = `${night}:${FIELD_VIEW.persp}`;
   if (fieldCanvas && fieldKey === key) return fieldCanvas;
+  const PX = FIELD_BG_PX;
   const c = document.createElement("canvas");
-  c.width = Math.round(DW * q);
-  c.height = Math.round(DH * q);
+  c.width = Math.round(DW / PX);
+  c.height = Math.round(DH / PX);
   const g = c.getContext("2d")!;
-  g.scale(q, q);
-  g.fillStyle = night ? "#121633" : "#2c3557";
-  g.fillRect(0, 0, DW, DH);
-  // 관중석 (펜스 바깥 띠)
-  g.save();
-  g.beginPath();
-  for (let a = -55; a <= 55; a += 2) {
-    const r = fenceDist(Math.max(-45, Math.min(45, a))) + 30;
-    // 원근: 관중석이 펜스 뒤로 올라가는 계단처럼
-    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FIELD_VIEW.persp ? 22 : 0);
-    if (a === -55) g.moveTo(p.x, p.y);
-    else g.lineTo(p.x, p.y);
-  }
-  for (let a = 55; a >= -55; a -= 2) {
-    const r = fenceDist(Math.max(-45, Math.min(45, a))) + 2;
-    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FENCE_H);
-    g.lineTo(p.x, p.y);
-  }
-  g.closePath();
-  g.fillStyle = night ? "#1f2547" : "#45507a";
-  g.fill();
-  g.clip();
-  crowd(g, 0, 0, DW, 260, 11, 34);
-  g.restore();
-  // 원근: 파울 지역 땅도 (안 칠하면 홈 양옆이 남색 빈칸으로 크게 보였음)
-  if (FIELD_VIEW.persp) {
+  g.scale(1 / PX, 1 / PX);
+  let seed = 97;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const rad = (a: number) => (a * Math.PI) / 180;
+  const W = (x: number, y: number, h = 0) => fproj(x, y, h);
+  const arcPt = (a: number, r: number, h = 0) => W(Math.sin(rad(a)) * r, Math.cos(rad(a)) * r, h);
+  const poly = (pts: { x: number; y: number }[]) => {
     g.beginPath();
-    for (let a = -62; a <= 62; a += 2) {
-      const r = fenceDist(Math.max(-45, Math.min(45, a))) + 2;
-      const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r);
-      if (a === -62) g.moveTo(p.x, p.y);
+    pts.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
+    g.closePath();
+  };
+  const circle = (cx: number, cy: number, r: number, n = 32) => {
+    const pts: { x: number; y: number }[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      pts.push(W(cx + Math.cos(a) * r, cy + Math.sin(a) * r));
+    }
+    return pts;
+  };
+  /** 픽셀 점 (배경 한 픽셀) */
+  const dot = (x: number, y: number, col: string) => {
+    g.fillStyle = col;
+    g.fillRect(Math.floor(x / PX) * PX, Math.floor(y / PX) * PX, PX, PX);
+  };
+  /** 지금 클립 영역 안에 흙 알갱이 */
+  const speckle = (x0: number, y0: number, x1: number, y1: number, n: number, cols: string[]) => {
+    for (let i = 0; i < n; i++) dot(x0 + rnd() * (x1 - x0), y0 + rnd() * (y1 - y0), cols[Math.floor(rnd() * cols.length)]);
+  };
+
+  g.fillStyle = FC.sky;
+  g.fillRect(0, 0, DW, DH);
+
+  // ── 관중석: 펜스 뒤로 올라가는 계단 (층마다 색 번갈아) + 관중 머리 점
+  const TIERS = 14;
+  for (let k = TIERS - 1; k >= 0; k--) {
+    const r0 = 3 + (k * 27) / TIERS;
+    const r1 = 3 + ((k + 1) * 27) / TIERS;
+    const h0 = FENCE_H + 0.6 + (k * 18) / TIERS;
+    const h1 = FENCE_H + 0.6 + ((k + 1) * 18) / TIERS;
+    const pts: { x: number; y: number }[] = [];
+    for (let a = -58; a <= 58; a += 2) pts.push(arcPt(a, fenceDist(Math.max(-45, Math.min(45, a))) + r0, h0));
+    for (let a = 58; a >= -58; a -= 2) pts.push(arcPt(a, fenceDist(Math.max(-45, Math.min(45, a))) + r1, h1));
+    poly(pts);
+    g.fillStyle = FC.stand[k % 3];
+    g.fill();
+    // 관중 (계단 한 줄에 한 줄) — 통로 자리는 비움
+    const hm = (h0 + h1) / 2;
+    const rm = (r0 + r1) / 2;
+    for (let a = -57; a <= 57; a += 0.9) {
+      if (Math.abs(((a + 60) % 15) - 7.5) < 0.6) continue; // 통로
+      if (rnd() < 0.18) continue;
+      const p = arcPt(a + rnd() * 0.5, fenceDist(Math.max(-45, Math.min(45, a))) + rm, hm);
+      const col = FC.crowd[Math.floor(rnd() * FC.crowd.length)];
+      dot(p.x, p.y, col);
+      if (rnd() < 0.5) dot(p.x, p.y + PX, "rgba(0,0,0,0.35)");
+    }
+  }
+  // 관중석 위 끝 그늘
+  {
+    const pts: { x: number; y: number }[] = [];
+    for (let a = -58; a <= 58; a += 2) pts.push(arcPt(a, fenceDist(Math.max(-45, Math.min(45, a))) + 30, FENCE_H + 18.6));
+    pts.push({ x: DW + 40, y: -40 }, { x: -40, y: -40 });
+    poly(pts);
+    g.fillStyle = FC.standEdge;
+    g.fill();
+  }
+
+  // ── 파울 지역 땅 (홈 양옆 · 펜스까지)
+  {
+    const pts: { x: number; y: number }[] = [];
+    for (let a = -62; a <= 62; a += 2) pts.push(arcPt(a, fenceDist(Math.max(-45, Math.min(45, a))) + 2));
+    for (const [x, y] of [[62, -6], [14, -18], [-14, -18], [-62, -6]]) pts.push(W(x, y));
+    poly(pts);
+    g.fillStyle = FC.foulA;
+    g.fill();
+  }
+
+  // ── 페어 지역 잔디: 대각 체크 무늬 (중계 화면 잔디 깎은 결)
+  const fair: { x: number; y: number }[] = [W(0, -3)];
+  for (let a = -45; a <= 45; a += 1.5) fair.push(arcPt(a, fenceDist(a)));
+  g.save();
+  poly(fair);
+  g.clip();
+  g.fillStyle = FC.grassA;
+  g.fillRect(0, 0, DW, DH);
+  const CELL = 9;
+  for (let i = -16; i <= 16; i++) {
+    for (let j = 0; j <= 16; j++) {
+      if ((i + j) % 2 === 0) continue;
+      // 홈 기준 45° 돌린 칸
+      const q = (u: number, v: number) => W(((u - v) * CELL) / Math.SQRT2, ((u + v) * CELL) / Math.SQRT2);
+      const u = j, v = i;
+      poly([q(u, v), q(u + 1, v), q(u + 1, v + 1), q(u, v + 1)]);
+      g.fillStyle = FC.grassB;
+      g.fill();
+    }
+  }
+  // 워닝 트랙 (펜스 앞 흙 띠)
+  {
+    const pts: { x: number; y: number }[] = [];
+    for (let a = -46; a <= 46; a += 1.5) pts.push(arcPt(a, fenceDist(a) + 1));
+    for (let a = 46; a >= -46; a -= 1.5) pts.push(arcPt(a, fenceDist(a) - 4.6));
+    poly(pts);
+    g.fillStyle = FC.track;
+    g.fill();
+  }
+  g.restore();
+  // 파울 지역 잔디 결 (파울 라인 바깥)
+  {
+    for (const s of [1, -1]) {
+      const pts = [W(0, -3), W(s * 75, 75), W(s * 90, 60), W(s * 18, -14)];
+      g.save();
+      poly(pts);
+      g.clip();
+      for (let k = 0; k < 10; k++) {
+        if (k % 2) continue;
+        const a0 = k * 9, a1 = (k + 1) * 9;
+        poly([W(s * a0, a0 - 3), W(s * a1, a1 - 3), W(s * (a1 + 12), a1 - 15), W(s * (a0 + 12), a0 - 15)]);
+        g.fillStyle = FC.foulB;
+        g.fill();
+      }
+      g.restore();
+    }
+  }
+
+  // ── 내야 흙: 마운드 기준 반지름 29m 호 (페어 안) + 파울 쪽 베이스 길
+  g.save();
+  poly(fair);
+  g.clip();
+  poly(circle(0, 18.4, 29, 64));
+  g.fillStyle = FC.dirt;
+  g.fill();
+  g.restore();
+  // 베이스 길 (1 · 3루 쪽 라인 따라 흙 띠, 파울 쪽 절반 포함)
+  for (const s of [1, -1]) {
+    const L = 19.4 * Math.SQRT2 + 2.4;
+    const ux = (s * 1) / Math.SQRT2, uy = 1 / Math.SQRT2;
+    const nx = uy * s, ny = -ux * s; // 라인 바깥쪽
+    const w = 1.0;
+    poly([W(-nx * w * 0.2, -ny * w * 0.2), W(ux * L - nx * w * 0.2, uy * L - ny * w * 0.2), W(ux * L + nx * w * 1.6, uy * L + ny * w * 1.6), W(nx * w * 1.6, ny * w * 1.6)]);
+    g.fillStyle = FC.dirt;
+    g.fill();
+  }
+  // 홈 주변 흙 원
+  poly(circle(0, 0, 4.2));
+  g.fillStyle = FC.dirt;
+  g.fill();
+  // 흙 알갱이 (내야)
+  {
+    // 흙 위에만: 클립을 흙 모양으로
+    g.save();
+    poly(fair);
+    g.clip();
+    poly(circle(0, 18.4, 29, 64));
+    g.clip();
+    const box = { x0: W(-35, 40).x, x1: W(35, 40).x, y0: W(0, 48).y - 8, y1: W(0, 0).y + 12 };
+    speckle(box.x0, box.y0, box.x1, box.y1, 1600, [FC.dirtDark, FC.dirtLight, FC.dirtDark]);
+    g.restore();
+  }
+  // 내야 잔디 (베이스 길 안쪽 정사각) — 1 · 3루 베이스 자리는 흙 원으로 깎음
+  poly([W(0, 2.6), W(17.6, 19.4), W(0, 36.2), W(-17.6, 19.4)]);
+  g.fillStyle = FC.grassB;
+  g.fill();
+  // 내야 잔디 결 (작은 체크)
+  g.save();
+  poly([W(0, 2.6), W(17.6, 19.4), W(0, 36.2), W(-17.6, 19.4)]);
+  g.clip();
+  for (let i = -4; i <= 4; i++) {
+    for (let j = 0; j <= 9; j++) {
+      if ((i + j) % 2 === 0) continue;
+      const C2 = 4.85;
+      const q = (u: number, v: number) => W(((u - v) * C2) / Math.SQRT2, ((u + v) * C2) / Math.SQRT2);
+      poly([q(j, i), q(j + 1, i), q(j + 1, i + 1), q(j, i + 1)]);
+      g.fillStyle = FC.grassA;
+      g.fill();
+    }
+  }
+  g.restore();
+  for (const [x, y] of [[19.4, 19.4], [-19.4, 19.4]]) {
+    poly(circle(x, y, 2.6, 20));
+    g.fillStyle = FC.dirt;
+    g.fill();
+  }
+  // 마운드
+  poly(circle(0, 18.4, 2.8, 24));
+  g.fillStyle = FC.dirtLight;
+  g.fill();
+  poly(circle(0, 18.6, 1.6, 16));
+  g.fillStyle = FC.dirt;
+  g.fill();
+  // 흙 알갱이 (내야 · 워닝 트랙)
+  {
+    g.save();
+    const pts: { x: number; y: number }[] = [];
+    for (let a = -46; a <= 46; a += 1.5) pts.push(arcPt(a, fenceDist(a) + 1));
+    for (let a = 46; a >= -46; a -= 1.5) pts.push(arcPt(a, fenceDist(a) - 4.6));
+    poly(pts);
+    g.clip();
+    speckle(0, 0, DW, W(0, 70).y, 2200, [FC.dirtDark, "#8a5c34"]);
+    g.restore();
+  }
+  // 잔디 알갱이 (조금)
+  g.save();
+  poly(fair);
+  g.clip();
+  speckle(0, W(0, 120).y, DW, DH, 2600, ["rgba(20,60,25,0.35)", "rgba(255,255,255,0.08)"]);
+  g.restore();
+
+  // ── 펜스 (패딩 벽 · 이음매 · 노란 윗선) + 파울폴
+  {
+    const pts: { x: number; y: number }[] = [];
+    for (let a = -45; a <= 45; a += 1.5) pts.push(arcPt(a, fenceDist(a)));
+    for (let a = 45; a >= -45; a -= 1.5) pts.push(arcPt(a, fenceDist(a), FENCE_H));
+    poly(pts);
+    g.fillStyle = FC.wall;
+    g.fill();
+    g.strokeStyle = FC.wallDark;
+    g.lineWidth = PX;
+    for (let a = -42; a <= 42; a += 6) {
+      const p0 = arcPt(a, fenceDist(a)), p1 = arcPt(a, fenceDist(a), FENCE_H);
+      g.beginPath();
+      g.moveTo(p0.x, p0.y);
+      g.lineTo(p1.x, p1.y);
+      g.stroke();
+    }
+    g.strokeStyle = FC.wallTop;
+    g.lineWidth = PX * 1.2;
+    g.beginPath();
+    for (let a = -45; a <= 45; a += 1.5) {
+      const p = arcPt(a, fenceDist(a), FENCE_H);
+      if (a === -45) g.moveTo(p.x, p.y);
       else g.lineTo(p.x, p.y);
     }
-    for (const [x, y] of [[60, -4], [12, -16], [-12, -16], [-60, -4]]) {
-      const p = fproj(x, y);
-      g.lineTo(p.x, p.y);
+    g.stroke();
+    for (const s of [1, -1]) {
+      const p0 = arcPt(s * 45, fenceDist(45)), p1 = arcPt(s * 45, fenceDist(45), FENCE_H + 14);
+      g.strokeStyle = FC.pole;
+      g.lineWidth = PX * 1.4;
+      g.beginPath();
+      g.moveTo(p0.x, p0.y);
+      g.lineTo(p1.x, p1.y);
+      g.stroke();
     }
-    g.closePath();
-    g.fillStyle = "#347a3f";
-    g.fill();
-    // 홈 뒤 흙
-    g.beginPath();
-    for (let i = 0; i <= 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      const p = fproj(Math.cos(a) * 5, Math.sin(a) * 5 - 0.5);
-      if (i) g.lineTo(p.x, p.y);
-      else g.moveTo(p.x, p.y);
-    }
-    g.fillStyle = "#c08550";
-    g.fill();
   }
-  // 잔디
-  g.beginPath();
-  const fair: { x: number; y: number }[] = [];
-  for (let a = -45; a <= 45; a += 1.5) {
-    const r = fenceDist(a);
-    fair.push(fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r));
-  }
-  const home = fproj(0, -4);
-  g.moveTo(home.x, home.y);
-  fair.forEach((p) => g.lineTo(p.x, p.y));
-  g.closePath();
-  const grass = g.createLinearGradient(0, 260, 0, DH);
-  grass.addColorStop(0, "#3d9a4a");
-  grass.addColorStop(1, "#4fb85c");
-  g.fillStyle = grass;
-  g.fill();
-  // 잔디 줄무늬
-  g.save();
-  g.clip();
-  for (let i = 0; i < 14; i++) {
-    g.fillStyle = i % 2 ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.035)";
-    const y0 = fproj(0, i * 9).y;
-    const y1 = fproj(0, (i + 1) * 9).y;
-    g.fillRect(0, y1, DW, y0 - y1);
-  }
-  g.restore();
-  // 펜스 (높이 있는 벽)
-  g.fillStyle = "#1d5a3a";
-  g.beginPath();
-  fair.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
-  for (let a = 45; a >= -45; a -= 1.5) {
-    const r = fenceDist(a);
-    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FENCE_H);
-    g.lineTo(p.x, p.y);
-  }
-  g.closePath();
-  g.fill();
-  g.strokeStyle = "#ffd23f";
-  g.lineWidth = 1.5;
-  g.beginPath();
-  for (let a = -45; a <= 45; a += 1.5) {
-    const r = fenceDist(a);
-    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FENCE_H);
-    if (a === -45) g.moveTo(p.x, p.y);
-    else g.lineTo(p.x, p.y);
-  }
-  g.stroke();
-  // 내야 흙
-  g.beginPath();
-  const h0 = fproj(0, -2);
-  g.moveTo(h0.x, h0.y);
-  for (let a = -45; a <= 45; a += 3) {
-    const p = fproj(Math.sin((a * Math.PI) / 180) * 29, Math.cos((a * Math.PI) / 180) * 29);
-    g.lineTo(p.x, p.y);
-  }
-  g.closePath();
-  g.fillStyle = "#c8925a";
-  g.fill();
-  g.beginPath();
-  const dia = [fproj(0, 1.5), fproj(17.6, 19.4), fproj(0, 37.2), fproj(-17.6, 19.4)];
-  dia.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
-  g.closePath();
-  g.fillStyle = "#4caf5a";
-  g.fill();
-  // 마운드
-  g.fillStyle = "#c08550";
-  g.beginPath();
-  for (let i = 0; i <= 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const p = fproj(Math.cos(a) * 2.8, 18.4 + Math.sin(a) * 2.8);
-    if (i) g.lineTo(p.x, p.y);
-    else g.moveTo(p.x, p.y);
-  }
-  g.fill();
-  // 파울라인
-  g.strokeStyle = "rgba(255,255,255,0.9)";
-  g.lineWidth = 1.5;
+
+  // ── 선: 파울 라인 · 타석
+  g.strokeStyle = FC.line;
+  g.lineWidth = PX;
   for (const s of [1, -1]) {
-    const a = fproj(0, 0);
-    const b = fproj((s * 98) / Math.SQRT2, 98 / Math.SQRT2);
+    const a = W(0, 0);
+    const b = W((s * 98) / Math.SQRT2, 98 / Math.SQRT2);
     g.beginPath();
     g.moveTo(a.x, a.y);
     g.lineTo(b.x, b.y);
     g.stroke();
+    // 타석 상자
+    poly([W(s * 0.55, -0.9), W(s * 1.75, -0.9), W(s * 1.75, 0.9), W(s * 0.55, 0.9)]);
+    g.stroke();
   }
-  // 베이스
-  BASES.slice(0, 4).forEach(([x, y], i) => {
-    // 땅 위 마름모 (네 꼭짓점을 시점대로)
-    const r = (i === 0 ? 5 : 4.5) / FV.S;
-    g.fillStyle = "#fff";
-    g.beginPath();
-    [[0, -r], [r, 0], [0, r], [-r, 0]].forEach(([dx, dy], j) => {
-      const q = fproj(x + dx * Math.SQRT2, y + dy * Math.SQRT2);
-      if (j) g.lineTo(q.x, q.y);
-      else g.moveTo(q.x, q.y);
-    });
-    g.closePath();
+  // 베이스 (땅 위 마름모) · 홈플레이트 · 투수판
+  BASES.slice(1, 4).forEach(([x, y]) => {
+    const r = 0.55;
+    poly([W(x, y - r), W(x + r, y), W(x, y + r), W(x - r, y)]);
+    g.fillStyle = FC.base;
     g.fill();
   });
+  poly([W(-0.3, 0.3), W(0.3, 0.3), W(0.3, 0), W(0, -0.3), W(-0.3, 0)]);
+  g.fillStyle = FC.base;
+  g.fill();
+  poly([W(-0.35, 18.3), W(0.35, 18.3), W(0.35, 18.5), W(-0.35, 18.5)]);
+  g.fill();
+  if (night) {
+    g.fillStyle = "rgba(8,10,30,0.25)";
+    g.fillRect(0, 0, DW, DH);
+  }
   fieldCanvas = c;
   fieldKey = key;
   return c;
@@ -713,7 +867,7 @@ export function drawFieldFrame(
   ctx.strokeStyle = "#222";
   ctx.lineWidth = 1;
   // 높이 뜰수록 카메라에 가까워 보이게 조금 크게 · 뜬 공은 둘레가 빛남
-  const br = (3.4 + Math.min(5, f.bh * 0.16)) * b.s;
+  const br = (4.3 + Math.min(5, f.bh * 0.16)) * b.s;
   if (flying) {
     ctx.save();
     ctx.fillStyle = "rgba(255,255,255,0.25)";
@@ -725,6 +879,8 @@ export function drawFieldFrame(
     ctx.strokeStyle = "#222";
     ctx.lineWidth = 1;
   }
+  ctx.lineWidth = 1.4;
+  ctx.strokeStyle = "#1a1a1a";
   ctx.beginPath();
   ctx.arc(b.x, b.y, br, 0, Math.PI * 2);
   ctx.fill();

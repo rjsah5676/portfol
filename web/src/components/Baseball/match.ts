@@ -37,6 +37,8 @@ import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
 import { FieldPoser, preloadFieldSprites, type Pose } from "./fieldSprites";
 import { DH, DW, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
+import { PixelLayer, pixelated } from "./pixelLayer";
+import { teamTinted } from "./teamTint";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
 
 /** 투수 그림 (pitcher-set.webp): 발 기준점 · 크기 (키 ≈ 115px, 목업 크기) */
@@ -70,6 +72,8 @@ const TEMPO = { call: 1.1, ready: 1.4, first: 1.9, result: 2.0, change: 2.4 };
 /** 타석에 걸어 들어오기 재생 속도 · 다 들어온 뒤 첫 공까지 숨 고르기 */
 const WALK_SPEED = WALKIN_LEN / 3.3;
 const WALK_SETTLE = 0.7;
+/** 투수 뷰 픽셀 크기 (한 픽셀 = 화면 px) */
+const PV_PX = 2.5;
 /** 호수비 타이밍 링: from → to 배율로 dur 초 동안 줄어듦 (1 = 원) */
 const QTE = { from: 2.2, to: 0.4, dur: 1.25 };
 const qteScale = (t: number) => QTE.from - (QTE.from - QTE.to) * Math.min(1, Math.max(0, t) / QTE.dur);
@@ -179,6 +183,10 @@ interface Popup {
   text: string;
   color: string;
   t: number;
+  /** 필드 좌표 (카메라 따라 움직임) */
+  cam?: boolean;
+  /** 판정 도장 (크게 튀어나옴) */
+  big?: boolean;
 }
 
 const SAVE = "pxb:v1";
@@ -497,8 +505,8 @@ export class Match {
   private setBanner(text: string, sub: string | undefined, color: string, dur = 1.2, big = false) {
     this.banner = { text, sub, color, t: 0, dur, big };
   }
-  private popup(x: number, y: number, text: string, color = "#fff") {
-    this.popups.push({ x, y, text, color, t: 0 });
+  private popup(x: number, y: number, text: string, color = "#fff", o?: { cam?: boolean; big?: boolean }) {
+    this.popups.push({ x, y, text, color, t: 0, ...o });
   }
   /** 스윙 버튼 때 스트라이드(디딤발 내딛기) 진행도 — 1 이면 배트만 돌림 */
   private swingSp = 1;
@@ -1361,6 +1369,14 @@ export class Match {
       this.ft = 0.15;
       this.fast = false;
       this.trail = [];
+      this.holdAt = -1;
+      // 타석에서 이어지게: 홈 근처를 당겨 본 채로 시작 → 공을 따라 빠짐 (+ 짧은 흰 전환)
+      {
+        const h = fproj(0, 4);
+        const z = 1.45;
+        this.fcam = { x: clamp(h.x, DW / 2 / z, DW - DW / 2 / z), y: clamp(h.y - 60, DH / 2 / z, DH - DH / 2 / z), z };
+        if (this.cfg.mode !== "derby") this.flash = Math.max(this.flash, 0.35);
+      }
       this.hr = f.hr;
       this.hrDist = f.dist;
       this.setPhase("field");
@@ -1909,8 +1925,13 @@ export class Match {
   }
 
   private updateField(dt: number) {
-    const sp = this.fast ? 2.6 : 1;
+    // 공을 잡고 0.6초 지나면 (송구 · 주루 마무리) 조금 빨리 — 2 · 3루타 중계가 9 ~ 12초씩 걸리던 것
+    const cur = this.frameAt(this.ft);
+    if (cur && cur.hold >= 0 && this.holdAt < 0) this.holdAt = this.ft;
+    const settle = this.holdAt >= 0 && this.ft - this.holdAt > 0.6 && this.cfg.mode !== "derby";
+    const sp = this.fast ? 2.6 : settle ? 1.6 : 1;
     this.ft += dt * sp;
+    if (cur) this.updateFieldCam(cur, dt);
     const last = this.frames[this.frames.length - 1];
     const end = last ? last.t : 0;
     // 이벤트
@@ -1918,23 +1939,31 @@ export class Match {
       const e = this.events[this.evIdx++];
       const p = fproj(e.x, e.y, 1.5);
       switch (e.kind) {
-        case "out":
-          this.popup(p.x, p.y - 20, "OUT", "#ff7a7a");
+        case "out": {
+          // 뜬공 · 라이너 아웃은 잡은 자리 (이벤트 자리는 1루로 찍혀 있음)
+          const air = /플라이|라이너|팝/.test(e.text);
+          const fr = air ? this.frameAt(e.t) : null;
+          const at = fr ? fproj(fr.bx, fr.by, 1.5) : p;
+          this.popup(at.x, at.y - 30, "OUT", "#ff5a5a", { cam: true, big: true });
           sfx.out();
+          break;
+        }
+        case "safe":
+          this.popup(p.x, p.y - 30, "SAFE", "#7dff9a", { cam: true, big: true });
           break;
         case "catch":
           sfx.catchBall();
           break;
         case "dive":
-          this.popup(p.x, p.y - 26, e.text, "#ffd23f");
+          this.popup(p.x, p.y - 26, e.text, "#ffd23f", { cam: true });
           sfx.cheer(0.8);
           break;
         case "stun":
-          this.popup(p.x, p.y - 26, e.text, "#ff7a3d");
+          this.popup(p.x, p.y - 26, e.text, "#ff7a3d", { cam: true });
           sfx.stun();
           break;
         case "run":
-          this.popup(fproj(0, 0).x, fproj(0, 0).y - 30, "득점!", "#7dff9a");
+          this.popup(fproj(0, 0).x, fproj(0, 0).y - 30, "득점!", "#7dff9a", { cam: true, big: true });
           sfx.safe();
           break;
         case "throw":
@@ -2012,14 +2041,30 @@ export class Match {
     this.drawBanner(ctx);
     for (const p of this.popups) {
       const a = 1 - smooth(0.9, 1.4, p.t);
+      const at = p.cam ? this.camPt(p.x, p.y) : p;
       ctx.globalAlpha = a;
-      ctx.font = '22px "Black Han Sans", sans-serif';
       ctx.textAlign = "center";
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = "rgba(0,0,0,0.75)";
-      ctx.strokeText(p.text, p.x, p.y - p.t * 30);
-      ctx.fillStyle = p.color;
-      ctx.fillText(p.text, p.x, p.y - p.t * 30);
+      if (p.big) {
+        // 판정 도장: 크게 튀어나왔다 자리 잡음
+        const k = p.t < 0.12 ? 1.8 - (p.t / 0.12) * 0.9 : p.t < 0.22 ? 0.9 + ((p.t - 0.12) / 0.1) * 0.1 : 1;
+        ctx.save();
+        ctx.translate(at.x, at.y - Math.max(0, p.t - 0.5) * 20);
+        ctx.scale(k, k);
+        ctx.font = '34px "Black Han Sans", sans-serif';
+        ctx.lineWidth = 7;
+        ctx.strokeStyle = "rgba(0,0,0,0.85)";
+        ctx.strokeText(p.text, 0, 0);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, 0, 0);
+        ctx.restore();
+      } else {
+        ctx.font = '22px "Black Han Sans", sans-serif';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "rgba(0,0,0,0.75)";
+        ctx.strokeText(p.text, at.x, at.y - p.t * 30);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, at.x, at.y - p.t * 30);
+      }
       ctx.globalAlpha = 1;
     }
     if (this.phase === "mission" && this.s.mission) this.drawMission(ctx);
@@ -2084,14 +2129,14 @@ export class Match {
       ctx.imageSmoothingQuality = "medium";
       ctx.translate(mp.x, mp.y);
       ctx.scale(pFlip ? -k : k, k);
-      ctx.drawImage(drawable(tim), c * T.CW, 0, T.CW, T.CH, -T.ax, -T.ay, T.CW, T.CH);
+      ctx.drawImage(teamTinted(T.src, drawable(tim), tim.naturalWidth, tim.naturalHeight, this.s.sides[fieldSide(this.s)].team.color), c * T.CW, 0, T.CW, T.CH, -T.ax, -T.ay, T.CW, T.CH);
       ctx.restore();
     } else if (pim.complete && pim.naturalWidth) {
       ctx.save();
       ctx.imageSmoothingQuality = "medium";
       ctx.translate(mp.x, mp.y);
       ctx.scale(pFlip ? -PITCHER_STILL.scale : PITCHER_STILL.scale, PITCHER_STILL.scale);
-      ctx.drawImage(pim, -PITCHER_STILL.ax, -PITCHER_STILL.ay);
+      ctx.drawImage(teamTinted(PITCHER_STILL.src, pim, pim.naturalWidth, pim.naturalHeight, this.s.sides[fieldSide(this.s)].team.color), -PITCHER_STILL.ax, -PITCHER_STILL.ay);
       ctx.restore();
     } else drawRig(ctx, PITCHER_RIG, pps, this.pitSkin, this.pitColors, mp.x, mp.y - 56 * pitcherScale, pitcherScale, pFlip);
     // 손 위치 (공 놓는 점)
@@ -2352,10 +2397,13 @@ export class Match {
       ctx.font = '700 15px "JetBrains Mono", monospace';
       ctx.textAlign = "center";
       const w = ctx.measureText(this.batInfo.text).width + 20;
+      // 존 · 공 위가 아니라 머리 버튼 아래 (공이 날아가는 쪽)
       ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(512 - w / 2, 330, w, 26);
+      ctx.beginPath();
+      ctx.roundRect(512 - w / 2, 92, w, 26, 8);
+      ctx.fill();
       ctx.fillStyle = "#ffd23f";
-      ctx.fillText(this.batInfo.text, 512, 348);
+      ctx.fillText(this.batInfo.text, 512, 110);
       ctx.globalAlpha = 1;
     }
     if (this.phase === "gauge" || (this.phase === "aim" && !this.userBat)) this.drawGauge(ctx);
@@ -2365,13 +2413,23 @@ export class Match {
    * 투수 뷰 (내가 던질 때): 외야 카메라 — 뒤쪽부터 심판 → 포수(미트 = 조준 자리) → 타자 → 공 → 내 투수(뒷모습) → 존 · 조준 · 게이지.
    * 타자가 컨택존을 어디로 옮겼는지는 안 보임 (타자도 안 움직임)
    */
+  /** 투수 뷰 사람 픽셀 레이어 (먼 쪽: 심판 · 포수 · 타자 / 가까운 쪽: 내 투수) */
+  private pxFar = new PixelLayer(PV_PX);
+  private pxNear = new PixelLayer(PV_PX);
   private drawPitching(ctx: CanvasRenderingContext2D, q: number) {
     const lefty = this.shownBatter.bats === "L";
     const c = pvCam(lefty);
-    ctx.drawImage(pvBackground(c, q, this.night), 0, 0, DW, DH);
+    // 배경 · 사람은 낮은 해상도로 그려 픽셀 그림처럼 (타석 · 수비 화면과 같은 화풍)
+    {
+      const sm = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(pixelated(pvBackground(c, q, this.night), PV_PX), 0, 0, DW, DH);
+      ctx.imageSmoothingEnabled = sm;
+    }
     const p = this.pitch;
     const P = (x: number, y: number, z: number) => pvProj(c, x, y, z);
-    drawUmpire(ctx, c, lefty ? -1 : 1);
+    const far = this.pxFar.begin();
+    drawUmpire(far, c, lefty ? -1 : 1);
     // 포수 미트: 조준하는 동안은 목표 자리, 공이 오면 실제로 들어오는 자리로 따라감
     let mitt = { x: this.target.x, h: this.target.y };
     if (p && (this.phase === "flight" || this.phase === "call" || this.phase === "contact" || this.phase === "result")) {
@@ -2379,10 +2437,11 @@ export class Match {
       const k = this.phase === "flight" ? smooth(0.55, 0.95, this.tf / p.dur) : 1;
       mitt = { x: lerp(this.target.x, at.x, k), h: lerp(this.target.y, at.y, k) };
     }
-    drawCatcher(ctx, c, this.pitColors, mitt);
+    drawCatcher(far, c, this.pitColors, mitt);
     const pose: PvBatPose =
       this.batAnim === BAT_SWING ? { kind: "swing", t: this.batAnimT } : this.batAnim === BAT_LOAD ? { kind: "load", t: this.batAnimT } : this.batAnim === BAT_BUNT ? { kind: "bunt", t: 0 } : { kind: "idle", t: 0 };
-    drawPvBatter(ctx, c, this.batColors, this.batLook.bat, lefty, pose, SWING_HIT_T);
+    drawPvBatter(far, c, this.batColors, this.batLook.bat, lefty, pose, SWING_HIT_T);
+    this.pxFar.end(ctx);
     // 공 (투수보다 멀리 있으니 투수 앞에 먼저)
     if (p && this.phase === "flight") {
       const r0 = pitchAt(p, 0);
@@ -2405,7 +2464,9 @@ export class Match {
     }
     // 내 투수 (뒷모습)
     const throwing = this.pitAnim === PIT_THROW;
-    const hand = drawPvPitcher(ctx, c, this.pitColors, this.pitcherNow.throws === "L", this.pitAnimT, throwing, PITCH_RELEASE_T);
+    const near = this.pxNear.begin();
+    const hand = drawPvPitcher(near, c, this.pitColors, this.pitcherNow.throws === "L", this.pitAnimT, throwing, PITCH_RELEASE_T);
+    this.pxNear.end(ctx);
     if (this.phase === "windup") this.pvRelHand = hand;
     else if (this.phase !== "flight") this.pvRelHand = null;
     // 공을 놓기 직전 손에 든 공
@@ -2875,10 +2936,83 @@ export class Match {
     return { pts, land: { x: F[c.landI].bx, y: F[c.landI].by } };
   }
 
+  // ───────────── 필드 카메라 (공 · 쫓는 수비 · 주자를 따라 당겨 봄) ─────────────
+  /** 화면 가운데에 둘 필드 화면 좌표(줌 1 기준) · 줌 */
+  fcam = { x: DW / 2, y: DH / 2, z: 1 };
+  /** 공을 처음 잡은 필드 시각 (-1 = 아직) */
+  private holdAt = -1;
+  private fieldCamTarget(fr: Frame) {
+    const pts: { x: number; y: number }[] = [];
+    const add = (x: number, y: number, h = 0) => pts.push(fproj(x, y, h));
+    add(fr.bx, fr.by, fr.bh);
+    add(fr.bx, fr.by);
+    if (!this.hr) {
+      const arc = this.flightArc(this.ft);
+      if (arc?.land) add(arc.land.x, arc.land.y);
+      if (fr.hold >= 0) {
+        add(fr.fx[fr.hold * 2], fr.fx[fr.hold * 2 + 1]);
+        // 공 잡은 뒤엔 뛰는 주자까지 (송구 · 태그 승부)
+        for (const r of fr.rs) if (r.st === 0) add(r.x, r.y);
+      } else {
+        const tx = arc?.land?.x ?? fr.bx;
+        const ty = arc?.land?.y ?? fr.by;
+        let bi = -1;
+        let bd = 1e9;
+        for (let i = 0; i < 9; i++) {
+          const d = Math.hypot(fr.fx[i * 2] - tx, fr.fx[i * 2 + 1] - ty);
+          if (d < bd) {
+            bd = d;
+            bi = i;
+          }
+        }
+        if (bi >= 0) add(fr.fx[bi * 2], fr.fx[bi * 2 + 1]);
+      }
+    }
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const p of pts) {
+      x0 = Math.min(x0, p.x);
+      x1 = Math.max(x1, p.x);
+      y0 = Math.min(y0, p.y);
+      y1 = Math.max(y1, p.y);
+    }
+    y0 -= 50; // 사람 키 · 공 위
+    const z = clamp(Math.min(DW / (x1 - x0 + 260), DH / (y1 - y0 + 170)), 1, this.hr ? 1.25 : 1.6);
+    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 + 6, z };
+  }
+  private updateFieldCam(fr: Frame, dt: number) {
+    const t = this.fieldCamTarget(fr);
+    const c = this.fcam;
+    const kp = 1 - Math.exp(-dt * 3.2);
+    const kz = 1 - Math.exp(-dt * 2.2);
+    c.z += (t.z - c.z) * kz;
+    c.x += (t.x - c.x) * kp;
+    c.y += (t.y - c.y) * kp;
+    const hw = DW / 2 / c.z;
+    const hh = DH / 2 / c.z;
+    c.x = clamp(c.x, hw, DW - hw);
+    c.y = clamp(c.y, hh, DH - hh);
+  }
+  /** 필드 좌표(줌 1) → 지금 카메라 화면 */
+  private camPt(x: number, y: number) {
+    const c = this.fcam;
+    return { x: (x - c.x) * c.z + DW / 2, y: (y - c.y) * c.z + DH / 2 };
+  }
+
   private drawField(ctx: CanvasRenderingContext2D, q: number) {
-    ctx.drawImage(fieldBg(q, this.night), 0, 0, DW, DH);
     const fr = this.frameAt(this.ft);
-    if (!fr) return;
+    const cam = this.fcam;
+    ctx.save();
+    ctx.translate(DW / 2, DH / 2);
+    ctx.scale(cam.z, cam.z);
+    ctx.translate(-cam.x, -cam.y);
+    const sm = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(fieldBg(q, this.night), 0, 0, DW, DH);
+    ctx.imageSmoothingEnabled = sm;
+    if (!fr) {
+      ctx.restore();
+      return;
+    }
     const fsd = this.s.sides[fieldSide(this.s)];
     const bsd = this.s.sides[batSide(this.s)];
     this.trail.push({ x: fr.bx, y: fr.by, h: fr.bh });
@@ -2917,6 +3051,7 @@ export class Match {
     } else {
       drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, this.trail, sp, this.flightArc(this.ft), this.poser, this.ft, this.lastPose);
     }
+    ctx.restore();
     if (this.hr) {
       const d = Math.round(this.hrDist);
       ctx.font = '30px "Black Han Sans", sans-serif';
@@ -3881,7 +4016,9 @@ export class Match {
       ctx.save();
       ctx.translate(g.x, g.y);
       if (f.flip) ctx.scale(-1, 1);
-      ctx.drawImage(im, -w / 2, -h, w, h);
+      // 수비수는 수비 팀 색 (주자는 공격 팀 그림 그대로)
+      const src = f.src === FIELDER.inf || f.src === FIELDER.of ? teamTinted(f.src, im, im.naturalWidth, im.naturalHeight, this.s.sides[fieldSide(this.s)].team.color) : im;
+      ctx.drawImage(src, -w / 2, -h, w, h);
       ctx.restore();
     }
   }

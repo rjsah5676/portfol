@@ -94,13 +94,21 @@ export function pvBackground(c: PvCam, q: number, night: boolean): HTMLCanvasEle
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  const cols = ["#f4d35e", "#ee6352", "#59cd90", "#3fa7d6", "#fac05e", "#f79d84", "#ffffff", "#c8a2ff", "#ff7a3d"];
-  for (let r = 0; r < 26; r++) {
-    const yy = standTop + 6 + r * 6.2;
-    for (let x = 0; x < DW; x += 5 + (r % 3)) {
+  // 관중: 층마다 한 줄 · 통로는 비움 · 차분한 색 (픽셀로 줄였을 때 색 노이즈처럼 안 보이게)
+  const cols = ["#c9b8a6", "#e6d6c2", "#8f7f72", "#d76a5a", "#e9b04f", "#6f9fd6", "#f2f2f2", "#9c86c9", "#5fb27a"];
+  for (let r = 0; r < 17; r++) {
+    const yy = standTop + 8 + r * 9.5;
+    g.fillStyle = r % 2 ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.03)";
+    g.fillRect(0, yy - 3, DW, 9.5);
+    for (let x = 0; x < DW; x += 6.5) {
+      if (x % 160 < 9) continue; // 통로
+      if (rnd() < 0.15) continue;
       g.fillStyle = cols[Math.floor(rnd() * cols.length)];
-      g.globalAlpha = 0.35 + rnd() * 0.35;
-      g.fillRect(x + rnd() * 2, yy + rnd() * 2, 2.6, 3);
+      g.globalAlpha = 0.55 + rnd() * 0.25;
+      g.fillRect(x + rnd() * 1.5, yy, 4, 4.5);
+      g.fillStyle = "#1a1d33";
+      g.globalAlpha = 0.5;
+      g.fillRect(x + 0.5, yy + 4.5, 3, 2.5);
     }
   }
   g.globalAlpha = 1;
