@@ -709,62 +709,6 @@ export class Match {
 
   /** 투구 시작 (CPU 투수면 여기서 정함) */
   /** 타자 준비 → 와인드업까지 기다리는 시간 (특수능력 카드가 떠 있으면 그게 사라질 즈음까지) */
-  /** 첫 타석 안내 (한 번만 · 누르면 시작) — 예전엔 안내 없이 1.9초 뒤 첫 공이 그냥 날아옴 */
-  private tutor = (() => {
-    try {
-      return typeof window !== "undefined" && !localStorage.getItem(TUTOR_KEY);
-    } catch {
-      return false;
-    }
-  })();
-  private get tutorOn() {
-    return this.tutor && this.userBat && this.phase === "ready" && this.cfg.mode !== "derby";
-  }
-  private dismissTutor() {
-    this.tutor = false;
-    try {
-      localStorage.setItem(TUTOR_KEY, "1");
-    } catch {}
-    this.pt = 0;
-    sfx.ui();
-    this.pushUi();
-  }
-  private drawTutor(ctx: CanvasRenderingContext2D) {
-    const x = 232, y = 118, w = 560, h = 236;
-    ctx.save();
-    ctx.fillStyle = "rgba(4,6,16,0.45)";
-    ctx.fillRect(0, 0, DW, DH);
-    this.panel(ctx, x, y, w, h, "rgba(255,207,74,0.8)");
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.font = '26px "Black Han Sans", sans-serif';
-    ctx.fillStyle = "#ffcf4a";
-    ctx.fillText("첫 타석!", x + w / 2, y + 30);
-    const rows: [string, string, string][] = [
-      ["#ffffff", "스윙", "Space · 클릭 · 폰은 스윙 버튼 — 공이 홈에 올 때"],
-      ["#ffbe5a", "주황 상자", "노리는 자리. 방향키 · WASD · 폰은 패드로 옮겨요"],
-      ["#6ab8ff", "파란 원", "지금 공이 존 어디쯤인지 — 따라가서 상자 안에 넣고 치면 정타"],
-      ["#7ad7ff", "볼", "존 밖 공은 참으면 볼넷. 휘두르면 빗맞아요"],
-    ];
-    rows.forEach(([col, k, v], i) => {
-      const ry = y + 72 + i * 34;
-      ctx.textAlign = "right";
-      ctx.font = '900 15px "Nanum Gothic", sans-serif';
-      ctx.fillStyle = col;
-      ctx.fillText(k, x + 118, ry);
-      ctx.textAlign = "left";
-      ctx.font = '700 14px "Nanum Gothic", sans-serif';
-      ctx.fillStyle = "rgba(255,255,255,0.88)";
-      ctx.fillText(v, x + 132, ry);
-    });
-    const blink = 0.55 + 0.45 * Math.sin(this.time * 5);
-    ctx.textAlign = "center";
-    ctx.font = '900 15px "Nanum Gothic", sans-serif';
-    ctx.fillStyle = `rgba(255,207,74,${blink.toFixed(2)})`;
-    ctx.fillText("탭 · Space 로 시작", x + w / 2, y + h - 22);
-    ctx.restore();
-  }
-
   private readyWait() {
     let base = this.cfg.mode === "derby" ? 0.8 : this.paFirst ? TEMPO.first : TEMPO.ready;
     // 걸어 들어오는 중이면 다 들어오고 WALK_SETTLE 뒤에 던짐
@@ -894,7 +838,6 @@ export class Match {
   // ───────────── 입력 ─────────────
   pressSwing(special = false) {
     if (this.paused) return;
-    if (this.tutorOn) return this.dismissTutor();
     if (this.phase === "mission") return this.skipMission();
     if (this.phase === "recap") return this.skipRecap();
     // 공이 나온 뒤 한 번 휘둘렀으면 그 공은 끝
@@ -1071,7 +1014,6 @@ export class Match {
   /** 화면 아무 데나 누름 · swing = 화면 누름으로 스윙할지 (터치 기기는 스윙 버튼으로만 — 화면 아무 데나 닿아도 휘둘러지던 문제) */
   tap(sx: number, sy: number, swing = true) {
     if (this.paused) return;
-    if (this.tutorOn) return this.dismissTutor();
     if (this.phase === "mission") return this.skipMission();
     if (this.phase === "recap") return this.skipRecap();
     if (this.phase === "field") {
@@ -1579,11 +1521,7 @@ export class Match {
       case "ready":
         // 사용자 타자: 잠깐 숨 고르고 투구
         // 특수능력 발동 카드(왼쪽 위)가 떠 있으면 다 사라질 즈음까지 기다렸다 던짐 (투구 중에 떠 있으면 거슬림)
-        if (this.tutorOn) {
-          // 안내 보는 동안은 안 던짐 (명찰 카드도 치움)
-          this.pt = Math.min(this.pt, 0.2);
-          this.cardsGone = true;
-        } else if (this.pt > this.readyWait() && !(this.boostFx && this.boostFx.t < BOOST_DUR - 0.35)) this.startWindup();
+        if (this.pt > this.readyWait() && !(this.boostFx && this.boostFx.t < BOOST_DUR - 0.35)) this.startWindup();
         break;
       case "aim":
       case "gauge":
@@ -1905,7 +1843,6 @@ export class Match {
     if (this.phase === "mission" && this.s.mission) this.drawMission(ctx);
     this.drawMissionFx(ctx);
     if (this.phase === "recap") this.drawRecap(ctx);
-    if (this.tutorOn) this.drawTutor(ctx);
   }
 
   private lastWasField() {
@@ -4300,4 +4237,3 @@ const PA_SHORT_COL: Record<string, string> = {
   홈런: "#ffd23f", "3루타": "#7dff9a", "2루타": "#7dff9a", 안타: "#7dff9a", 볼넷: "#7ad7ff", 사구: "#7ad7ff", 삼진: "#ff8a7a", 병살: "#ff8a7a",
 };
 
-const TUTOR_KEY = "pxb:tut:bat";
