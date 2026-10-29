@@ -3291,7 +3291,8 @@ export class Match {
 
     // ── 양 팀 타순 ──
     const lineup = (t: number, x: number) => {
-      const w = 290, y0 = 104, rowH = 44;
+      // 아래 40px 은 배속 · 메뉴 버튼 자리 (겹치지 않게)
+      const w = 290, y0 = 102, rowH = 42;
       const atk = (t === 0) === st.top;
       this.panel(ctx, x, y0, w, 9 * rowH + 34, atk ? "rgba(255,207,74,0.6)" : undefined);
       ctx.textAlign = "left";
@@ -3419,7 +3420,7 @@ export class Match {
       ctx.fillText(last.pit, cx0 + 70, 300);
     }
     // 중계 (최근 5줄 · 새 줄은 밝게 미끄러져 들어옴)
-    const fy = 324, fh = 228, fx = cx0 - 200, fw = 400;
+    const fy = 320, fh = 210, fx = cx0 - 200, fw = 400;
     this.panel(ctx, fx, fy, fw, fh);
     const N = 5;
     const from = Math.max(0, r.shown - N);
