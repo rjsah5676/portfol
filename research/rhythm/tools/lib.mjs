@@ -37,13 +37,9 @@ export const BUILTIN = {
   sugarcloud: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 18] },
   overload: { single: true, boss: {}, explus: {}, levels: [3, 6, 10, 13, 16, 19] },
   etude: { boss: {}, explus: {}, levels: [3, 6, 10, 13, 17, 20] },
-  limitbreak: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
-  neonoverdrive: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
-  summerstatic: { single: true, boss: {}, levels: [3, 5, 8, 11, 14] },
-  skybreaker: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
-  brassrocket: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
   highlight: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
   tomeinauso: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
+  picopico: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

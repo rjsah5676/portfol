@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.14",
+    name: "새 곡 PIKO PIKO OVERKILL · 곡 정리",
+    date: "2026.10.29",
+    lines: [
+      "PIKO PIKO OVERKILL — 188 BPM J-CORE / 덴파 하드코어 (AI 자작곡, tunee.ai), EASY ~ ULTIMA",
+      "v2.12 연주곡 5곡(LIMIT BREAK · NEON OVERDRIVE · Summer Static · SKYBREAKER · BRASS ROCKET)은 뺌 — 밋밋해서",
+      "일본어 곡 제목을 영어로: 夏霞のあと → After the Summer Haze, 透明な嘘 → Transparent Lie",
+    ],
+  },
+  {
     ver: "v2.13",
     name: "새 곡 2곡 (보컬곡)",
     date: "2026.10.29",

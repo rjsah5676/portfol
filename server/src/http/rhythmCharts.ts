@@ -16,13 +16,9 @@ import starlight from "../../../web/src/data/rhythm/starlight.json";
 import sugarcloud from "../../../web/src/data/rhythm/sugarcloud.json";
 import overload from "../../../web/src/data/rhythm/overload.json";
 import etude from "../../../web/src/data/rhythm/etude.json";
-import limitbreak from "../../../web/src/data/rhythm/limitbreak.json";
-import neonoverdrive from "../../../web/src/data/rhythm/neonoverdrive.json";
-import summerstatic from "../../../web/src/data/rhythm/summerstatic.json";
-import skybreaker from "../../../web/src/data/rhythm/skybreaker.json";
-import brassrocket from "../../../web/src/data/rhythm/brassrocket.json";
 import highlight from "../../../web/src/data/rhythm/highlight.json";
 import tomeinauso from "../../../web/src/data/rhythm/tomeinauso.json";
+import picopico from "../../../web/src/data/rhythm/picopico.json";
 
 /*
  * 리듬게임 내장곡 채보에서 기록 검증에 쓰는 값만 뽑아 둠 (프론트와 같은 채보 파일을 읽음).
@@ -56,13 +52,9 @@ const SONGS: Record<string, SongData> = {
   sugarcloud,
   overload,
   etude,
-  limitbreak,
-  neonoverdrive,
-  summerstatic,
-  skybreaker,
-  brassrocket,
   highlight,
   tomeinauso,
+  picopico,
 };
 export const RHYTHM_SONG_IDS = Object.keys(SONGS);
 /** 곡 id → 길이(초)와 있는 난이도 (온라인 방에서 곡·난이도 확인용) */

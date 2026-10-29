@@ -25,13 +25,9 @@ import starlightData from "@/data/rhythm/starlight.json";
 import sugarcloudData from "@/data/rhythm/sugarcloud.json";
 import overloadData from "@/data/rhythm/overload.json";
 import etudeData from "@/data/rhythm/etude.json";
-import limitbreakData from "@/data/rhythm/limitbreak.json";
-import neonoverdriveData from "@/data/rhythm/neonoverdrive.json";
-import summerstaticData from "@/data/rhythm/summerstatic.json";
-import skybreakerData from "@/data/rhythm/skybreaker.json";
-import brassrocketData from "@/data/rhythm/brassrocket.json";
 import highlightData from "@/data/rhythm/highlight.json";
 import tomeinausoData from "@/data/rhythm/tomeinauso.json";
+import picopicoData from "@/data/rhythm/picopico.json";
 
 export type Kind =
   | "kick"
@@ -366,10 +362,16 @@ const JILJU = audioSong("jilju", "질주주의보", "/audio/jilju.mp3", jiljuDat
   color: "#38BDF8",
   desc: "170 BPM · K-POP ROCK · AI 자작곡 (tunee.ai)",
 });
-const NATSU = audioSong("natsukasumi", "夏霞のあと", "/audio/natsukasumi.mp3", natsuData, {
-  color: "#F9A8D4",
-  desc: "119 BPM · J-ROCK / INDIE POP · AI 자작곡 (tunee.ai)",
-});
+const NATSU = audioSong(
+  "natsukasumi",
+  "After the Summer Haze",
+  "/audio/natsukasumi.mp3",
+  natsuData,
+  {
+    color: "#F9A8D4",
+    desc: "119 BPM · J-ROCK / INDIE POP · AI 자작곡 (tunee.ai)",
+  }
+);
 
 const NEWDIM = audioSong("newdim", "New Dimension", "/audio/newdim.mp3", newdimData, {
   color: "#C084FC",
@@ -460,54 +462,21 @@ const HIGHLIGHT = audioSong("highlight", "하이라이트", "/audio/highlight.mp
 });
 
 // 3분 16초로 나와서 2절(마디 33~64, 51초)을 덜어 냄 — 앞뒤 마디가 거의 같은 자리(유사도 0.98)에서 박에 맞춰 이음
-const TOMEINAUSO = audioSong("tomeinauso", "透明な嘘", "/audio/tomeinauso.mp3", tomeinausoData, {
-  color: "#A5B4FC",
-  desc: "149 BPM · J-POP 록 발라드 · AI 자작곡 (tunee.ai)",
-});
-
-// 연주곡 5곡 (Gemini) — 가사 있는 곡은 잘 안 뽑혀서 보컬 없이
-const LIMITBREAK = audioSong("limitbreak", "LIMIT BREAK", "/audio/limitbreak.mp3", limitbreakData, {
-  color: "#DC2626",
-  desc: "172 BPM · K-POP 걸밴드 록 · AI 자작곡 (Gemini)",
-});
-
-const NEONOVERDRIVE = audioSong(
-  "neonoverdrive",
-  "NEON OVERDRIVE",
-  "/audio/neonoverdrive.mp3",
-  neonoverdriveData,
+const TOMEINAUSO = audioSong(
+  "tomeinauso",
+  "Transparent Lie",
+  "/audio/tomeinauso.mp3",
+  tomeinausoData,
   {
-    color: "#22D3EE",
-    desc: "150 BPM · EUROBEAT · AI 자작곡 (Gemini)",
+    color: "#A5B4FC",
+    desc: "149 BPM · J-POP 록 발라드 · AI 자작곡 (tunee.ai)",
   }
 );
 
-const SUMMERSTATIC = audioSong(
-  "summerstatic",
-  "Summer Static",
-  "/audio/summerstatic.mp3",
-  summerstaticData,
-  {
-    color: "#34D399",
-    desc: "135 BPM · UK GARAGE / 2-STEP · AI 자작곡 (Gemini)",
-  }
-);
-
-const SKYBREAKER = audioSong("skybreaker", "SKYBREAKER", "/audio/skybreaker.mp3", skybreakerData, {
-  color: "#7DD3FC",
-  desc: "150 BPM · EUPHORIC HARDSTYLE · AI 자작곡 (Gemini)",
+const PICOPICO = audioSong("picopico", "PIKO PIKO OVERKILL", "/audio/picopico.mp3", picopicoData, {
+  color: "#FF2E97",
+  desc: "188 BPM · J-CORE / DENPA HARDCORE · AI 자작곡 (tunee.ai)",
 });
-
-const BRASSROCKET = audioSong(
-  "brassrocket",
-  "BRASS ROCKET",
-  "/audio/brassrocket.mp3",
-  brassrocketData,
-  {
-    color: "#FBBF24",
-    desc: "170 BPM · SKA PUNK · AI 자작곡 (Gemini)",
-  }
-);
 
 // xi의 곡 — 제작자 표기 필수 (artist는 곡 선택·플레이·결과·랭킹에 함께 나옴)
 const ANIMA = audioSong("anima", "ANiMA", "/audio/anima.mp3", animaData, {
@@ -552,13 +521,9 @@ const FREEDOMDIVE = audioSong(
  *   sugarcloud  --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
  *   overload    --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19   (ULTIMA는 18 — 하프타임이라 280으로 잡혀서 --single)
  *   etude       --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20   (NIGHTMARE는 16)
- *   limitbreak  --bpm-label 172 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE 15 · ULTIMA 16)
- *   neonoverdrive --bpm-label 150 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 15)
- *   summerstatic --single --bpm-label 135 --boss '{}' --levels 3,5,8,11,14   (2배 템포 270으로 잡혀서 --single · NIGHTMARE 13)
- *   skybreaker  --bpm-label 150 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 16)
- *   brassrocket --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE 15 · ULTIMA 16)
  *   highlight   --bpm-label 192 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (EX 12 · NIGHTMARE 15 · ULTIMA 16)
  *   tomeinauso  --bpm-label 149 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 15)
+ *   picopico    --bpm-label 188 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (EX 13 · NIGHTMARE 14 · ULTIMA 15 — 위로는 타격이 모자라 더 안 오름)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -607,13 +572,9 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  PICOPICO,
   HIGHLIGHT,
   TOMEINAUSO,
-  LIMITBREAK,
-  NEONOVERDRIVE,
-  SUMMERSTATIC,
-  SKYBREAKER,
-  BRASSROCKET,
   STARLIGHT,
   SUGARCLOUD,
   MIDNIGHT,
