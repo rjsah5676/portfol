@@ -67,7 +67,7 @@ export interface GameOpts {
   away: Team;
   home: Team;
   /** 육성: 인연 특별 미션을 줄 수 있는 덱 캐릭터 [id, 노리는 쪽("hit" 타격 · "power" 파워 · "run" 주루)] */
-  bondChars?: [CharId, "hit" | "power" | "run"][];
+  bondChars?: [CharId, "hit" | "power" | "run" | "def"][];
 }
 
 export interface GameState {
@@ -91,6 +91,12 @@ export interface GameState {
   notes: string[];
   /** 타석 기록 (결승타 · 역전 · 끝내기 · 병살 판정용) */
   plays?: Play[];
+  /** 육성: 지금 내 선수에게 온 찬스 (도루 · 호수비) — 화면이 고르기 · 타이밍을 받아서 풂 */
+  chance?: { kind: "steal" | "field"; p: number; hit?: "1B" | "2B" } | null;
+  /** 육성: 내 선수 도루 · 도루 실패 · 호수비 · 수비 찬스 수 */
+  me?: { sb: number; cs: number; df: number; fc: number };
+  /** 도루를 이미 물어본 타석 (plays 길이) */
+  stealAsk?: number;
 }
 export interface Play {
   /** 공격 팀 0 원정 · 1 홈 */

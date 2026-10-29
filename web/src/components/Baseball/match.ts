@@ -10,7 +10,7 @@
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, SPEED_SCALE, type Diff } from "@/lib/baseball/ai";
 import { CZ_MOVE, CZ_RANGE, contactZone, timingLabel, timingWindow } from "@/lib/baseball/contact";
 import { BP_PITCHER, TEAM_DEFS, artUrl, charById, cutinUrl, faceUrl, hasSwingArt, swingArtUrl, makeTeam, seasonOf, swingOf, type Batter, type CharId, type Pitcher, type Team } from "@/lib/baseball/data";
-import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, slotName, type CareerSetup, type MyPA, type RecapLine } from "@/lib/baseball/careerGame";
+import { advanceToMyPA, botHook, mySide, newCareerGame, quickPA, recapHead, recapOf, resolveField, resolveSteal, slotName, type CareerSetup, type MyPA, type RecapLine } from "@/lib/baseball/careerGame";
 import {
   BAT_BUNT, BAT_IDLE, BAT_LOAD, BAT_SWING, BATS, BATTER_RIG, HAIR, HELMETS, PIT_IDLE, PIT_RIG_RELEASE_T, PIT_THROW, PITCH_RELEASE_T, PITCHER_RIG,
   SKIN_TONES, SWING_HIT_T, baseSkin,
@@ -70,6 +70,9 @@ const TEMPO = { call: 1.1, ready: 1.4, first: 1.9, result: 2.0, change: 2.4 };
 /** 타석에 걸어 들어오기 재생 속도 · 다 들어온 뒤 첫 공까지 숨 고르기 */
 const WALK_SPEED = WALKIN_LEN / 3.3;
 const WALK_SETTLE = 0.7;
+/** 호수비 타이밍 링: from → to 배율로 dur 초 동안 줄어듦 (1 = 원) */
+const QTE = { from: 2.2, to: 0.4, dur: 1.25 };
+const qteScale = (t: number) => QTE.from - (QTE.from - QTE.to) * Math.min(1, Math.max(0, t) / QTE.dur);
 const BOOST_PHASES: Phase[] = ["ready", "windup", "flight", "contact", "call"];
 /** HUD · 이펙트 그림 (GPT 이미지 → public/baseball/ui) */
 const UI = {
@@ -118,7 +121,7 @@ export interface MatchCfg {
 
 export type Phase =
   | "intro" | "mission" | "ready" | "aim" | "gauge" | "cutin" | "windup" | "flight" | "contact"
-  | "call" | "field" | "result" | "change" | "over" | "recap";
+  | "call" | "field" | "result" | "change" | "over" | "recap" | "chance";
 
 export interface UiState {
   phase: Phase;
@@ -155,6 +158,8 @@ export interface UiState {
   speed: number;
   /** 육성 경기: 지금 방식 · 다음 타석부터 바뀔 방식 */
   career: null | { mode: "direct" | "highlight"; next: "direct" | "highlight" | "auto" | null };
+  /** 육성 찬스: 도루 (고르기) · 호수비 (타이밍) */
+  chance: null | { kind: "steal" | "field"; p: number };
 }
 
 interface Banner {
@@ -473,6 +478,7 @@ export class Match {
       paused: this.paused,
       speed: this.cfg.speed ?? 1,
       career: this.cfg.career ? { mode: this.cfg.highlight ? "highlight" : "direct", next: this.afterMode } : null,
+      chance: this.phase === "chance" && this.s.chance ? { kind: this.s.chance.kind, p: Math.round(this.s.chance.p * 100) / 100 } : null,
     };
   }
   private pushUi() {
@@ -519,13 +525,158 @@ export class Match {
   private careerAdvance(allAuto: boolean, log?: RecapLine[]): MyPA[] {
     const s = this.s;
     const c = this.cfg.career!;
-    const autos = advanceToMyPA(s, c.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff, allAuto) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto, log);
+    const autos = advanceToMyPA(s, c.myIdx, this.rng, this.cfg.highlight || allAuto ? botHook(this.cfg.diff, allAuto) : undefined, this.myPAs.filter((p) => !p.auto).length, allAuto, log, !allAuto);
     this.myPAs.push(...autos);
     if (!s.over) {
       cpuManage(s, fieldSide(s));
       this.rbiBefore = s.sides[batSide(s)].bat[c.myIdx].rbi;
     }
     return autos;
+  }
+
+  // ───────────── 육성 찬스 (도루 · 호수비) ─────────────
+  /** 호수비 타이밍: t = 링이 줄기 시작한 뒤 초 (음수 = 준비) · w = 맞는 창 (배율 ±) */
+  qte: { t: number; w: number; done: boolean; ok: boolean; hold: number } | null = null;
+  /** 찬스 결과 잠깐 보여 주기 */
+  chanceRes: { text: string; sub: string; ok: boolean; t: number } | null = null;
+  private openChance() {
+    const ch = this.s.chance!;
+    this.setPhase("chance");
+    this.chanceRes = null;
+    if (ch.kind === "field") {
+      this.qte = { t: -0.75, w: 0.07 + ch.p * 0.18, done: false, ok: false, hold: 0 };
+      sfx.cutin();
+    } else {
+      this.qte = null;
+      sfx.ui();
+    }
+    logUi(`chance:${ch.kind}`);
+    this.pushUi();
+  }
+  /** 도루 찬스: 뛴다 / 그대로 */
+  chooseSteal(go: boolean) {
+    const ch = this.s.chance;
+    if (this.phase !== "chance" || ch?.kind !== "steal" || this.chanceRes) return;
+    const ok = go && this.rng() < ch.p;
+    const msg = resolveSteal(this.s, this.cfg.career!.myIdx, go, ok);
+    if (!msg) return this.afterChance();
+    this.chanceRes = { text: msg, sub: ok ? "2루 안착 · 득점권!" : "태그 아웃", ok, t: 0 };
+    (ok ? sfx.missionOk : sfx.missionNg)();
+    this.pushUi();
+  }
+  /** 호수비 찬스: 누름 (링이 원에 겹칠 때) */
+  fieldPress() {
+    const q = this.qte;
+    if (this.phase !== "chance" || !q || q.done || q.t < 0) return;
+    q.ok = Math.abs(qteScale(q.t) - 1) <= q.w;
+    q.done = true;
+    (q.ok ? sfx.missionOk : sfx.missionNg)();
+  }
+  /** 찬스 단계 키 (Space · Enter): 호수비 누르기 · 도루 뛰기 */
+  chanceKey(go = true) {
+    if (this.phase !== "chance") return;
+    if (this.qte) this.fieldPress();
+    else this.chooseSteal(go);
+  }
+  private endField() {
+    const q = this.qte!;
+    const s = this.s;
+    const h = recapHead(s, false);
+    const pa = resolveField(s, this.cfg.career!.myIdx, q.ok, this.rng);
+    this.qte = null;
+    this.pendingLines.push(recapOf(s, h, pa));
+    if (pa.halfOver && !s.over) nextHalf(s);
+    this.afterChance();
+  }
+  private afterChance() {
+    this.chanceRes = null;
+    this.qte = null;
+    this.recapJustShown = true;
+    this.beginPA();
+  }
+  private updateChance(dt: number) {
+    const q = this.qte;
+    if (q) {
+      if (!q.done) {
+        q.t += dt;
+        if (q.t > QTE.dur + 0.06) {
+          q.done = true;
+          q.ok = false;
+          sfx.missionNg();
+        }
+      } else if ((q.hold += dt) > 1.05) this.endField();
+      return;
+    }
+    if (this.chanceRes && (this.chanceRes.t += dt) > 1.15) this.afterChance();
+  }
+  private drawChance(ctx: CanvasRenderingContext2D) {
+    const ch = this.s.chance;
+    const q = this.qte;
+    ctx.fillStyle = "rgba(6,10,26,0.72)";
+    ctx.fillRect(0, 0, DW, DH);
+    ctx.textAlign = "center";
+    const title = (t: string, col: string, y: number, size = 40) => {
+      ctx.font = `${size}px "Black Han Sans", sans-serif`;
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "rgba(0,0,0,0.8)";
+      ctx.strokeText(t, DW / 2, y);
+      ctx.fillStyle = col;
+      ctx.fillText(t, DW / 2, y);
+    };
+    const sub = (t: string, y: number, col = "rgba(255,255,255,0.8)") => {
+      ctx.font = '700 16px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = col;
+      ctx.fillText(t, DW / 2, y);
+    };
+    if (q) {
+      const cx = DW / 2, cy = 300, R = 70;
+      title("호수비 찬스!", "#4aa8ff", 130);
+      const POS: Record<string, string> = { C: "포수", "1B": "1루수", "2B": "2루수", "3B": "3루수", SS: "유격수", LF: "좌익수", CF: "중견수", RF: "우익수" };
+      const myPos = POS[this.cfg.career?.my.batters[this.cfg.career.myIdx]?.pos ?? ""] ?? "내";
+      sub(q.done ? "" : q.t < 0 ? `${myPos} 쪽으로 날카로운 타구…!` : "링이 원에 겹칠 때 누르세요 · Space / 터치", 168);
+      // 맞는 띠
+      ctx.lineWidth = Math.max(4, R * q.w * 2);
+      ctx.strokeStyle = "rgba(74,168,255,0.28)";
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#4aa8ff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.stroke();
+      // 공
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+      ctx.fill();
+      if (!q.done && q.t >= 0) {
+        const k = qteScale(q.t);
+        const hit = Math.abs(k - 1) <= q.w;
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = hit ? "#ffd23f" : "#fff";
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * k, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      if (q.done) {
+        title(q.ok ? "나이스 캐치!" : "아쉽게 빠졌다…", q.ok ? "#ffd23f" : "#ff8a8a", cy + 140, 44);
+        sub(q.ok ? "호수비 +1 · 경기 평가 ↑" : `수비 성공률 ${Math.round((ch?.p ?? 0) * 100)}% — 수비 훈련으로 창이 넓어져요`, cy + 172);
+      }
+      return;
+    }
+    const r = this.chanceRes;
+    if (r) {
+      title(r.text, r.ok ? "#7dff9a" : "#ff8a8a", 250, 52);
+      sub(r.sub, 290);
+      return;
+    }
+    if (ch?.kind === "steal") {
+      title("도루 찬스!", "#ffcf3a", 170);
+      sub(`1루 주자 ${this.cfg.career?.my.batters[this.cfg.career.myIdx]?.name ?? "나"} · 2루가 비었다`, 206);
+      title(`성공률 ${Math.round(ch.p * 100)}%`, ch.p >= 0.6 ? "#7dff9a" : ch.p >= 0.45 ? "#ffd23f" : "#ff9a7a", 262, 34);
+      sub("성공하면 득점권 · 실패하면 아웃 — 주루 능력치가 높을수록 ↑", 296, "rgba(255,255,255,0.6)");
+    }
   }
 
   private beginPA(): void {
@@ -554,6 +705,8 @@ export class Match {
         return;
       }
       if (s.over) return this.finish();
+      // 도루 · 호수비 찬스 (요약을 다 본 뒤)
+      if (s.chance) return this.openChance();
       const recapped = this.recapJustShown;
       this.recapJustShown = false;
       if (recapped) {
@@ -849,6 +1002,7 @@ export class Match {
   // ───────────── 입력 ─────────────
   pressSwing(special = false) {
     if (this.paused) return;
+    if (this.phase === "chance") return this.chanceKey();
     if (this.phase === "mission") return this.skipMission();
     if (this.phase === "recap") return this.skipRecap();
     // 타석으로 걸어 들어오는 동안엔 못 휘두름
@@ -1027,6 +1181,10 @@ export class Match {
   /** 화면 아무 데나 누름 · swing = 화면 누름으로 스윙할지 (터치 기기는 스윙 버튼으로만 — 화면 아무 데나 닿아도 휘둘러지던 문제) */
   tap(sx: number, sy: number, swing = true) {
     if (this.paused) return;
+    if (this.phase === "chance") {
+      if (this.qte) this.fieldPress();
+      return;
+    }
     if (this.phase === "mission") return this.skipMission();
     if (this.phase === "recap") return this.skipRecap();
     if (this.phase === "field") {
@@ -1515,6 +1673,9 @@ export class Match {
         // 육성은 인트로 없이 바로 경기 요약(중계 화면) → 그다음 내 타자가 걸어 들어옴
         if (this.pt > (this.cfg.career && !this.cfg.bond ? 0 : 1.6)) this.beginPA();
         break;
+      case "chance":
+        this.updateChance(dt);
+        break;
       case "recap": {
         const r = this.recap;
         if (!r) break;
@@ -1864,6 +2025,36 @@ export class Match {
     if (this.phase === "mission" && this.s.mission) this.drawMission(ctx);
     this.drawMissionFx(ctx);
     if (this.phase === "recap") this.drawRecap(ctx);
+    if (this.phase === "chance") this.drawChance(ctx);
+    else if (this.cfg.career?.missions?.length && !this.cfg.bond && this.phase !== "recap") this.drawSeasonMissions(ctx);
+  }
+
+  /** 육성: 시즌 미션 (오른쪽 위 · 이 경기 기록까지 더해서) */
+  private drawSeasonMissions(ctx: CanvasRenderingContext2D) {
+    const c = this.cfg.career!;
+    const ms = c.missions!;
+    const ln = this.s.sides[mySide(this.s)].bat[c.myIdx];
+    const me = this.s.me;
+    const today = { h: ln.h, xbh: ln.d2 + ln.d3 + ln.hr, hr: ln.hr, rbi: ln.rbi, sb: me?.sb ?? 0, df: me?.df ?? 0 };
+    const w = 226, x = DW - 12 - w, y = 108, h = 22 + ms.length * 19;
+    this.panel(ctx, x, y, w, h);
+    ctx.textAlign = "left";
+    ctx.font = '700 11px "Nanum Gothic", sans-serif';
+    ctx.fillStyle = "#5fc8ff";
+    ctx.fillText("시즌 미션", x + 10, y + 16);
+    ms.forEach((m, i) => {
+      const now = Math.min(m.need, m.now + today[m.key]);
+      const done = m.done || now >= m.need;
+      const yy = y + 34 + i * 19;
+      ctx.font = '700 12.5px "Nanum Gothic", sans-serif';
+      ctx.fillStyle = done ? "#ffd23f" : "#fff";
+      ctx.fillText(`${done ? "✓ " : ""}${m.name}`, x + 10, yy);
+      ctx.textAlign = "right";
+      ctx.font = '700 12px "JetBrains Mono", monospace';
+      ctx.fillStyle = today[m.key] ? "#7dff9a" : "rgba(255,255,255,0.6)";
+      ctx.fillText(`${now}/${m.need}`, x + w - 10, yy);
+      ctx.textAlign = "left";
+    });
   }
 
   private lastWasField() {
@@ -2992,7 +3183,7 @@ export class Match {
     if (r === "ok") {
       out.push(career ? { t: `자금 +${Math.round(m.pt / 3)}만`, good: true } : { t: `+${m.pt} 코인`, good: true });
       if (!this.userBat) out.push({ t: "마구 +1", good: true });
-      if (career) out.push({ t: "감독 신뢰 ↑", good: true }, { t: "인기도 +2", good: true }, { t: "경기 평가 ↑", good: true });
+      if (career) out.push({ t: `스킬P +${Math.round(m.pt / 4)}`, good: true }, { t: "경기 평가 ↑", good: true });
       if (bond && career) out.push({ t: `${bond} 호감 +6`, good: true });
     } else if (r === "partial") {
       const pp = Math.round(m.pt / 4);
@@ -3000,8 +3191,7 @@ export class Match {
       if (bond && career) out.push({ t: `${bond} 호감 +2`, good: true });
       if (career) out.push({ t: "패널티 없음", good: true });
     } else {
-      if (career) out.push({ t: "감독 신뢰 ↓", good: false });
-      if (bond && career) out.push({ t: `${bond} 호감 −3`, good: false });
+      if (bond && career) out.push({ t: `${bond} 호감 −2`, good: false });
       if (!out.length) out.push({ t: "보상 없음", good: false });
     }
     return out;

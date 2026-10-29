@@ -27,16 +27,11 @@ export interface CareerSetup {
   spUses?: number;
   /** 인연 특별 미션을 줄 덱 캐릭터 */
   bondChars?: GameState["opts"]["bondChars"];
+  /** 시즌 미션 (경기 화면 표시) — now = 이 경기 전까지 */
+  missions?: { name: string; key: "h" | "xbh" | "hr" | "rbi" | "sb" | "df"; now: number; need: number; done?: boolean }[];
 }
 
-/** 감독 신뢰 → 타순 (낮으면 하위 타순 · 높으면 중심 타선) */
-export function slotOf(trust: number) {
-  return trust < 25 ? 8 : trust < 50 ? 6 : trust < 75 ? 1 : 3;
-}
 export const slotName = (i: number) => `${i + 1}번`;
-
-/** 육성 상대 투수 수준 (연차별 · 제구 · 변화 평균) — 원래 팀 기본은 560. 육성 선수가 150 남짓에서 시작하니 첫해는 200 */
-export const PITCH_LV = [200, 240, 280, 320, 360, 400, 450, 500, 520, 540];
 
 /**
  * 우리 팀 동료 덤: edge = 늘 (가을야구 진출 · 우승이 너무 운이 아니게) · mood = 팀 분위기 1 마다
@@ -44,16 +39,18 @@ export const PITCH_LV = [200, 240, 280, 320, 360, 400, 450, 500, 520, 540];
  */
 export const TEAM_TUNE = { edge: 40, mood: 16, pit: 0.6 };
 
-/** 시즌마다 같은 동료 · 매주 다른 상대 (시드로 고정) */
-export function careerSetup(seed: number, season: number, week: number, me: Batter, trust: number, diff: Diff, spUses?: number, bondChars?: CareerSetup["bondChars"], mood = 0): CareerSetup {
-  const rTeam = makeRng((seed ^ (season * 0x9e37)) >>> 0);
+/**
+ * 한 시즌 같은 동료 · 매주 다른 상대 (시드로 고정). key = 경기 열쇠(주 · 결승), slot = 내 타순(0 = 1번),
+ * lv = 이번 주 투수 수준 (원래 팀 기본 560 — 내 선수가 크는 만큼 주마다 세짐)
+ */
+export function careerSetup(seed: number, key: number, me: Batter, slot: number, diff: Diff, lv: number, spUses?: number, bondChars?: CareerSetup["bondChars"], mood = 0): CareerSetup {
+  const week = key;
+  const rTeam = makeRng((seed ^ 0x9e37) >>> 0);
   // 마선수 없음 — 캐릭터는 인연에서만
   const my = makeTeam(TEAM_DEFS[0], rTeam);
-  const rOpp = makeRng((seed * 31 + season * 977 + week * 131) >>> 0);
-  const def = TEAM_DEFS[1 + (week % 3)];
+  const rOpp = makeRng((seed * 31 + 977 + week * 131) >>> 0);
+  const def = TEAM_DEFS[key >= 300 ? key - 300 : 1 + ((week - 1 + 3) % 3)];
   const opp = makeTeam(def, rOpp);
-  // 상대 투수: 연차마다 세짐 (1년차 300 · 30씩 → 7년차 480 · 그 뒤 510 · 540 · 560) — 처음부터 560 이라 초반에 너무 못 쳤음
-  const lv = PITCH_LV[Math.min(PITCH_LV.length - 1, Math.max(0, season - 1))];
   // 우리 팀 투수도 똑같이 낮춰야 팀 승률이 반반 (상대만 낮추면 동료들이 다 쳐서 순위 1위가 너무 쉬움)
   for (const p of [...opp.pitchers, ...my.pitchers]) {
     const d = lv - 560;
@@ -83,7 +80,6 @@ export function careerSetup(seed: number, season: number, week: number, me: Batt
     });
     rest.splice(wi, 1);
   }
-  const slot = slotOf(trust);
   rest.splice(slot, 0, me);
   my.batters = rest;
   return { my, opp, myIdx: slot, userHome: rOpp() < 0.5, diff, innings: 9, spUses, bondChars };
@@ -200,6 +196,106 @@ export function quickPA(s: GameState, rng: Rng): PAResult {
   return applyPlay(s, f);
 }
 
+/* ─────────────── 주루 · 수비 찬스 (육성: 내 선수) ─────────────── */
+
+/** 육성 선수 (수비 · 다이빙 덤까지) */
+export type MeBatter = Batter & { def?: number; dive?: number };
+/** 상대 타석마다 내 쪽으로 날카로운 타구가 올 확률 */
+export const CHANCE = { field: 0.018, stealGo: 0.6 };
+/** 도루 성공 확률 (주루 · 경기 능력치) */
+export const stealP = (b: MeBatter) => clamp(0.38 + (b.run - 200) / 700, 0.22, 0.92);
+/** 호수비 성공 확률 (자동 · 시뮬) — 직접이면 타이밍 창 크기 */
+export const fieldP = (b: MeBatter) => clamp(0.32 + (b.def ?? 150) / 1500 + (b.dive ?? 0), 0.3, 0.9);
+const meOf = (s: GameState, myIdx: number) => s.sides[mySide(s)].team.batters[myIdx] as MeBatter;
+const meLine = (s: GameState) => (s.me ??= { sb: 0, cs: 0, df: 0, fc: 0 });
+const POS_KO: Record<string, string> = { C: "포수", "1B": "1루수", "2B": "2루수", "3B": "3루수", SS: "유격수", LF: "좌익수", CF: "중견수", RF: "우익수" };
+
+/** 지금 도루 찬스인가 — 내가 방금 쳐서 1루에 있고 2루가 비었고 2아웃 전 */
+export function stealChance(s: GameState, myIdx: number) {
+  if (s.over || batSide(s) !== mySide(s) || s.outs >= 2) return false;
+  if (s.bases[0] !== myIdx || s.bases[1] !== null) return false;
+  const pl = s.plays ?? [];
+  const last = pl[pl.length - 1];
+  if (!last || last.side !== mySide(s) || last.ord !== myIdx) return false;
+  return s.stealAsk !== pl.length;
+}
+/** 도루 고르기 반영 — go = 뛴다 · ok = 성공 (뛸 때만). 돌려줌: 띄울 말 */
+export function resolveSteal(s: GameState, myIdx: number, go: boolean, ok: boolean): string | null {
+  s.chance = null;
+  s.stealAsk = (s.plays ?? []).length;
+  if (!go || s.bases[0] !== myIdx) return null;
+  const ml = meLine(s);
+  if (ok) {
+    s.bases = [null, myIdx, s.bases[2]];
+    ml.sb++;
+    return "도루 성공!";
+  }
+  s.bases = [null, null, s.bases[2]];
+  s.outs++;
+  const fs = s.sides[fieldSide(s)];
+  fs.pit[fs.pitcher].outs++;
+  ml.cs++;
+  return "도루 실패…";
+}
+
+/** 수비 찬스 결과 반영 (상대 타석 하나) — ok 면 호수비 아웃, 아니면 빠지는 안타 */
+export function resolveField(s: GameState, myIdx: number, ok: boolean, rng: Rng): PAResult {
+  const hit = s.chance?.hit ?? "1B";
+  s.chance = null;
+  const pos = POS_KO[meOf(s, myIdx).pos] ?? "";
+  for (let i = 0; i < 4; i++) pitchThrown(s);
+  const base = s.bases;
+  const scored: number[] = [];
+  const nb: (number | null)[] = [null, null, null];
+  const bo = s.sides[batSide(s)].order;
+  const ml = meLine(s);
+  let f: FieldOut;
+  if (ok) {
+    ml.df++;
+    for (let k = 0; k < 3; k++) nb[k] = base[k];
+    f = { foul: false, hr: false, dist: 0, frames: [], events: [], outs: 1, runs: 0, scored: [], bases: nb, result: "OUT", label: `${pos} 호수비!`, rbi: 0, fielder: 0 };
+  } else {
+    const n = hit === "2B" ? 2 : 1;
+    for (let k = 2; k >= 0; k--) {
+      const id = base[k];
+      if (id === null) continue;
+      const to = k + n + (rng() < 0.5 ? 1 : 0);
+      if (to >= 3) scored.push(id);
+      else nb[to] = id;
+    }
+    nb[n - 1] = bo;
+    f = { foul: false, hr: false, dist: 0, frames: [], events: [], outs: 0, runs: scored.length, scored, bases: nb, result: hit, label: `${pos} 옆을 빠지는 ${hit === "2B" ? "2루타" : "안타"}`, rbi: scored.length, fielder: 0 };
+  }
+  return applyPlay(s, f);
+}
+
+/** 찬스를 사람이 안 고를 때 (자동 · 시뮬) 바로 풀기 */
+export function autoChance(s: GameState, myIdx: number, rng: Rng): PAResult | null {
+  const ch = s.chance;
+  if (!ch) return null;
+  if (ch.kind === "steal") {
+    const go = ch.p >= CHANCE.stealGo;
+    resolveSteal(s, myIdx, go, go && rng() < ch.p);
+    return null;
+  }
+  return resolveField(s, myIdx, rng() < ch.p, rng);
+}
+
+/** 지금 찬스가 생기나 보고 s.chance 를 세움 (상대 타석이면 수비 찬스 굴림) */
+function rollChance(s: GameState, myIdx: number, rng: Rng): boolean {
+  if (s.chance) return true;
+  if (stealChance(s, myIdx)) {
+    s.chance = { kind: "steal", p: stealP(meOf(s, myIdx)) };
+    return true;
+  }
+  if (batSide(s) !== mySide(s) && rng() < CHANCE.field) {
+    meLine(s).fc++;
+    s.chance = { kind: "field", p: fieldP(meOf(s, myIdx)), hit: rng() < 0.75 ? "1B" : "2B" };
+    return true;
+  }
+  return false;
+}
+
 /** 내 타석 스윙 결정 (사람 · 봇 · 시뮬) */
 export type SwingHook = (s: GameState, p: Pitch, at: { x: number; y: number }, b: Batter, rng: Rng) => SwingDecision | null;
 
@@ -285,6 +381,10 @@ export interface CareerGameOut {
   /** 돌발미션으로 번 코인 */
   missionPt: number;
   clutch: Clutch;
+  /** 도루 · 도루 실패 · 호수비 */
+  sb: number;
+  cs: number;
+  df: number;
 }
 
 /** 하이라이트 타석: 득점권 · 7회부터 2점 차 이내 · 돌발미션 */
@@ -323,7 +423,12 @@ export interface RecapLine {
 }
 
 type RecapHead = Pick<RecapLine, "inning" | "top" | "ours" | "me" | "name" | "side" | "ord" | "pit">;
-function recapOf(s: GameState, before: RecapHead, pa: PAResult): RecapLine {
+/** 지금 타석 머리 (문자중계 한 줄) */
+export const recapHead = (s: GameState, me: boolean): RecapHead => ({
+  inning: s.inning, top: s.top, ours: batSide(s) === mySide(s), me, name: curBatter(s).name,
+  side: batSide(s), ord: s.sides[batSide(s)].order, pit: curPitcher(s).name,
+});
+export function recapOf(s: GameState, before: RecapHead, pa: PAResult): RecapLine {
   return {
     ...before, text: pa.text, kind: pa.kind, runs: pa.runs, outs: pa.halfOver ? 3 : s.outs,
     bases: [s.bases[0] !== null, s.bases[1] !== null, s.bases[2] !== null], score: [s.score[0], s.score[1]],
@@ -331,14 +436,22 @@ function recapOf(s: GameState, before: RecapHead, pa: PAResult): RecapLine {
   };
 }
 
-export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0, allAuto = false, log?: RecapLine[]): MyPA[] {
+export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: SwingHook, directSoFar = 0, allAuto = false, log?: RecapLine[], interactive = false): MyPA[] {
   const autoPAs: MyPA[] = [];
   let guard = 0;
-  const head = (me: boolean): RecapHead => ({
-    inning: s.inning, top: s.top, ours: batSide(s) === mySide(s), me, name: curBatter(s).name,
-    side: batSide(s), ord: s.sides[batSide(s)].order, pit: curPitcher(s).name,
-  });
+  const head = (me: boolean) => recapHead(s, me);
   while (!s.over && guard++ < 600) {
+    // 도루 · 수비 찬스: 화면이면 멈추고 (s.chance) 사람이 풂 · 아니면 바로
+    if (rollChance(s, myIdx, rng)) {
+      if (interactive) break;
+      const h = head(false);
+      const pa = autoChance(s, myIdx, rng);
+      if (pa) {
+        log?.push(recapOf(s, h, pa));
+        if (pa.halfOver && !s.over) nextHalf(s);
+      }
+      continue;
+    }
     if (isMyPA(s, myIdx)) {
       if (!autoMine) break;
       cpuManage(s, fieldSide(s));
@@ -390,5 +503,6 @@ export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng, autoM
     if (pa.halfOver && !s.over) nextHalf(s);
   }
   const ms = mySide(s);
-  return { s, line: s.sides[ms].bat[st.myIdx], win: s.winner < 0 ? null : s.winner === ms, pas, missionPt, clutch: clutchOf(s, ms, st.myIdx) };
+  const me = s.me ?? { sb: 0, cs: 0, df: 0, fc: 0 };
+  return { s, line: s.sides[ms].bat[st.myIdx], win: s.winner < 0 ? null : s.winner === ms, pas, missionPt, clutch: clutchOf(s, ms, st.myIdx), sb: me.sb, cs: me.cs, df: me.df };
 }

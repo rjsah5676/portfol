@@ -11,7 +11,7 @@ import { ApiError } from "@/lib/api/errors";
 import { ovrOf, type Career } from "@/lib/baseball/career";
 
 /** 서버로 올리는 저장 (배속 · 진행 방식 같은 기기 설정은 뺌) */
-export const SYNC_KEYS = ["pxb:v1", "pxb:career:v3", "pxb:hof:v1", "pxb:bondxp:v1", "pxb:club:v1", "pxb:seen:v1"] as const;
+export const SYNC_KEYS = ["pxb:v1", "pxb:career:v4", "pxb:career:v3", "pxb:hof:v1", "pxb:bondxp:v1", "pxb:club:v1", "pxb:seen:v1"] as const;
 type Snap = Record<string, string>;
 export interface Remote {
   rev: number;
@@ -61,14 +61,14 @@ function setOwner(uid: string) {
     localStorage.setItem(OWNER, uid);
   } catch {}
 }
-const isEmpty = (s: Snap) => !s["pxb:career:v3"] && !s["pxb:club:v1"] && !s["pxb:hof:v1"];
+const isEmpty = (s: Snap) => !s["pxb:career:v4"] && !s["pxb:career:v3"] && !s["pxb:club:v1"] && !s["pxb:hof:v1"];
 
 /** 고르기 화면에 띄울 요약 한 줄씩 */
 export function summarize(s: Snap): string[] {
   const out: string[] = [];
   try {
-    const c = s["pxb:career:v3"] ? (JSON.parse(s["pxb:career:v3"]) as Career) : null;
-    if (c) out.push(`육성: ${c.name} ${c.season}년차 · 종합 ${ovrOf(c)}`);
+    const c = s["pxb:career:v4"] ? (JSON.parse(s["pxb:career:v4"]) as Career) : null;
+    if (c) out.push(`육성: ${c.name} ${c.phase === "camp" ? "캠프" : `${c.week}주차`} · 종합 ${ovrOf(c)}`);
   } catch {}
   try {
     const h = s["pxb:hof:v1"] ? (JSON.parse(s["pxb:hof:v1"]) as unknown[]) : [];

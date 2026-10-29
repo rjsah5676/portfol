@@ -2,14 +2,17 @@
  * 육성 저장 (프로토: 이 브라우저 localStorage) — 진행 중인 선수 1명 + 명예의 전당.
  * 서버 저장은 다음 단계 (랭킹 · 구단으로 넘기기).
  */
-import { BONDS, CAREER_DIFF, SKILLS, applyGame, careerBatter, finishBattle, gameKey, hofEntry, ovrOf, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
+import { inheritable, ovrOf as ovrOfSafe, type SkillId } from "@/lib/baseball/career";
+import { BONDS, CAREER_DIFF, SKILLS, applyGame, canPlay, careerBatter, missionName, missionNeed, missionNow, finishBattle, gameKey, hofEntry, pitchLv, slotOfCareer, spUses, type Career, type GameIn, type GameSummary, type HofEntry, type TurnOut } from "@/lib/baseball/career";
 import { logPlay } from "@/lib/baseball/telemetry";
 import { CHARS, TEAM_DEFS, type CharId } from "@/lib/baseball/data";
 import { DEFAULT_LOOK } from "@/lib/baseball/look";
 import { botHook, careerSetup, playCareerGame, type CareerSetup, type MyPA } from "@/lib/baseball/careerGame";
 import { makeRng } from "@/lib/baseball/rng";
 
-const KEY = "pxb:career:v3";
+const KEY = "pxb:career:v4";
+/** 예전(10년제 v3) 진행 중 선수 — 한 번 명예의 전당으로 옮기고 지움 */
+const OLD_KEY = "pxb:career:v3";
 const HOF = "pxb:hof:v1";
 
 /** 예전 저장의 포르테(→ 바이올렛으로 교체) 이름 바꾸기 */
@@ -26,21 +29,48 @@ const mig = (t: string | null) => (t ? FORTE.reduce((a, [r, v]) => a.replace(r, 
 
 export function loadCareer(): Career | null {
   try {
+    migrateOld();
     const c = JSON.parse(mig(localStorage.getItem(KEY)) ?? "null");
-    return c && c.v === 3 ? normalize(c as Career) : null;
+    return c && c.v === 4 ? normalize(c as Career) : null;
   } catch {
     return null;
   }
 }
-/** 예전 저장에 없던 칸 채우기 (v3 안에서 늘어난 것들) */
+/** 예전 10년제 선수 → 명예의 전당 (그때 종합 · 기록 그대로) */
+function migrateOld() {
+  const raw = localStorage.getItem(OLD_KEY);
+  if (!raw) return;
+  try {
+    const o = JSON.parse(mig(raw) ?? "null") as {
+      id: string; name: string; type: HofEntry["type"]; stats: { hit: number; power: number; run: number }; skills?: string[]; total?: { hr: number; h: number; ab: number };
+      seasons?: { ovr: number }[]; look?: HofEntry["look"]; bats?: "R" | "L"; num?: number; pos?: string; phase?: string;
+    } | null;
+    if (o && o.stats) {
+      const list = loadHof().filter((e) => e.id !== o.id);
+      const t = o.total ?? { hr: 0, h: 0, ab: 0 };
+      const ovr = o.seasons?.length ? o.seasons[o.seasons.length - 1].ovr : Math.round((o.stats.hit + o.stats.power + o.stats.run) / 3);
+      const skills = (o.skills ?? []).filter((id): id is SkillId => id in SKILLS && inheritable(id as SkillId));
+      list.push({
+        id: o.id, name: o.name, type: o.type, ovr, grade: ovr >= 640 ? "A" : ovr >= 540 ? "B" : ovr >= 440 ? "C" : "D", nick: o.phase === "retired" ? "10년 리그 출신" : "10년 리그 은퇴",
+        stats: { hit: Math.round(o.stats.hit), power: Math.round(o.stats.power), run: Math.round(o.stats.run) }, hr: t.hr, avg: t.ab ? t.h / t.ab : 0, seasons: o.seasons?.length ?? 0, at: Date.now(), gp: 0,
+        skills, look: o.look, bats: o.bats, num: o.num, pos: o.pos,
+      });
+      list.sort((a, b) => b.ovr - a.ovr);
+      localStorage.setItem(HOF, JSON.stringify(list.slice(0, 30)));
+    }
+  } catch {}
+  localStorage.removeItem(OLD_KEY);
+}
+/** 예전 저장에 없던 칸 채우기 */
 function normalize(c: Career): Career {
-  c.bcount ??= {};
   c.look ??= { ...DEFAULT_LOOK };
-  c.specials ??= [];
   c.know ??= {};
   c.aff ??= {};
   c.blv ??= {};
+  c.tries ??= {};
   c.battle ??= null;
+  c.hist ??= [];
+  c.offer ??= null;
   c.table ??= TEAM_DEFS.map(() => [0, 0] as [number, number]);
   // 없어진 특수능력 (수비 세트 「골든 글러브」 등) 은 지움
   c.skills = (c.skills ?? []).filter((id) => id in SKILLS);
@@ -48,9 +78,6 @@ function normalize(c: Career): Career {
   if (c.pick) c.pick.options = c.pick.options.filter((id) => id in SKILLS);
   for (const k of Object.keys(c.blv)) if (!(k in SKILLS)) delete (c.blv as Record<string, unknown>)[k];
   if (c.legacy?.skill && !(c.legacy.skill in SKILLS)) c.legacy.skill = undefined;
-  // 육성 모드 코치는 뺌
-  c.gp = [];
-  // 육성 난이도는 중급 하나로 통일
   c.diff = CAREER_DIFF;
   return c;
 }
@@ -85,8 +112,10 @@ export function addHof(c: Career) {
 }
 
 /** 이번 주 경기 세팅 */
-export const setupOf = (c: Career): CareerSetup =>
-  careerSetup(c.seed, c.season, gameKey(c), careerBatter(c), c.trust, c.diff, spUses(c), bondCharsOf(c), c.mood ?? 0);
+export const setupOf = (c: Career): CareerSetup => ({
+  ...careerSetup(c.seed, gameKey(c), careerBatter(c), slotOfCareer(c), c.diff, pitchLv(c), spUses(c), bondCharsOf(c)),
+  missions: (c.missions ?? []).map((m) => ({ name: missionName(m), key: m.key, now: missionNow(c, m.key), need: missionNeed(m), done: m.done })),
+});
 /** 인연 특별 미션을 줄 덱 캐릭터 (그 사람이 키워 주는 능력치 쪽을 요구) */
 export const bondCharsOf = (c: Career): CareerSetup["bondChars"] => c.deck.map((id) => [id, BONDS[id].stat]);
 const missionResults = (pas: MyPA[]) => pas.filter((p) => p.mission).map((p) => ({ ok: p.mission!.ok, partial: p.mission!.partial, char: p.mission!.char }));
@@ -144,19 +173,17 @@ export const takeReport = () => {
 export function careerSnap(c: Career) {
   return {
     cid: c.id,
-    season: c.season,
+    v: 4,
     week: c.week,
     turn: c.turn,
     type: c.type,
-    talent: c.talent,
     diff: c.diff,
-    ovr: ovrOf(c),
+    ovr: ovrOfSafe(c),
     stats: { ...c.stats },
-    trust: Math.round(c.trust * 10) / 10,
     cond: c.cond,
     stamina: Math.round(c.stamina),
-    fame: Math.round(c.fame),
     money: c.money,
+    sp: c.sp,
     skills: [...c.skills],
     blv: { ...c.blv },
     deck: [...c.deck],
@@ -177,13 +204,19 @@ function logGame(c: Career, g: GameIn, sum: GameSummary, mode: "direct" | "auto"
   });
 }
 
-/** 자동 진행 (또는 직접 출전을 그만둔 경기) */
+/** 자동 진행 (또는 직접 출전을 그만둔 경기) · 부상이면 결장 (팀 결과만) */
 export function autoGame(c: Career, note?: string): GameReport {
+  if (!canPlay(c)) {
+    c.inGame = false;
+    const sum = applyGame(c, null);
+    saveCareer(c);
+    return { sum, pas: [], score: "", auto: true, note: note ?? "부상으로 결장" };
+  }
   const st = setupOf(c);
   // 자동 진행은 돌발미션 없음 — 미션 보상(자금 · 신뢰 · 인기 · 호감)은 직접 쳐야
   const g = playCareerGame(st, botHook(c.diff), makeRng((c.seed * 7 + c.turn * 131) >>> 0), undefined, false);
   c.inGame = false;
-  const gin: GameIn = { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false, clutch: g.clutch };
+  const gin: GameIn = { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false, clutch: g.clutch, sb: g.sb, cs: g.cs, df: g.df };
   const sum = applyGame(c, gin);
   logGame(c, gin, sum, "auto", g.pas);
   const s = g.s;

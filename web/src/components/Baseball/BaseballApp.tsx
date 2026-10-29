@@ -13,6 +13,7 @@ import { CLUB_DEFS, charById, clubDefById, faceUrl } from "@/lib/baseball/data";
 import { buildTeam, findGhosts, veloKmh, ghostTeam, gradeOf, teamRating, type Club, type Ghost } from "@/lib/baseball/club";
 import { makeRng } from "@/lib/baseball/rng";
 import { clutchOf } from "@/lib/baseball/game";
+import { CHANCE } from "@/lib/baseball/careerGame";
 import { createClub, loadClub, recordOnline, saveClub } from "./clubStore";
 import ClubScreen from "./Club";
 import { Emblem, GradeChip } from "./clubUi";
@@ -224,7 +225,7 @@ function BaseballMain() {
             const s = mm.s;
             const me = s.opts.userHome ? 1 : 0;
             finishDirect(
-              { line: s.sides[me].bat[cfg.career!.myIdx], win: s.winner < 0 ? null : s.winner === me, missionPt: s.pt, missions: mm.missionsOk, direct: true, clutch: clutchOf(s, me, cfg.career!.myIdx) },
+              { line: s.sides[me].bat[cfg.career!.myIdx], win: s.winner < 0 ? null : s.winner === me, missionPt: s.pt, missions: mm.missionsOk, direct: true, clutch: clutchOf(s, me, cfg.career!.myIdx), sb: s.me?.sb ?? 0, cs: s.me?.cs ?? 0, df: s.me?.df ?? 0 },
               mm.myPAs,
               `${s.opts.away.short} ${s.score[0]} : ${s.score[1]} ${s.opts.home.short}`
             );
@@ -532,7 +533,7 @@ function Play({
     setUi(m.ui);
     setM(m);
     // 개발 중 자동 테스트용 (배포 빌드엔 안 들어감)
-    if (process.env.NODE_ENV !== "production") (window as unknown as { __pxb?: Match }).__pxb = m;
+    if (process.env.NODE_ENV !== "production") Object.assign(window, { __pxb: m, __pxbChance: CHANCE });
     let raf = 0;
     let last = performance.now();
     // 느린 기기: 프레임이 계속 늦으면(평균 22ms 넘게 1.5초) 캔버스 해상도를 한 단계씩 낮춤 (2 → 1.75 → … → 1)
@@ -630,6 +631,11 @@ function Play({
       }
       if (m.paused) return;
       const k = e.key.toLowerCase();
+      if (m.phase === "chance") {
+        if (k === " " || k === "j" || k === "enter") m.chanceKey();
+        else if (k === "n") m.chooseSteal(false);
+        return;
+      }
       if (k === " " || k === "j" || k === "enter") {
         e.preventDefault();
         if (m.ui.userBat) m.pressSwing();
@@ -696,7 +702,7 @@ function Play({
           {/* 오른쪽 조작 칸 (필드 화면 · 결과 문구 동안은 숨김) */}
           <div
             className="absolute top-[112px] right-3 flex w-[164px] flex-col items-stretch gap-2 transition-opacity"
-            style={{ opacity: ["field", "result", "change", "contact", "intro", "recap", "mission"].includes(ui.phase) ? 0 : 1, pointerEvents: ["field", "result", "change", "contact", "intro", "recap", "mission"].includes(ui.phase) ? "none" : undefined }}
+            style={{ opacity: ["field", "result", "change", "contact", "intro", "recap", "mission", "chance"].includes(ui.phase) ? 0 : 1, pointerEvents: ["field", "result", "change", "contact", "intro", "recap", "mission", "chance"].includes(ui.phase) ? "none" : undefined }}
           >
             {ui.userBat && (
               <>
@@ -776,6 +782,17 @@ function Play({
               {/* 비교용: 탑뷰 ↔ 3/4 시점 (다음 타구부터가 아니라 바로) */}
               <Btn className="px-3 py-1.5 text-[13px]" color="#7ad7ff" onClick={() => setFieldView(!FIELD_VIEW.persp)}>
                 시점 바꾸기 · V
+              </Btn>
+            </div>
+          )}
+          {/* 육성 도루 찬스: 뛴다 / 그대로 (그림은 캔버스) */}
+          {ui.chance?.kind === "steal" && (
+            <div className="absolute top-[330px] left-1/2 z-10 flex -translate-x-1/2 gap-3">
+              <Btn className={`${font.title} w-[200px] py-3 text-[24px]`} color="#ffcf3a" active onClick={() => m?.chooseSteal(true)}>
+                도루! <span className="font-['Nanum_Gothic'] text-[11px] font-normal opacity-60">Space</span>
+              </Btn>
+              <Btn className={`${font.title} w-[160px] py-3 text-[20px]`} color="#8b93b8" onClick={() => m?.chooseSteal(false)}>
+                그대로 <span className="font-['Nanum_Gothic'] text-[11px] font-normal opacity-60">N</span>
               </Btn>
             </div>
           )}

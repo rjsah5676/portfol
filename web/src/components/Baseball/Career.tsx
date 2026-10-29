@@ -1,25 +1,26 @@
 "use client";
 
 /*
- * 육성 모드 화면 — 선수 만들기 · 시내 지도(관리 턴) · 이벤트 · 특수능력 고르기 · 경기(직접 · 하이라이트 · 자동) · 시즌 결산 · 은퇴 · 명예의 전당.
+ * 육성 모드 v4 「라이징 시즌」 화면 — 슈퍼스타즈식 배치.
+ * 허브(왼쪽 위 상태 · 위 능력 4칩 · 오른쪽 위 재화 · 왼쪽 미션/인연 · 가운데 연습장 · 오른쪽 메뉴 · 오른쪽 아래 훈련/숙소)
+ * → 훈련 화면(종류 탭 + 미리보기) → 훈련 결과 카드 → 「누구와 만나게 될까?」 → 주말 경기 → 경기 평가 · 주차 결산 → 시즌 결산.
  * 규칙 · 숫자는 lib/baseball/career.ts, 저장은 careerStore.ts.
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Diff } from "@/lib/baseball/ai";
 import {
-  ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER,
-  INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
-  CAREER_DIFF, ROOKIE, SET_NEED, careerGameStats, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
-  awardRace, costOf, fmtAvg, gameNo, myRank, postName, standings, MOOD, moodName, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
-  trainLv, trainMul, trainRisk, whenText, whyNot,
-  type Action, type BatType, type Career, type FieldPos, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
-  type SkillId, type Spot, type StatKey, type Tag, type TurnOut,
+  BEATS, BEAT_NAME, BOND_MAX, CAMP_TICKETS, COND_COLOR, COND_FACE, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, DORM, FINAL_TICKETS, FRIEND_AFF, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER,
+  INJURY_NAME, LEARNED_VAL, MISSION_CATS, MISSION_TIER, SET_NEED, SPOT_EVENTS, STAT_COLOR, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TICKETS, TRAINS, TRAIN_KEYS, TRAIN_LV_EVERY, TYPES, WEEKS,
+  CAREER_DIFF, PICK_POS, PICK_TYPES, act, autoBattle, avg, awardRace, buy, buyGear, buySkill, canPlay, careerBatter, careerGameStats, choose, chooseMissions, chooseOffer, choosePick, consumeItem, endSeason,
+  finishBattle, fmtAvg, gameName, gearNext, gradeOf, matesOf, missionName, missionNeed, missionNow, myRank, newCareer, nextBeat, oppOf, ops, ovrOf, posOf, seasonGrade, skill, skillPrice, skillShop, spLv, spUses,
+  standings, statGrade, stepOf, tagCount, trainLv, trainPreview, whenText, whyNot,
+  type Action, type BatType, type Career, type ConsumableId, type Delta, type FieldPos, type GearId, type HofEntry, type SeasonMission, type SkillId, type StatKey, type Tag, type TrainKey, type TurnOut,
 } from "@/lib/baseball/career";
-import { slotName, slotOf } from "@/lib/baseball/careerGame";
+import { slotName } from "@/lib/baseball/careerGame";
 import { TEAM_DEFS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
-import { SPECIAL_DAY, ROLE, isBond, type BondId } from "@/lib/baseball/bonds";
+import { isBond, type BondId } from "@/lib/baseball/bonds";
 import { makeRng } from "@/lib/baseball/rng";
-import { BattleModal, BondCard, BondPanel, BondsModal, BoonPickModal, DeckStep, GuideModal, Hint, VnScene, artUrl, recommendDeck, seenHint } from "./CareerBonds";
+import { BattleModal, BondPanel, BondsModal, BoonPickModal, DeckStep, GuideModal, Hint, VnScene, recommendDeck, seenHint } from "./CareerBonds";
 import { BAT_IDLE, BATS, BATTER_RIG, HELMETS, PITCHER_RIG, PIT_IDLE, baseSkin } from "@/lib/baseball/figures";
 import { DEFAULT_LOOK, LOOK_KEYS, LOOK_LABEL, LOOK_OPTS, SKINS, lookColors, lookSkin, type Look } from "@/lib/baseball/look";
 import { drawRig, pose } from "@/lib/baseball/rig";
@@ -31,23 +32,35 @@ import {
 import { logPlay, logUi } from "@/lib/baseball/telemetry";
 import type { MatchCfg } from "./match";
 import { sfx } from "./sfx";
-import { useStage } from "./Stage";
 import { prefetchBondArt } from "./loadTasks";
 import { ACCENT, Btn, MenuBg, Modal, font } from "./ui";
 
 type View = "home" | "create" | "hub" | "hof";
+type ModalKind = null | "train" | "dorm" | "shop" | "skills" | "records" | "standings" | "bonds" | "guide" | "newConfirm" | "epilogue";
 
-const STAT_COLOR: Record<StatKey, string> = { hit: "#7dff9a", power: "#ff7a5c", run: "#7ad7ff" };
-const TONE_COLOR: Record<TurnOut["tone"], string> = { great: "#ffd23f", ok: "#ffffff", fail: "#9aa3c7", injury: "#ff5a5a", event: "#7ad7ff", awaken: "#ff7ae0" };
+/** 슈퍼스타즈식 패널 (남색 반투명 + 하늘색 테두리) */
+const PANEL = "rounded-xl border-2 border-[#5fc8ff]/45 bg-[#0d1838]/88 shadow-[0_4px_0_rgba(0,0,0,0.35)]";
+const SKY = "#5fc8ff";
+const TONE_COLOR: Record<TurnOut["tone"], string> = { great: "#ffd23f", ok: "#7ad7ff", fail: "#9aa3c7", injury: "#ff5a5a", event: "#7ad7ff", awaken: "#ff7ae0" };
 const NAMES = ["김픽셀", "이도트", "박비트", "최렌더", "정버퍼", "강루프", "조캐시", "윤커밋", "장스택", "한패치", "오클릭", "서해시"];
 const MODE_NAME: Record<PlayMode, string> = { direct: "직접 출전", highlight: "하이라이트", auto: "자동 진행" };
 const MODE_DESC: Record<PlayMode, string> = {
   direct: "내 타석 전부 직접 · 경기당 2분쯤",
-  highlight: "찬스 · 돌발미션 · 7회부터 접전 타석만 직접 · 경기당 1분 안쪽",
-  auto: "결과만 · 바로 · 미션 없음",
+  highlight: "찬스 · 돌발미션 · 접전 타석만 직접",
+  auto: "결과만 바로 · 돌발미션 없음",
+};
+const TRAIN_ICON: Record<TrainKey, string> = { hit: "🏏", power: "🏋️", run: "👟", def: "🧤", special: "🔥" };
+const TRAIN_COLOR: Record<TrainKey, string> = { ...STAT_COLOR, special: "#ff5fb4" };
+const RESULT_BADGE: Record<string, { t: string; col: string }> = {
+  우승: { t: "🏆 라이징스타 리그 우승!", col: "#ffd23f" },
+  준우승: { t: "🥈 준우승", col: "#d8e2f0" },
+  "2위": { t: "리그 2위", col: "#7ad7ff" },
+  "3위": { t: "리그 3위", col: "#9aa3c2" },
+  "4위": { t: "리그 4위", col: "#9aa3c2" },
 };
 
 const clone = (c: Career): Career => JSON.parse(JSON.stringify(c));
+const ticketMax = (c: Career) => (c.phase === "camp" ? CAMP_TICKETS : c.phase === "final" ? FINAL_TICKETS : TICKETS);
 
 export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onPlay: (cfg: MatchCfg) => void }) {
   const [view, setView] = useState<View>("home");
@@ -55,8 +68,8 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const [hof, setHof] = useState<HofEntry[]>([]);
   const [queue, setQueue] = useState<TurnOut[]>([]);
   const [reports, setReports] = useState<GameReport[]>([]);
-  const [season, setSeason] = useState<SeasonSummary | null>(null);
-  const [modal, setModal] = useState<null | "shop" | "records" | "standings" | "bonds" | "guide" | "newConfirm" | "epilogue" | { place: PlaceId }>(null);
+  const [modal, setModal] = useState<ModalKind>(null);
+  const [trainTab, setTrainTab] = useState<TrainKey>("hit");
   /** 큐 맨 앞 결과의 미연시 장면을 봤나 */
   const [vnSeen, setVnSeen] = useState(false);
   const [toast, setToast] = useState("");
@@ -68,7 +81,6 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     let cur = loadCareer();
     let rep = takeReport();
     if (cur?.inGame) {
-      // 경기 차례가 아닌데 「경기 중」이 남아 있으면 (저장 꼬임) 끄기만 — 예전엔 여기서 던져서 육성 화면이 영영 안 열렸음
       if (stepOf(cur) !== "game") {
         cur.inGame = false;
         saveCareer(cur);
@@ -82,7 +94,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
         cur = loadCareer();
       }
     }
-    if (cur?.phase === "retired") addHof(cur);
+    if (cur?.phase === "done") addHof(cur);
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장값 불러오기
     setC(cur);
     setHof(loadHof());
@@ -107,7 +119,13 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   };
   const flash = (t: string) => {
     setToast(t);
-    window.setTimeout(() => setToast((v) => (v === t ? "" : v)), 1600);
+    window.setTimeout(() => setToast((v) => (v === t ? "" : v)), 1700);
+  };
+  const showOut = (out: TurnOut) => {
+    const q = [out, ...(out.extra && !out.extra.stub ? [out.extra] : [])].filter((o) => !o.stub || o.vn);
+    setQueue(q);
+    setVnSeen(false);
+    if (q[0]) playTone(q[0].tone);
   };
 
   const doAct = (a: Action) => {
@@ -118,34 +136,31 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     const out = act(n, a);
     commit(n);
     setModal(null);
-    const q = [out, ...(out.extra && !out.extra.stub ? [out.extra] : [])].filter((o) => !o.stub || o.vn);
-    setQueue(q);
-    setVnSeen(false);
-    if (q[0]) playTone(q[0].tone);
-  };
-  // 행동력이 많이 남았는데 「다음 날 ▶」를 누르면 한 번 더 확인 (첫 턴을 그냥 날리던 것) — 이월은 최대 10까지라 넘치는 만큼 사라짐
-  const advArmed = useRef(0);
-  const doAdvance = () => {
-    if (!c || stepOf(c) !== "turn") return;
-    const lost = c.active + (c.phase === "season" ? ACTIVE_PER_GAME : ACTIVE_PER_DAY) - ACTIVE_MAX;
-    if (c.active >= MIN_COST && Date.now() - advArmed.current > 2500) {
-      advArmed.current = Date.now();
-      return flash(`⚡ 행동력 ${c.active} 남았어요${lost > 0 ? ` (넘기면 ${lost} 사라짐)` : ""} — 한 번 더 누르면 넘어가요`);
-    }
-    advArmed.current = 0;
-    const n = clone(c);
-    advance(n);
-    commit(n);
-    sfx.ui();
+    showOut(out);
   };
   const doChoose = (i: number) => {
     if (!c) return;
     const n = clone(c);
     const out = choose(n, i);
     commit(n);
-    setQueue([out]);
-    setVnSeen(false);
-    playTone(out.tone);
+    showOut(out);
+  };
+  const doOffer = (i: number) => {
+    if (!c) return;
+    const n = clone(c);
+    logPlay("offer", { ...careerSnap(n), cards: n.offer?.cards.map((x) => x.char ?? x.event) ?? [], chosen: i });
+    const out = chooseOffer(n, i);
+    commit(n);
+    showOut(out);
+  };
+  const doMissions = (ms: SeasonMission[]) => {
+    if (!c) return;
+    const n = clone(c);
+    const why = chooseMissions(n, ms);
+    if (why) return flash(why);
+    logPlay("missions", { ...careerSnap(n), missions: ms.map((m) => `${m.key}${m.tier}`) });
+    commit(n);
+    sfx.cheer(0.6);
   };
   /** 인연 대결: 직접 (경기 화면) / 자동 */
   const battleDirect = () => {
@@ -166,9 +181,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     const n = clone(c);
     const out = finishBattle(n, autoBattle(n, makeRng((n.seed * 31 + n.turn * 7 + n.battle!.tries) >>> 0)), true);
     commit(n);
-    setQueue([out, ...(out.extra ? [out.extra] : [])]);
-    setVnSeen(false);
-    playTone(out.tone);
+    showOut(out);
   };
   const doPick = (i: number) => {
     if (!c) return;
@@ -179,29 +192,14 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     setQueue([out]);
     playTone(out.tone);
   };
-  const doRetire = (yes: boolean) => {
-    if (!c) return;
-    const n = clone(c);
-    decideRetire(n, yes);
-    if (yes) {
-      addHof(n);
-      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards, rank: x.rank ?? null, post: x.post ?? null })) });
-    }
-    commit(n);
-    sfx.cheer(0.8);
-  };
   const doSeasonEnd = () => {
     if (!c) return;
     const n = clone(c);
     const s = endSeason(n);
-    logPlay("season", { ...careerSnap(n), line: s.line, awards: s.awards, talentReveal: s.talentReveal ?? null, retire: !!s.retire });
-    if (s.retire) {
-      addHof(n);
-      logPlay("retire", { ...careerSnap(n), total: n.total, seasons: n.seasons.map((x) => ({ season: x.season, line: x.line, ovr: x.ovr, awards: x.awards, rank: x.rank ?? null, post: x.post ?? null })) });
-    }
+    logPlay("season", { ...careerSnap(n), line: s.line, awards: s.awards, result: s.result, ovr: s.ovr });
+    addHof(n);
     commit(n);
-    setSeason(s);
-    sfx.cheer(0.8);
+    sfx.cheer(0.9);
   };
   const changeSpeed = (v: number) => {
     setSpeed(v);
@@ -213,36 +211,30 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     saveMode(m);
     logUi("mode", { m });
   };
-  // 어떤 창을 여는지 (안 쓰는 기능 찾기)
   useEffect(() => {
-    if (modal) logUi(`modal:${typeof modal === "string" ? modal : `place:${modal.place}`}`);
+    if (modal) logUi(`modal:${modal}`);
   }, [modal]);
 
   const playGame = () => {
     if (!c) return;
-    if (mode === "auto") return autoWeek(false);
+    if (mode === "auto" || !canPlay(c)) {
+      const n = clone(c);
+      n.inGame = true;
+      const r = autoGame(n);
+      setC(n);
+      setReports([r]);
+      (r.pas.some((p) => p.kind === "HR") ? sfx.homerun : () => sfx.cheer(0.5))();
+      return;
+    }
     const n = clone(c);
     n.inGame = true;
     commit(n);
     onPlay({ mode: "career", diff: c.diff, innings: 9, userHome: true, career: setupOf(n), highlight: mode === "highlight", speed });
   };
-  /** 자동: 이번 경기만 / 이번 주 남은 경기 전부 (부상 결장 포함) */
-  const autoWeek = (all: boolean) => {
-    if (!c) return;
-    const n = clone(c);
-    const reps: GameReport[] = [];
-    const week = n.week;
-    do {
-      n.inGame = true;
-      reps.push(autoGame(n));
-    } while (all && stepOf(n) === "game" && n.week === week && n.phase === "season");
-    setC(n);
-    setReports(reps);
-    (reps.some((r) => r.pas.some((p) => p.kind === "HR")) ? sfx.homerun : () => sfx.cheer(0.5))();
-  };
 
   const step = c ? stepOf(c) : null;
-  const overlayBusy = queue.length > 0 || reports.length > 0 || !!season;
+  const overlayBusy = queue.length > 0 || reports.length > 0;
+  const hub = view === "hub" && c;
 
   return (
     <MenuBg>
@@ -253,7 +245,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
           onContinue={() => setView("hub")}
           onNew={() => {
             setHof(loadHof());
-            if (c && c.phase !== "retired") setModal("newConfirm");
+            if (c && c.phase !== "done") setModal("newConfirm");
             else setView("create");
           }}
           onHof={() => {
@@ -267,21 +259,18 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
           onBack={() => setView("home")}
           hof={hof}
           onStart={(o) => {
-            {
-              const nc = newCareer({ ...o, affStart: affStart() });
-              logPlay("career_start", careerSnap(nc));
-              commit(nc);
-            }
+            const nc = newCareer({ ...o, affStart: affStart() });
+            logPlay("career_start", careerSnap(nc));
+            commit(nc);
             setView("hub");
             sfx.cheer(0.7);
           }}
         />
       )}
       {view === "hof" && <Hof list={hof} onBack={() => setView("home")} />}
-      {view === "hub" &&
-        c &&
-        (c.phase === "retired" && !season ? (
-          <Retire
+      {hub &&
+        (c.phase === "done" ? (
+          <SeasonEnd
             c={c}
             onHome={() => setView("home")}
             onNew={() => {
@@ -302,22 +291,18 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             onSpeed={changeSpeed}
             onMode={changeMode}
             onBack={() => setView("home")}
-            onPlace={(place) => (place === "mall" ? setModal("shop") : setModal({ place }))}
-            onAdvance={doAdvance}
-            onShop={() => setModal("shop")}
-            onRecords={() => setModal("records")}
-            onStandings={() => setModal("standings")}
-            onBonds={() => setModal("bonds")}
-            onGuide={() => setModal("guide")}
+            onModal={setModal}
+            onTrain={(k) => {
+              if (k) setTrainTab(k);
+              setModal("train");
+            }}
             quiet={overlayBusy || !!modal}
             onPlay={playGame}
-            onAutoWeek={() => autoWeek(true)}
-            onSitOut={() => autoWeek(false)}
             onSeasonEnd={doSeasonEnd}
           />
         ))}
 
-      {/* 결과 팝업들 (턴 결과 → 경기 → 시즌 → 이벤트 고르기 → 특수능력 고르기 → 은퇴 물어보기) */}
+      {/* 결과 팝업들 (턴 결과 → 경기 평가 → 이벤트 고르기 → 특수능력 고르기 · 대결) */}
       {queue.length > 0 &&
         (queue[0].vn && !vnSeen ? (
           <VnScene
@@ -326,7 +311,6 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             skin={queue[0].vn.skin}
             lines={queue[0].vn.lines}
             title={queue[0].title}
-            place={queue[0].vn.place}
             seenKey={queue[0].vn.key}
             panel={c && isBond(queue[0].vn.char) && c.deck.includes(queue[0].vn.char) ? <BondPanel c={c} id={queue[0].vn.char} label={queue[0].title.split(" · ")[1]} /> : undefined}
             result={queue[0].stub || queue[0].lines.length > 2 ? undefined : queue[0]}
@@ -338,7 +322,15 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
               }
             }}
           />
-        ) : queue[0].stub ? null : (
+        ) : queue[0].stub ? null : queue[0].train ? (
+          <TrainResult
+            out={queue[0]}
+            onNext={() => {
+              setQueue((q) => q.slice(1));
+              setVnSeen(false);
+            }}
+          />
+        ) : (
           <TurnModal
             out={queue[0]}
             onNext={() => {
@@ -348,19 +340,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
           />
         ))}
       {!queue.length && reports.length > 0 && c && <ReportModal c={c} r={reports[0]} more={reports.length - 1} onClose={() => setReports((r) => r.slice(1))} />}
-      {!queue.length && !reports.length && season && c && <SeasonModal
-          s={season}
-          c={c}
-          onClose={() => setSeason(null)}
-          onReroll={() => {
-            saveCareer(null);
-            setC(null);
-            setSeason(null);
-            setHof(loadHof());
-            setView("create");
-          }}
-        />}
-      {!overlayBusy && view === "hub" && c && step === "pending" &&
+      {!overlayBusy && hub && step === "pending" &&
         (c.pending?.scene && c.pending.char ? (
           <VnScene
             key={`${c.turn}-${c.pending.char}`}
@@ -369,39 +349,52 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             title={c.pending.title}
             choices={c.pending.choices}
             onChoose={doChoose}
-            place={c.pending.scene.place}
             seenKey={`${c.pending.char}:${c.pending.scene.beat}`}
             panel={isBond(c.pending.char) ? <BondPanel c={c} id={c.pending.char} label={`${BEAT_NAME[BEATS[c.pending.scene.beat]]} ${c.pending.scene.beat + 1}/${BOND_MAX}`} /> : undefined}
           />
         ) : (
           <ChoiceModal c={c} onPick={doChoose} />
         ))}
-      {!overlayBusy && view === "hub" && c && step === "pick" && (c.pick?.boon ? <BoonPickModal c={c} onPick={doPick} /> : <PickModal c={c} onPick={doPick} />)}
-      {!overlayBusy && view === "hub" && c && step === "battle" && <BattleModal c={c} onDirect={battleDirect} onAuto={battleAuto} />}
-      {!overlayBusy && view === "hub" && c && step === "retireAsk" && <RetireAskModal c={c} onAnswer={doRetire} />}
+      {!overlayBusy && hub && step === "pick" && (c.pick?.boon ? <BoonPickModal c={c} onPick={doPick} /> : <PickModal c={c} onPick={doPick} />)}
+      {!overlayBusy && hub && step === "battle" && <BattleModal c={c} onDirect={battleDirect} onAuto={battleAuto} />}
+      {!overlayBusy && hub && step === "offer" && <OfferModal c={c} onPick={doOffer} />}
+      {!overlayBusy && hub && step === "missions" && <MissionSelect c={c} onDone={doMissions} />}
 
-      {modal && typeof modal === "object" && c && <PlaceModal c={c} place={modal.place} onClose={() => setModal(null)} onAct={doAct} />}
+      {modal === "train" && c && <TrainModal c={c} tab={trainTab} setTab={setTrainTab} onClose={() => setModal(null)} onAct={doAct} />}
+      {modal === "dorm" && c && <DormModal c={c} onClose={() => setModal(null)} onAct={doAct} />}
       {modal === "shop" && c && (
         <ShopModal
           c={c}
           onClose={() => setModal(null)}
           onBuyGear={(id) => {
             const n = clone(c);
-            const msg = buyGear(n, id);
+            flash(buyGear(n, id));
             commit(n);
-            flash(msg);
           }}
           onBuy={(id) => {
             const n = clone(c);
-            const msg = buy(n, id);
+            flash(buy(n, id));
             commit(n);
-            flash(msg);
           }}
           onUse={(id) => {
             const n = clone(c);
-            const msg = consumeItem(n, id);
+            flash(consumeItem(n, id));
             commit(n);
-            flash(msg);
+          }}
+        />
+      )}
+      {modal === "skills" && c && (
+        <SkillShopModal
+          c={c}
+          onClose={() => setModal(null)}
+          onBuy={(id) => {
+            const n = clone(c);
+            const r = buySkill(n, id);
+            if (typeof r === "string") return flash(r);
+            logPlay("skill_buy", { ...careerSnap(n), id });
+            commit(n);
+            sfx.missionOk();
+            flash(r.join(" · "));
           }}
         />
       )}
@@ -409,13 +402,11 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
       {modal === "standings" && c && <StandingsModal c={c} onClose={() => setModal(null)} />}
       {modal === "bonds" && c && <BondsModal c={c} onClose={() => setModal(null)} />}
       {modal === "guide" && <GuideModal onClose={() => setModal(null)} />}
-      {modal === "epilogue" && c && retireCard(c).partner && (
-        <VnScene char={retireCard(c).partner!} lines={[retireCard(c).epilogue!]} title="에필로그" onDone={() => setModal(null)} />
-      )}
+      {modal === "epilogue" && c?.summary?.partner && <VnScene char={c.summary.partner} lines={[c.summary.epilogue ?? ""]} title="에필로그" onDone={() => setModal(null)} />}
       {modal === "newConfirm" && (
         <Modal>
           <div className={`${font.title} mb-2 text-2xl`}>새로 시작할까요?</div>
-          <p className="text-[14px] text-white/70">키우던 선수 {c?.name}의 기록은 사라져요. 명예의 전당엔 은퇴한 선수만 남아요.</p>
+          <p className="text-[14px] text-white/70">키우던 {c?.name}의 이번 시즌은 사라져요. 명예의 전당엔 시즌을 끝낸 선수만 남아요.</p>
           <div className="mt-4 flex justify-center gap-2">
             <Btn
               className="px-5 py-2"
@@ -436,7 +427,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
         </Modal>
       )}
       {toast && (
-        <div className="pointer-events-none absolute top-[70px] left-1/2 z-40 -translate-x-1/2 rounded-full bg-black/85 px-5 py-2 text-[14px] font-bold text-white">
+        <div className="pointer-events-none absolute top-[84px] left-1/2 z-40 -translate-x-1/2 rounded-full bg-black/85 px-5 py-2 text-[14px] font-bold text-white">
           {toast}
         </div>
       )}
@@ -452,20 +443,109 @@ function playTone(t: TurnOut["tone"]) {
   else sfx.ui();
 }
 
+/* ─────────────── 공용 조각 ─────────────── */
+
+/** 이벤트 시작 · 끝 사선 띠 배너 */
+function Banner({ children, color = SKY }: { children: ReactNode; color?: string }) {
+  return (
+    <div
+      className={`${font.title} relative mx-auto w-fit -skew-x-12 px-8 py-1 text-[22px] text-white`}
+      style={{ background: `repeating-linear-gradient(135deg, ${color}, ${color} 10px, ${color}cc 10px, ${color}cc 20px)`, boxShadow: `0 0 18px ${color}66`, textShadow: "0 2px 0 rgba(0,0,0,0.5)" }}
+    >
+      <span className="inline-block skew-x-12">{children}</span>
+    </div>
+  );
+}
+
+function Bar({ v, color, max = 999, h = 7 }: { v: number; color: string; max?: number; h?: number }) {
+  return (
+    <div className="relative w-full overflow-hidden rounded-full bg-white/10" style={{ height: h }}>
+      <div className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500" style={{ width: `${Math.max(0, Math.min(100, (v / max) * 100))}%`, background: color }} />
+    </div>
+  );
+}
+
+/** 행동권 칸 */
+function Tickets({ n, max }: { n: number; max: number }) {
+  return (
+    <div className="flex items-center gap-[3px]" title="행동권 — 훈련 · 숙소 하나에 1장">
+      {Array.from({ length: max }, (_, i) => (
+        <div
+          key={i}
+          className="h-[16px] w-[11px] rounded-[3px] border"
+          style={{ background: i < n ? "#ffd23f" : "rgba(255,255,255,0.08)", borderColor: i < n ? "#fff3b0" : "rgba(255,255,255,0.15)", boxShadow: i < n ? "0 0 6px #ffd23f88" : undefined }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** 능력 칩 (슈퍼스타즈: 늘 같은 색) */
+function StatChip({ k, v, gain }: { k: StatKey; v: number; gain?: number }) {
+  const g = statGrade(v);
+  return (
+    <div className="flex h-[44px] w-[92px] flex-col justify-center rounded-lg border-2 px-1.5" style={{ borderColor: `${STAT_COLOR[k]}aa`, background: `linear-gradient(180deg, ${STAT_COLOR[k]}33, ${STAT_COLOR[k]}10)` }}>
+      <div className="flex items-center justify-between text-[11px] font-bold" style={{ color: STAT_COLOR[k] }}>
+        <span>{STAT_NAME[k]}</span>
+        {gain ? <span className="text-[10.5px] text-[#ffe680]">▲{gain}</span> : null}
+      </div>
+      <div className="flex items-baseline justify-between leading-none">
+        <span className={`${font.title} text-[18px]`} style={{ color: g.color }}>
+          {g.g}
+        </span>
+        <span className="font-mono text-[17px] font-bold">{Math.round(v)}</span>
+      </div>
+    </div>
+  );
+}
+
+function SkillChip({ id }: { id: SkillId }) {
+  const s = skill(id);
+  const col = s.set ? "#ffd23f" : s.bad ? "#ff9a9a" : s.risk ? "#ffb070" : s.tag ? TAG_COLOR[s.tag] : "#cfe9ff";
+  return (
+    <span title={s.desc} className="rounded-md border px-1.5 py-0.5 text-[11px]" style={{ borderColor: `${col}88`, color: col, fontWeight: s.set ? 700 : 400, background: s.set ? "#ffd23f1a" : undefined }}>
+      {s.set ? "★ " : ""}
+      {s.name}
+    </span>
+  );
+}
+
+function DeltaChips({ d }: { d: Delta }) {
+  const chips: { t: string; good: boolean; col?: string }[] = [];
+  for (const k of STAT_KEYS) {
+    const v = d.stats[k];
+    if (v) chips.push({ t: `${STAT_NAME[k]} ${v > 0 ? "+" : ""}${v}`, good: v > 0, col: v > 0 ? STAT_COLOR[k] : undefined });
+  }
+  if (d.sp) chips.push({ t: `스킬P ${d.sp > 0 ? "+" : ""}${d.sp}`, good: d.sp > 0, col: "#c9a2ff" });
+  if (d.stamina) chips.push({ t: `체력 ${d.stamina > 0 ? "+" : ""}${d.stamina}`, good: d.stamina > 0 });
+  if (d.cond) chips.push({ t: `컨디션 ${d.cond > 0 ? "▲" : "▼"}`, good: d.cond > 0 });
+  if (d.money) chips.push({ t: `자금 ${d.money > 0 ? "+" : ""}${d.money.toLocaleString()}만`, good: d.money > 0, col: "#ffd23f" });
+  if (!chips.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+      {chips.map((x, i) => (
+        <span key={i} className="rounded-full px-2.5 py-1 text-[13px] font-bold" style={{ background: x.good ? `${x.col ?? "#7dff9a"}22` : "rgba(255,90,90,0.15)", color: x.good ? x.col ?? "#7dff9a" : "#ff8a8a" }}>
+          {x.t}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 /* ─────────────── 시작 화면 ─────────────── */
 
 function Home({ c, onBack, onContinue, onNew, onHof }: { c: Career | null; onBack: () => void; onContinue: () => void; onNew: () => void; onHof: () => void }) {
-  const live = c && c.phase !== "retired";
+  const live = c && c.phase !== "done";
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5">
       <div className="text-center">
         <div className={`${font.title} text-[52px] leading-none`} style={{ color: ACCENT, textShadow: "0 5px 0 #000" }}>
-          육성 모드
+          라이징 시즌
         </div>
         <div className="mt-2 text-[14px] text-white/65">
-          선수 한 명을 최대 {MAX_SEASONS}년 · 한 해 {GAMES}경기 · 훈련 · 시내 외출 · 특수능력 고르기 · 픽셀파이트 캐릭터에게 필살타법 전수
+          한 판 = 한 시즌 · 캠프 → 정규 {WEEKS}주 → 챔피언 결정전 · 훈련 · 함께 훈련 · 인연 · 필살타법
         </div>
-        <div className="mt-1 text-[12px] text-white/45">타자편 프로토 · 이 브라우저에 저장돼요 · 매 턴 자동 저장</div>
+        <div className="mt-1 text-[12px] text-white/45">육성 모드 · 30분 안팎 · 이 브라우저에 자동 저장</div>
       </div>
       {live && (
         <button
@@ -482,7 +562,7 @@ function Home({ c, onBack, onContinue, onNew, onHof }: { c: Career | null; onBac
           <div className="flex-1">
             <div className={`${font.title} text-[22px]`}>이어하기 — {c!.name}</div>
             <div className="text-[13px] text-white/65">
-              {TYPES[c!.type].name} · {whenText(c!)}
+              {TYPES[c!.type].name} · {whenText(c!)} · {c!.wins}승 {c!.losses}패
             </div>
           </div>
           <span className="text-2xl">▶</span>
@@ -490,7 +570,7 @@ function Home({ c, onBack, onContinue, onNew, onHof }: { c: Career | null; onBac
       )}
       {c && !live && (
         <Btn className="w-[440px] py-2.5 text-[15px]" color="#ffd23f" onClick={onContinue}>
-          은퇴한 {c.name} 결과 다시 보기 · 종합 {ovrOf(c)} ({gradeOf(ovrOf(c)).g})
+          {c.name} 시즌 결산 다시 보기 · 종합 {ovrOf(c)} ({gradeOf(ovrOf(c)).g})
         </Btn>
       )}
       <div className="flex gap-3">
@@ -524,16 +604,16 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
   const [num, setNum] = useState(() => 10 + Math.floor(Math.random() * 60));
   const [bats, setBats] = useState<"R" | "L">("R");
   const [type, setType] = useState<BatType>("all");
-  const [pos, setPos] = useState<FieldPos>("SS");
+  const [pos, setPos] = useState<FieldPos>(TYPES.all.pos);
   const diff: Diff = CAREER_DIFF;
-  // 외형 커스터마이징은 잠금 (경기 그림이 아직 한 가지라 골라도 안 바뀜) — 기본 외형 고정
   const look: Look = DEFAULT_LOOK;
   const [tab, setTab] = useState<"look" | "base">("base");
   const t = TYPES[type];
   const start = () => {
     const lg = legacy ? hof.find((h) => h.id === legacy.id) : undefined;
-    onStart({ name, num, bats, type, pos, diff, look, deck: deck.length === DECK_SIZE ? deck : recommendDeck(type), legacy: lg ? { name: lg.name, skill: legacy?.skill, stats: lg.stats } : undefined });
+    onStart({ name, num, bats, type, pos, look, deck: deck.length === DECK_SIZE ? deck : recommendDeck(type), legacy: lg ? { name: lg.name, skill: legacy?.skill, stats: lg.stats } : undefined });
   };
+  void diff;
   const head = (
     <div className="flex items-center justify-between">
       <span className={`${font.title} text-[28px]`} style={{ color: ACCENT }}>
@@ -552,8 +632,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
         <div className="flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-2.5">
           <div className="text-[12.5px] leading-relaxed text-white/60">
             {deck.length < DECK_SIZE ? `${DECK_SIZE - deck.length}명 더 고르거나 그냥 시작하면 추천 덱으로 가요.` : `덱: ${deck.map((d) => charById(d).name).join(" · ")}`}
-            <br />
-            은퇴하면 덱 사람들 호감이 「인연 레벨」로 쌓여서 다음 선수는 처음부터 더 친하게 시작해요.
+            <br />덱 사람들은 훈련장에 같이 나와요 — 얼굴 있는 훈련을 고르면 효율 ↑ · 호감 ↑. 시즌이 끝나면 호감이 「인연 레벨」로 쌓여요.
           </div>
           <Btn className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={start}>
             입단!
@@ -576,12 +655,8 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
               {nm}
             </Btn>
           ))}
-          <span className="flex w-[90px] items-center justify-center rounded-xl border-2 border-dashed border-white/15 py-1.5 text-[11.5px] text-white/35" title="스킨 · 준비 중">
-            🔒 스킨
-          </span>
         </div>
       ))}
-      <div className="text-[11.5px] text-white/45">외형은 능력치에 영향 없어요 · 유니폼은 우리 팀 전체가 같이 입어요</div>
     </div>
   );
   return (
@@ -607,96 +682,97 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
               기본 · 타입
             </Btn>
           </div>
-          {tab === "look" ? lookTab : (
-      <div className="flex gap-5">
-        <div className="flex flex-col gap-2.5">
-          <Field label="이름">
-            <input
-              value={name}
-              maxLength={6}
-              onChange={(e) => setName(e.target.value.replace(/\s/g, ""))}
-              className="w-[120px] rounded-lg border-2 border-white/20 bg-black/40 px-2 py-1 text-[15px] font-bold outline-none focus:border-[#FF8A3D]"
-            />
-            <Btn className="px-2 py-1 text-[12px]" color="#8b93b8" onClick={() => setName(NAMES[Math.floor(Math.random() * NAMES.length)])}>
-              🎲
-            </Btn>
-          </Field>
-          <Field label="등번호">
-            <input
-              type="number"
-              min={0}
-              max={99}
-              value={num}
-              onChange={(e) => setNum(Math.max(0, Math.min(99, Number(e.target.value) || 0)))}
-              className="w-[70px] rounded-lg border-2 border-white/20 bg-black/40 px-2 py-1 font-mono text-[15px] font-bold outline-none focus:border-[#FF8A3D]"
-            />
-          </Field>
-          <Field label="타석">
-            {(["R", "L"] as const).map((b) => (
-              <Btn key={b} active={bats === b} className="px-3 py-1 text-[13px]" onClick={() => setBats(b)}>
-                {b === "R" ? "우타" : "좌타"}
-              </Btn>
-            ))}
-          </Field>
-        </div>
-        <div className="flex flex-1 flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-bold text-white/70">포지션</span>
-            <Btn active className="px-3 py-0.5 text-[12.5px]">
-              타자
-            </Btn>
-            <Btn disabled className="px-3 py-0.5 text-[12.5px]" color="#8b93b8">
-              🔒 투수 육성 · 잠금
-            </Btn>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-[56px] text-[13px] font-bold text-white/70">수비 위치</span>
-            <div className="grid flex-1 grid-cols-3 gap-1.5">
-              {PICK_POS.map((p) => (
-                <Btn key={p.pos} active={pos === p.pos} className="py-1.5 text-[14px]" onClick={() => setPos(p.pos)}>
-                  {p.name}
-                </Btn>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-[56px] text-[13px] font-bold text-white/70">타입</span>
-            <div className="grid flex-1 grid-cols-3 gap-1.5">
-              {PICK_TYPES.map((k) => (
-                <Btn key={k} active={type === k} className="py-1.5 text-[14px]" onClick={() => setType(k)}>
-                  {TYPES[k].name}
-                </Btn>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-2">
-            <div className="text-[13px] text-white/75">
-              {t.desc} · {PICK_POS.find((p) => p.pos === pos)?.name} (수비 위치는 능력치에 영향 없음)
-            </div>
-            <div className="mt-1.5 grid grid-cols-4 gap-2">
-              {STAT_KEYS.map((k) => (
-                <div key={k} className="text-[12px]">
-                  <div className="flex justify-between text-white/60">
-                    <span>{STAT_NAME[k]}</span>
-                    <span style={{ color: t.apt[k] > 1.05 ? "#7dff9a" : t.apt[k] < 0.95 ? "#ff9a7a" : "#fff" }}>
-                      성장 {t.apt[k] > 1.05 ? "▲" : t.apt[k] < 0.95 ? "▼" : "─"}
-                    </span>
+          {tab === "look" ? (
+            lookTab
+          ) : (
+            <div className="flex gap-5">
+              <div className="flex flex-col gap-2.5">
+                <Field label="이름">
+                  <input
+                    value={name}
+                    maxLength={6}
+                    onChange={(e) => setName(e.target.value.replace(/\s/g, ""))}
+                    className="w-[120px] rounded-lg border-2 border-white/20 bg-black/40 px-2 py-1 text-[15px] font-bold outline-none focus:border-[#FF8A3D]"
+                  />
+                  <Btn className="px-2 py-1 text-[12px]" color="#8b93b8" onClick={() => setName(NAMES[Math.floor(Math.random() * NAMES.length)])}>
+                    🎲
+                  </Btn>
+                </Field>
+                <Field label="등번호">
+                  <input
+                    type="number"
+                    min={0}
+                    max={99}
+                    value={num}
+                    onChange={(e) => setNum(Math.max(0, Math.min(99, Number(e.target.value) || 0)))}
+                    className="w-[70px] rounded-lg border-2 border-white/20 bg-black/40 px-2 py-1 font-mono text-[15px] font-bold outline-none focus:border-[#FF8A3D]"
+                  />
+                </Field>
+                <Field label="타석">
+                  {(["R", "L"] as const).map((b) => (
+                    <Btn key={b} active={bats === b} className="px-3 py-1 text-[13px]" onClick={() => setBats(b)}>
+                      {b === "R" ? "우타" : "좌타"}
+                    </Btn>
+                  ))}
+                </Field>
+              </div>
+              <div className="flex flex-1 flex-col gap-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-[56px] text-[13px] font-bold text-white/70">타입</span>
+                  <div className="grid flex-1 grid-cols-5 gap-1.5">
+                    {PICK_TYPES.map((k) => (
+                      <Btn
+                        key={k}
+                        active={type === k}
+                        className="py-1.5 text-[14px]"
+                        onClick={() => {
+                          setType(k);
+                          setPos(TYPES[k].pos);
+                        }}
+                      >
+                        {TYPES[k].name}
+                      </Btn>
+                    ))}
                   </div>
-                  <Bar v={t.start[k]} color={STAT_COLOR[k]} />
                 </div>
-              ))}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-[56px] text-[13px] font-bold text-white/70">수비 위치</span>
+                  <div className="grid flex-1 grid-cols-4 gap-1.5">
+                    {PICK_POS.map((p) => (
+                      <Btn key={p.pos} active={pos === p.pos} className="py-1 text-[13px]" color="#7ad7ff" onClick={() => setPos(p.pos)}>
+                        {p.name}
+                      </Btn>
+                    ))}
+                  </div>
+                </div>
+                <div className={`${PANEL} px-3 py-2`}>
+                  <div className="text-[13px] text-white/80">
+                    {t.desc} · {PICK_POS.find((p) => p.pos === pos)?.name}
+                  </div>
+                  <div className="mt-1.5 grid grid-cols-4 gap-2">
+                    {STAT_KEYS.map((k) => (
+                      <div key={k} className="text-[12px]">
+                        <div className="flex justify-between">
+                          <span style={{ color: STAT_COLOR[k] }} className="font-bold">
+                            {STAT_NAME[k]}
+                          </span>
+                          <span style={{ color: t.apt[k] > 1.05 ? "#7dff9a" : t.apt[k] < 0.95 ? "#ff9a7a" : "#fff" }}>성장 {t.apt[k] > 1.05 ? "▲" : t.apt[k] < 0.95 ? "▼" : "─"}</span>
+                        </div>
+                        <Bar v={t.start[k]} max={400} color={STAT_COLOR[k]} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
           )}
         </div>
       </div>
       <div className="mt-auto flex items-center justify-between rounded-xl border border-white/10 bg-black/30 px-4 py-2.5">
         <div className="text-[12.5px] leading-relaxed text-white/60">
-          19세 입단 · 한 해 {GAMES}경기 · {RETIRE_FROM}년차부터 은퇴를 고를 수 있고 {MAX_SEASONS}년차엔 은퇴. 숨은 재능은 1년차가 끝나면 알려 줘요.
+          한 시즌 = 캠프 + 정규 {WEEKS}주(주마다 행동권 {TICKETS}장 + 주말 경기) + 1위면 챔피언 결정전.
           <br />
-          결과는 운 · 선택 · 실력에 따라 갈려요 — 10년 뒤 종합 보통 400~500 · 잘 풀리면 600~700대.
+          끝나면 종합 등급 · 수상 · 칭호로 명예의 전당에 올라가요 — 보통 종합 450 안팎 · 잘 풀리면 550+.
         </div>
         <Btn space className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
           다음 ▶
@@ -715,15 +791,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Bar({ v, color, max = 999, h = 7 }: { v: number; color: string; max?: number; h?: number }) {
-  return (
-    <div className="relative w-full overflow-hidden rounded-full bg-white/10" style={{ height: h }}>
-      <div className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500" style={{ width: `${Math.min(100, (v / max) * 100)}%`, background: color }} />
-    </div>
-  );
-}
-
-/* ─────────────── 선수 그림 (등 뒤 · 등번호 · 이름) ─────────────── */
+/* ─────────────── 선수 그림 ─────────────── */
 
 function Portrait({ c, w = 120, h = 150 }: { c: Career; w?: number; h?: number }) {
   return <Figure look={c.look} num={c.num} name={c.name} bats={c.bats} learned={c.learned} metal={!!c.gear.bat} w={w} h={h} />;
@@ -764,12 +832,10 @@ function Figure({ look, num, name, bats, learned, metal, front, w, h }: { look: 
       ctx.clearRect(0, 0, w, h);
       if (front) {
         const ps = pose(PITCHER_RIG, PIT_IDLE, t);
-        // 발끝 ~ 머리 꼭대기가 다 들어오게
         const sc = h / 225;
         drawRig(ctx, PITCHER_RIG, ps, skin, colors, w / 2, h - 72 * sc, sc, false);
       } else {
         const ps = pose(BATTER_RIG, BAT_IDLE, t);
-        // 방망이 끝 ~ 발끝이 다 들어오게 (머리 · 방망이 안 잘리게)
         const sc = h / 215;
         const bx = w / 2 + (bats === "L" ? 1 : -1) * w * 0.06;
         if (!drawBatter(ctx, batterFrame(BAT_IDLE, t), spriteLook, bx, h - 64 * sc, sc, bats === "L")) drawRig(ctx, BATTER_RIG, ps, skin, colors, bx, h - 64 * sc, sc, bats === "L");
@@ -783,7 +849,7 @@ function Figure({ look, num, name, bats, learned, metal, front, w, h }: { look: 
   return <canvas ref={ref} style={{ width: w, height: h }} />;
 }
 
-/* ─────────────── 관리 화면 (시내 지도) ─────────────── */
+/* ─────────────── 허브 (슈퍼스타즈 배치) ─────────────── */
 
 function Hub(p: {
   c: Career;
@@ -792,688 +858,625 @@ function Hub(p: {
   onSpeed: (v: number) => void;
   onMode: (m: PlayMode) => void;
   onBack: () => void;
-  onPlace: (place: PlaceId) => void;
-  onAdvance: () => void;
-  onShop: () => void;
-  onRecords: () => void;
-  onStandings: () => void;
-  onBonds: () => void;
-  onGuide: () => void;
-  /** 팝업이 떠 있음 (힌트 숨김) */
+  onModal: (m: ModalKind) => void;
+  onTrain: (k?: TrainKey) => void;
   quiet?: boolean;
   onPlay: () => void;
-  onAutoWeek: () => void;
-  onSitOut: () => void;
   onSeasonEnd: () => void;
 }) {
   const { c } = p;
   const step = stepOf(c);
-  // 폰(무대 배율 0.68)에선 머리 버튼이 손가락보다 작았음 → 크게 · 배속은 한 버튼으로 돌림
-  const { phone } = useStage();
-  const hb = `${phone ? "px-3 py-1.5 text-[16px]" : "px-2.5 py-1 text-[13px]"} whitespace-nowrap`;
+  const ovr = ovrOf(c);
+  const gr = gradeOf(ovr);
+  const stCol = c.stamina < 30 ? "#ff5a5a" : c.stamina < 50 ? "#ffd23f" : "#7dff9a";
+  const turnish = step === "turn" || step === "pending" || step === "pick" || step === "battle" || step === "offer" || step === "missions";
   return (
     <div className="flex h-full flex-col">
-      {/* 위 */}
-      <div className="flex h-[50px] items-center gap-3 border-b border-white/10 bg-black/40 px-3">
-        <Btn className={hb} color="#8b93b8" onClick={p.onBack}>
+      {/* 위: 상태 · 능력 · 재화 */}
+      <div className="flex h-[66px] shrink-0 items-center gap-2 border-b-2 border-[#5fc8ff]/30 bg-[#081028]/85 px-2">
+        <Btn className="px-2 py-1 text-[13px]" color="#8b93b8" onClick={p.onBack}>
           ←
         </Btn>
-        <div className={`${font.title} text-[20px] whitespace-nowrap`}>{whenText(c)}</div>
-        <Schedule c={c} />
-        <div className="ml-auto flex items-center gap-1.5">
-          <Btn className={`${hb} font-mono`} color="#7dff9a" onClick={() => p.onSpeed(SPEEDS[(SPEEDS.indexOf(p.speed as (typeof SPEEDS)[number]) + 1) % SPEEDS.length])}>
-            배속 ×{p.speed}
+        <div className={`${PANEL} flex h-[56px] items-center gap-2 px-2`}>
+          <div className="flex h-[50px] w-[40px] items-end justify-center overflow-hidden rounded-md bg-gradient-to-b from-[#2a6b3a]/50 to-transparent">
+            <Portrait c={c} w={40} h={50} />
+          </div>
+          <div className="w-[118px]">
+            <div className="flex items-center gap-1">
+              <span className="text-[17px] leading-none" title={`컨디션 ${COND_NAME[c.cond]}`}>
+                {COND_FACE[c.cond]}
+              </span>
+              <span className="truncate text-[13px] font-bold">{c.name}</span>
+            </div>
+            <div className="mt-0.5 flex items-center gap-1 text-[10.5px]">
+              <span className="text-white/55">체력</span>
+              <div className="flex-1">
+                <Bar v={c.stamina} max={100} color={stCol} h={8} />
+              </div>
+              <span className="font-mono font-bold" style={{ color: stCol }}>
+                {Math.round(c.stamina)}
+              </span>
+            </div>
+            <div className="text-[10.5px]" style={{ color: COND_COLOR[c.cond] }}>
+              컨디션 {COND_NAME[c.cond]}
+            </div>
+          </div>
+          <div className="flex flex-col items-center border-l border-white/10 pl-2">
+            <span className={`${font.title} text-[15px] leading-tight text-[#ffd23f]`}>{whenText(c)}</span>
+            <Tickets n={c.tickets} max={ticketMax(c)} />
+          </div>
+        </div>
+        <div className="mx-auto flex items-center gap-1.5">
+          {STAT_KEYS.map((k) => (
+            <StatChip key={k} k={k} v={c.stats[k]} gain={Math.round(c.stats[k]) - Math.round(c.weekStart[k]) || undefined} />
+          ))}
+          <div className="flex h-[44px] w-[64px] flex-col items-center justify-center rounded-lg border-2 border-white/20 bg-black/40" title="종합 = 능력치 평균 + 특수능력">
+            <span className="text-[10px] text-white/55">종합</span>
+            <span className={`${font.title} text-[18px] leading-none`} style={{ color: gr.color }}>
+              {gr.g} {ovr}
+            </span>
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="rounded-md bg-black/50 px-2 font-mono text-[13px] font-bold text-[#ffd23f]">💰 {c.money.toLocaleString()}만</span>
+          <span className="rounded-md bg-black/50 px-2 font-mono text-[13px] font-bold text-[#c9a2ff]">SP {c.sp}</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <Btn className="px-2 py-0.5 font-mono text-[11px]" color="#7dff9a" onClick={() => p.onSpeed(SPEEDS[(SPEEDS.indexOf(p.speed as (typeof SPEEDS)[number]) + 1) % SPEEDS.length])}>
+            ×{p.speed}
           </Btn>
-          <span className="ml-1.5 font-mono text-[13px] font-bold whitespace-nowrap text-[#ffd23f]">₩{c.money.toLocaleString()}만</span>
-          <Btn className={hb} color="#ffd23f" onClick={p.onShop}>
-            상점
-          </Btn>
-          <Btn className={hb} color="#ff7ae0" onClick={p.onBonds}>
-            인연
-          </Btn>
-          <Btn className={hb} color="#8b93b8" onClick={p.onGuide}>
+          <Btn className="px-2 py-0.5 text-[11px]" color="#8b93b8" onClick={() => p.onModal("guide")}>
             ?
-          </Btn>
-          {(c.phase === "season" || c.phase === "post" || c.phase === "seasonEnd") && (
-            <Btn className={hb} color="#7dff9a" onClick={p.onStandings}>
-              순위
-            </Btn>
-          )}
-          <Btn className={hb} color="#7ad7ff" onClick={p.onRecords}>
-            기록
           </Btn>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-2.5 p-2.5">
-        <PlayerCard c={c} />
+      <div className="flex min-h-0 flex-1 gap-2 p-2">
+        {/* 왼쪽: 시즌 미션 · 인연 · 특수능력 */}
+        <div className="flex w-[214px] shrink-0 flex-col gap-2">
+          <MissionPanel c={c} />
+          <BondList c={c} onOpen={() => p.onModal("bonds")} />
+          <SkillPanel c={c} onOpen={() => p.onModal("skills")} />
+        </div>
+
+        {/* 가운데: 연습장 · 경기 전 · 시즌 끝 */}
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           {c.injury && (
             <div className="rounded-xl border-2 border-[#ff5a5a]/60 bg-[#ff5a5a]/10 px-3 py-1 text-[12.5px] text-[#ffb0b0]">
-              🩹 {INJURY_NAME[c.injury.kind]} — 복귀까지 {c.injury.left} (경기 · 캠프 하루마다 1씩). 숙소 · 병원만 갈 수 있고 경기는 결장. 병원 치료 · 상점 「재활 치료」로 줄일 수 있어요.
+              🩹 {INJURY_NAME[c.injury.kind]} — 복귀까지 {c.injury.left}턴. 훈련은 못 하고 숙소(휴식 · 치료)만. 경기는 결장.
             </div>
           )}
-          {step === "turn" || step === "pending" || step === "pick" || step === "battle" || step === "retireAsk" ? (
-            <TownMap c={c} onPlace={p.onPlace} onAdvance={p.onAdvance} />
+          {turnish ? (
+            <PracticeField c={c} onTrain={p.onTrain} />
           ) : step === "game" ? (
-            <GameCard c={c} mode={p.mode} onMode={p.onMode} onPlay={p.onPlay} onAutoWeek={p.onAutoWeek} onSitOut={p.onSitOut} />
-          ) : step === "seasonEnd" ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-[#ffd23f]/40 bg-black/30">
-              <div className={`${font.title} text-[30px]`}>{c.season}년차 시즌 종료!</div>
-              {c.postRes && <div className={`${font.title} text-[22px]`} style={{ color: POST_BADGE[c.postRes]?.col }}>{POST_BADGE[c.postRes]?.t}</div>}
-              <div className="w-[440px]">
-                <StandingsTable rows={standings(c)} />
+            <PreGame c={c} mode={p.mode} onMode={p.onMode} onPlay={p.onPlay} />
+          ) : step === "end" ? (
+            <div className={`${PANEL} flex flex-1 flex-col items-center justify-center gap-3`}>
+              <Banner color="#ffb020">시즌 종료</Banner>
+              {c.result && (
+                <div className={`${font.title} text-[26px]`} style={{ color: RESULT_BADGE[c.result]?.col }}>
+                  {RESULT_BADGE[c.result]?.t}
+                </div>
+              )}
+              <div className="text-[14px] text-white/70">
+                {c.line.g}경기 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점 · {c.wins}승 {c.losses}패
               </div>
-              <div className="text-[14px] text-white/65">
-                {c.line.g}경기 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점 · 팀 {myRank(c)}위{c.postRes && c.postRes !== "진출 실패" ? ` · 가을야구 ${c.postRes}` : ""}
-              </div>
-              <Btn className={`${font.title} px-8 py-3 text-xl`} color="#ffd23f" onClick={p.onSeasonEnd}>
-                시즌 결산 보기
+              <Btn space className={`${font.title} px-10 py-3 text-xl`} color="#ffd23f" onClick={p.onSeasonEnd}>
+                시즌 결산 보기 ▶
               </Btn>
             </div>
           ) : null}
-          <div className="h-[62px] shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/35 px-3 py-1">
-            <div className="flex justify-between text-[11px] text-white/45">
-              <span>최근 소식</span>
-              <span>
-                이번 시즌 {c.line.g}경기 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점
-              </span>
-            </div>
-            {c.log.slice(0, 2).map((l, i) => (
-              <div key={i} className="truncate text-[12.5px]" style={{ opacity: 1 - i * 0.3 }}>
-                {l}
-              </div>
-            ))}
+          <div className="flex h-[30px] shrink-0 items-center gap-2 overflow-hidden rounded-lg border border-white/10 bg-black/40 px-3">
+            <span className="text-[11px] font-bold text-[#5fc8ff]">LOG</span>
+            <span className="truncate text-[12.5px] text-white/85">{c.log[0] ?? "시즌을 시작했다!"}</span>
           </div>
         </div>
-        <SideStatus c={c} />
+
+        {/* 오른쪽: 메뉴 · 훈련 · 숙소 */}
+        <div className="flex w-[116px] shrink-0 flex-col gap-1.5">
+          <MenuBtn icon="🛒" label="상점" color="#ffd23f" onClick={() => p.onModal("shop")} />
+          <MenuBtn icon="✨" label="스킬" color="#c9a2ff" badge={c.sp >= Math.min(...skillShop(c).map((id) => skillPrice(c, id)), 9999) ? "!" : undefined} onClick={() => p.onModal("skills")} />
+          <MenuBtn icon="💞" label="인연" color="#ff7ae0" onClick={() => p.onModal("bonds")} />
+          <MenuBtn icon="📊" label="순위" color="#7dff9a" onClick={() => p.onModal("standings")} />
+          <MenuBtn icon="📜" label="기록" color="#7ad7ff" onClick={() => p.onModal("records")} />
+          <div className="mt-auto flex flex-col items-center gap-1.5">
+            <button
+              type="button"
+              disabled={step !== "turn"}
+              onClick={() => {
+                sfx.ui();
+                p.onTrain();
+              }}
+              className={`${font.title} flex h-[104px] w-[104px] cursor-pointer flex-col items-center justify-center text-[24px] text-white transition-transform hover:scale-105 disabled:cursor-not-allowed disabled:opacity-40`}
+              style={{ clipPath: "polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%)", background: "linear-gradient(180deg, #ff9a3d, #e0571c)", textShadow: "0 2px 0 rgba(0,0,0,0.45)" }}
+            >
+              <span className="text-[26px] leading-none">💪</span>
+              훈련
+            </button>
+            <Btn className={`${font.title} w-full py-1.5 text-[16px]`} color="#7ad7ff" disabled={step !== "turn"} onClick={() => p.onModal("dorm")}>
+              🛏️ 숙소
+            </Btn>
+          </div>
+        </div>
       </div>
-      {/* 힌트는 한 번에 하나씩 (안 본 것 중 앞에서부터 — 예전엔 첫 행동 뒤엔 허브 힌트가 영영 안 떴음) */}
-      {!p.quiet && step === "turn" && !seenHint("hub") && (
-        <Hint k="hub" title="관리 턴 — 지도에서 장소를 눌러요">
-          ⚡ 행동력이 남아 있는 동안 훈련 · 휴식 · 만남을 해요. 다 쓰면 오른쪽 위 「{c.phase === "season" ? "경기 진행" : "다음 날"} ▶」. 체력 40 아래로 훈련하면 부상이 확 늘어요.
-        </Hint>
-      )}
-      {!p.quiet && step === "turn" && seenHint("hub") && !seenHint("bond") && spotsOf(c).some((s) => s.char) && (
-        <Hint k="bond" title="❗ 인연이 나타났어요">
-          얼굴이 뜬 장소에 가면 그 사람과 이야기가 이어져요. 대답에 따라 호감이 오르고, 그 사람다운 답을 고르면 「이해」가 쌓여요. 상단 「인연」에서 진행 상황을 볼 수 있어요.
-        </Hint>
-      )}
-      {!p.quiet && step === "turn" && seenHint("hub") && (seenHint("bond") || !spotsOf(c).some((s) => s.char)) && Object.keys(trainersOf(c)).length > 0 && (
-        <Hint k="mate" title="함께 훈련">
-          운동장 훈련 버튼에 얼굴이 붙어 있으면 그 사람이 같이 해 줘요 — 효율 ×1.3 이상 + 호감 +3. 이번 관리 기간에 한 번만!
+      {!p.quiet && step === "turn" && !seenHint("hub4") && (
+        <Hint k="hub4" title="한 판 = 한 시즌">
+          🎫 행동권 {ticketMax(c)}장으로 「훈련」이나 「숙소」를 해요. 다 쓰면 주말 리그 경기. 연습장에 얼굴이 있는 훈련은 덱 사람과 「함께 훈련」 — 효율 ↑ · 호감 ↑. 상점 · 스킬은 행동권 안 써요.
         </Hint>
       )}
     </div>
   );
 }
 
-function PlayerCard({ c }: { c: Career }) {
-  const ovr = ovrOf(c);
-  const gs = careerGameStats(c).stats;
-  const gr = gradeOf(ovr);
-  const tc = tagCount(c);
+function MenuBtn({ icon, label, color, badge, onClick }: { icon: string; label: string; color: string; badge?: string; onClick: () => void }) {
   return (
-    <div className="flex w-[252px] shrink-0 flex-col rounded-2xl border-2 border-white/10 bg-[#0e1226]/90 p-2.5">
-      <div className="flex gap-2">
-        <div className="shrink-0 rounded-xl bg-gradient-to-b from-[#2a6b3a]/40 to-transparent">
-          <Portrait c={c} w={96} h={124} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className={`${font.title} truncate text-[21px] leading-tight`}>{c.name}</div>
-          <div className="truncate text-[11px] text-white/60">
-            #{c.num} · {TYPES[c.type].name} · {c.bats === "R" ? "우타" : "좌타"} · {age(c)}세
-          </div>
-          <div className="text-[12px] text-white/60">
-            숨은 재능{" "}
-            <b className="text-[13px]" style={{ color: c.talentKnown ? "#ffd23f" : "#fff" }}>
-              {talentName(c)}
-            </b>
-            {c.awakened && <span className="ml-1 text-[#ff7ae0]">각성</span>}
-          </div>
-          <div className="mt-1 flex items-end gap-2">
-            <span className={`${font.title} text-[42px] leading-none`} style={{ color: gr.color }}>
-              {ovr}
-            </span>
-            <span className="pb-1">
-              <span className={`${font.title} block text-[20px] leading-none`} style={{ color: gr.color }}>
-                {gr.g}
-              </span>
-              <span className="text-[10px] text-white/50">종합</span>
-            </span>
-          </div>
-        </div>
+    <button
+      type="button"
+      onClick={() => {
+        sfx.ui();
+        onClick();
+      }}
+      className="relative flex h-[40px] cursor-pointer items-center gap-2 rounded-xl border-2 bg-[#0d1838]/90 px-2.5 text-left transition-transform hover:-translate-x-0.5"
+      style={{ borderColor: `${color}88`, boxShadow: "0 3px 0 rgba(0,0,0,0.4)" }}
+    >
+      <span className="text-[18px]">{icon}</span>
+      <span className={`${font.title} text-[16px]`} style={{ color }}>
+        {label}
+      </span>
+      {badge && <span className="absolute -top-1.5 -right-1.5 flex h-[18px] w-[18px] items-center justify-center rounded-full bg-[#ff5a5a] text-[11px] font-bold">{badge}</span>}
+    </button>
+  );
+}
+
+/** 왼쪽: 시즌 미션 */
+function MissionPanel({ c }: { c: Career }) {
+  return (
+    <div className={`${PANEL} px-2.5 py-1.5`}>
+      <div className="flex items-center justify-between text-[12px] font-bold text-[#5fc8ff]">
+        <span>시즌 미션</span>
+        {c.missions && <span className="text-white/50">{c.missions.filter((m) => m.done).length}/3</span>}
       </div>
-      <div className="mt-2 flex flex-col gap-1.5">
-        {STAT_KEYS.map((k) => {
-          const v = Math.round(c.stats[k]);
-          const g = statGrade(v);
+      {c.missions ? (
+        <div className="mt-1 flex flex-col gap-1">
+          {c.missions.map((m) => {
+            const now = missionNow(c, m.key);
+            const need = missionNeed(m);
+            const T = MISSION_TIER[m.tier];
+            return (
+              <div key={m.key} className="text-[11.5px]">
+                <div className="flex justify-between">
+                  <span className={m.done ? "text-[#ffd23f]" : "text-white/85"}>
+                    {m.done ? "✓ " : ""}
+                    {missionName(m)}
+                  </span>
+                  <span className="font-mono text-white/60">
+                    {Math.min(now, need)}/{need}
+                  </span>
+                </div>
+                <Bar v={Math.min(now, need)} max={need} color={m.done ? "#ffd23f" : T.color} h={5} />
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-0.5 text-[11.5px] leading-snug text-white/55">캠프가 끝나면 3개를 골라요 — 이루는 순간 스킬P!</div>
+      )}
+    </div>
+  );
+}
+
+/** 왼쪽: 인연 덱 */
+function BondList({ c, onOpen }: { c: Career; onOpen: () => void }) {
+  return (
+    <button type="button" onClick={onOpen} className={`${PANEL} cursor-pointer px-2.5 py-1.5 text-left hover:border-[#5fc8ff]/80`}>
+      <div className="text-[12px] font-bold text-[#ff7ae0]">인연</div>
+      <div className="mt-1 flex flex-col gap-1.5">
+        {c.deck.map((id) => {
+          const ch = charById(id);
+          const aff = c.aff[id] ?? 0;
+          const ready = nextBeat(c, id).kind !== "hang";
+          const v = c.bonds[id] ?? 0;
           return (
-            <div key={k} className="flex items-center gap-2">
-              <span className="w-[44px] text-[12px] text-white/70">{STAT_NAME[k]}</span>
-              <span className={`${font.title} w-[18px] text-center text-[16px]`} style={{ color: g.color }}>
-                {g.g}
-              </span>
-              <span className="w-[30px] text-right font-mono text-[13px] font-bold">{v}</span>
-              <div className="flex-1">
-                <Bar v={v} color={STAT_COLOR[k]} />
+            <div key={id} className="flex items-center gap-1.5">
+              <div className="relative shrink-0">
+                <img src={faceUrl(id)} alt={ch.name} className="h-[32px] w-[30px] rounded-md object-cover object-top" style={{ outline: `2px solid ${ch.color}` }} />
+                {ready && <span className="absolute -top-2 -right-1.5 text-[14px]">❗</span>}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex justify-between text-[11.5px]">
+                  <b style={{ color: ch.color }}>{ch.name}</b>
+                  <span className="text-white/55">
+                    {Math.min(v, BOND_MAX)}/{BOND_MAX}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-[#ff7ae0]">♥</span>
+                  <Bar v={aff} max={100} color={aff >= FRIEND_AFF ? "linear-gradient(90deg,#ff7ae0,#ffd23f)" : "#ff7ae0"} h={5} />
+                  <span className="w-[18px] text-right font-mono text-[10px] text-white/60">{aff}</span>
+                </div>
               </div>
             </div>
           );
         })}
-        {/* 경기 화면 능력치는 신인 보정 · 축복 · 장비 · 컨디션까지 더한 값이라 여기랑 달라 보였음 → 같이 보여 줌 */}
-        <div className="text-[10.5px] leading-tight text-white/45">
-          경기에선 타격 <b className="text-white/75">{gs.hit}</b> · 파워 <b className="text-white/75">{gs.power}</b>
-          {c.season <= ROOKIE.seasons ? " · 신인 보정 · 축복 · 장비 포함" : " · 축복 · 장비 · 컨디션 포함"}
-        </div>
-        {c.season === 1 && <div className="text-[10.5px] leading-tight text-[#7ad7ff]/70">신인은 다 F · G 등급에서 시작해요 — 10년 뒤 종합 400 ~ 600 이 보통</div>}
       </div>
-      {/* 태그 (세트까지 몇 장) */}
-      <div className="mt-2 flex flex-wrap gap-1">
+      {c.learned && (
+        <div className="mt-1.5 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-black" style={{ background: charById(c.learned).color }}>
+          ★ {charById(c.learned).swing.name} Lv{spLv(c)}
+        </div>
+      )}
+    </button>
+  );
+}
+
+/** 왼쪽: 특수능력 (태그 세트 진행) */
+function SkillPanel({ c, onOpen }: { c: Career; onOpen: () => void }) {
+  const tc = tagCount(c);
+  return (
+    <button type="button" onClick={onOpen} className={`${PANEL} flex min-h-0 flex-1 cursor-pointer flex-col px-2.5 py-1.5 text-left hover:border-[#5fc8ff]/80`}>
+      <div className="flex justify-between text-[12px] font-bold text-[#c9a2ff]">
+        <span>특수능력 {c.skills.length}</span>
+        <span className="text-white/45">스킬 습득 ▶</span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1">
         {(Object.keys(TAG_NAME) as Tag[])
           .filter((t) => tc[t])
           .map((t) => (
-            <span key={t} className="rounded px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: `${TAG_COLOR[t]}22`, color: TAG_COLOR[t] }} title={`같은 태그 ${SET_NEED}장이면 세트 효과`}>
+            <span key={t} className="rounded px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: `${TAG_COLOR[t]}22`, color: TAG_COLOR[t] }}>
               {TAG_NAME[t]} {Math.min(SET_NEED, tc[t] ?? 0)}/{SET_NEED}
             </span>
           ))}
       </div>
-      <div className="mt-1.5 flex min-h-0 flex-1 flex-wrap content-start gap-1 overflow-y-auto">
-        {c.learned && (
-          <span className="rounded-md px-1.5 py-0.5 text-[11px] font-bold text-black" style={{ background: charById(c.learned).color }} title={charById(c.learned).swing.desc}>
-            ★ {charById(c.learned).swing.name} Lv{spLv(c)} · {spUses(c)}회
-          </span>
-        )}
-        {c.skills.map((id) => (
+      <div className="mt-1 flex min-h-0 flex-1 flex-wrap content-start gap-1 overflow-hidden">
+        {c.skills.slice(-8).map((id) => (
           <SkillChip key={id} id={id} />
         ))}
-        {!c.learned && !c.skills.length && <span className="text-[11px] text-white/35">특수능력 없음 — 시즌 보상 · 인연 · 퀴즈쇼에서 얻어요</span>}
+        {!c.skills.length && <span className="text-[11px] text-white/40">스킬P로 배우거나 이벤트 · 인연 축복으로 얻어요</span>}
       </div>
-    </div>
+    </button>
   );
 }
 
-function SkillChip({ id }: { id: SkillId }) {
-  const s = skill(id);
-  const col = s.set ? "#ffd23f" : s.bad ? "#ff9a9a" : s.risk ? "#ffb070" : s.tag ? TAG_COLOR[s.tag] : "#cfe9ff";
-  return (
-    <span title={s.desc} className="rounded-md border px-1.5 py-0.5 text-[11px]" style={{ borderColor: `${col}88`, color: col, fontWeight: s.set ? 700 : 400, background: s.set ? "#ffd23f1a" : undefined }}>
-      {s.set ? "★ " : ""}
-      {s.name}
-    </span>
-  );
-}
+/** 훈련장 자리 (가운데 연습장) */
+const STATION: Record<Exclude<TrainKey, "special">, { x: number; y: number; name: string }> = {
+  hit: { x: 20, y: 30, name: "타격 케이지" },
+  power: { x: 80, y: 30, name: "웨이트장" },
+  run: { x: 20, y: 76, name: "러닝 트랙" },
+  def: { x: 80, y: 76, name: "펑고 수비장" },
+};
 
-/** 오른쪽 열: 상태 게이지 (세로) · 다음 경기 · 수상 레이스 */
-function SideStatus({ c }: { c: Career }) {
-  const slot = slotOf(c.trust);
-  const COND = ["#ff5a5a", "#ff9a7a", "#fff", "#7dff9a", "#ffd23f"];
-  const season = c.phase === "season";
-  const st = season ? setupOfSafe(c) : null;
-  const race = season && c.line.g >= 3 ? awardRace(c)[0] : null;
+/** 가운데: 연습장 — 내 선수 + 훈련장마다 함께할 덱 캐릭터 */
+function PracticeField({ c, onTrain }: { c: Career; onTrain: (k?: TrainKey) => void }) {
+  const mates = matesOf(c);
+  const opp = c.phase === "camp" ? null : TEAM_DEFS[oppOf(c)];
+  const canAct = stepOf(c) === "turn";
   return (
-    <div className="flex w-[172px] shrink-0 flex-col gap-1.5">
-      <Gauge label="체력" value={`${Math.round(c.stamina)}`} pct={c.stamina} color={c.stamina < 30 ? "#ff5a5a" : c.stamina < 50 ? "#ffd23f" : "#7dff9a"} />
-      <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-1.5">
-        <div className="flex justify-between text-[12px] text-white/60">
-          <span>컨디션</span>
-          <b style={{ color: COND[c.cond] }}>{COND_NAME[c.cond]}</b>
-        </div>
-        <div className="mt-1 flex gap-1">
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-[7px] flex-1 rounded-full" style={{ background: i <= c.cond ? COND[c.cond] : "rgba(255,255,255,0.1)" }} />
-          ))}
-        </div>
-      </div>
-      <Gauge label="감독 신뢰" value={`${Math.round(c.trust)} · ${slotName(slot)} 타순`} pct={c.trust} color="#7ad7ff" />
-      <Gauge label="인기도" value={Math.round(c.fame).toLocaleString()} pct={Math.min(100, (c.fame / 3000) * 100)} color="#ff7ae0" />
-      {st && (
-        <div className="rounded-xl border border-[#FF8A3D]/40 bg-black/30 px-2.5 py-1.5 text-[12px]">
-          <div className="flex justify-between text-white/55">
-            <span>다음 경기</span>
-            <span>{gameNo(c) + 1}/{GAMES}</span>
-          </div>
-          <div className="truncate font-bold">
-            vs <span style={{ color: st.opp.color }}>{st.opp.name}</span>
-          </div>
-          <div className="mt-0.5 text-[11.5px]">
-            나: <b className="text-[#ffd23f]">{slotName(st.myIdx)} 타자</b>
-          </div>
-        </div>
-      )}
-      {race && (
-        <div className="rounded-xl border px-2.5 py-1.5 text-[11.5px]" style={{ borderColor: race.lead ? "#ffd23f" : "rgba(255,255,255,0.12)", background: race.lead ? "#ffd23f14" : "rgba(0,0,0,0.3)" }}>
-          👑 {race.title} {race.lead ? <b className="text-[#ffd23f]">1위 페이스</b> : <span className="text-white/65">{race.fmt(Math.abs(race.gap))}{race.unit} 차</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Schedule({ c }: { c: Career }) {
-  const done = c.phase === "season" ? gameNo(c) : c.phase === "seasonEnd" || c.phase === "off" || c.phase === "post" ? GAMES : 0;
-  return (
-    <div className="flex items-center gap-[2px]">
-      {Array.from({ length: GAMES }, (_, i) => (
-        <div
-          key={i}
-          className="h-[10px] w-[4px] rounded-[1px]"
-          style={{ background: i < done ? "#FF8A3D" : i === done && c.phase === "season" ? "#ffd23f" : "rgba(255,255,255,0.12)", marginLeft: i && i % 2 === 0 ? 2 : 0 }}
-        />
-      ))}
-      <span className="ml-1.5 text-[11px] whitespace-nowrap text-white/45">
-        {c.season}/{MAX_SEASONS}년
-      </span>
-    </div>
-  );
-}
-
-function Gauge({ label, value, pct, color }: { label: string; value: string; pct: number; color: string }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-black/30 px-3 py-1.5">
-      <div className="flex justify-between text-[12px] text-white/60">
-        <span>{label}</span>
-        <b className="truncate pl-1" style={{ color }}>
-          {value}
-        </b>
-      </div>
-      <div className="mt-1">
-        <Bar v={pct} max={100} color={color} />
-      </div>
-    </div>
-  );
-}
-
-/** 시내 지도: 장소 버튼 + 이번 주 ❗ (캐릭터 얼굴 · 이벤트) */
-function TownMap({ c, onPlace, onAdvance }: { c: Career; onPlace: (p: PlaceId) => void; onAdvance: () => void }) {
-  const spots = spotsOf(c);
-  const mates = trainersOf(c);
-  const season = c.phase === "season";
-  const out = c.active < MIN_COST;
-  const at = (p: PlaceId) => spots.find((s) => s.place === p);
-  const injured = !!c.injury;
-  return (
-    <div className="relative flex-1 overflow-hidden rounded-2xl border-2 border-white/10" style={{ background: "linear-gradient(180deg, #1d3b5c 0%, #1a4a3a 55%, #23402c 100%)" }}>
-      {/* 길 */}
+    <div className="relative flex-1 overflow-hidden rounded-2xl border-2 border-[#5fc8ff]/30" style={{ background: "radial-gradient(ellipse at 50% 65%, #3f8a46 0%, #2c6b35 45%, #1d4a27 75%, #13301f 100%)" }}>
+      {/* 흙 다이아몬드 */}
       <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <path d="M5 44 H95 M50 10 V95 M5 72 H95" stroke="rgba(255,255,255,0.12)" strokeWidth="3" fill="none" />
-        <path d="M5 44 H95 M50 10 V95 M5 72 H95" stroke="rgba(255,255,255,0.25)" strokeWidth="0.4" strokeDasharray="2 2" fill="none" />
+        <polygon points="50,30 74,56 50,82 26,56" fill="#a8743f" opacity="0.55" />
+        <polygon points="50,38 66,56 50,74 34,56" fill="#3f8a46" opacity="0.9" />
+        <path d="M0 12 H100" stroke="rgba(255,255,255,0.08)" strokeWidth="0.6" />
       </svg>
-      {/* 행동력 (원작 ACTIVE) */}
-      <div className="absolute top-2 left-3 z-10 flex items-center gap-2 rounded-xl border border-white/15 bg-black/60 px-2.5 py-1.5" title={`${season ? `경기마다 +${ACTIVE_PER_GAME}` : `하루 지나면 +${ACTIVE_PER_DAY}`} · 남으면 넘어가요`}>
-        <span className={`${font.title} text-[15px] text-[#ffd23f]`}>⚡</span>
-        <div className="flex gap-[3px]">
-          {Array.from({ length: ACTIVE_MAX }, (_, i) => (
-            <div key={i} className="h-[14px] w-[10px] rounded-[3px]" style={{ background: i < c.active ? "#ffd23f" : "rgba(255,255,255,0.12)", boxShadow: i < c.active ? "0 0 6px #ffd23f88" : undefined }} />
-          ))}
-        </div>
-        <span className="font-mono text-[14px] font-bold">
-          {c.active}/{ACTIVE_MAX}
+      {/* 이번 주 경기 띠 */}
+      <div className="absolute top-2 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/15 bg-black/60 px-4 py-1 text-[12.5px] whitespace-nowrap">
+        {opp ? (
+          <>
+            이번 주말 · {gameName(c)} vs <b style={{ color: opp.color }}>{opp.name}</b> · 팀 {myRank(c)}위
+          </>
+        ) : (
+          <>스프링 캠프 · 행동권 {CAMP_TICKETS}장 · 끝나면 시즌 미션 고르기</>
+        )}
+      </div>
+      {/* 내 선수 */}
+      <div className="absolute top-[54%] left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
+        <Portrait c={c} w={92} h={120} />
+        <span className="-mt-1 rounded bg-black/60 px-2 text-[11px] font-bold">
+          #{c.num} {c.name}
         </span>
-        <span className="text-[10.5px] text-white/50">{season ? `경기마다 +${ACTIVE_PER_GAME}` : `하루 +${ACTIVE_PER_DAY}`}</span>
       </div>
-      <div className="absolute top-2 right-3 z-10 flex flex-col items-end gap-1">
-        <Btn className={`${font.title} px-4 py-2 text-[17px]`} color={out ? ACCENT : "#7ad7ff"} active={out} onClick={onAdvance}>
-          {season ? "경기 진행 ▶" : "다음 날 ▶"}
-        </Btn>
-        <span className="text-[10.5px] text-white/50">{out ? "행동력이 모자라요" : "❗ 는 이번에만 · 남은 행동력은 다음으로"}</span>
-      </div>
-      {PLACE_IDS.map((id) => {
-        const pl = PLACES[id];
-        const s = at(id);
-        const ch = s?.char ? charById(s.char) : null;
-        const ev = s?.event ? SPOT_EVENTS[s.event] : null;
-        const off = injured && !(id === "dorm" || id === "hospital" || id === "mall");
+      {(Object.keys(STATION) as (keyof typeof STATION)[]).map((k) => {
+        const st = STATION[k];
+        const ms = mates[k] ?? [];
+        const col = TRAIN_COLOR[k];
         return (
           <button
-            key={id}
+            key={k}
             type="button"
+            disabled={!canAct}
             onClick={() => {
               sfx.ui();
-              onPlace(id);
+              onTrain(k);
             }}
-            className="absolute flex w-[120px] -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center rounded-xl border-2 px-2 py-1.5 transition-transform hover:-translate-y-[54%] disabled:cursor-not-allowed"
-            style={{
-              left: `${pl.x}%`,
-              top: `${pl.y}%`,
-              borderColor: ch ? ch.color : ev ? "#ffd23f" : "rgba(255,255,255,0.18)",
-              background: ch || ev ? "rgba(10,14,30,0.92)" : "rgba(10,14,30,0.78)",
-              boxShadow: ch ? `0 0 16px ${ch.color}88` : ev ? "0 0 14px #ffd23f66" : "0 3px 0 rgba(0,0,0,0.45)",
-              opacity: off ? 0.4 : 1,
-            }}
+            className="absolute flex w-[150px] -translate-x-1/2 -translate-y-1/2 cursor-pointer flex-col items-center rounded-xl border-2 bg-[#0d1838]/85 px-2 py-1 transition-transform hover:-translate-y-[55%] disabled:cursor-default"
+            style={{ left: `${st.x}%`, top: `${st.y}%`, borderColor: ms.length ? col : `${col}55`, boxShadow: ms.length ? `0 0 14px ${col}77` : "0 3px 0 rgba(0,0,0,0.4)" }}
           >
-            <div className="flex items-center gap-1.5">
-              <span className="text-[20px] leading-none">{pl.icon}</span>
-              <span className={`${font.title} text-[15px]`}>{pl.name}</span>
+            <div className="flex items-center gap-1">
+              <span className="text-[16px]">{TRAIN_ICON[k]}</span>
+              <span className={`${font.title} text-[14px] whitespace-nowrap`} style={{ color: col }}>
+                {st.name}
+              </span>
+              <span className="font-mono text-[10.5px] text-white/60">Lv{trainLv(c, k)}</span>
             </div>
-            {ch ? (
-              <div className="mt-0.5 flex items-center gap-1">
-                <img src={faceUrl(ch.id)} alt={ch.name} className="h-[26px] w-[26px] rounded-md object-cover object-top" />
-                <span className="text-[11.5px] font-bold" style={{ color: ch.color }}>
-                  {s?.special ? "🎁" : "❗"} {ch.name}
-                </span>
-              </div>
-            ) : id === "ground" && Object.keys(mates).length ? (
-              <div className="mt-0.5 flex items-center gap-1">
-                {Object.values(mates).map((m) => (
-                  <img key={m} src={faceUrl(m!)} alt="" className="h-[22px] w-[22px] rounded-md object-cover object-top" style={{ outline: `1.5px solid ${charById(m!).color}` }} />
-                ))}
-                <span className="text-[10.5px] font-bold text-[#7dff9a]">함께 훈련</span>
-              </div>
-            ) : ev ? (
-              <span className="mt-0.5 text-[11.5px] font-bold text-[#ffd23f]">❗ {ev.name}</span>
-            ) : (
-              <span className="mt-0.5 text-[10.5px] text-white/55">{pl.desc}</span>
-            )}
+            <div className="mt-0.5 flex h-[30px] items-center gap-1">
+              {ms.length ? (
+                ms.map((id) => {
+                  const ch = charById(id);
+                  const ready = nextBeat(c, id).kind !== "hang";
+                  return (
+                    <div key={id} className="relative">
+                      <img src={faceUrl(id)} alt={ch.name} className="h-[28px] w-[26px] rounded-md object-cover object-top" style={{ outline: `2px solid ${ch.color}` }} />
+                      {ready && <span className="absolute -top-2 -right-1 text-[12px]">❗</span>}
+                      {(c.aff[id] ?? 0) >= FRIEND_AFF && <span className="absolute -bottom-1 -left-1 text-[10px]">💛</span>}
+                    </div>
+                  );
+                })
+              ) : (
+                <span className="text-[10.5px] text-white/40">혼자 훈련</span>
+              )}
+            </div>
           </button>
         );
       })}
+      {c.learned && (
+        <button
+          type="button"
+          disabled={!canAct}
+          onClick={() => onTrain("special")}
+          className="absolute bottom-2 left-1/2 flex -translate-x-1/2 cursor-pointer items-center gap-1 rounded-full border-2 border-[#ff5fb4]/70 bg-[#0d1838]/85 px-3 py-0.5 text-[12px] font-bold text-[#ff5fb4] disabled:cursor-default"
+        >
+          🔥 필살 훈련 Lv{spLv(c)}
+        </button>
+      )}
     </div>
   );
 }
 
-/** 장소를 눌렀을 때: 그 장소에서 할 수 있는 것 */
-function PlaceModal({ c, place, onClose, onAct }: { c: Career; place: PlaceId; onClose: () => void; onAct: (a: Action) => void }) {
-  const pl = PLACES[place];
-  const spot: Spot | undefined = spotsOf(c).find((s) => s.place === place);
-  const risk = trainRisk(c);
-  const opt = (a: Action, title: string, sub: string, foot0: string, color: string, extra?: ReactNode) => {
-    const foot = `⚡${costOf(a)} · ${foot0}`;
-    const why = whyNot(c, a);
-    return (
-      <Btn key={title} disabled={!!why} color={color} className="flex flex-col items-start gap-0.5 px-3 py-2 text-left" onClick={() => onAct(a)}>
-        <span className={`${font.title} text-[18px] leading-tight`} style={{ color }}>
-          {title}
-        </span>
-        <span className="text-[11.5px] leading-snug font-normal text-white/75">{why ?? sub}</span>
-        {extra}
-        <span className="mt-0.5 font-mono text-[11px] text-white/55">{foot}</span>
-      </Btn>
-    );
-  };
-  let body: ReactNode = null;
-  if (place === "ground") {
-    body = (
-      <>
-        <div className="grid grid-cols-5 gap-2">
+/* ─────────────── 훈련 화면 (종류 탭 + 미리보기) ─────────────── */
+
+function TrainModal({ c, tab, setTab, onClose, onAct }: { c: Career; tab: TrainKey; setTab: (k: TrainKey) => void; onClose: () => void; onAct: (a: Action) => void }) {
+  const mates = matesOf(c);
+  const pv = trainPreview(c, tab);
+  const why = whyNot(c, { kind: "train", key: tab });
+  const t = TRAINS[tab];
+  const col = TRAIN_COLOR[tab];
+  const after = Math.max(0, Math.round(c.stamina - pv.cost));
+  return (
+    <Modal w={860} onClose={onClose}>
+      <div className="flex items-center justify-between">
+        <div className={`${font.title} text-[26px]`}>💪 훈련</div>
+        <div className="flex items-center gap-3">
+          <span className="text-[12.5px] text-white/60">
+            {whenText(c)} · 행동권 {c.tickets}/{ticketMax(c)}
+          </span>
+          <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={onClose}>
+            닫기
+          </Btn>
+        </div>
+      </div>
+      <div className="mt-2 flex gap-3 text-left">
+        {/* 훈련 종류 탭 */}
+        <div className="flex w-[300px] shrink-0 flex-col gap-1.5">
           {TRAIN_KEYS.map((k) => {
-            const t = TRAINS[k];
-            const mate = trainersOf(c)[k];
-            const mm = mate ? 1.3 + Math.min(0.3, (c.aff[mate] ?? 0) / 330) : 1;
-            const mul = trainMul(c, k) * mm;
-            return opt(
-              { kind: "train", key: k },
-              t.name,
-              t.desc,
-              k === "special" ? spLv(c) >= 5 ? "필살 마스터 Lv5" : `체력 -${t.cost} · 필살 Lv${spLv(c) || "-"}` : `체력 -${t.cost} · Lv${trainLv(c, k)} · 효율 ×${mul.toFixed(2)}`,
-              k === "special" ? "#ff5fb4" : STAT_COLOR[k as StatKey],
-              mate ? (
-                <span className="mt-0.5 flex items-center gap-1 text-[11px] font-bold" style={{ color: charById(mate).color }}>
-                  <img src={faceUrl(mate)} alt="" className="h-[20px] w-[20px] rounded object-cover object-top" />
-                  {charById(mate).name}와 함께 ×{mm.toFixed(2)}
-                </span>
-              ) : undefined
+            const ms = k === "special" ? [] : mates[k] ?? [];
+            const lv = k === "special" ? spLv(c) : trainLv(c, k);
+            const cnt = c.tCount[k] ?? 0;
+            const locked = k === "special" && !c.learned;
+            const on = tab === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => {
+                  sfx.ui();
+                  setTab(k);
+                }}
+                className="flex cursor-pointer items-center gap-2 rounded-xl border-2 px-2.5 py-1.5"
+                style={{ borderColor: on ? TRAIN_COLOR[k] : "rgba(255,255,255,0.12)", background: on ? `${TRAIN_COLOR[k]}26` : "rgba(0,0,0,0.3)", opacity: locked ? 0.45 : 1 }}
+              >
+                <span className="text-[22px]">{TRAIN_ICON[k]}</span>
+                <div className="min-w-0 flex-1">
+                  <div className={`${font.title} text-[16px]`} style={{ color: TRAIN_COLOR[k] }}>
+                    {TRAINS[k].name}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <span key={i} className="h-[5px] w-[14px] rounded-full" style={{ background: i < lv ? TRAIN_COLOR[k] : "rgba(255,255,255,0.12)" }} />
+                    ))}
+                    <span className="ml-1 font-mono text-[10.5px] text-white/55">{locked ? "잠김" : `Lv${lv}${k !== "special" && lv < 5 ? ` · 다음 ${TRAIN_LV_EVERY - (cnt % TRAIN_LV_EVERY)}번` : ""}`}</span>
+                  </div>
+                </div>
+                <div className="flex gap-0.5">
+                  {ms.map((id) => (
+                    <img key={id} src={faceUrl(id)} alt="" className="h-[30px] w-[28px] rounded-md object-cover object-top" style={{ outline: `2px solid ${charById(id).color}` }} />
+                  ))}
+                </div>
+              </button>
             );
           })}
         </div>
-        <div className="mt-2 flex gap-4 rounded-lg bg-black/30 px-3 py-1.5 text-[12.5px] text-white/70">
-          <span>
-            대성공 <b className="text-[#ffd23f]">{Math.round(risk.great * 100)}%</b>
-          </span>
-          <span>
-            실패 <b className={risk.fail > 0.15 ? "text-[#ff9a7a]" : "text-white"}>{Math.round(risk.fail * 100)}%</b>
-          </span>
-          <span>
-            부상 <b className={risk.injury > 0.05 ? "text-[#ff5a5a]" : "text-white"}>{(risk.injury * 100).toFixed(risk.injury < 0.1 ? 1 : 0)}%</b>
-          </span>
-          <span className="text-white/45">체력 40 아래부터 부상이 확 늘어요</span>
-        </div>
-      </>
-    );
-  } else if (place === "dorm") {
-    body = (
-      <div className="grid grid-cols-2 gap-2">
-        {opt({ kind: "rest" }, c.injury ? "요양" : "휴식", "체력 크게 회복 · 가끔 컨디션 ↑", "체력 +45 · 부상 중 +30", "#b6ffb0")}
-        {opt({ kind: "care" }, "개인정비", "장비 손질 · 스트레칭 · 영상 복기", "체력 +20 · 컨디션 +1", "#7ad7ff")}
-      </div>
-    );
-  } else if (place === "hospital") {
-    body = <div className="grid grid-cols-1 gap-2">{opt({ kind: "clinic" }, "치료", c.injury ? "부상 남은 기간 -2턴" : "피로 회복 · 체력 70 아래일 때", `자금 -${CLINIC_PRICE}만 · 체력 +30`, "#ff9a9a")}</div>;
-  } else if (spot?.char) {
-    const bid = spot.char;
-    const ch = charById(bid);
-    const sd = SPECIAL_DAY[ROLE[bid]];
-    body = spot.special ? (
-      <div className="flex gap-3 text-left">
-        <img src={artUrl(sd.skin[bid] ?? bid)} alt={ch.name} className="h-[200px] w-auto shrink-0 object-contain" />
-        <div className="flex flex-1 flex-col gap-2">
-          <div className={`${font.title} text-[24px]`} style={{ color: ch.color }}>
-            🎁 {sd.title}
+        {/* 미리보기 */}
+        <div className={`${PANEL} flex flex-1 flex-col p-3`}>
+          <div className="flex items-center gap-2">
+            <span className={`${font.title} text-[24px]`} style={{ color: col }}>
+              {t.name}
+            </span>
+            <span className="text-[12px] text-white/55">{t.desc}</span>
           </div>
-          <div className="text-[13px] text-white/75">올해 가장 가까웠던 {ch.name}와 특별한 하루. 호감 +10 · 컨디션 크게 ↑ · 체력 +30 · {ch.name}의 축복 하나.</div>
-          {opt({ kind: "meet", char: bid }, `${ch.name}와 ${sd.title}`, "1년에 한 번", "비시즌 첫날에만", ch.color)}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {(Object.entries(pv.gain) as [StatKey, number][]).map(([k, v]) => (
+              <div key={k} className="flex w-[96px] flex-col items-center rounded-lg border-2 py-1" style={{ borderColor: `${STAT_COLOR[k]}aa`, background: `${STAT_COLOR[k]}1c` }}>
+                <span className="text-[12px] font-bold" style={{ color: STAT_COLOR[k] }}>
+                  {STAT_NAME[k]}
+                </span>
+                <span className={`${font.title} text-[22px] leading-none text-[#ffe680]`}>▲{v}</span>
+              </div>
+            ))}
+            <div className="flex w-[96px] flex-col items-center rounded-lg border-2 border-[#c9a2ff]/70 bg-[#c9a2ff]/10 py-1">
+              <span className="text-[12px] font-bold text-[#c9a2ff]">스킬P</span>
+              <span className={`${font.title} text-[22px] leading-none text-[#ffe680]`}>▲{pv.sp}</span>
+            </div>
+            <div className="flex w-[96px] flex-col items-center rounded-lg border-2 border-[#ffd23f]/60 bg-[#ffd23f]/10 py-1">
+              <span className="text-[12px] font-bold text-[#ffd23f]">자금</span>
+              <span className={`${font.title} text-[22px] leading-none text-[#ffe680]`}>+{pv.money}</span>
+            </div>
+          </div>
+          <div className="mt-1 text-[11px] text-white/45">대략값 · 대성공이면 ×1.6 · 실패면 ×0.3 · 컨디션 {COND_NAME[c.cond]} 반영</div>
+          {pv.mates.length > 0 && (
+            <div className="mt-2 flex flex-col gap-1 rounded-lg bg-black/30 px-2 py-1.5">
+              {pv.mates.map((id) => {
+                const ch = charById(id);
+                const fr = (c.aff[id] ?? 0) >= FRIEND_AFF;
+                return (
+                  <div key={id} className="flex items-center gap-2 text-[12.5px]">
+                    <img src={faceUrl(id)} alt="" className="h-[24px] w-[22px] rounded object-cover object-top" />
+                    <b style={{ color: ch.color }}>{ch.name}</b>
+                    <span className={fr ? "font-bold text-[#ffd23f]" : "text-[#7dff9a]"}>{fr ? "우정 훈련" : "함께 훈련"}</span>
+                    <span className="text-white/60">· 호감 +{fr ? 4 : 6}</span>
+                    {nextBeat(c, id).kind !== "hang" && <span className="text-[#ffd23f]">❗ 이야기 준비됨</span>}
+                  </div>
+                );
+              })}
+              <div className="text-[11.5px] text-white/60">효율 ×{pv.mateMul.toFixed(2)}</div>
+            </div>
+          )}
+          <div className="mt-auto grid grid-cols-3 gap-2 pt-2 text-[12px]">
+            <div>
+              <div className="flex justify-between text-white/60">
+                <span>성공률</span>
+                <b className={pv.success < 0.85 ? "text-[#ff9a7a]" : "text-[#7dff9a]"}>{Math.round(pv.success * 100)}%</b>
+              </div>
+              <Bar v={pv.success * 100} max={100} color={pv.success < 0.85 ? "#ff9a7a" : "#7dff9a"} />
+            </div>
+            <div>
+              <div className="flex justify-between text-white/60">
+                <span>대성공</span>
+                <b className="text-[#ffd23f]">{Math.round(pv.great * 100)}%</b>
+              </div>
+              <Bar v={pv.great * 100} max={100} color="#ffd23f" />
+            </div>
+            <div>
+              <div className="flex justify-between text-white/60">
+                <span>체력</span>
+                <b style={{ color: after < 30 ? "#ff5a5a" : "#fff" }}>
+                  {Math.round(c.stamina)} → {after}
+                </b>
+              </div>
+              <Bar v={after} max={100} color={after < 30 ? "#ff5a5a" : after < 50 ? "#ffd23f" : "#7dff9a"} />
+            </div>
+          </div>
+          {pv.injury > 0.02 && <div className="mt-1 text-[12px] font-bold text-[#ff5a5a]">⚠ 부상 위험 {Math.round(pv.injury * 100)}% — 숙소에서 쉬는 게 좋아요</div>}
+          <Btn space className={`${font.title} mt-2 py-2.5 text-[22px]`} disabled={!!why} onClick={() => onAct({ kind: "train", key: tab })}>
+            {why ?? "훈련하기 🎫1"}
+          </Btn>
         </div>
       </div>
-    ) : (
-      <div className="flex flex-col gap-2">
-        <BondCard c={c} id={bid} />
-        {opt({ kind: "meet", char: bid }, `${ch.name} 만나기`, (c.bonds[bid] ?? 0) >= BOND_MAX ? "같이 놀기 · 호감 · 능력치 조금" : "다음 이야기 진행", "체력 +8 · 컨디션 +1", ch.color)}
-      </div>
-    );
-  } else if (spot?.event) {
-    const ev = SPOT_EVENTS[spot.event];
-    body = <div className="grid grid-cols-1 gap-2">{opt({ kind: "event", event: spot.event }, ev.name, ev.desc, "이번 주에만", "#ffd23f")}</div>;
-  } else if (pl.spot) {
-    body = <div className="grid grid-cols-1 gap-2">{opt({ kind: "stroll", place }, place === "downtown" ? "외식" : "산책", place === "downtown" ? "맛있는 거 먹기" : "바람 쐬기", place === "downtown" ? "체력 +15 · 컨디션 +1 · 자금 -60만" : "체력 +10 · 컨디션 +1", "#b6ffb0")}</div>;
-  }
-  return (
-    <Modal w={place === "ground" ? 820 : 560} onClose={onClose}>
-      <div className="mb-3 flex items-center justify-between">
-        <div className={`${font.title} text-[26px]`}>
-          {pl.icon} {pl.name} <span className="ml-2 font-mono text-[15px] text-[#ffd23f]">⚡ {c.active}/{ACTIVE_MAX}</span>
-        </div>
-        <Btn className="px-3 py-1 text-[13px]" color="#8b93b8" onClick={onClose}>
-          닫기
-        </Btn>
-      </div>
-      {body}
+      <Hint k="train4" title="훈련 미리보기">
+        오를 양 · 스킬P · 성공률 · 체력 소모가 다 보여요. 얼굴이 붙은 훈련은 「함께 훈련」이라 크게 오르고 호감도 쌓여요. 같은 훈련 {TRAIN_LV_EVERY}번마다 레벨 업!
+      </Hint>
     </Modal>
   );
 }
 
-function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career; mode: PlayMode; onMode: (m: PlayMode) => void; onPlay: () => void; onAutoWeek: () => void; onSitOut: () => void }) {
-  const st = setupOfSafe(c);
-  const opp = st.opp;
-  const oppHero = opp.batters[3];
-  const oppAce = opp.pitchers.find((pp) => pp.role === "SP");
-  const tired = c.stamina < 20;
+function DormModal({ c, onClose, onAct }: { c: Career; onClose: () => void; onAct: (a: Action) => void }) {
   return (
-    <div className="flex flex-1 flex-col gap-2 rounded-2xl border-2 border-[#FF8A3D]/50 bg-black/35 p-3">
+    <Modal w={640} onClose={onClose}>
       <div className="flex items-center justify-between">
-        <div className={`${font.title} text-[22px]`}>
-          {c.post ? <span className="text-[#ffd23f]">🍂 {postName(c.post)}</span> : `${gameNo(c) + 1}경기`} <span className="text-white/50">vs</span> <span style={{ color: opp.color }}>{opp.name}</span>
-          {!c.post && <span className="ml-2 text-[13px] text-white/50">· 이번 주 {c.gameInWeek + 1}/2</span>}
-        </div>
-        <div className="text-[13px] text-white/60">
-          {st.userHome ? "홈" : "원정"} · 9이닝
-        </div>
-      </div>
-      <Standings c={c} />
-      <div className="flex gap-2 text-[13px]">
-        <div className="flex-1 rounded-xl bg-white/[0.04] px-3 py-1.5">
-          <div className="text-white/55">내 자리</div>
-          <div className="text-[15px] font-bold">
-            {slotName(st.myIdx)} 타자 · {posOf(c)}
-          </div>
-          <div className="text-[12px] text-white/55">
-            컨디션 {COND_NAME[c.cond]}
-            {c.learned ? ` · 필살 ${spUses(c)}회` : ""}
-            {tired && <span className="text-[#ff9a7a]"> · 지쳐서 타격 -10%</span>}
-          </div>
-        </div>
-        <div className="flex flex-1 items-center gap-2 rounded-xl bg-white/[0.04] px-3 py-1.5">
-          <div className="text-[12px] leading-snug text-white/70">
-            상대 4번 <b style={{ color: opp.color }}>{oppHero?.name}</b>
-            <br />
-            선발 <b style={{ color: opp.color }}>{oppAce?.name}</b> — {oppAce?.velo}km/h
-          </div>
-        </div>
-      </div>
-      <div className="text-[11.5px] text-white/50">
-        경기 평가 {GAME_GRADES.map((g) => `${g.g} ⚡${ACTIVE_PER_GAME + g.act}`).join(" · ")} — 잘 칠수록 행동력 · 체력 · 컨디션을 더 받아요 · 능력치는 훈련 · 활동으로 올라요 · 타순은 감독 신뢰 25 · 50 · 75에서 올라가요
-      </div>
-      {canPlay(c) ? (
-        <>
-          <div className="grid grid-cols-3 gap-2">
-            {(["direct", "highlight", "auto"] as PlayMode[]).map((m) => (
-              <Btn key={m} active={mode === m} color={m === "auto" ? "#7ad7ff" : ACCENT} className="px-2 py-1.5 text-left" onClick={() => onMode(m)}>
-                <span className={`${font.title} block text-[16px]`}>{MODE_NAME[m]}</span>
-                <span className="block text-[11px] font-normal opacity-80">{MODE_DESC[m]}</span>
-              </Btn>
-            ))}
-          </div>
-          <div className="mt-auto grid grid-cols-[2fr_1fr] gap-2">
-            <Btn space className={`${font.title} py-3.5 text-[24px]`} onClick={onPlay}>
-              ⚾ {MODE_NAME[mode]}로 경기 시작
-              <span className="ml-2 align-middle font-['Nanum_Gothic'] text-[11px] font-normal opacity-60">Space</span>
-            </Btn>
-            <Btn className={`${font.title} py-3.5 text-[16px] leading-tight`} color="#7ad7ff" onClick={onAutoWeek}>
-              {c.post ? "⏩ 이 경기" : "⏩ 이번 주 남은 경기"}
-              <span className="block font-['Nanum_Gothic'] text-[11px] font-normal opacity-80">{c.post ? "자동으로" : "전부 자동"}</span>
-            </Btn>
-          </div>
-        </>
-      ) : (
-        <Btn className={`${font.title} mt-auto py-4 text-[22px]`} color="#ff7a7a" onClick={onSitOut}>
-          결장 ({INJURY_NAME[c.injury!.kind]}) — 다음으로
-        </Btn>
-      )}
-    </div>
-  );
-}
-/** 팀 순위표 한 줄 (가을야구 중이면 시리즈 상황) */
-function Standings({ c }: { c: Career }) {
-  const rows = standings(c);
-  return (
-    <div className="flex flex-wrap items-center gap-1 text-[12px] whitespace-nowrap">
-      <span className="text-white/45">{c.post ? `정규 ${c.post.rank}위` : "순위"}</span>
-      {rows.map((r) => (
-        <span key={r.i} className="rounded-md px-1.5 py-0.5 whitespace-nowrap" style={{ background: r.i === 0 ? `${r.color}33` : "rgba(255,255,255,0.05)", border: r.i === 0 ? `1px solid ${r.color}` : "1px solid transparent" }}>
-          <b style={{ color: r.color }}>{r.rank}</b> {r.short} <span className="font-mono text-white/70">{r.w}-{r.l}</span>
+        <div className={`${font.title} text-[26px]`}>🛏️ 숙소</div>
+        <span className="text-[12.5px] text-white/60">
+          체력 {Math.round(c.stamina)} · 컨디션 {COND_NAME[c.cond]} · 행동권 {c.tickets}
         </span>
-      ))}
-      {c.post?.stage === "final" && <span className="ml-auto font-bold text-[#ffd23f]">시리즈 {c.post.w}-{c.post.l} · 2승 먼저</span>}
-      {!c.post && <span className="ml-auto text-white/40">3위까지 가을야구</span>}
-      <MoodChip m={c.mood ?? 0} />
-    </div>
-  );
-}
-/** 순위표 (승 · 패 · 승률 · 게임차) — 3위까지 가을야구 */
-function StandingsTable({ rows }: { rows: ReturnType<typeof standings> }) {
-  const top = rows[0];
-  return (
-    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30 text-[14px]">
-      <div className="grid grid-cols-[40px_1fr_44px_44px_60px_52px] px-3 py-1.5 text-[11.5px] text-white/45">
-        <span>순위</span>
-        <span className="text-left">팀</span>
-        <span>승</span>
-        <span>패</span>
-        <span>승률</span>
-        <span>게임차</span>
       </div>
-      {rows.map((r) => (
-        <div key={r.i}>
-          <div className="grid grid-cols-[40px_1fr_44px_44px_60px_52px] items-center px-3 py-1.5 font-mono" style={r.i === 0 ? { background: `${r.color}26`, boxShadow: `inset 3px 0 0 ${r.color}` } : undefined}>
-            <b style={{ color: r.color }}>{r.rank}</b>
-            <span className="text-left font-['Nanum_Gothic'] font-bold" style={{ color: r.i === 0 ? r.color : "#fff" }}>
-              {r.name}
-              {r.i === 0 ? " (우리)" : ""}
-            </span>
-            <span>{r.w}</span>
-            <span>{r.l}</span>
-            <span>{fmtAvg(r.pct)}</span>
-            <span className="text-white/60">{r.rank === 1 ? "-" : ((top.w - r.w + (r.l - top.l)) / 2).toFixed(1)}</span>
-          </div>
-          {r.rank === 3 && <div className="border-t border-dashed border-[#ffd23f]/50 text-center text-[10.5px] leading-[14px] text-[#ffd23f]/70">↑ 가을야구</div>}
-        </div>
-      ))}
-    </div>
-  );
-}
-function StandingsModal({ c, onClose }: { c: Career; onClose: () => void }) {
-  const rows = standings(c);
-  const left = c.phase === "season" ? GAMES - gameNo(c) : 0;
-  return (
-    <Modal w={520} onClose={onClose}>
-      <div className={`${font.title} text-[26px]`}>{c.season}년차 팀 순위</div>
-      <div className="mt-3">
-        <StandingsTable rows={rows} />
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {(["rest", "play", "clinic"] as const).map((k) => {
+          const d = DORM[k];
+          const why = whyNot(c, { kind: k });
+          return (
+            <button
+              key={k}
+              type="button"
+              disabled={!!why}
+              onClick={() => onAct({ kind: k })}
+              className="flex h-[150px] cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-[#5fc8ff]/50 bg-[#0d1838]/90 transition-transform hover:-translate-y-1 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <span className="text-[38px]">{d.icon}</span>
+              <span className={`${font.title} text-[20px]`}>{d.name}</span>
+              <span className="text-[12px] text-white/70">{why && k === "clinic" ? why : d.desc}</span>
+              <span className="text-[11px] text-[#ffd23f]">🎫1</span>
+            </button>
+          );
+        })}
       </div>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[13px] text-white/70">
-        {c.phase === "season" && <span>남은 경기 {left}</span>}
-        {c.post && <span className="font-bold text-[#ffd23f]">{postName(c.post)}{c.post.stage === "final" ? ` · 시리즈 ${c.post.w}-${c.post.l}` : ""}</span>}
-        {c.postRes && <span className="font-bold text-[#ffd23f]">가을야구 {c.postRes}</span>}
-        <MoodChip m={c.mood ?? 0} />
-      </div>
-      <div className="mt-1 text-[11.5px] text-white/45">1위는 한국시리즈 직행 · 2 · 3위는 준플레이오프 단판 · 내가 잘 칠수록 팀 분위기가 올라 동료들도 잘 쳐요</div>
-      <Btn space className={`${font.title} mt-4 px-8 py-2 text-lg`} color="#7dff9a" onClick={onClose}>
+      <Btn space className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
         닫기
       </Btn>
     </Modal>
   );
 }
-const POST_BADGE: Record<string, { t: string; col: string }> = {
-  우승: { t: "🏆 한국시리즈 우승!", col: "#ffd23f" },
-  준우승: { t: "🥈 준우승", col: "#d8e2f0" },
-  "준PO 탈락": { t: "준플레이오프 탈락", col: "#ffb37a" },
-  "진출 실패": { t: "가을야구 진출 실패", col: "#9aa3c2" },
-};
-/** 팀 분위기 — 내 경기 평가로 오르내리고 동료 타격 · 투구에 더해짐 (잘 치면 팀이 같이 산다) */
-function MoodChip({ m }: { m: number }) {
-  const col = m >= MOOD.hot ? "#ff7a3d" : m >= 1 ? "#ffd23f" : m > -1 ? "#9aa3c2" : "#7ad7ff";
-  return (
-    <span className="rounded-md px-1.5 py-0.5 font-bold whitespace-nowrap" style={{ color: col, background: `${col}1f`, border: `1px solid ${col}66` }} title="경기 평가 S · A 면 오르고 D 면 내려가요. 분위기가 좋을수록 동료들도 잘 쳐요.">
-      {m >= MOOD.hot ? "🔥 " : ""}팀 분위기 {moodName(m)}
-    </span>
-  );
-}
-const setupOfSafe = (c: Career) => {
-  return setupOfCache(c);
-};
-// 같은 경기 동안 다시 만들지 않게 (팀 생성이 무겁진 않지만 렌더마다 돌 필요는 없음)
-let cacheKey = "";
-let cacheVal: ReturnType<typeof setupOf> | null = null;
-function setupOfCache(c: Career) {
-  const k = `${c.id}:${c.season}:${c.phase}:${c.post?.n ?? 0}:${c.post?.opp ?? 0}:${c.week}:${c.gameInWeek}:${Math.round(c.trust)}:${c.cond}:${c.mood ?? 0}`;
-  if (k !== cacheKey || !cacheVal) {
-    cacheKey = k;
-    cacheVal = setupOf(c);
-  }
-  return cacheVal;
-}
 
-/* ─────────────── 팝업 ─────────────── */
+/* ─────────────── 결과 팝업 ─────────────── */
 
-function DeltaChips({ d }: { d: Delta }) {
-  const chips: { t: string; good: boolean }[] = [];
-  for (const k of STAT_KEYS) {
-    const v = d.stats[k];
-    if (v) chips.push({ t: `${STAT_NAME[k]} ${v > 0 ? "+" : ""}${v}`, good: v > 0 });
-  }
-  if (d.stamina) chips.push({ t: `체력 ${d.stamina > 0 ? "+" : ""}${d.stamina}`, good: d.stamina > 0 });
-  if (d.cond) chips.push({ t: `컨디션 ${d.cond > 0 ? "↑" : "↓"}`, good: d.cond > 0 });
-  if (d.trust) chips.push({ t: `신뢰 ${d.trust > 0 ? "+" : ""}${d.trust}`, good: d.trust > 0 });
-  if (d.fame) chips.push({ t: `인기도 ${d.fame > 0 ? "+" : ""}${d.fame}`, good: d.fame > 0 });
-  if (d.money) chips.push({ t: `자금 ${d.money > 0 ? "+" : ""}${d.money.toLocaleString()}만`, good: d.money > 0 });
-  if (!chips.length) return null;
+/** 훈련 결과 카드 줄 */
+function TrainResult({ out, onNext }: { out: TurnOut; onNext: () => void }) {
+  const col = out.tone === "great" ? "#ffd23f" : out.tone === "fail" ? "#9aa3c7" : out.tone === "injury" ? "#ff5a5a" : SKY;
+  const d = out.delta;
   return (
-    <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-      {chips.map((c, i) => (
-        <span key={i} className="rounded-full px-2.5 py-1 text-[13px] font-bold" style={{ background: c.good ? "rgba(125,255,154,0.15)" : "rgba(255,90,90,0.15)", color: c.good ? "#7dff9a" : "#ff8a8a" }}>
-          {c.t}
-        </span>
-      ))}
-    </div>
+    <Modal w={620} onClose={onNext}>
+      <Banner color={col}>{out.title}</Banner>
+      <div className="mt-4 flex flex-wrap justify-center gap-2">
+        {STAT_KEYS.filter((k) => d.stats[k]).map((k) => (
+          <div key={k} className="flex w-[100px] flex-col items-center rounded-xl border-2 py-2" style={{ borderColor: STAT_COLOR[k], background: `${STAT_COLOR[k]}22` }}>
+            <span className="text-[13px] font-bold" style={{ color: STAT_COLOR[k] }}>
+              {STAT_NAME[k]}
+            </span>
+            <span className={`${font.title} text-[28px] leading-none text-[#ffe680]`}>▲{d.stats[k]}</span>
+          </div>
+        ))}
+        {d.sp > 0 && (
+          <div className="flex w-[100px] flex-col items-center rounded-xl border-2 border-[#c9a2ff] bg-[#c9a2ff]/15 py-2">
+            <span className="text-[13px] font-bold text-[#c9a2ff]">스킬P</span>
+            <span className={`${font.title} text-[28px] leading-none text-[#ffe680]`}>▲{d.sp}</span>
+          </div>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap justify-center gap-1.5 text-[12px]">
+        {(out.bonus ?? []).map((b) => (
+          <span key={b} className="rounded-full bg-[#ffd23f]/15 px-2.5 py-0.5 font-bold text-[#ffd23f]">
+            {b}
+          </span>
+        ))}
+        {d.stamina !== 0 && <span className="rounded-full bg-white/10 px-2.5 py-0.5">체력 {d.stamina > 0 ? "+" : ""}{d.stamina}</span>}
+        {d.money > 0 && <span className="rounded-full bg-white/10 px-2.5 py-0.5 text-[#ffd23f]">자금 +{d.money}만</span>}
+        {d.cond !== 0 && <span className="rounded-full bg-white/10 px-2.5 py-0.5">컨디션 {d.cond > 0 ? "▲" : "▼"}</span>}
+      </div>
+      {out.mates && out.mates.length > 0 && (
+        <div className="mt-3 flex justify-center gap-3">
+          {out.mates.map((m) => {
+            const ch = charById(m.id);
+            return (
+              <div key={m.id} className="flex items-center gap-1.5 rounded-xl border px-2 py-1" style={{ borderColor: `${ch.color}88` }}>
+                <img src={faceUrl(m.id)} alt="" className="h-[36px] w-[33px] rounded-md object-cover object-top" />
+                <div className="text-left text-[12px]">
+                  <b style={{ color: ch.color }}>{ch.name}</b>
+                  <div className="text-[#ff7ae0]">♥ +{m.aff}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {out.lines.length > 0 && (
+        <div className="mt-2 flex flex-col gap-0.5 text-[13.5px] text-white/80">
+          {out.lines.map((l, i) => (
+            <div key={i} className={l.includes("레벨") || l.includes("마스터") ? "font-bold text-[#ffd23f]" : undefined}>
+              {l}
+            </div>
+          ))}
+        </div>
+      )}
+      <Btn space className="mt-4 w-full py-2" color={col} onClick={onNext}>
+        화면을 누르세요
+      </Btn>
+    </Modal>
   );
 }
 
@@ -1481,48 +1484,90 @@ function TurnModal({ out, onNext }: { out: TurnOut; onNext: () => void }) {
   const col = TONE_COLOR[out.tone];
   const ch = out.char ? charById(out.char) : null;
   return (
-    <Modal w={460} onClose={onNext}>
+    <Modal w={480} onClose={onNext}>
       {ch && <img src={faceUrl(ch.id)} alt={ch.name} className="mx-auto mb-2 h-[86px] w-[80px] rounded-xl object-cover object-top" style={{ outline: `3px solid ${ch.color}` }} />}
-      <div className={`${font.title} text-[28px]`} style={{ color: col, textShadow: out.tone === "awaken" ? "0 0 20px #ff7ae0" : undefined }}>
-        {out.title}
-      </div>
-      <div className="mt-2 flex flex-col gap-1 text-[14px] text-white/80">
+      <Banner color={col}>{out.title}</Banner>
+      <div className="mt-3 flex flex-col gap-1 text-[14px] text-white/80">
         {out.lines.map((l, i) => (
-          <div key={i} className={l.startsWith("★") ? "font-bold text-[#ffd23f]" : undefined}>
+          <div key={i} className={l.startsWith("★") || l.includes("획득") ? "font-bold text-[#ffd23f]" : undefined}>
             {l}
           </div>
         ))}
       </div>
       <DeltaChips d={out.delta} />
-      <Btn space className="mt-4 w-full py-2.5 text-lg" color={col === "#ffffff" ? ACCENT : col} onClick={onNext}>
+      <Btn space className="mt-4 w-full py-2.5 text-lg" color={col} onClick={onNext}>
         확인
       </Btn>
     </Modal>
   );
 }
 
-function ChoiceModal({ c, onPick }: { c: Career; onPick: (i: 0 | 1) => void }) {
+function ChoiceModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
   const p = c.pending!;
   const ch = p.char ? charById(p.char) : null;
   return (
     <Modal w={480}>
-      <div className="flex items-center gap-3 text-left">
+      <Banner>{p.title}</Banner>
+      <div className="mt-3 flex items-center gap-3 text-left">
         {ch && <img src={faceUrl(ch.id)} alt={ch.name} className="h-[88px] w-[80px] shrink-0 rounded-xl object-cover object-top" style={{ outline: `3px solid ${ch.color}` }} />}
-        <div>
-          <div className={`${font.title} text-[22px]`} style={{ color: ch?.color ?? "#7ad7ff" }}>
-            {p.title}
-          </div>
-          <div className="mt-1 text-[15px] text-white/85">{p.text}</div>
-        </div>
+        <div className="text-[15px] text-white/85">{p.text}</div>
       </div>
       <div className="mt-4 grid grid-cols-2 gap-2">
         {p.choices.map((t, i) => (
-          <Btn key={i} className="py-3 text-[15px]" color={i ? "#7ad7ff" : ACCENT} onClick={() => onPick(i as 0 | 1)}>
+          <Btn key={i} className="py-3 text-[15px]" color={i ? "#7ad7ff" : ACCENT} onClick={() => onPick(i)}>
             {t}
           </Btn>
         ))}
       </div>
     </Modal>
+  );
+}
+
+/** 「누구와 만나게 될까?」 — 세로 카드 3장 */
+function OfferModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
+  const cards = c.offer!.cards;
+  const TONE = { good: "#7dff9a", risk: "#ffb070", bad: "#ff7a7a" } as const;
+  return (
+    <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-black/70">
+      <Banner color="#ff7ae0">누구와 만나게 될까?</Banner>
+      <div className="mt-5 flex gap-4">
+        {cards.map((cd, i) => {
+          const ch = cd.char ? charById(cd.char) : null;
+          const ev = cd.event ? SPOT_EVENTS[cd.event] : null;
+          const col = ch ? ch.color : ev ? TONE[ev.tone] : SKY;
+          const ready = cd.char ? nextBeat(c, cd.char).kind !== "hang" : false;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                sfx.ui();
+                onPick(i);
+              }}
+              className="flex h-[330px] w-[220px] cursor-pointer flex-col items-center overflow-hidden rounded-2xl border-[3px] bg-[#0d1838] transition-transform hover:-translate-y-2"
+              style={{ borderColor: col, boxShadow: `0 0 22px ${col}55` }}
+            >
+              <div className="flex h-[190px] w-full items-end justify-center" style={{ background: `linear-gradient(180deg, ${col}44, transparent)` }}>
+                {ch ? <img src={faceUrl(ch.id)} alt={ch.name} className="h-[180px] w-[170px] object-cover object-top" /> : <span className="mb-8 text-[84px]">{ev?.icon}</span>}
+              </div>
+              <div className="flex flex-1 flex-col items-center justify-center gap-1 px-3">
+                {ready && <span className="rounded bg-[#ffd23f] px-2 text-[11px] font-bold text-black">이야기 ❗</span>}
+                {ev && (
+                  <span className="rounded px-2 text-[11px] font-bold" style={{ background: `${col}22`, color: col }}>
+                    {ev.tone === "good" ? "좋은 일" : ev.tone === "risk" ? "고르기" : "불길"}
+                  </span>
+                )}
+                <span className={`${font.title} text-[19px] leading-tight`} style={{ color: col }}>
+                  {cd.title}
+                </span>
+                <span className="text-[12px] leading-snug text-white/75">{cd.desc}</span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-3 text-[12px] text-white/50">하나를 골라요 · 인연 이야기는 호감이 문턱을 넘어야 다음으로 가요</div>
+    </div>
   );
 }
 
@@ -1532,8 +1577,8 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
   const tc = tagCount(c);
   return (
     <Modal w={760}>
-      <div className={`${font.title} text-[28px] text-[#ffd23f]`}>{p.from}</div>
-      <div className="text-[13px] text-white/60">특수능력 하나를 골라요 · 같은 태그 {SET_NEED}장이면 세트 효과 · 주황 테두리는 양날 카드</div>
+      <Banner color="#ffb020">{p.from}</Banner>
+      <div className="mt-2 text-[13px] text-white/60">특수능력 하나를 골라요 · 같은 태그 {SET_NEED}장이면 세트 효과 · 주황 테두리는 양날 카드</div>
       {!p.options.length && <div className="mt-4 text-[14px] text-white/70">더 고를 수 있는 특수능력이 없어요. 넘기기를 눌러 주세요.</div>}
       <div className="mt-3 grid grid-cols-3 gap-3">
         {p.options.map((id, i) => {
@@ -1566,249 +1611,402 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
       <button type="button" className="mt-3 cursor-pointer text-[12px] text-white/40 underline" onClick={() => onPick(-1)}>
         안 고르고 넘기기
       </button>
-      <Hint k="pick" title="특수능력 고르기">
-        3장 중 1장! 카드 위 태그가 같은 걸 4장 모으면 세트 효과가 붙어요. 주황 테두리 양날 카드는 강하지만 대가가 있어요.
-      </Hint>
     </Modal>
   );
 }
 
-function RetireAskModal({ c, onAnswer }: { c: Career; onAnswer: (yes: boolean) => void }) {
-  const ovr = ovrOf(c);
+/** 캠프 끝: 시즌 미션 3개 고르기 (6종 × 쉬움 · 보통 · 어려움) */
+function MissionSelect({ c, onDone }: { c: Career; onDone: (ms: SeasonMission[]) => void }) {
+  const [sel, setSel] = useState<SeasonMission[]>([]);
+  const toggle = (key: SeasonMission["key"], tier: number) => {
+    setSel((s) => {
+      const cur = s.find((m) => m.key === key);
+      if (cur && cur.tier === tier) return s.filter((m) => m.key !== key);
+      if (cur) return s.map((m) => (m.key === key ? { key, tier } : m));
+      if (s.length >= 3) return s;
+      return [...s, { key, tier }];
+    });
+  };
+  const sum = sel.reduce((a, m) => a + MISSION_TIER[m.tier].sp, 0);
   return (
-    <Modal w={500}>
-      <div className={`${font.title} text-[28px]`}>{c.season}년차를 마쳤다</div>
-      <div className="mt-1 text-[14px] text-white/70">
-        {age(c)}세 · 종합 {ovr} ({gradeOf(ovr).g}) · 통산 {c.total.g}경기 {c.total.hr}홈런
+    <Modal w={800}>
+      <Banner color="#ffb020">시즌 미션 고르기</Banner>
+      <div className="mt-2 text-[13px] text-white/65">
+        {c.name}의 이번 시즌 목표 3개! 정규 {WEEKS}주 + 결승 동안 이루면 그 순간 스킬P. 서로 다른 종류로 골라요.
       </div>
-      <div className="mt-2 text-[13px] text-white/60">
-        여기서 은퇴할 수 있어요. 은퇴 종합은 은퇴하는 순간 능력치로 정해져요 — 보통은 한 해 더 뛰면 훈련으로 종합이 더 오르고 기록 · 수상도 더 쌓여요. 노쇠는 8년차부터 주루부터 조금씩.
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Btn className={`${font.title} py-3 text-xl`} color="#ffd23f" onClick={() => onAnswer(true)}>
-          은퇴한다
-        </Btn>
-        <Btn className={`${font.title} py-3 text-xl`} onClick={() => onAnswer(false)}>
-          한 해 더!
-        </Btn>
-      </div>
-    </Modal>
-  );
-}
-
-function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: number; onClose: () => void }) {
-  const g = r.sum.grade !== undefined ? GAME_GRADES[r.sum.grade] : undefined;
-  const win = r.sum.win;
-  const d = r.sum.delta;
-  const race = awardRace(c)[0];
-  const done = gameNo(c) || (c.phase !== "season" ? GAMES : 0);
-  const PA_COLOR: Record<string, string> = { HR: "#ffd23f", HIT: "#7dff9a", BB: "#7ad7ff", K: "#ff8a8a" };
-  return (
-    <Modal w={780} onClose={onClose}>
-      {/* 머리: 평가 · 승패 · 점수 */}
-      <div className="flex items-center justify-center gap-4">
-        {g && (
-          <span className={`${font.title} text-[64px] leading-none`} style={{ color: g.color, textShadow: `0 0 24px ${g.color}66` }}>
-            {g.g}
+      <div className="mt-3 grid grid-cols-[110px_1fr_1fr_1fr] gap-1.5 text-[13px]">
+        <span />
+        {MISSION_TIER.map((t) => (
+          <span key={t.name} className="text-center font-bold" style={{ color: t.color }}>
+            {t.name} · SP {t.sp}
           </span>
-        )}
-        <div className="text-left">
-          <div className={`${font.title} text-[30px] leading-tight`} style={{ color: win ? "#ffd23f" : win === false ? "#ff9a9a" : "#fff" }}>
-            {r.sum.dnp ? "결장" : win ? "팀 승리!" : win === false ? "팀 패배" : "무승부"}
-          </div>
-          <div className="font-mono text-[16px] text-white/75">{r.score}</div>
-          <div className="text-[11.5px] text-white/45">{r.auto ? "자동 진행" : "직접 출전"}{r.note ? ` · ${r.note}` : ""}</div>
-        </div>
+        ))}
+        {MISSION_CATS.map((cat) => (
+          <MissionRow key={cat.key} cat={cat} sel={sel.find((m) => m.key === cat.key)?.tier} onPick={(t) => toggle(cat.key, t)} />
+        ))}
       </div>
-      <div className="mt-3 flex gap-3 text-left">
-        {/* 내 타석 */}
-        <div className="flex w-[300px] shrink-0 flex-col gap-1">
-          <div className="text-[12px] font-bold text-white/60">내 타석</div>
-          {r.pas.length ? (
-            r.pas.map((pa, i) => (
-              <div key={i} className="flex items-center gap-2 rounded-lg border px-2 py-1 text-[13px]" style={{ borderColor: pa.kind === "HR" ? "#ffd23f88" : "rgba(255,255,255,0.1)", background: pa.kind === "HR" ? "#ffd23f14" : "rgba(0,0,0,0.25)", opacity: pa.auto ? 0.7 : 1 }}>
-                <span className="w-[30px] text-white/50">{pa.inning}회</span>
-                <span className="flex-1 font-bold" style={{ color: PA_COLOR[pa.kind] ?? "#fff" }}>
-                  {pa.text}
-                  {pa.rbi ? ` ${pa.rbi}타점` : ""}
-                </span>
-                {pa.mission && (
-                  <span className={pa.mission.ok ? "text-[11px] text-[#ffd23f]" : pa.mission.partial ? "text-[11px] text-[#ffcf9a]" : "text-[11px] text-white/40"}>
-                    {pa.mission.char ? `${charById(pa.mission.char).name} 미션` : "미션"}
-                    {pa.mission.ok ? "✓" : pa.mission.partial ? "△" : "✗"}
-                  </span>
-                )}
-                <span className="rounded px-1.5 text-[10.5px]" style={{ background: pa.auto ? "rgba(255,255,255,0.1)" : "#7ad7ff33", color: pa.auto ? "#bbb" : "#7ad7ff" }}>
-                  {pa.auto ? "자동" : "직접"}
-                </span>
-              </div>
-            ))
-          ) : (
-            <div className="rounded-lg bg-black/25 px-2 py-2 text-[12.5px] text-white/50">벤치에서 응원했다</div>
-          )}
+      <div className="mt-2 text-[11.5px] text-white/45">도루 · 호수비는 경기 중 찬스가 오면 직접 고르거나 눌러서 쌓여요 · 자동이면 능력치로</div>
+      <Btn space className={`${font.title} mt-3 w-full py-2.5 text-[20px]`} color="#ffd23f" disabled={sel.length !== 3} onClick={() => onDone(sel)}>
+        {sel.length === 3 ? `이걸로 시즌 개막! · 최대 SP ${sum}` : `${3 - sel.length}개 더 골라요`}
+      </Btn>
+    </Modal>
+  );
+}
+function MissionRow({ cat, sel, onPick }: { cat: (typeof MISSION_CATS)[number]; sel?: number; onPick: (t: number) => void }) {
+  return (
+    <>
+      <span className="flex items-center font-bold text-white/80">{cat.name}</span>
+      {cat.tiers.map((n, t) => {
+        const on = sel === t;
+        const col = MISSION_TIER[t].color;
+        return (
+          <button
+            key={t}
+            type="button"
+            onClick={() => {
+              sfx.ui();
+              onPick(t);
+            }}
+            className="cursor-pointer rounded-lg border-2 py-1.5 font-bold"
+            style={{ borderColor: on ? col : `${col}44`, background: on ? `${col}33` : "rgba(0,0,0,0.3)", color: on ? "#fff" : "rgba(255,255,255,0.75)", boxShadow: on ? `0 0 12px ${col}66` : undefined }}
+          >
+            {on ? "✓ " : ""}
+            {cat.name} {n}
+            {cat.unit}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
+/* ─────────────── 경기 전 ─────────────── */
+
+function PreGame({ c, mode, onMode, onPlay }: { c: Career; mode: PlayMode; onMode: (m: PlayMode) => void; onPlay: () => void }) {
+  const opp = TEAM_DEFS[oppOf(c)];
+  const rows = standings(c);
+  const st = setupOfCache(c);
+  const oppAce = st.opp.pitchers.find((pp) => pp.role === "SP");
+  return (
+    <div className={`${PANEL} flex flex-1 flex-col gap-2 p-3`}>
+      <div className="flex items-center justify-between">
+        <div className={`${font.title} text-[24px]`}>
+          {c.phase === "final" ? <span className="text-[#ffd23f]">🏆 챔피언 결정전</span> : gameName(c)} <span className="text-white/50">vs</span> <span style={{ color: opp.color }}>{opp.name}</span>
         </div>
-        {/* 오늘의 성장 */}
-        <div className="flex flex-1 flex-col gap-1.5 rounded-xl border border-white/10 bg-black/25 p-2.5">
-          <div className="flex items-center justify-between text-[12px] font-bold text-white/60">
-            <span>오늘의 보상</span>
-            {g && (
-              <span>
-                경기 평가 <b style={{ color: g.color }}>{g.g}</b>
-              </span>
-            )}
-          </div>
-          {/* (능력치 막대는 뺌 — 경기로는 능력치가 안 올라서 늘 +0 이었음) */}
-          <div className="mt-1 flex flex-wrap gap-1.5 text-[11.5px] font-bold">
-            {<span className="rounded-md bg-[#ffd23f22] px-2 py-0.5 text-[#ffd23f]">⚡ 행동력 +{r.sum.act ?? ACTIVE_PER_GAME}</span>}
-            {d.stamina !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5" style={{ color: d.stamina > 0 ? "#7dff9a" : "#ffb37a" }}>체력 {d.stamina > 0 ? "+" : ""}{d.stamina}</span>}
-            {d.money > 0 && <span className="rounded-md bg-white/10 px-2 py-0.5">자금 +{d.money}만</span>}
-            {d.trust !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5" style={{ color: d.trust > 0 ? "#7ad7ff" : "#ff9a9a" }}>감독 신뢰 {d.trust > 0 ? "+" : ""}{d.trust}</span>}
-            {d.fame > 0 && <span className="rounded-md bg-white/10 px-2 py-0.5 text-[#ff9ad5]">인기도 +{d.fame}</span>}
-            {d.cond !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5">컨디션 {d.cond > 0 ? "▲" : "▼"}</span>}
-          </div>
-          {r.sum.lines.length > 0 && <div className="text-[12px] text-white/70">{r.sum.lines.join(" · ")}</div>}
-        </div>
+        <span className="text-[12px] text-white/55">
+          {slotName(st.myIdx)} 타자 · {posOf(c)} · 컨디션 {COND_FACE[c.cond]}
+        </span>
       </div>
-      {/* 시즌 진행 · 수상 레이스 */}
-      <div className="mt-2.5 flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-left">
+      {/* 일정 진행 원 */}
+      <div className="flex items-center gap-1.5">
+        {Array.from({ length: WEEKS }, (_, i) => {
+          const r = c.hist[i];
+          const cur = c.phase === "season" && i === c.week - 1;
+          const col = r === "W" ? "#ffd23f" : r === "L" ? "#7a86b0" : r ? "#9aa3c2" : cur ? SKY : "rgba(255,255,255,0.15)";
+          return (
+            <div key={i} className="flex h-[30px] w-[30px] items-center justify-center rounded-full border-2 text-[12px] font-bold" style={{ borderColor: col, background: r === "W" ? "#ffd23f33" : cur ? `${SKY}33` : "transparent", boxShadow: cur ? `0 0 10px ${SKY}` : undefined }}>
+              {r === "W" ? "승" : r === "L" ? "패" : r ? "무" : i + 1}
+            </div>
+          );
+        })}
+        <span className="mx-1 text-white/30">▶</span>
+        <div className="flex h-[30px] items-center rounded-full border-2 px-2.5 text-[12px] font-bold" style={{ borderColor: c.phase === "final" ? "#ffd23f" : "rgba(255,255,255,0.15)", color: c.phase === "final" ? "#ffd23f" : "rgba(255,255,255,0.4)" }}>
+          🏆 결승
+        </div>
+        <span className="ml-auto text-[11.5px] text-white/45">리그 1위만 결승</span>
+      </div>
+      <div className="flex gap-2">
         <div className="flex-1">
-          <div className="flex justify-between text-[11.5px] text-white/55">
-            <span>시즌 진행</span>
-            <span>
-              {done}/{GAMES} · 팀 {myRank(c)}위 · 타율 {fmtAvg(avg(c.line))} · {c.line.hr}홈런 · {c.line.rbi}타점
-            </span>
-          </div>
-          <div className="mt-1 flex gap-[3px]">
-            {Array.from({ length: GAMES }, (_, i) => (
-              <div key={i} className="h-[7px] flex-1 rounded-full" style={{ background: i < done ? "#FF8A3D" : "rgba(255,255,255,0.12)" }} />
+          <StandingsTable rows={rows} compact />
+        </div>
+        <div className="flex w-[180px] flex-col gap-1 rounded-xl bg-black/30 px-2.5 py-1.5 text-[12px]">
+          <div className="text-white/55">상대 선발</div>
+          <b style={{ color: opp.color }}>
+            {oppAce?.name} · {oppAce?.velo}km/h
+          </b>
+          <div className="mt-1 text-white/55">내 시즌</div>
+          <span className="font-mono">
+            {fmtAvg(avg(c.line))} · {c.line.hr}HR · {c.line.rbi}타점
+          </span>
+          {c.learned && <span className="text-[#ff7ae0]">필살 {spUses(c)}회</span>}
+        </div>
+      </div>
+      {canPlay(c) ? (
+        <>
+          <div className="grid grid-cols-3 gap-2">
+            {(["direct", "highlight", "auto"] as PlayMode[]).map((m) => (
+              <Btn key={m} active={mode === m} color={m === "auto" ? "#7ad7ff" : ACCENT} className="px-2 py-1.5 text-left" onClick={() => onMode(m)}>
+                <span className={`${font.title} block text-[16px]`}>{MODE_NAME[m]}</span>
+                <span className="block text-[11px] font-normal opacity-80">{MODE_DESC[m]}</span>
+              </Btn>
             ))}
           </div>
-        </div>
-        {c.line.g >= 3 && race && (
-          <div className="rounded-lg border px-2.5 py-1 text-[12px]" style={{ borderColor: race.lead ? "#ffd23f" : "rgba(255,255,255,0.2)", background: race.lead ? "#ffd23f1c" : "transparent" }}>
-            👑 {race.title} 레이스 <b style={{ color: race.lead ? "#ffd23f" : "#fff" }}>{race.lead ? "1위 페이스!" : `1위 페이스와 ${race.fmt(Math.abs(race.gap))}${race.unit} 차`}</b>
-            <div className="text-[10.5px] text-white/50">
-              나 {race.fmt(race.mine)} · 1위 페이스 {race.fmt(race.pace)}
-            </div>
-          </div>
-        )}
+          <Btn space className={`${font.title} mt-auto py-3 text-[24px]`} onClick={onPlay}>
+            ⚾ {MODE_NAME[mode]}로 경기 시작
+          </Btn>
+        </>
+      ) : (
+        <Btn space className={`${font.title} mt-auto py-4 text-[22px]`} color="#ff7a7a" onClick={onPlay}>
+          결장 ({INJURY_NAME[c.injury!.kind]}) — 결과 보기
+        </Btn>
+      )}
+      <div className="text-center text-[11px] text-white/45">경기 평가 {GAME_GRADES.map((g) => `${g.g} SP${g.sp}`).join(" · ")} · 기록만큼 「실전 경험」으로 능력치도 올라요</div>
+    </div>
+  );
+}
+
+// 같은 경기 동안 다시 만들지 않게
+let cacheKey = "";
+let cacheVal: ReturnType<typeof setupOf> | null = null;
+function setupOfCache(c: Career) {
+  const k = `${c.id}:${c.phase}:${c.week}:${c.cond}:${c.skills.length}:${Math.round(c.stats.hit)}`;
+  if (k !== cacheKey || !cacheVal) {
+    cacheKey = k;
+    cacheVal = setupOf(c);
+  }
+  return cacheVal;
+}
+
+function StandingsTable({ rows, compact }: { rows: ReturnType<typeof standings>; compact?: boolean }) {
+  const top = rows[0];
+  const py = compact ? "py-0.5" : "py-1.5";
+  return (
+    <div className={`overflow-hidden rounded-xl border border-white/10 bg-black/30 ${compact ? "text-[12.5px]" : "text-[14px]"}`}>
+      <div className={`grid grid-cols-[34px_1fr_36px_36px_52px_44px] px-2 ${py} text-[11px] text-white/45`}>
+        <span>순위</span>
+        <span className="text-left">팀</span>
+        <span>승</span>
+        <span>패</span>
+        <span>승률</span>
+        <span>차</span>
       </div>
-      <Btn space className={`${font.title} mt-3 w-full py-2.5 text-[20px]`} onClick={onClose}>
-        {more ? `다음 경기 결과 ▶ ${more}` : "확인"}
+      {rows.map((r) => (
+        <div key={r.i} className={`grid grid-cols-[34px_1fr_36px_36px_52px_44px] items-center px-2 ${py} font-mono`} style={r.i === 0 ? { background: `${r.color}26`, boxShadow: `inset 3px 0 0 ${r.color}` } : undefined}>
+          <b style={{ color: r.rank === 1 ? "#ffd23f" : r.color }}>{r.rank}</b>
+          <span className="truncate text-left font-['Nanum_Gothic'] font-bold" style={{ color: r.i === 0 ? r.color : "#fff" }}>
+            {r.name}
+          </span>
+          <span>{r.w}</span>
+          <span>{r.l}</span>
+          <span>{fmtAvg(r.pct)}</span>
+          <span className="text-white/60">{r.rank === 1 ? "-" : ((top.w - r.w + (r.l - top.l)) / 2).toFixed(1)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+function StandingsModal({ c, onClose }: { c: Career; onClose: () => void }) {
+  return (
+    <Modal w={500} onClose={onClose}>
+      <div className={`${font.title} text-[26px]`}>라이징스타 리그 순위</div>
+      <div className="mt-3">
+        <StandingsTable rows={standings(c)} />
+      </div>
+      <div className="mt-2 text-[12px] text-white/55">
+        정규 {WEEKS}주 · 주마다 한 경기 · 1위는 2위와 챔피언 결정전 · 지금 {c.wins}승 {c.losses}패
+      </div>
+      <Btn space className={`${font.title} mt-4 px-8 py-2 text-lg`} color="#7dff9a" onClick={onClose}>
+        닫기
       </Btn>
     </Modal>
   );
 }
 
-function SeasonModal({ s, c, onClose, onReroll }: { s: SeasonSummary; c: Career; onClose: () => void; onReroll: () => void }) {
-  const [ask, setAsk] = useState(false);
-  const L = s.line;
-  return (
-    <Modal w={540}>
-      <div className={`${font.title} text-[30px] text-[#ffd23f]`}>{s.season}년차 시즌 결산</div>
-      {s.post && (
-        <div className={`${font.title} mt-1 text-[24px]`} style={{ color: POST_BADGE[s.post]?.col }}>
-          {POST_BADGE[s.post]?.t ?? s.post}
+/* ─────────────── 경기 평가 · 주차 결산 ─────────────── */
+
+function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: number; onClose: () => void }) {
+  const [page, setPage] = useState(0);
+  const s = r.sum;
+  const g = s.grade !== undefined ? GAME_GRADES[s.grade] : undefined;
+  const d = s.delta;
+  const PA_COLOR: Record<string, string> = { HR: "#ffd23f", HIT: "#7dff9a", BB: "#7ad7ff", K: "#ff8a8a" };
+  const race = c.line.g >= 2 ? awardRace(c)[0] : null;
+  const L = c.line;
+  if (page === 1 && s.week) {
+    const wk = s.week;
+    return (
+      <Modal w={620} onClose={onClose}>
+        <Banner color="#4fb0ff">{wk.label} 결산</Banner>
+        <div className="mt-4 flex flex-col gap-2 text-left">
+          {STAT_KEYS.map((k) => {
+            const v = wk.stats[k];
+            const gn = wk.gain[k] ?? 0;
+            return (
+              <div key={k} className="flex items-center gap-2">
+                <span className="w-[44px] text-[14px] font-bold" style={{ color: STAT_COLOR[k] }}>
+                  {STAT_NAME[k]}
+                </span>
+                <span className={`${font.title} w-[22px] text-[17px]`} style={{ color: statGrade(v).color }}>
+                  {statGrade(v).g}
+                </span>
+                <div className="relative h-[14px] flex-1 overflow-hidden rounded-full bg-white/10">
+                  <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(100, ((v - gn) / 999) * 100)}%`, background: STAT_COLOR[k] }} />
+                  <div className="absolute inset-y-0 rounded-r-full" style={{ left: `${Math.min(100, ((v - gn) / 999) * 100)}%`, width: `${(gn / 999) * 100}%`, background: "#ffe680" }} />
+                </div>
+                <span className="w-[38px] text-right font-mono text-[15px] font-bold">{Math.round(v)}</span>
+                <span className="w-[46px] text-right font-mono text-[14px] font-bold text-[#ffe680]">{gn ? `▲${gn}` : ""}</span>
+              </div>
+            );
+          })}
         </div>
-      )}
-      {s.standings && (
-        <div className="mt-2">
-          <StandingsTable rows={s.standings} />
+        <div className="mt-3 text-[13px] text-white/70">
+          팀 {myRank(c)}위 · {c.wins}승 {c.losses}패 · 타율 {fmtAvg(avg(L))} · {L.hr}홈런 · {L.rbi}타점{L.sb ? ` · ${L.sb}도루` : ""}
         </div>
-      )}
-      <div className="mt-2 grid grid-cols-6 gap-1 rounded-xl bg-black/30 py-2 font-mono text-[13px]">
-        {[
-          ["경기", L.g],
-          ["타율", fmtAvg(avg(L))],
-          ["홈런", L.hr],
-          ["타점", L.rbi],
-          ["안타", L.h],
-          ["OPS", ops(L).toFixed(3)],
-        ].map(([k, v]) => (
-          <div key={k as string}>
-            <div className="text-[11px] text-white/45">{k}</div>
-            <div className="text-[16px] font-bold">{v}</div>
-          </div>
-        ))}
-      </div>
-      {s.awards.length > 0 && (
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          {s.awards.map((a) => (
-            <span key={a} className={`${font.title} rounded-lg bg-[#ffd23f] px-3 py-1 text-[18px] text-black`}>
-              🏆 {a}
-            </span>
-          ))}
-        </div>
-      )}
-      {/* 이번 시즌 성적 평가 (OPS 기준) — 숨은 재능(타고난 성장 속도)과 헷갈리지 않게 따로 */}
-      {L.ab > 0 && (() => {
-        const sg = seasonGrade(L);
-        return (
-          <div className="mt-3 flex items-center justify-center gap-3 rounded-xl border-2 py-2" style={{ borderColor: `${sg.color}80`, background: `${sg.color}14` }}>
-            <div className="text-[12px] text-white/60">이번 시즌 성적</div>
-            <div className={`${font.title} text-[40px] leading-none`} style={{ color: sg.color }}>
-              {sg.g}
-            </div>
-            <div className="text-left text-[11px] text-white/50">
-              OPS {ops(L).toFixed(3)}
-              <br />
-              S .950 · A .820 · B .700 · C .600
-            </div>
-          </div>
-        );
-      })()}
-      {s.talentReveal && (
-        <div className="mt-3 rounded-xl border-2 border-[#ffd23f]/50 bg-[#ffd23f]/10 py-2">
-          <div className="text-[12px] text-white/60">스카우트 — 숨은 재능 — 타고난 성장 속도</div>
-          <div className={`${font.title} text-[40px] leading-none text-[#ffd23f]`}>{s.talentReveal}</div>
-          <div className="text-[11px] text-white/50">F · D · C · B · A · S · 각성하면 한 단계 위로</div>
-        </div>
-      )}
-      {s.decline && (
-        <div className="mt-2 text-[12.5px] text-[#ff9a9a]">
-          노쇠: {STAT_KEYS.filter((k) => s.decline![k]).map((k) => `${STAT_NAME[k]} ${s.decline![k]}`).join(" · ")}
-        </div>
-      )}
-      <div className="mt-2 flex flex-col gap-0.5 text-[13px] text-white/75">
-        {s.lines
-          .filter((l) => !l.startsWith("스카우트") && !l.startsWith("수상") && !l.startsWith("나이가"))
-          .map((l, i) => (
-            <div key={i}>{l}</div>
-          ))}
-      </div>
-      <div className="mt-1 text-[13px] text-white/60">
-        종합 {ovrOf(c)} ({gradeOf(ovrOf(c)).g})
-        {s.retire ? " · 10년 커리어 끝" : ` · 다음: 시즌 보상 고르기${s.canRetire ? " → 은퇴할지 고르기" : ""} → 비시즌 ${OFF_TURNS}턴`}
-      </div>
-      {s.talentReveal && c.season === 1 && !s.retire ? (
-        ask ? (
-          <div className="mt-3 rounded-xl border border-[#ff7a7a]/50 bg-[#ff7a7a]/10 p-2 text-[13px]">
-            {c.name}를 보내고 새 선수를 만들까요? (이 선수는 기록에 안 남아요)
-            <div className="mt-2 flex gap-2">
-              <Btn className="flex-1 py-2" color="#ff7a7a" onClick={onReroll}>
-                새 선수 만들기
-              </Btn>
-              <Btn className="flex-1 py-2" color="#8b93b8" onClick={() => setAsk(false)}>
-                취소
-              </Btn>
-            </div>
-          </div>
-        ) : (
-          <div className="mt-4 flex gap-2">
-            <Btn space className={`${font.title} flex-[2] py-2.5 text-lg`} color="#ffd23f" onClick={onClose}>
-              이 선수로 계속 ▶
-            </Btn>
-            <Btn className="flex-1 py-2.5 text-[13px]" color="#8b93b8" onClick={() => setAsk(true)}>
-              재능 다시 뽑기
-              <span className="block text-[10.5px] font-normal opacity-70">새 선수로 처음부터</span>
-            </Btn>
-          </div>
-        )
-      ) : (
-        <Btn className="mt-4 w-full py-2.5 text-lg" color="#ffd23f" onClick={onClose}>
-          {s.retire ? "은퇴식으로" : "다음"}
+        {s.next === "final" && <div className={`${font.title} mt-2 text-[22px] text-[#ffd23f]`}>🏆 챔피언 결정전 진출! 보너스 행동권 {FINAL_TICKETS}장</div>}
+        {s.next === "end" && <div className={`${font.title} mt-2 text-[20px] text-[#ffd23f]`}>시즌 끝 — 결산으로!</div>}
+        <Btn space className={`${font.title} mt-4 w-full py-2.5 text-[20px]`} onClick={onClose}>
+          {more ? `다음 경기 결과 ▶ ${more}` : "확인"}
         </Btn>
+      </Modal>
+    );
+  }
+  return (
+    <Modal w={780} onClose={() => (s.week ? setPage(1) : onClose())}>
+      <Banner color={g?.color ?? "#9aa3c2"}>경기 평가</Banner>
+      <div className="mt-3 flex items-center justify-center gap-5">
+        {g && (
+          <div className="flex flex-col items-center">
+            <span className={`${font.title} text-[68px] leading-none`} style={{ color: g.color, textShadow: `0 0 24px ${g.color}66` }}>
+              {g.g}
+            </span>
+            <span className="text-[13px] font-bold" style={{ color: g.color }}>
+              {g.label}
+            </span>
+          </div>
+        )}
+        <div className="text-left">
+          <div className={`${font.title} text-[28px] leading-tight`} style={{ color: s.win ? "#ffd23f" : s.win === false ? "#ff9a9a" : "#fff" }}>
+            {s.dnp ? "결장" : s.win ? "팀 승리!" : s.win === false ? "팀 패배" : "무승부"}
+          </div>
+          <div className="font-mono text-[16px] text-white/75">{r.score}</div>
+          <div className="text-[11.5px] text-white/45">
+            {r.auto ? "자동 진행" : "직접 출전"}
+            {r.note ? ` · ${r.note}` : ""}
+          </div>
+          {g && (
+            <div className="mt-1 flex gap-[3px]">
+              {[...GAME_GRADES].reverse().map((x, i) => (
+                <div key={x.g} className="h-[8px] w-[34px] rounded-full" style={{ background: 4 - i >= s.grade! ? x.color : "rgba(255,255,255,0.1)" }} />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      {!s.dnp && (
+        <div className="mt-3 flex gap-3 text-left">
+          <div className="flex w-[300px] shrink-0 flex-col gap-1">
+            <div className="text-[12px] font-bold text-white/60">내 타석</div>
+            {r.pas.length ? (
+              r.pas.map((pa, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg border px-2 py-0.5 text-[12.5px]" style={{ borderColor: pa.kind === "HR" ? "#ffd23f88" : "rgba(255,255,255,0.1)", background: pa.kind === "HR" ? "#ffd23f14" : "rgba(0,0,0,0.25)", opacity: pa.auto ? 0.7 : 1 }}>
+                  <span className="w-[30px] text-white/50">{pa.inning}회</span>
+                  <span className="flex-1 font-bold" style={{ color: PA_COLOR[pa.kind] ?? "#fff" }}>
+                    {pa.text}
+                    {pa.rbi ? ` ${pa.rbi}타점` : ""}
+                  </span>
+                  {pa.mission && <span className={pa.mission.ok ? "text-[11px] text-[#ffd23f]" : "text-[11px] text-white/40"}>{pa.mission.ok ? "미션✓" : pa.mission.partial ? "미션△" : "미션✗"}</span>}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg bg-black/25 px-2 py-2 text-[12.5px] text-white/50">기록 없음</div>
+            )}
+          </div>
+          <div className="flex flex-1 flex-col gap-1.5 rounded-xl border-2 border-[#5fc8ff]/30 bg-black/25 p-2.5">
+            <div className="text-[12px] font-bold text-white/60">보상</div>
+            <div className="flex flex-wrap gap-1.5 text-[12px] font-bold">
+              {d.sp > 0 && <span className="rounded-md bg-[#c9a2ff22] px-2 py-0.5 text-[#c9a2ff]">스킬P +{d.sp}</span>}
+              {d.money > 0 && <span className="rounded-md bg-[#ffd23f22] px-2 py-0.5 text-[#ffd23f]">자금 +{d.money}만</span>}
+              {d.cond !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5">컨디션 {d.cond > 0 ? "▲" : "▼"}</span>}
+              {d.stamina !== 0 && <span className="rounded-md bg-white/10 px-2 py-0.5">체력 {d.stamina > 0 ? "+" : ""}{d.stamina}</span>}
+            </div>
+            {s.exp && Object.keys(s.exp).length > 0 && (
+              <>
+                <div className="text-[12px] font-bold text-white/60">실전 경험</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {STAT_KEYS.filter((k) => s.exp![k]).map((k) => (
+                    <span key={k} className="rounded-md px-2 py-0.5 text-[12px] font-bold" style={{ background: `${STAT_COLOR[k]}22`, color: STAT_COLOR[k] }}>
+                      {STAT_NAME[k]} ▲{s.exp![k]}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+            {s.lines.length > 0 && (
+              <div className="flex flex-col gap-0.5 text-[12px] text-white/75">
+                {s.lines.map((l, i) => (
+                  <div key={i} className={l.startsWith("시즌 미션") || l.startsWith("🏆") ? "font-bold text-[#ffd23f]" : undefined}>
+                    {l}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
+      {s.dnp && <div className="mt-3 text-[13px] text-white/70">{s.lines.join(" · ")}</div>}
+      {race && (
+        <div className="mt-2 rounded-lg border px-2.5 py-1 text-[12px]" style={{ borderColor: race.lead ? "#ffd23f" : "rgba(255,255,255,0.2)" }}>
+          👑 {race.title} 레이스 <b style={{ color: race.lead ? "#ffd23f" : "#fff" }}>{race.lead ? "1위 페이스!" : `1위 페이스와 ${race.fmt(Math.abs(race.gap))} 차`}</b>
+        </div>
+      )}
+      <Btn space className={`${font.title} mt-3 w-full py-2.5 text-[20px]`} onClick={() => (s.week ? setPage(1) : onClose())}>
+        {s.week ? "주차 결산 ▶" : "확인"}
+      </Btn>
+    </Modal>
+  );
+}
+
+/* ─────────────── 상점 · 스킬 · 기록 ─────────────── */
+
+function SkillShopModal({ c, onClose, onBuy }: { c: Career; onClose: () => void; onBuy: (id: SkillId) => void }) {
+  const list = skillShop(c);
+  const tc = tagCount(c);
+  return (
+    <Modal w={800} onClose={onClose}>
+      <div className="flex items-center justify-between">
+        <div className={`${font.title} text-[26px]`}>✨ 스킬 습득</div>
+        <div className="text-right">
+          <div className="font-mono text-[16px] font-bold text-[#c9a2ff]">SP {c.sp}</div>
+          <div className="text-[11px] text-white/50">진열은 주마다 바뀌어요 · 행동권 안 써요</div>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2.5">
+        {list.map((id) => {
+          const s = skill(id);
+          const col = s.risk ? "#ffb070" : s.tag ? TAG_COLOR[s.tag] : "#fff";
+          const price = skillPrice(c, id);
+          const have = s.tag ? tc[s.tag] ?? 0 : 0;
+          return (
+            <div key={id} className="flex min-h-[150px] flex-col items-center justify-between rounded-2xl border-2 bg-[#0b0e1c] p-2.5" style={{ borderColor: `${col}aa` }}>
+              <span className="rounded px-2 py-0.5 text-[11px] font-bold" style={{ background: `${col}22`, color: col }}>
+                {s.risk ? "양날" : s.tag ? `${TAG_NAME[s.tag]} ${have}/${SET_NEED}` : ""}
+              </span>
+              <span className={`${font.title} text-[20px]`} style={{ color: col }}>
+                {s.name}
+              </span>
+              <span className="text-[12px] text-white/80">{s.desc}</span>
+              <Btn className="mt-1 w-full py-1 text-[13px]" color="#c9a2ff" disabled={c.sp < price} onClick={() => onBuy(id)}>
+                SP {price}
+              </Btn>
+            </div>
+          );
+        })}
+        {!list.length && <div className="col-span-3 py-6 text-white/50">이번 주 진열을 다 배웠어요!</div>}
+      </div>
+      {c.skills.length > 0 && (
+        <div className="mt-3 text-left">
+          <div className="text-[12px] font-bold text-white/60">가진 특수능력</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {c.skills.map((id) => (
+              <SkillChip key={id} id={id} />
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="mt-2 text-[11.5px] text-white/45">같은 태그 {SET_NEED}장이면 세트 효과 · 많이 가질수록 값이 올라요 · SP는 훈련 · 경기 평가 · 시즌 미션으로</div>
+      <Btn space className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
+        닫기
+      </Btn>
     </Modal>
   );
 }
@@ -1819,13 +2017,13 @@ function ShopModal({
   return (
     <Modal w={760} onClose={onClose}>
       <div className="flex items-center justify-between">
-        <div className={`${font.title} text-[26px]`}>🛍️ 쇼핑몰</div>
+        <div className={`${font.title} text-[26px]`}>🛒 상점</div>
         <div className="text-right">
-          <div className="font-mono text-[15px] font-bold text-[#ffd23f]">자금 {c.money.toLocaleString()}만원</div>
-          <div className="text-[11px] text-white/50">인기도 {Math.round(c.fame).toLocaleString()} · 턴 안 써요</div>
+          <div className="font-mono text-[15px] font-bold text-[#ffd23f]">💰 {c.money.toLocaleString()}만원</div>
+          <div className="text-[11px] text-white/50">행동권 안 써요</div>
         </div>
       </div>
-      <div className="mt-2 text-left text-[13px] font-bold text-white/70">장비 — 그 훈련 효율 + 경기 능력치 · 단계마다 인기도 조건</div>
+      <div className="mt-2 text-left text-[13px] font-bold text-white/70">장비 — 그 훈련 효율 + 경기 능력치</div>
       <div className="mt-1 grid grid-cols-2 gap-2">
         {GEAR_IDS.map((id) => {
           const g = GEAR[id];
@@ -1833,6 +2031,7 @@ function ShopModal({
           const n = gearNext(c, id);
           return (
             <div key={id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-left">
+              <span className="text-[24px]">{g.icon}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-[14px] font-bold">
                   {cur ? g.tiers[cur - 1] : `${g.name} 없음`}{" "}
@@ -1844,21 +2043,17 @@ function ShopModal({
                 <div className="text-[11.5px] text-white/60">
                   {cur ? `${TRAINS[g.train].name} +${Math.round(GEAR_TIER[cur - 1].train * 100)}% · 경기 ${STAT_NAME[g.stat]} +${GEAR_TIER[cur - 1].game}` : `${TRAINS[g.train].name} · 경기 ${STAT_NAME[g.stat]}`}
                 </div>
-                {n && (
-                  <div className="text-[11px] text-white/45">
-                    다음: {n.name} (+{Math.round(n.train * 100)}% · +{n.game}){n.fame ? ` · 인기도 ${n.fame}` : ""}
-                  </div>
-                )}
+                {n && <div className="text-[11px] text-white/45">다음: {n.name} (+{Math.round(n.train * 100)}% · +{n.game})</div>}
               </div>
-              <Btn className="w-[96px] py-1 text-[12px]" color="#ffd23f" disabled={!n || !!n.why} onClick={() => onBuyGear(id)}>
-                {!n ? "최고 단계" : n.why && n.why.startsWith("인기도") ? n.why : `${n.price.toLocaleString()}만`}
+              <Btn className="w-[86px] py-1 text-[12px]" color="#ffd23f" disabled={!n || !!n.why} onClick={() => onBuyGear(id)}>
+                {!n ? "최고 단계" : `${n.price.toLocaleString()}만`}
               </Btn>
             </div>
           );
         })}
       </div>
       <div className="mt-3 text-left text-[13px] font-bold text-white/70">
-        소모품 — 턴마다 하나만 쓸 수 있어요{c.usedItem ? <span className="text-[#ff9a7a]"> (이번 턴엔 이미 씀)</span> : null}
+        소모품 — 턴마다 하나만{c.usedItem ? <span className="text-[#ff9a7a]"> · 이번 턴엔 이미 씀</span> : null}
       </div>
       <div className="mt-1 grid grid-cols-2 gap-2">
         {CONSUMABLE_IDS.map((id) => {
@@ -1866,6 +2061,7 @@ function ShopModal({
           const have = c.bag[id] ?? 0;
           return (
             <div key={id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-left">
+              <span className="text-[24px]">{it.icon}</span>
               <div className="min-w-0 flex-1">
                 <div className="text-[14px] font-bold">
                   {it.name}
@@ -1878,7 +2074,7 @@ function ShopModal({
                   쓰기
                 </Btn>
               )}
-              <Btn className="w-[80px] py-1 text-[12px]" color="#ffd23f" disabled={c.money < it.price} onClick={() => onBuy(id)}>
+              <Btn className="w-[72px] py-1 text-[12px]" color="#ffd23f" disabled={c.money < it.price} onClick={() => onBuy(id)}>
                 {it.price}만
               </Btn>
             </div>
@@ -1894,55 +2090,53 @@ function ShopModal({
 }
 
 function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
-  const rows = [
-    ...c.seasons.map((s) => ({ k: `${s.season}년차`, l: s.line, aw: [s.post === "우승" ? "🏆우승" : s.post === "준우승" ? "준우승" : "", ...s.awards].filter(Boolean).join(" · "), ovr: s.ovr })),
-    ...(c.line.g ? [{ k: `${c.season}년차 · 진행 중`, l: c.line, aw: "", ovr: ovrOf(c) }] : []),
-  ];
+  const L = c.line;
+  const gs = careerGameStats(c).stats;
   return (
-    <Modal w={700} onClose={onClose}>
+    <Modal w={720} onClose={onClose}>
       <div className={`${font.title} text-[26px]`}>{c.name} 기록</div>
-      <table className="mt-2 w-full font-mono text-[13px]">
-        <thead>
-          <tr className="text-[11px] text-white/50">
-            {["시즌", "경기", "타율", "안타", "홈런", "타점", "볼넷", "삼진", "OPS", "종합", "수상"].map((h) => (
-              <th key={h} className="px-1 py-1 font-normal">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.k} className="border-t border-white/10">
-              <td className="px-1 py-1 font-['Nanum_Gothic'] text-[12px]">{r.k}</td>
-              <td>{r.l.g}</td>
-              <td>{fmtAvg(avg(r.l))}</td>
-              <td>{r.l.h}</td>
-              <td>{r.l.hr}</td>
-              <td>{r.l.rbi}</td>
-              <td>{r.l.bb}</td>
-              <td>{r.l.k}</td>
-              <td>{ops(r.l).toFixed(3)}</td>
-              <td>{r.ovr}</td>
-              <td className="font-['Nanum_Gothic'] text-[11px] text-[#ffd23f]">{r.aw}</td>
-            </tr>
-          ))}
-          {!rows.length && (
-            <tr>
-              <td colSpan={11} className="py-4 font-['Nanum_Gothic'] text-white/45">
-                아직 경기 기록이 없어요
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      <div className="mt-2 text-left text-[12px] text-white/55">
-        팀 성적 {c.wins}승 {c.losses}패 · 연봉 {c.salary.toLocaleString()}만원 · 인기도 {Math.round(c.fame).toLocaleString()} · 훈련 횟수{" "}
-        {TRAIN_KEYS.map((k) => `${TRAINS[k].name.replace(" 훈련", "")} ${c.tCount[k]}`).join(" · ")}
+      <div className="mt-2 grid grid-cols-9 gap-1 rounded-xl bg-black/30 py-2 font-mono text-[13px]">
+        {[
+          ["경기", L.g],
+          ["타율", fmtAvg(avg(L))],
+          ["안타", L.h],
+          ["홈런", L.hr],
+          ["타점", L.rbi],
+          ["도루", L.sb],
+          ["호수비", L.df],
+          ["볼넷", L.bb],
+          ["OPS", ops(L).toFixed(3)],
+        ].map(([k, v]) => (
+          <div key={k as string}>
+            <div className="font-['Nanum_Gothic'] text-[11px] text-white/45">{k}</div>
+            <div className="text-[15px] font-bold">{v}</div>
+          </div>
+        ))}
       </div>
-      <div className="mt-1 text-left text-[12px] text-white/55">
-        인연:{" "}
-        {c.deck.map((id) => `${charById(id).name} ${c.bonds[id] ?? 0}/${BOND_MAX} · 호감 ${c.aff[id] ?? 0}`).join(" · ")}
+      <div className="mt-2 grid grid-cols-4 gap-2">
+        {STAT_KEYS.map((k) => (
+          <div key={k} className="rounded-xl border-2 px-2 py-1" style={{ borderColor: `${STAT_COLOR[k]}66` }}>
+            <div className="text-[12px] font-bold" style={{ color: STAT_COLOR[k] }}>
+              {STAT_NAME[k]} {Math.round(c.stats[k])}
+            </div>
+            <div className="text-[11px] text-white/55">
+              경기에선 {gs[k]} · 훈련 {c.tCount[k]}번 · Lv{trainLv(c, k)}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 text-left text-[12px] text-white/60">
+        팀 {c.wins}승 {c.losses}패 · {myRank(c)}위 · 특수능력 {c.skills.length}개{c.learned ? ` · 필살 「${charById(c.learned).swing.name}」 Lv${spLv(c)} 종합 +${LEARNED_VAL}~` : ""}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-1">
+        {c.skills.map((id) => (
+          <SkillChip key={id} id={id} />
+        ))}
+      </div>
+      <div className="mt-2 max-h-[120px] overflow-y-auto rounded-lg bg-black/30 px-2 py-1 text-left text-[12px] text-white/65">
+        {c.log.slice(0, 20).map((l, i) => (
+          <div key={i}>· {l}</div>
+        ))}
       </div>
       <Btn space className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
         닫기
@@ -1951,12 +2145,14 @@ function RecordsModal({ c, onClose }: { c: Career; onClose: () => void }) {
   );
 }
 
-/* ─────────────── 은퇴 · 명예의 전당 ─────────────── */
+/* ─────────────── 시즌 결산 · 명예의 전당 ─────────────── */
 
-function Retire({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: () => void; onNew: () => void; onHof: () => void; onEpilogue: () => void }) {
-  const r = retireCard(c);
-  const t = r.total;
-  const awardText = [...new Set(r.awards)].map((a) => `${a}${r.awards.filter((x) => x === a).length > 1 ? ` ×${r.awards.filter((x) => x === a).length}` : ""}`).join(" · ");
+function SeasonEnd({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: () => void; onNew: () => void; onHof: () => void; onEpilogue: () => void }) {
+  const s = c.summary;
+  if (!s) return null;
+  const L = s.line;
+  const sg = L.ab ? seasonGrade(L) : null;
+  const rb = RESULT_BADGE[s.result];
   return (
     <div className="flex h-full items-center justify-center gap-6 px-8">
       <div className="flex flex-col items-center">
@@ -1965,24 +2161,26 @@ function Retire({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: ()
         </div>
         <div className={`${font.title} mt-1 text-[28px]`}>{c.name}</div>
         <div className="text-[13px] text-white/60">
-          #{c.num} · {TYPES[c.type].name} · {c.seasons.length}년 · 재능 {talentName(c)}
-          {c.awakened ? " (각성)" : ""}
+          #{c.num} · {TYPES[c.type].name} · {posOf(c)}
         </div>
+        {rb && (
+          <div className={`${font.title} mt-1 text-[20px]`} style={{ color: rb.col }}>
+            {rb.t}
+          </div>
+        )}
       </div>
-      <div className="flex w-[560px] flex-col gap-2">
-        <div className="text-[14px] text-white/60">
-          은퇴 — {c.seasons.length}년 커리어 · {age(c)}세
-        </div>
+      <div className="flex w-[580px] flex-col gap-2">
+        <Banner color="#ffb020">시즌 결산</Banner>
         <div className="flex items-end gap-4">
-          <span className={`${font.title} text-[96px] leading-none`} style={{ color: r.grade.color, textShadow: `0 0 30px ${r.grade.color}66` }}>
-            {r.grade.g}
+          <span className={`${font.title} text-[92px] leading-none`} style={{ color: s.grade.color, textShadow: `0 0 30px ${s.grade.color}66` }}>
+            {s.grade.g}
           </span>
           <div className="pb-2">
-            <div className={`${font.title} text-[46px] leading-none`}>{r.ovr}</div>
-            <div className="text-[15px] text-[#ffd23f]">상위 {r.top < 1 ? r.top.toFixed(1) : Math.round(r.top)}%</div>
+            <div className={`${font.title} text-[44px] leading-none`}>{s.ovr}</div>
+            <div className="text-[15px] text-[#ffd23f]">상위 {s.top < 1 ? s.top.toFixed(1) : Math.round(s.top)}%</div>
           </div>
           <div className="ml-auto flex flex-col items-end gap-1 pb-2">
-            {r.nick.slice(0, 3).map((n) => (
+            {s.nick.slice(0, 3).map((n) => (
               <span key={n} className="rounded-md bg-white/10 px-2 py-0.5 text-[13px] font-bold">
                 「{n}」
               </span>
@@ -1994,8 +2192,10 @@ function Retire({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: ()
             const v = Math.round(c.stats[k]);
             const g = statGrade(v);
             return (
-              <div key={k} className="rounded-xl bg-black/30 px-2 py-1.5 text-center">
-                <div className="text-[11px] text-white/55">{STAT_NAME[k]}</div>
+              <div key={k} className="rounded-xl border-2 bg-black/30 px-2 py-1 text-center" style={{ borderColor: `${STAT_COLOR[k]}66` }}>
+                <div className="text-[11px] font-bold" style={{ color: STAT_COLOR[k] }}>
+                  {STAT_NAME[k]}
+                </div>
                 <div className={`${font.title} text-[22px] leading-none`} style={{ color: g.color }}>
                   {g.g} <span className="font-mono text-[16px] text-white">{v}</span>
                 </div>
@@ -2003,25 +2203,43 @@ function Retire({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: ()
             );
           })}
         </div>
-        <div className="rounded-xl bg-black/30 px-3 py-2 font-mono text-[13px]">
-          통산 {t.g}경기 · 타율 {fmtAvg(avg(t))} · {t.h}안타 · {t.hr}홈런 · {t.rbi}타점 · OPS {ops(t).toFixed(3)}
-          {r.awards.length > 0 && <div className="font-['Nanum_Gothic'] text-[12px] text-[#ffd23f]">수상: {awardText}</div>}
-          <div className="font-['Nanum_Gothic'] text-[12px] text-white/55">
-            특수능력 {c.skills.length}개 · 세트 {c.skills.filter((s) => skill(s).set).length}{c.learned ? ` · 필살 「${charById(c.learned).swing.name}」 Lv${spLv(c)} +${LEARNED_VAL}~` : ""} · 최종 연봉{" "}
-            {c.salary.toLocaleString()}만원
+        <div className="flex items-center gap-3 rounded-xl bg-black/30 px-3 py-2">
+          <div className="flex-1 font-mono text-[13px]">
+            {L.g}경기 · 타율 {fmtAvg(avg(L))} · {L.h}안타 · {L.hr}홈런 · {L.rbi}타점 · {L.sb}도루 · OPS {ops(L).toFixed(3)}
+            <div className="font-['Nanum_Gothic'] text-[12px] text-white/60">
+              시즌 미션 {s.missions.filter((m) => m.done).length}/{s.missions.length}
+              {s.missions.length ? ` — ${s.missions.map((m) => `${m.done ? "✓" : "✗"}${m.name}`).join(" · ")}` : ""}
+            </div>
           </div>
+          {sg && (
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] text-white/50">시즌 성적</span>
+              <span className={`${font.title} text-[30px] leading-none`} style={{ color: sg.color }}>
+                {sg.g}
+              </span>
+            </div>
+          )}
         </div>
-        {r.partner && (
-          <button type="button" onClick={onEpilogue} className="flex cursor-pointer items-center gap-2 rounded-xl border-2 px-3 py-1.5 text-left" style={{ borderColor: charById(r.partner).color, background: `${charById(r.partner).color}1c` }}>
-            <img src={faceUrl(r.partner)} alt="" className="h-[40px] w-[38px] rounded-md object-cover object-top" />
+        {s.awards.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {s.awards.map((a) => (
+              <span key={a} className={`${font.title} rounded-lg bg-[#ffd23f] px-3 py-1 text-[17px] text-black`}>
+                🏆 {a}
+              </span>
+            ))}
+          </div>
+        )}
+        {s.partner && (
+          <button type="button" onClick={onEpilogue} className="flex cursor-pointer items-center gap-2 rounded-xl border-2 px-3 py-1.5 text-left" style={{ borderColor: charById(s.partner).color, background: `${charById(s.partner).color}1c` }}>
+            <img src={faceUrl(s.partner)} alt="" className="h-[40px] w-[38px] rounded-md object-cover object-top" />
             <span className="flex-1 text-[13px]">
-              <b style={{ color: charById(r.partner).color }}>파트너 {charById(r.partner).name}</b> — 에필로그 보기 ▶
+              <b style={{ color: charById(s.partner).color }}>파트너 {charById(s.partner).name}</b> — 에필로그 보기 ▶
             </span>
           </button>
         )}
-        <div className="text-[12px] text-white/45">명예의 전당에 올라갔어요 · 덱 사람들 인연 레벨이 쌓였어요. 이 선수의 특수능력은 다음 선수에게 「선배의 유산」으로 물려줄 수 있어요.</div>
+        <div className="text-[12px] text-white/45">명예의 전당에 올라갔어요 · 덱 사람들 인연 레벨이 쌓였어요 · 이 선수의 특수능력 하나를 다음 선수에게 「선배의 유산」으로 물려줄 수 있어요.</div>
         <div className="mt-1 flex gap-2">
-          <Btn className={`${font.title} flex-1 py-3 text-xl`} onClick={onNew}>
+          <Btn space className={`${font.title} flex-1 py-3 text-xl`} onClick={onNew}>
             새 선수 키우기
           </Btn>
           <Btn className={`${font.title} flex-1 py-3 text-xl`} color="#ffd23f" onClick={onHof}>
@@ -2049,7 +2267,7 @@ function Hof({ list, onBack }: { list: HofEntry[]; onBack: () => void }) {
         <table className="w-full text-[13px]">
           <thead className="sticky top-0 bg-[#11152a] text-[11px] text-white/50">
             <tr>
-              {["#", "등급", "종합", "이름", "타입", "별명", "타격", "파워", "주루", "통산"].map((h, i) => (
+              {["#", "등급", "종합", "이름", "타입", "별명", "타격", "파워", "주루", "수비", "기록"].map((h, i) => (
                 <th key={i} className="px-2 py-2 text-left font-normal">
                   {h}
                 </th>
@@ -2067,23 +2285,28 @@ function Hof({ list, onBack }: { list: HofEntry[]; onBack: () => void }) {
                   </td>
                   <td className="px-2 font-mono text-[15px] font-bold">{e.ovr}</td>
                   <td className="px-2 font-bold">{e.name}</td>
-                  <td className="px-2 text-white/65">{TYPES[e.type].name}</td>
+                  <td className="px-2 text-white/65">{TYPES[e.type]?.name ?? e.type}</td>
                   <td className="px-2 text-white/80">「{e.nick}」</td>
                   {STAT_KEYS.map((k) => (
-                    <td key={k} className="px-2 font-mono" style={{ color: statGrade(e.stats[k]).color }}>
-                      {e.stats[k]}
+                    <td key={k} className="px-2 font-mono" style={{ color: e.stats[k] !== undefined ? statGrade(e.stats[k]!).color : "rgba(255,255,255,0.3)" }}>
+                      {e.stats[k] ?? "-"}
                     </td>
                   ))}
-                  <td className="px-2 font-mono text-white/65">
-                    {e.seasons ?? "-"}년 · {fmtAvg(e.avg)} · {e.hr}HR
+                  <td className="px-2 text-white/65">
+                    <span className="font-mono">
+                      {fmtAvg(e.avg)} · {e.hr}HR
+                    </span>
+                    {e.result && <span className="ml-1 text-[11px] text-[#ffd23f]">{e.result === "우승" ? "🏆" : e.result}</span>}
+                    {e.awards && e.awards.length > 0 && <span className="ml-1 text-[11px] text-[#ffd23f]">{e.awards.join(" · ")}</span>}
+                    {!e.result && e.seasons > 1 && <span className="ml-1 text-[11px] text-white/40">{e.seasons}년</span>}
                   </td>
                 </tr>
               );
             })}
             {!list.length && (
               <tr>
-                <td colSpan={10} className="py-10 text-center text-white/45">
-                  아직 은퇴한 선수가 없어요. 선수를 끝까지 키우면 여기에 올라가요.
+                <td colSpan={11} className="py-10 text-center text-white/45">
+                  아직 아무도 없어요. 한 시즌을 끝까지 치르면 여기에 올라가요.
                 </td>
               </tr>
             )}

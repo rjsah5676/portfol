@@ -7,7 +7,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BOND_IDS, BOONS, DUOS, ROLE_NAME, heartName, type BondId } from "@/lib/baseball/bonds";
 import {
-  BEATS, BEAT_NAME, BOND_MAX, BOON_MUL, DECK_SIZE, STAT_NAME, TAG_NAME, TYPES, VISIT_AFF, VISIT_SEASON,
+  BEATS, BEAT_NAME, BOND_MAX, BOON_MUL, DECK_SIZE, STAT_NAME, TAG_NAME, TYPES, VISIT_AFF,
   autoBattle, boonLv, inheritable, legacyBonus, nextBeat, roleOf, skill, tagCount,
   type BatType, type Career, type HofEntry, type SkillId, type StatKey, type TurnOut,
 } from "@/lib/baseball/career";
@@ -237,7 +237,7 @@ export function BondCard({ c, id, action }: { c: Career; id: BondId; action?: Re
   const aff = c.aff[id] ?? 0;
   const v = c.bonds[id] ?? 0;
   const nb = nextBeat(c, id);
-  const lock = v < BOND_MAX && c.season < VISIT_SEASON[v] ? `${VISIT_SEASON[v]}년차부터` : null;
+  const lock = v < BOND_MAX && (c.aff[id] ?? 0) < VISIT_AFF[v] ? `호감 ${VISIT_AFF[v]}부터` : null;
   const boons = c.skills.filter((s) => {
     const b = skill(s).boon;
     return b === id || (Array.isArray(b) && b.includes(id));
@@ -633,7 +633,7 @@ export function DeckStep({
                 {on && (
                   <div className="mt-1">
                     <div className="text-[10.5px] text-white/55">
-                      시작 능력치 +{(["hit", "power", "run"] as StatKey[]).map((k) => legacyBonus(h.stats[k])).join("/")}
+                      시작 능력치 +{(["hit", "power", "run", "def"] as StatKey[]).map((k) => legacyBonus(h.stats[k] ?? 0)).join("/")}
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-1">
                       {sk.length ? (
@@ -717,13 +717,14 @@ export function Hint({ k, title, children }: { k: string; title: string; childre
 /* ─────────────── 도움말 ─────────────── */
 
 const GUIDE: [string, string][] = [
-  ["하루 흐름", "캠프 · 비시즌은 하루마다, 시즌은 2경기마다 관리 턴이 와요. 지도에서 장소를 눌러 행동하고, 다 했으면 「경기 진행 ▶ / 다음 날 ▶」."],
-  ["⚡ 행동력", "행동마다 행동력을 써요 — 훈련 4 · 필살 훈련 5 · 만남 5 · 쉬기 3. 경기마다 +3, 캠프 · 비시즌 하루마다 +6. 남은 건 다음으로 넘어가요 · 최대 10."],
-  ["훈련 · 부상", "훈련 버튼에 대성공 · 실패 · 부상 확률이 나와요. 체력 40 아래부터 부상이 확 늘어요. 얼굴이 붙은 훈련은 「함께 훈련」 — 효율 ×1.3 이상."],
-  ["인연", "덱 3명이 지도에 ❗ 로 나와요. 만남마다 이야기 → 축복 → 대결 → … → 필살 전수 대결. 대답이 그 사람답다면 「이해」가 쌓여 특별한 답 · 축복 Lv2 시작이 열려요."],
-  ["특수능력 · 세트 · 양날", "시즌 끝 · S 평가 · 퀴즈쇼에서 3장 중 1장. 같은 태그 4장이면 세트 효과. 주황 테두리 = 좋은 점과 나쁜 점이 같이 있는 양날 카드."],
-  ["경기", "직접 · 하이라이트 · 자동. 하이라이트는 찬스 타석만 직접. 능력치는 경기로 안 오르고 훈련 · 활동으로만 — 잘 칠수록 경기 평가 S ~ D 가 높아져 다음 관리 턴 행동력 · 체력 · 컨디션을 더 받아요. 건너뛴 타석은 중계 화면으로 보여 줘요. 경기 중에도 다음 타석부터 방식을 바꿀 수 있어요."],
-  ["은퇴 · 다음 선수", "7년차부터 은퇴를 고를 수 있어요. 은퇴하면 명예의 전당 · 인연 레벨이 쌓이고, 다음 선수에게 「선배의 유산」 — 특수능력 1개 + 능력치 조금 — 을 물려줄 수 있어요."],
+  ["한 판 = 한 시즌", "캠프 → 시즌 미션 3개 고르기 → 정규 1 ~ 6주 → 리그 1위면 챔피언 결정전 → 시즌 결산 · 명예의 전당. 30분 안팎이면 한 판이 끝나요."],
+  ["🎫 행동권", "주마다 4장. 훈련 · 숙소 하나에 1장씩 쓰고, 다 쓰면 주말 리그 경기. 상점 · 스킬 습득 · 인연 보기는 공짜."],
+  ["훈련", "타격 · 근력 · 주루 · 수비 · 필살 5종. 같은 훈련 3번마다 레벨 업(효율 +12%). 체력이 50 아래면 실패율이, 30 아래면 부상이 늘어요. 미리보기에 오를 양 · 스킬P · 성공률이 다 나와요."],
+  ["함께 훈련", "덱 3명이 턴마다 훈련장에 흩어져 있어요. 얼굴 있는 훈련을 고르면 효율 ↑ · 호감 ↑. 호감 60이 넘으면 「우정 훈련」으로 훨씬 크게."],
+  ["누구와 만나게 될까?", "훈련 뒤 가끔 이벤트 카드 3장 — 인연 이야기 · 퀴즈쇼 · 비밀 특훈 같은 것 중 하나를 골라요. 이야기가 준비된 사람과 같이 훈련하면 바로 만나기도 해요."],
+  ["인연 · 필살타법", "이야기 → 축복 → 대결 → … → 필살 전수 대결. 호감이 문턱을 넘으면 다음 이야기가 열려요. 마지막 대결에서 이기면 필살타법!"],
+  ["재화 둘", "자금은 상점(소모품 · 장비), 스킬P는 스킬 습득(이번 주 진열 6장). 스킬P는 훈련 · 경기 평가 · 시즌 미션으로 모여요. 같은 태그 4장이면 세트 효과."],
+  ["경기", "직접 · 하이라이트 · 자동. 경기 평가 S ~ D 로 스킬P · 자금 · 컨디션, 그리고 기록만큼 「실전 경험」으로 능력치도 올라요. 시즌 미션은 이루는 순간 스킬P."],
 ];
 export function GuideModal({ onClose }: { onClose: () => void }) {
   return (
