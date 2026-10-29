@@ -1316,6 +1316,7 @@ export function makeAutoChart(
       rmsAt,
       rnd,
       duringW: diff === "easy" || diff === "normal" ? 0 : 0.15,
+      clear: diff === "easy" || diff === "normal" || diff === "hard",
     });
     notes.length = 0;
     notes.push(...held);
@@ -1768,6 +1769,9 @@ function addLongNotes(
     rnd: () => number;
     /** 누르는 동안 다른 노트 하나당 감점 */
     duringW?: number;
+    /** 누르는 동안 다른 레인 노트가 아예 없게 — 다음 줄 앞에서 뗌 (쉬움·보통·어려움: osu · Quaver 는 이 구간
+     *  롱노트의 2 · 11% 만 누르는 동안 다른 노트가 오는데 우리는 75 · 81%였음 — 초보에겐 갑자기 확 어려운 구간) */
+    clear?: boolean;
   }
 ): Note[] {
   const out = notes.map((n) => ({ ...n })).sort((x, y) => x.t - y.t || x.lane - y.lane);
@@ -1783,6 +1787,10 @@ function addLongNotes(
   }
   const rowSize = new Map<number, number>();
   for (const n of out) rowSize.set(n.t, (rowSize.get(n.t) ?? 0) + 1);
+  // 다음 줄(어느 레인이든) 시각 — clear 일 때 롱노트는 그 앞에서 끝남
+  const nextRow = new Array<number>(out.length).fill(Infinity);
+  for (let i = out.length - 2; i >= 0; i--)
+    nextRow[i] = out[i + 1].t > out[i].t + 1e-6 ? out[i + 1].t : nextRow[i + 1];
   const bt = o.beatTimes;
   const nearBeat = (t: number) => {
     let lo = 0,
@@ -1796,14 +1804,19 @@ function addLongNotes(
     return d < Math.max(0.03, o.beatSec * 0.08);
   };
   // 너무 짧은 롱노트(단노트랑 구분이 안 되고 떼기만 귀찮은)는 안 넣음: 최소 0.33초·거의 한 박
-  const minLen = Math.max(0.33, o.beatSec * 0.9);
+  //  (clear 일 땐 다음 줄 앞에서 떼야 해서 한 박 간격 노트에도 들어가게 0.75박 — 그래도 0.3초 이상)
+  const minLen = o.clear ? Math.max(0.3, o.beatSec * 0.75) : Math.max(0.33, o.beatSec * 0.9);
   type Cand = { i: number; len: number; score: number; on: boolean };
   const cands: Cand[] = [];
   out.forEach((n, i) => {
     if (n.t < 0.3 || n.end) return;
     if ((rowSize.get(n.t) ?? 1) > 2) return;
     const pick = o.lens[Math.floor(o.rnd() * o.lens.length)] ?? 1;
-    const room = nextSame[i] - n.t - Math.max(0.1, o.beatSec * 0.25);
+    const room = Math.min(
+      nextSame[i] - n.t - Math.max(0.1, o.beatSec * 0.25),
+      // 다른 레인 다음 줄 앞에서 뗌 — 떼는 순간과 다음 노트가 겹치지 않게 조금 띄움
+      o.clear ? nextRow[i] - n.t - Math.max(0.05, o.beatSec * 0.1) : Infinity
+    );
     const len = Math.min(pick * o.beatSec, o.maxSec, room);
     if (len < minLen) return;
     const on = nearBeat(n.t);

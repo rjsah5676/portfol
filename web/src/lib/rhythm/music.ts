@@ -362,16 +362,10 @@ const JILJU = audioSong("jilju", "질주주의보", "/audio/jilju.mp3", jiljuDat
   color: "#38BDF8",
   desc: "170 BPM · K-POP ROCK · AI 자작곡 (tunee.ai)",
 });
-const NATSU = audioSong(
-  "natsukasumi",
-  "After the Summer Haze",
-  "/audio/natsukasumi.mp3",
-  natsuData,
-  {
-    color: "#F9A8D4",
-    desc: "119 BPM · J-ROCK / INDIE POP · AI 자작곡 (tunee.ai)",
-  }
-);
+const NATSU = audioSong("natsukasumi", "Natsukasumi no Ato", "/audio/natsukasumi.mp3", natsuData, {
+  color: "#F9A8D4",
+  desc: "119 BPM · J-ROCK / INDIE POP · AI 자작곡 (tunee.ai)",
+});
 
 const NEWDIM = audioSong("newdim", "New Dimension", "/audio/newdim.mp3", newdimData, {
   color: "#C084FC",
@@ -464,7 +458,7 @@ const HIGHLIGHT = audioSong("highlight", "하이라이트", "/audio/highlight.mp
 // 3분 16초로 나와서 2절(마디 33~64, 51초)을 덜어 냄 — 앞뒤 마디가 거의 같은 자리(유사도 0.98)에서 박에 맞춰 이음
 const TOMEINAUSO = audioSong(
   "tomeinauso",
-  "Transparent Lie",
+  "Tomei na Uso",
   "/audio/tomeinauso.mp3",
   tomeinausoData,
   {
@@ -513,7 +507,7 @@ const FREEDOMDIVE = audioSong(
  *   monarch        --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,5,8,12,15   (NM 14)
  *   velocity       --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --levels 3,6,10,14,17,17   (NM 16)
  *   anima          --boss '{}' --explus '{}' --levels 3,6,9,13,17,20   (NM 16 · ULT 18) (ULTIMA 18 은 목표 20 으로 뽑아야 나옴 (21곡 중 유일한 18))
- *   aragami        --boss '{}' --explus '{}' --levels 3,6,11,14,16,18   (HA 10 · ULT 17)
+ *   aragami        --boss '{}' --explus '{}' --levels 3,6,11,14,16,18   (HA 9 · ULT 17)
  *   crimsoncadenza --double --boss '{}' --explus '{}' --levels 3,6,9,12,16,17   (NM 15) (절반 템포 100으로 잡혀서 --double · 200 BPM 이라 매우 어려움은 16분(75ms)이 안 들어가 12 가 천장)
  *   hwimori        --boss '{}' --explus '{}' --levels 3,6,10,13,16,18   (NM 15 · ULT 17)
  *   luckyseven     --double --boss '{}' --explus '{}' --levels 3,6,9,11,15,17   (NM 14 · ULT 16) (절반 템포 88로 잡혀서 --double)

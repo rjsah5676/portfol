@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.16",
+    name: "롱노트 정리",
+    date: "2026.10.29",
+    lines: [
+      "EASY · NORMAL · HARD 롱노트는 누르는 동안 다른 노트가 안 오게 — 다음 노트 앞에서 떼도록 길이를 맞춤",
+      "전엔 NORMAL 롱노트의 절반 · HARD 의 3/4 이 누른 채 다른 레인을 쳐야 했음 (osu! · Quaver 는 2 · 10%)",
+      "EXPERT 이상은 그대로 (누른 채 치기가 그 난이도의 재미)",
+    ],
+  },
+  {
     ver: "v2.15",
     name: "전 곡 난이도 재배분",
     date: "2026.10.29",
@@ -34,7 +44,7 @@ export const PATCHES: Patch[] = [
     lines: [
       "PIKO PIKO OVERKILL — 188 BPM J-CORE / 덴파 하드코어 (AI 자작곡, tunee.ai), EASY ~ ULTIMA",
       "v2.12 연주곡 5곡(LIMIT BREAK · NEON OVERDRIVE · Summer Static · SKYBREAKER · BRASS ROCKET)은 뺌 — 밋밋해서",
-      "일본어 곡 제목을 영어로: 夏霞のあと → After the Summer Haze, 透明な嘘 → Transparent Lie",
+      "일본어 곡 제목을 로마자로: 夏霞のあと → Natsukasumi no Ato, 透明な嘘 → Tomei na Uso",
     ],
   },
   {
