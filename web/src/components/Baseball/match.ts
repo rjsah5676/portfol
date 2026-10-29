@@ -505,6 +505,8 @@ export class Match {
   private recapJustShown = false;
   /** 요약 시작 때 상태 (첫 줄 전 점수표 · 주자) */
   private recapBase: RecapBase | null = null;
+  /** 오늘 타석 기록 (팀 → 타순 → 「안타」 「삼진」 …) — 중계 화면 타순표 */
+  hist: string[][][] = [Array.from({ length: 9 }, () => []), Array.from({ length: 9 }, () => [])];
 
   private careerAdvance(allAuto: boolean, log?: RecapLine[]): MyPA[] {
     const s = this.s;
@@ -1359,6 +1361,7 @@ export class Match {
       if (this.cfg.career && this.userBat) {
         const ln = this.s.sides[batSide(this.s)].bat[this.cfg.career.myIdx];
         this.myPAs.push({ inning: this.s.inning, text: res.text, kind: res.kind, rbi: ln.rbi - this.rbiBefore, mission: res.mission ? { ok: res.mission.ok, pt: 0, partial: res.mission.partial, char: res.mission.char } : undefined });
+        this.hist[this.paSide][this.paOrder]?.push(paShort(res.text, res.kind));
       }
       if (res.mission) {
         if (res.mission.ok) this.missionsOk++;
@@ -3109,6 +3112,9 @@ export class Match {
     {
       const rk = 1 - Math.pow(1 - Math.min(1, t / 0.28), 3);
       const label = bond ? `♥ ${m.who}의 부탁` : `${m.who}의 돌발 미션`;
+      // 앞에서 그린 배너(가운데 정렬)가 남아 있으면 글씨가 리본 왼쪽 밖으로 삐져나왔음
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
       ctx.font = '20px "Black Han Sans", sans-serif';
       const lw = ctx.measureText(label).width + 30;
       const rx = x + 14 - (1 - rk) * 220;
@@ -3185,10 +3191,11 @@ export class Match {
     this.recap = { lines: [...lines], shown: 0, t: step * 0.6, step, hold: !lines.length ? 2 : this.cfg.highlight ? 1.4 : 1 };
     this.setPhase("recap");
   }
-  /** 요약 한 줄 드러내기 */
+  /** 요약 한 줄 드러내기 (타순표의 오늘 기록에도 붙음) */
   private revealRecap() {
     const r = this.recap!;
     const l = r.lines[r.shown++];
+    this.hist[l.side][l.ord]?.push(paShort(l.text, l.kind));
     if (l.kind === "HR") sfx.ui();
   }
   skipRecap() {
@@ -3264,7 +3271,7 @@ export class Match {
       ctx.fill();
       ctx.font = '900 15px "Nanum Gothic", sans-serif';
       ctx.fillStyle = t === me ? "#ffcf4a" : "#fff";
-      ctx.fillText(`${team(t).name}${t === me ? " (우리)" : ""}`, sx + 40, y + 1);
+      ctx.fillText(team(t).name, sx + 40, y + 1);
       ctx.textAlign = "center";
       ctx.font = '800 15px "Nanum Gothic", sans-serif';
       for (let i = 0; i < nInn; i++) {
@@ -3313,13 +3320,8 @@ export class Match {
         ctx.font = `${isMe ? "900" : "800"} 15px "Nanum Gothic", sans-serif`;
         ctx.fillStyle = isMe ? "#ffcf4a" : "#fff";
         ctx.fillText(isMe ? `${b.name} ★` : b.name, x + 70, y + rowH / 2);
-        // 이번 중계에서 친 결과 하나만 (오늘 기록을 쌓아 두면 복잡함)
-        let lastL: RecapLine | undefined;
-        for (let j = r.shown - 1; j >= 0; j--) if (r.lines[j].side === t && r.lines[j].ord === i) {
-          lastL = r.lines[j];
-          break;
-        }
-        const h = lastL ? [paShort(lastL.text, lastL.kind)] : [];
+        // 오늘 기록 (최근 3개)
+        const h = (this.hist[t][i] ?? []).slice(-3);
         let cx = x + w - 10;
         ctx.font = '800 11px "Nanum Gothic", sans-serif';
         for (let k = h.length - 1; k >= 0; k--) {
@@ -3407,7 +3409,7 @@ export class Match {
       ctx.textAlign = "center";
       ctx.font = '900 15px "Nanum Gothic", sans-serif';
       ctx.fillStyle = last.me ? "#ffcf4a" : "#fff";
-      ctx.fillText(`${last.name}${last.me ? " (나)" : ""}`, cx0 - 70, 300);
+      ctx.fillText(`${last.name}${last.me ? " ★" : ""}`, cx0 - 70, 300);
       ctx.fillStyle = "rgba(255,255,255,0.4)";
       ctx.font = '800 12px "Nanum Gothic", sans-serif';
       ctx.fillText("VS", cx0, 300);
@@ -3439,7 +3441,7 @@ export class Match {
       ctx.fill();
       ctx.font = `${l.me ? "900" : "800"} 14px "Nanum Gothic", sans-serif`;
       ctx.fillStyle = l.me ? "#ffcf4a" : "#fff";
-      ctx.fillText(l.me ? `${l.name} (나)` : l.name, fx + 72 + slide, y);
+      ctx.fillText(l.me ? `${l.name} ★` : l.name, fx + 72 + slide, y);
       ctx.font = '900 14px "Nanum Gothic", sans-serif';
       ctx.fillStyle = col;
       const tx = fx + 190 + slide;
@@ -4187,9 +4189,11 @@ export class Match {
     const bf = this.boostFx && this.boostFx.t >= 0 && b === this.shownBatter ? this.boostFx : null;
     const bon = bf?.bonus;
     const glow = bf ? 1 - smooth(BOOST_DUR - 0.45, BOOST_DUR, bf.t) : 0;
-    this.statBar(ctx, tx, y + 76, "타격", b.hit, "#5fe07f", 120, undefined, bon?.hit, glow);
-    this.statBar(ctx, tx, y + 93, "파워", b.power, "#ff5a5a", 120, undefined, bon?.power, glow);
-    this.statBar(ctx, tx, y + 110, "주루", b.run, "#4fb3ff", 120, undefined, bon?.run, glow);
+    // 육성 선수는 순수 능력치로 보여 줌 (보정은 판정에만 — 허브 능력치와 달라 보이던 것)
+    const shown = b.base ?? b;
+    this.statBar(ctx, tx, y + 76, "타격", shown.hit, "#5fe07f", 120, undefined, bon?.hit, glow);
+    this.statBar(ctx, tx, y + 93, "파워", shown.power, "#ff5a5a", 120, undefined, bon?.power, glow);
+    this.statBar(ctx, tx, y + 110, "주루", shown.run, "#4fb3ff", 120, undefined, bon?.run, glow);
     if (bf && glow > 0) {
       // 카드 테두리 금빛 맥박
       ctx.save();

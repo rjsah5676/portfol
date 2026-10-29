@@ -342,7 +342,9 @@ export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: 
     if (isMyPA(s, myIdx)) {
       if (!autoMine) break;
       cpuManage(s, fieldSide(s));
-      if (!s.mission) {
+      // 남은 경기 자동이면 미션 없음 (미션 보상은 직접 쳐야) · 하이라이트는 미션이 뜨면 그 타석을 직접으로
+      if (allAuto) s.mission = null;
+      else if (!s.mission) {
         const m = maybeMission(s, rng);
         if (m) s.mission = m;
       }
@@ -367,7 +369,8 @@ export function advanceToMyPA(s: GameState, myIdx: number, rng: Rng, autoMine?: 
 }
 
 /** 경기 한 판 통째로 (자동 · 시뮬) */
-export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng, autoMine?: SwingHook): CareerGameOut {
+/** missions = false: 자동 진행 — 돌발미션이 안 나옴 (보상 · 패널티 없음 · 미션은 직접 쳐야 받는 것) */
+export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng, autoMine?: SwingHook, missions = true): CareerGameOut {
   const s = newCareerGame(st);
   const pas: MyPA[] = [];
   let missionPt = 0;
@@ -375,7 +378,8 @@ export function playCareerGame(st: CareerSetup, hook: SwingHook, rng: Rng, autoM
     pas.push(...advanceToMyPA(s, st.myIdx, rng, autoMine, pas.filter((p) => !p.auto).length));
     if (s.over) break;
     cpuManage(s, fieldSide(s));
-    const m = s.mission ?? maybeMission(s, rng);
+    if (!missions) s.mission = null;
+    const m = missions ? s.mission ?? maybeMission(s, rng) : null;
     if (m) s.mission = m;
     const before = s.sides[mySide(s)].bat[st.myIdx].rbi;
     const inning = s.inning;

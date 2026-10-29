@@ -154,6 +154,8 @@ export interface Batter {
   sit?: { rispHit?: number; rispPow?: number; twoK?: number; late?: number };
   /** 육성 선수 외형 (헤어 · 얼굴 · 피부 · 배트 · 유니폼) */
   look?: { hair: number; face: number; skin: number; bat: number; uni: number };
+  /** 육성 선수 순수 능력치 (선수 카드에 보이는 값 — 경기 판정엔 보정 들어간 hit · power · run 을 씀) */
+  base?: { hit: number; power: number; run: number };
   /** 육성 선수: 다 같이 낮은 능력치에서 시작하니 경기에선 편차를 줄여 씀 (playStat) */
   grow?: boolean;
   /** 이번 시즌 기록 (육성 선수는 진짜 기록 — 없으면 seasonOf 가 능력치로 만들어 냄) */

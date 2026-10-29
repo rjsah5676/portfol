@@ -44,7 +44,7 @@ const MODE_NAME: Record<PlayMode, string> = { direct: "직접 출전", highlight
 const MODE_DESC: Record<PlayMode, string> = {
   direct: "내 타석 전부 직접 · 경기당 2분쯤",
   highlight: "찬스 · 돌발미션 · 7회부터 접전 타석만 직접 · 경기당 1분 안쪽",
-  auto: "결과만 · 바로",
+  auto: "결과만 · 바로 · 미션 없음",
 };
 
 const clone = (c: Career): Career => JSON.parse(JSON.stringify(c));

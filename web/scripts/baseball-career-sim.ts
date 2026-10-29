@@ -126,7 +126,7 @@ export function run(i: number, gp: GpId[], over: Partial<Persona> = {}, extra: S
         const mode = FMODE ?? ps.mode;
         const g =
           mode === "auto"
-            ? playCareerGame(setup, bot, makeRng(c.seed + c.turn * 101))
+            ? playCareerGame(setup, bot, makeRng(c.seed + c.turn * 101), undefined, false)
             : playCareerGame(setup, me, makeRng(c.seed + c.turn * 101), mode === "highlight" ? bot : undefined);
         for (const pa of g.pas) {
           const k = pa.auto || mode === "auto" ? MS.auto : MS.direct;

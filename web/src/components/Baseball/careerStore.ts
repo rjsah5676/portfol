@@ -180,7 +180,8 @@ function logGame(c: Career, g: GameIn, sum: GameSummary, mode: "direct" | "auto"
 /** 자동 진행 (또는 직접 출전을 그만둔 경기) */
 export function autoGame(c: Career, note?: string): GameReport {
   const st = setupOf(c);
-  const g = playCareerGame(st, botHook(c.diff), makeRng((c.seed * 7 + c.turn * 131) >>> 0));
+  // 자동 진행은 돌발미션 없음 — 미션 보상(자금 · 신뢰 · 인기 · 호감)은 직접 쳐야
+  const g = playCareerGame(st, botHook(c.diff), makeRng((c.seed * 7 + c.turn * 131) >>> 0), undefined, false);
   c.inGame = false;
   const gin: GameIn = { line: g.line, win: g.win, missionPt: g.missionPt, missions: g.pas.filter((p) => p.mission?.ok).length, results: missionResults(g.pas), direct: false, clutch: g.clutch };
   const sum = applyGame(c, gin);
