@@ -1187,7 +1187,8 @@ export class Match {
   /** 공이 지나간 뒤: 볼 · 스트라이크 · 파울 · 인플레이 */
   private afterPitch() {
     const o = this.outcome!;
-    if (o.call === "bip" && o.field) {
+    // 인플레이 · 수비가 쫓아간 파울 · 라인 바로 밖 큰 파울은 필드 화면으로 (파울은 끝나면 「파울」)
+    if ((o.call === "bip" || (o.call === "foul" && this.cfg.mode !== "derby")) && o.field && o.field.frames.length) {
       const f = o.field;
       this.frames = f.frames;
       this.events = f.events;
@@ -1201,7 +1202,7 @@ export class Match {
       if (f.hr) {
         sfx.homerun();
         this.shake = 0.4;
-      } else sfx.cheer(0.5);
+      } else if (o.call === "bip") sfx.cheer(0.5);
       return;
     }
     this.finishPitch();
@@ -1280,7 +1281,8 @@ export class Match {
       color = golden ? "#ffd23f" : "#7dff9a";
     } else {
       out = true;
-      text = o.call === "bip" ? "홈런 아님 — 아웃" : o.call === "foul" ? "파울 — 아웃" : "헛스윙 — 아웃";
+      const foulOut = o.call === "foul" || o.field?.label.includes("파울");
+      text = foulOut ? "파울 — 아웃" : o.call === "bip" ? "홈런 아님 — 아웃" : "헛스윙 — 아웃";
     }
     if (out) d.outs++;
     if (d.boss) {

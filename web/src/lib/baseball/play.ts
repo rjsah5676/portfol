@@ -49,8 +49,9 @@ const DIVE_SHOW = 0.28;
 /** 낮은 라이너(타구각 범위)에 내야수 · 투수 반응 늦음 (초) */
 const LINER_LA = [2, 18];
 const LINER_REACT = 0.25;
-/** 외야수 기본 달리기 (m/s, 여기에 수비 실력 몫 +0.83) — 얕은 뜬공 · 빗맞은 라이너가 다 안타가 되지 않게 */
-const OF_SPEED = 6.4;
+/** 외야수 기본 달리기 (m/s, 여기에 수비 실력 몫 +0.83) — 얕은 뜬공 · 빗맞은 라이너가 다 안타가 되지 않게.
+ *  6.4 → 6.3: 파울 플라이 아웃(경기당 1.2개)이 늘린 아웃만큼 타율 · 득점 되돌림 */
+const OF_SPEED = 6.3;
 /** 주자 달리기 (m/s): 주루 300 → 7.36 · 500 → 7.8 · 900 → 8.68 (주루가 2 · 3루타 · 내야안타에 잘 드러나게) */
 export const runSpeed = (run: number) => 6.7 + (run / 1000) * 2.2;
 export const FENCE_H = 3.2;
@@ -391,17 +392,139 @@ function dirName(spray: number) {
   return "우익수";
 }
 
+/** 파울 지역 중 수비가 들어갈 수 있는 땅 (관중석 · 그물 앞) — 그림의 파울 지역과 같은 모양 */
+const FOUL_GROUND: [number, number][] = (() => {
+  const pts: [number, number][] = [];
+  for (let a = -62; a <= 62; a += 2) {
+    const r = fenceDist(a) + 2;
+    pts.push([Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r]);
+  }
+  pts.push([60, -4], [12, -16], [-12, -16], [-60, -4]);
+  return pts;
+})();
+function inPlayable(x: number, y: number) {
+  let inside = false;
+  const P = FOUL_GROUND;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const [xi, yi] = P[i];
+    const [xj, yj] = P[j];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * 파울 타구: 관중석 · 그물 앞에서 뜬 채로 잡히면 파울 플라이 아웃 (주자는 그대로).
+ * 못 잡아도 수비가 쫓아간 공 · 라인 바로 밖 큰 타구는 필드 화면으로 끝까지 보여 줌 — 그 밖엔 예전처럼 화면 없이 「파울」
+ */
+function simulateFoul(inp: FieldIn, pts: BallPt[], land: number): FieldOut {
+  const ball = inp.ball;
+  const bases = inp.bases.map((r) => r?.id ?? null);
+  const plain: FieldOut = { foul: true, hr: false, dist: land, frames: [], events: [], outs: 0, runs: 0, scored: [], bases, result: "FOUL", label: "파울", rbi: 0, fielder: -1 };
+  if (ball.bunt) return plain;
+  const REACH = ball.la < 10 ? 1.0 : 1.15;
+  const CATCH_H = 2.45;
+  const F = HOME_POS.map(([x, y], i) => ({
+    x, y,
+    speed: (i === 1 ? 5.4 : i === 0 ? 5.8 : i >= 6 ? OF_SPEED : 5.9) + (FIELD_DEF / 1000) * 1.6,
+    goAt: 0.2 + (1 - FIELD_DEF / 1000) * 0.15 + (ball.la < 10 && i === 0 ? 0.15 : 0) + (i !== 1 && i <= 5 && ball.la >= LINER_LA[0] && ball.la < LINER_LA[1] ? LINER_REACT : 0),
+  }));
+  // 잡을 수 있는 첫 점 (뜬 채 · 손 닿는 높이 · 관중석 앞)
+  let catcher = -1;
+  let catchIdx = -1;
+  for (let k = 1; k < pts.length && catcher < 0; k++) {
+    const p = pts[k];
+    if (!p.air) break;
+    if (p.h > CATCH_H || !inPlayable(p.x, p.y)) continue;
+    let best = -1;
+    let bestLeft = Infinity;
+    F.forEach((f, i) => {
+      const d = Math.max(0, dist(f.x, f.y, p.x, p.y) - REACH);
+      const need = f.goAt + d / f.speed;
+      if (need <= p.t && need < bestLeft) {
+        best = i;
+        bestLeft = need;
+      }
+    });
+    if (best >= 0) {
+      catcher = best;
+      catchIdx = k;
+    }
+  }
+  // 못 잡으면: 떨어진 곳에 가장 가까운 수비가 쫓아감
+  const end = pts[pts.length - 1];
+  let chaser = catcher;
+  let target = catchIdx >= 0 ? pts[catchIdx] : end;
+  if (chaser < 0) {
+    let bd = Infinity;
+    F.forEach((f, i) => {
+      const d = dist(f.x, f.y, end.x, end.y);
+      if (d < bd) {
+        bd = d;
+        chaser = i;
+      }
+    });
+    // 관중석 · 그물 너머면 그 앞까지만
+    if (!inPlayable(end.x, end.y)) {
+      for (let k = pts.length - 1; k >= 0; k--) {
+        if (inPlayable(pts[k].x, pts[k].y)) {
+          target = pts[k];
+          break;
+        }
+      }
+    }
+  }
+  const cf = F[chaser];
+  // 아깝게 못 잡은 공 (손 닿기 3m 안쪽까지 따라감)
+  const chased = catcher >= 0 || dist(cf.x, cf.y, target.x, target.y) - REACH - cf.speed * Math.max(0, end.t - cf.goAt) < 3;
+  const phiEnd = (Math.atan2(end.x, end.y) * 180) / Math.PI;
+  const nearMiss = Math.hypot(end.x, end.y) > 50 && Math.abs(phiEnd) < 56;
+  if (catcher < 0 && !chased && !nearMiss) return plain;
+
+  const frames: Frame[] = [];
+  const events: FieldEvent[] = [];
+  const caughtT = catchIdx >= 0 ? pts[catchIdx].t : Infinity;
+  const stopT = (catchIdx >= 0 ? caughtT + 0.8 : end.t + 0.5);
+  const runnerPos = [{ id: inp.batter.id, x: 0, y: 0 }, ...inp.bases.flatMap((r, k) => (r ? [{ id: r.id, x: B[k + 1][0], y: B[k + 1][1] }] : []))];
+  for (let step = 0; step * DT <= stopT; step++) {
+    const t = step * DT;
+    if (t >= cf.goAt && t < caughtT) {
+      const d = dist(cf.x, cf.y, target.x, target.y);
+      if (d > 0.05) {
+        const m = Math.min(d, cf.speed * DT);
+        cf.x += ((target.x - cf.x) / d) * m;
+        cf.y += ((target.y - cf.y) / d) * m;
+      }
+    }
+    const held = t >= caughtT;
+    const p = pts[Math.min(step, pts.length - 1)];
+    if (held && events.length === 0) {
+      events.push({ t, kind: "catch", x: cf.x, y: cf.y, text: "잡았다" });
+      events.push({ t, kind: "out", x: cf.x, y: cf.y, text: "파울 플라이 아웃" });
+    }
+    const fx = new Float32Array(18);
+    F.forEach((f, i) => {
+      fx[i * 2] = f.x;
+      fx[i * 2 + 1] = f.y;
+    });
+    frames.push({
+      t, bx: held ? cf.x : p.x, by: held ? cf.y : p.y, bh: held ? 1.2 : p.h, hold: held ? chaser : -1, fx, fs: new Uint8Array(9),
+      rs: runnerPos.map((r) => ({ id: r.id, x: r.x, y: r.y, st: 1 })),
+    });
+  }
+  if (catcher < 0) return { ...plain, frames };
+  return {
+    foul: false, hr: false, dist: land, frames, events, outs: 1, runs: 0, scored: [], bases, result: "OUT",
+    label: `${POS_NAME[catcher]} 파울 플라이`, rbi: 0, fielder: catcher,
+  };
+}
+
 export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   const pred = predictBall(inp.ball);
   const { pts } = pred;
   const ball = inp.ball;
   const sp = ball.special;
-  if (pred.foul) {
-    return {
-      foul: true, hr: false, dist: pred.land, frames: [], events: [], outs: 0, runs: 0, scored: [],
-      bases: inp.bases.map((r) => r?.id ?? null), result: "FOUL", label: "파울", rbi: 0, fielder: -1,
-    };
-  }
+  if (pred.foul) return simulateFoul(inp, pts, pred.land);
 
   // 필살타법 효과
   const freezeUntil = sp === "gunmo" ? SP_FIELD.gunmoFreeze : 0;

@@ -12,6 +12,9 @@ import type { Rng } from "./rng";
 import { clamp, lerp } from "./rng";
 import { BALL_R, ZONE, type Pitch } from "./pitch";
 
+/** 빗맞은 파울 중 높이 떠서 공으로 굴리는 몫 · 그중 뒤(그물 쪽)로 가는 몫 · 속도 · 각도 */
+export const FOUL_POP = { p: 0.6, back: 0.3, ev0: 16, evR: 14, la0: 48, laR: 34, side0: 50, sideR: 45 };
+
 export interface BattedBall {
   /** 타구 속도 m/s */
   ev: number;
@@ -171,7 +174,28 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
 
   // 빗맞음 → 대부분 파울. 터무니없는 볼은 앞으로 거의 안 감 (컨택존 밖이면 아예)
   const foulP = wild > 0.5 ? (outCz ? 1 : 0.9) : 0.72 - c;
-  if (c < 0.3 && rng.chance(foulP)) return { kind: "foul", e: o.e, c, tip: c < 0.18 };
+  if (c < 0.3 && rng.chance(foulP)) {
+    const tip = c < 0.18;
+    // 빗맞아 높이 뜬 파울 (일부): 공으로 굴려서 관중석 앞이면 수비가 쫓아가 잡을 수 있게 (파울 플라이 아웃)
+    if (!tip && rng.chance(FOUL_POP.p)) {
+      const pull = (o.e < 0 ? -1 : 1) * (o.bats === "R" ? 1 : -1);
+      const back = rng.chance(FOUL_POP.back);
+      // 뒤(그물 쪽)로 간 건 더 높고 약하게 — 포수가 마스크 벗고 쫓는 공
+      return {
+        kind: "bip",
+        e: o.e,
+        ball: {
+          ev: back ? 14 + rng() * 8 : FOUL_POP.ev0 + rng() * FOUL_POP.evR,
+          la: back ? 66 + rng() * 18 : FOUL_POP.la0 + rng() * FOUL_POP.laR,
+          spray: pull * (back ? 140 + rng() * 40 : FOUL_POP.side0 + rng() * FOUL_POP.sideR),
+          c,
+          perfect: false,
+          bunt: false,
+        },
+      };
+    }
+    return { kind: "foul", e: o.e, c, tip };
+  }
 
   const side = o.bats === "R" ? 1 : -1;
   let spray = (e / W) * 58 * side + o.at.x * 38 + rng.gauss() * (3 + 9 * (1 - c));
@@ -241,8 +265,7 @@ export function swing(o: SwingIn, rng: Rng): SwingResult {
     default:
       if (sp) ev += 2;
   }
-  // 첫 판정: 너무 옆이면 파울
-  if (Math.abs(spray) > 47 && la < 55) return { kind: "foul", e: o.e, c, tip: false };
+  // 너무 옆이면 파울 — 공은 그대로 굴려서 라인 밖 큰 타구 · 잡히는 파울 플라이도 보여 줌 (play.ts)
   return { kind: "bip", e: o.e, ball: { ev, la: clamp(la, -35, 80), spray, c, perfect, bunt: false, special: sp } };
 }
 
