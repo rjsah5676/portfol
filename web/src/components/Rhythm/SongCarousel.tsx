@@ -26,6 +26,8 @@ import neonoverdriveCover from "@/img/rhythm/neonoverdrive.jpg";
 import summerstaticCover from "@/img/rhythm/summerstatic.jpg";
 import skybreakerCover from "@/img/rhythm/skybreaker.jpg";
 import brassrocketCover from "@/img/rhythm/brassrocket.jpg";
+import highlightCover from "@/img/rhythm/highlight.jpg";
+import tomeinausoCover from "@/img/rhythm/tomeinauso.jpg";
 
 export const COVERS: Record<string, StaticImageData> = {
   jilju: jiljuCover,
@@ -51,6 +53,8 @@ export const COVERS: Record<string, StaticImageData> = {
   summerstatic: summerstaticCover,
   skybreaker: skybreakerCover,
   brassrocket: brassrocketCover,
+  highlight: highlightCover,
+  tomeinauso: tomeinausoCover,
 };
 
 /** 내 음악에 앨범 사진이 없을 때 쓰는 기본 재킷 */

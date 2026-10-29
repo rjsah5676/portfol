@@ -42,6 +42,8 @@ export const BUILTIN = {
   summerstatic: { single: true, boss: {}, levels: [3, 5, 8, 11, 14] },
   skybreaker: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
   brassrocket: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
+  highlight: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 18] },
+  tomeinauso: { boss: {}, explus: {}, levels: [3, 6, 9, 12, 15, 17] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

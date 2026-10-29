@@ -30,6 +30,8 @@ import neonoverdriveData from "@/data/rhythm/neonoverdrive.json";
 import summerstaticData from "@/data/rhythm/summerstatic.json";
 import skybreakerData from "@/data/rhythm/skybreaker.json";
 import brassrocketData from "@/data/rhythm/brassrocket.json";
+import highlightData from "@/data/rhythm/highlight.json";
+import tomeinausoData from "@/data/rhythm/tomeinauso.json";
 
 export type Kind =
   | "kick"
@@ -452,6 +454,17 @@ const ETUDE = audioSong("etude", "Étude of Falling Stars", "/audio/etude.mp3", 
   desc: "170 BPM · PIANO HARDCORE · AI 자작곡 (tunee.ai)",
 });
 
+const HIGHLIGHT = audioSong("highlight", "하이라이트", "/audio/highlight.mp3", highlightData, {
+  color: "#EC4899",
+  desc: "192 BPM · K-POP 걸밴드 록 · AI 자작곡 (tunee.ai)",
+});
+
+// 3분 16초로 나와서 2절(마디 33~64, 51초)을 덜어 냄 — 앞뒤 마디가 거의 같은 자리(유사도 0.98)에서 박에 맞춰 이음
+const TOMEINAUSO = audioSong("tomeinauso", "透明な嘘", "/audio/tomeinauso.mp3", tomeinausoData, {
+  color: "#A5B4FC",
+  desc: "149 BPM · J-POP 록 발라드 · AI 자작곡 (tunee.ai)",
+});
+
 // 연주곡 5곡 (Gemini) — 가사 있는 곡은 잘 안 뽑혀서 보컬 없이
 const LIMITBREAK = audioSong("limitbreak", "LIMIT BREAK", "/audio/limitbreak.mp3", limitbreakData, {
   color: "#DC2626",
@@ -544,6 +557,8 @@ const FREEDOMDIVE = audioSong(
  *   summerstatic --single --bpm-label 135 --boss '{}' --levels 3,5,8,11,14   (2배 템포 270으로 잡혀서 --single · NIGHTMARE 13)
  *   skybreaker  --bpm-label 150 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 16)
  *   brassrocket --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE 15 · ULTIMA 16)
+ *   highlight   --bpm-label 192 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (EX 12 · NIGHTMARE 15 · ULTIMA 16)
+ *   tomeinauso  --bpm-label 149 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 15)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -592,6 +607,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  HIGHLIGHT,
+  TOMEINAUSO,
   LIMITBREAK,
   NEONOVERDRIVE,
   SUMMERSTATIC,

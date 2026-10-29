@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.13",
+    name: "새 곡 2곡 (보컬곡)",
+    date: "2026.10.29",
+    lines: [
+      "하이라이트 — 192 BPM K-POP 걸밴드 록",
+      "透明な嘘 — 149 BPM J-POP 록 발라드",
+      "둘 다 가사 있는 AI 자작곡(tunee.ai), EASY ~ ULTIMA",
+    ],
+  },
+  {
     ver: "v2.12",
     name: "새 곡 5곡",
     date: "2026.10.29",
