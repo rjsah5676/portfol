@@ -550,6 +550,9 @@ export class Match {
   private openChance() {
     const ch = this.s.chance!;
     this.setPhase("chance");
+    // 뒤 타석 화면엔 대기 자세 (방금 친 팔로스루 그대로 멈춰 있던 것)
+    this.batAnim = BAT_IDLE;
+    this.batAnimT = 0;
     this.chanceRes = null;
     if (ch.kind === "field") {
       this.qte = { t: -0.75, w: 0.07 + ch.p * 0.18, done: false, ok: false, hold: 0 };

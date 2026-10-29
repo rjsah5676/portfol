@@ -277,7 +277,7 @@ function swoosh(ctx: CanvasRenderingContext2D, frame: number, k: number) {
  *   대기 = 칸을 시간표대로 돌림 (배트 까딱 + 무릎 · 어깨 리듬), 그 밖(로드 · 스윙 · 번트)은 아직 1칸.
  *   원본: scripts/baseball-batter-idle.py (시트 → 줄 · 마스크 · 기준점 json)
  */
-const IDLE = { src: "/baseball/sprites/batter-idle.webp", mask: "/baseball/sprites/batter-idle-mask.png", ...idleData, scale: 0.289 };
+const IDLE = { src: "/baseball/sprites/batter-idle.webp", ...idleData, scale: 0.289 };
 /** 대기 순서 [칸, 초] — 그록 영상(첫 장면 = 마지막 장면이라 그대로 반복) 칸을 같은 간격으로 · 시간표는 json(seq, 끝 시각) */
 const IDLE_SEQ: [number, number][] = idleData.seq.map(([c, e], i, a) => [c, e - (i ? a[i - 1][1] : 0)] as [number, number]);
 const IDLE_LEN = IDLE_SEQ.reduce((a, [, d]) => a + d, 0);
@@ -318,7 +318,6 @@ export function walkinFrame(t: number): number {
 }
 let walkImg: HTMLImageElement | null = null;
 let still: HTMLImageElement | null = null;
-let stillMask: HTMLImageElement | null = null;
 let kickImg: HTMLImageElement | null = null;
 let swingImg: HTMLImageElement | null = null;
 /**
@@ -340,8 +339,7 @@ export const drawable = (im: CanvasImageSource): CanvasImageSource => bitmaps.ge
 function stillImg() {
   if (!still && typeof Image !== "undefined") {
     still = sheetImage(IDLE.src);
-    stillMask = new Image();
-    stillMask.src = IDLE.mask;
+    for (const k of Object.keys(TINT_SRC) as SheetKey[]) tintOf(k);
     kickImg = sheetImage(KICKS.src);
     swingImg = sheetImage(SWINGS.src);
     walkImg = sheetImage(WALKS.src);
@@ -352,49 +350,98 @@ const hexRgb = (h: string) => {
   const v = parseInt(h.replace("#", "").slice(0, 6), 16);
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => c / 255);
 };
-const stillCache = new Map<string, HTMLCanvasElement>();
 /**
- * 색 바꾸기: 마스크(R = 헬멧, G = 소매 · 양말) 자리만 그 픽셀 밝기 × 팀색으로 다시 칠함 (하이라이트는 흰 쪽으로).
- * 마스크가 아직 안 왔으면 원래 그림(주황) 그대로.
+ * 팀색 칠하기 — 시트마다 마스크(batter-*-tint.webp, 절반 크기 · R 헬멧 명암 · G 팀 명암 · A 비중, scripts/baseball-batter-tint).
+ * 받으면 헬멧 · 팀 두 장(회색 명암 + 비중)으로 나눠 두고, 그릴 때 칸마다 「명암 × 팀색」을 원래 그림 위에 덮음.
+ * 원래 그림 색(주황)과 비슷한 팀이면 안 칠함.
  */
-/** 팀색 칠하기 — 채색 작업 끝나면 일괄 교체할 때까지 꺼둠 (모든 팀 원래 그림 그대로) */
-const RECOLOR = false;
-function tintedStill(st: HTMLImageElement, lk: SpriteLook): CanvasImageSource {
-  const mk = stillMask;
-  if (!RECOLOR || !mk || !mk.complete || !mk.naturalWidth || typeof document === "undefined") return st;
-  const key = `${lk.helm}|${lk.team}`;
-  const hit = stillCache.get(key);
-  if (hit) return hit;
-  const W = st.naturalWidth;
-  const H = st.naturalHeight;
-  const c = document.createElement("canvas");
-  c.width = W;
-  c.height = H;
-  const g = c.getContext("2d", { willReadFrequently: true })!;
-  g.drawImage(mk, 0, 0, W, H);
-  const m = g.getImageData(0, 0, W, H).data;
-  g.clearRect(0, 0, W, H);
-  g.drawImage(st, 0, 0);
-  const id = g.getImageData(0, 0, W, H);
-  const d = id.data;
-  const ch = hexRgb(lk.helm);
-  const ct = hexRgb(lk.team);
-  for (let i = 0; i < d.length; i += 4) {
-    const wh = m[i] / 255;
-    const wt = m[i + 1] / 255;
-    if (wh + wt < 0.01) continue;
-    const col = wh >= wt ? ch : ct;
-    const w = Math.max(wh, wt);
-    const k = Math.max(d[i], d[i + 1], d[i + 2]) / 255 / IDLE.ref;
-    const hi = Math.max(0, k - 1) * 0.6;
-    for (let j = 0; j < 3; j++) {
-      const v = Math.min(1, col[j] * k + hi) * 255;
-      d[i + j] = d[i + j] * (1 - w) + v * w;
-    }
+const RECOLOR = true;
+const TINT_SRC: Record<string, string> = {
+  idle: "/baseball/sprites/batter-idle-tint.webp",
+  kick: "/baseball/sprites/batter-load-tint.webp",
+  swing: "/baseball/sprites/batter-swing-tint.webp",
+  walk: "/baseball/sprites/batter-walkin-tint.webp",
+};
+type SheetKey = keyof typeof TINT_SRC;
+const tintParts = new Map<SheetKey, { helm: HTMLCanvasElement; team: HTMLCanvasElement } | "loading">();
+function tintOf(k: SheetKey) {
+  const t = tintParts.get(k);
+  if (t === "loading") return null;
+  if (t) return t;
+  if (typeof Image === "undefined" || typeof document === "undefined") return null;
+  tintParts.set(k, "loading");
+  const im = new Image();
+  im.onload = () => {
+    const W = im.naturalWidth, H = im.naturalHeight;
+    const src = document.createElement("canvas");
+    src.width = W;
+    src.height = H;
+    const g = src.getContext("2d", { willReadFrequently: true })!;
+    g.drawImage(im, 0, 0);
+    const d = g.getImageData(0, 0, W, H).data;
+    const mk = (ch: 0 | 1) => {
+      const c = document.createElement("canvas");
+      c.width = W;
+      c.height = H;
+      const x = c.getContext("2d")!;
+      const o = x.createImageData(W, H);
+      const od = o.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const own = ch === 0 ? d[i] > d[i + 1] : d[i + 1] >= d[i] && d[i + 1] > 0;
+        if (!own || !d[i + 3]) continue;
+        const v = d[i + ch];
+        od[i] = od[i + 1] = od[i + 2] = v;
+        od[i + 3] = d[i + 3];
+      }
+      x.putImageData(o, 0, 0);
+      return c;
+    };
+    tintParts.set(k, { helm: mk(0), team: mk(1) });
+  };
+  im.onerror = () => tintParts.delete(k);
+  im.src = TINT_SRC[k];
+  return null;
+}
+/** 원래 그림(주황)과 같은 계열이면 칠할 필요 없음 */
+function isOrange(hex: string) {
+  const [r, g, b] = hexRgb(hex);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  if (mx - mn < 0.25 || mx !== r) return false;
+  const h = (((g - b) / (mx - mn)) * 60 + 360) % 360;
+  return h >= 14 && h <= 34;
+}
+let scratch: HTMLCanvasElement | null = null;
+/** 마스크 한 칸(절반 크기)에 색 곱해서 (dx, dy, dw, dh) 에 */
+function tintCell(ctx: CanvasRenderingContext2D, part: HTMLCanvasElement, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number, color: string) {
+  const w = Math.ceil(sw), h = Math.ceil(sh);
+  if (!scratch) scratch = document.createElement("canvas");
+  if (scratch.width < w || scratch.height < h) {
+    scratch.width = Math.max(scratch.width, w);
+    scratch.height = Math.max(scratch.height, h);
   }
-  g.putImageData(id, 0, 0);
-  stillCache.set(key, c);
-  return c;
+  const g = scratch.getContext("2d")!;
+  g.globalCompositeOperation = "source-over";
+  g.clearRect(0, 0, w, h);
+  g.drawImage(part, sx, sy, sw, sh, 0, 0, sw, sh);
+  g.globalCompositeOperation = "multiply";
+  g.fillStyle = color;
+  g.fillRect(0, 0, w, h);
+  g.globalCompositeOperation = "destination-in";
+  g.drawImage(part, sx, sy, sw, sh, 0, 0, sw, sh);
+  g.globalCompositeOperation = "source-over";
+  ctx.drawImage(scratch, 0, 0, sw, sh, dx, dy, dw, dh);
+}
+/** 시트 한 칸 그리기 (+ 팀색) — 좌표는 원래 시트 기준 */
+function cellDraw(ctx: CanvasRenderingContext2D, key: SheetKey, im: CanvasImageSource, lk: SpriteLook, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number) {
+  ctx.drawImage(im, sx, sy, sw, sh, dx, dy, dw, dh);
+  if (!RECOLOR) return;
+  const helmOn = !isOrange(lk.helm);
+  const teamOn = !isOrange(lk.team);
+  if (!helmOn && !teamOn) return;
+  const t = tintOf(key);
+  if (!t) return;
+  if (helmOn) tintCell(ctx, t.helm, sx / 2, sy / 2, sw / 2, sh / 2, dx, dy, dw, dh, lk.helm);
+  if (teamOn) tintCell(ctx, t.team, sx / 2, sy / 2, sw / 2, sh / 2, dx, dy, dw, dh, lk.team);
 }
 
 /** 타자 시트 중 아직 한 번도 안 그린 것 (첫 그림 때 디코드 · GPU 업로드로 화면이 멈칫해서 미리 1px 로 한 번 그려 둠) */
@@ -416,17 +463,17 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
     const sw = swingImg;
     const swCell = (cell: number) => {
       const c = Math.min(cell, SWINGS.n - 1);
-      ctx.drawImage(drawable(sw!), (c % SWINGS.cols) * SWINGS.CW, Math.floor(c / SWINGS.cols) * SWINGS.CH, SWINGS.CW, SWINGS.CH, -SWINGS.ax, -SWINGS.ay, SWINGS.CW, SWINGS.CH);
+      cellDraw(ctx, "swing", drawable(sw!), lk, (c % SWINGS.cols) * SWINGS.CW, Math.floor(c / SWINGS.cols) * SWINGS.CH, SWINGS.CW, SWINGS.CH, -SWINGS.ax, -SWINGS.ay, SWINGS.CW, SWINGS.CH);
     };
     const wk = walkImg;
     const walkCell = (cell: number) => {
       const c = Math.min(cell, WALKS.n - 1);
       const k = 1 / WALKS.scale;
-      ctx.drawImage(drawable(wk!), (c % WALKS.cols) * WALKS.CW, Math.floor(c / WALKS.cols) * WALKS.CH, WALKS.CW, WALKS.CH, -WALKS.ax * k, -WALKS.ay * k, WALKS.CW * k, WALKS.CH * k);
+      cellDraw(ctx, "walk", drawable(wk!), lk, (c % WALKS.cols) * WALKS.CW, Math.floor(c / WALKS.cols) * WALKS.CH, WALKS.CW, WALKS.CH, -WALKS.ax * k, -WALKS.ay * k, WALKS.CW * k, WALKS.CH * k);
     };
     const idleFirst = () => {
       const cols = IDLE.cols ?? IDLE.n;
-      ctx.drawImage(drawable(tintedStill(st, lk)), (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+      cellDraw(ctx, "idle", drawable(st), lk, (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
     };
     if (frame >= WALK_BASE && !(wk && wk.complete && wk.naturalWidth)) {
       // 걸어 들어오기 그림이 아직이면 대기 자세로
@@ -440,21 +487,21 @@ export function drawBatter(ctx: CanvasRenderingContext2D, frame: number, lk: Spr
       swCell(STRIDE[STRIDE.length - 1][0]);
       ctx.globalAlpha = k;
       const cols = IDLE.cols ?? IDLE.n;
-      ctx.drawImage(drawable(tintedStill(st, lk)), (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+      cellDraw(ctx, "idle", drawable(st), lk, (0 % cols) * IDLE.CW, 0, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
       ctx.globalAlpha = 1;
     } else if (frame >= SWING_BASE && sw && sw.complete && sw.naturalWidth) {
       swCell(frame - SWING_BASE);
     } else if (frame >= SWING_BASE && ki && ki.complete && ki.naturalWidth) {
-      ctx.drawImage(drawable(ki), KICK_TOP * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
+      cellDraw(ctx, "kick", drawable(ki), lk, KICK_TOP * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
     } else if (frame >= KICK_BASE && ki && ki.complete && ki.naturalWidth) {
       const cell = Math.min(frame - KICK_BASE, KICKS.n - 1);
-      ctx.drawImage(drawable(ki), cell * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
+      cellDraw(ctx, "kick", drawable(ki), lk, cell * KICKS.CW, 0, KICKS.CW, KICKS.CH, -KICKS.ax, -KICKS.ay, KICKS.CW, KICKS.CH);
     } else {
       const idle = frame === IDX.stance || frame === IDX.waggle;
       const cell = idle ? idleCell(typeof performance !== "undefined" ? performance.now() / 1000 : 0) : 0;
       // 대기 줄은 여러 줄 (한 줄에 cols 칸)
       const cols = IDLE.cols ?? IDLE.n;
-      ctx.drawImage(drawable(tintedStill(st, lk)), (cell % cols) * IDLE.CW, Math.floor(cell / cols) * IDLE.CH, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
+      cellDraw(ctx, "idle", drawable(st), lk, (cell % cols) * IDLE.CW, Math.floor(cell / cols) * IDLE.CH, IDLE.CW, IDLE.CH, -IDLE.ax, -IDLE.ay, IDLE.CW, IDLE.CH);
     }
     ctx.restore();
     return true;
