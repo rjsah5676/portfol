@@ -8,7 +8,7 @@ import { API_URL } from "@/lib/api/config";
 /** 기록 형식 판 (필드가 바뀌면 올림) */
 export const LOG_V = 1;
 /** 게임 판 (밸런스 · 화면이 바뀌는 패치를 낼 때 올림 — 로그에서 패치 전후를 가르려고) */
-export const GAME_BUILD = "2026-10-29";
+export const GAME_BUILD = "2026-10-29b";
 const PID_KEY = "pxb:pid";
 
 function pid(): string {

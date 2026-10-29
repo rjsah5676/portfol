@@ -775,7 +775,10 @@ export class Match {
 
   /** 이번 공 실투 (와인드업 전에 정함 — 「! 실투」를 먼저 보여 주고 0.5초 뒤에 던짐) */
   private mistakeNext = false;
+  /** 미트에 꽂힌 자리 (볼 · 스트라이크 · 헛스윙) — 다음 공 던질 때까지 존 위에 남김 */
+  private pitchMark: { x: number; y: number; strike: boolean; at: number } | null = null;
   private goWindup() {
+    this.pitchMark = null;
     this.setPhase("windup");
     this.pitAnim = PIT_THROW;
     this.pitAnimT = 0;
@@ -1641,6 +1644,10 @@ export class Match {
           const call = this.outcome?.call;
           if (call !== "foul" && call !== "hbp" && call !== "bip") {
             sfx.mitt(call === "swingMiss" || call === "strike");
+            if (!this.hbpHit) {
+              const pc = plateCross(p);
+              this.pitchMark = { x: pc.x, y: pc.y, strike: inZone(pc.x, pc.y), at: this.time };
+            }
             // 미트 「퍽」: 먼지 조금 + 빠른 공은 살짝 흔들림 (속도감)
             const at = this.scr(p.target.x, p.target.y, -0.6);
             for (let i = 0; i < 7; i++) {
@@ -1999,6 +2006,8 @@ export class Match {
       }
     }
 
+    this.drawPitchMark(ctx, ballProj);
+
     // 공
     // 홈 근처(마지막 8%)부터는 타자 앞에 그림 — 타자 옆을 지나는 몸쪽 공이 그림상 몸 뒤로 숨어 「맞았는데 볼」처럼 보였음
     const ballNear = !!p && this.phase === "flight" && this.tf >= p.dur * 0.92;
@@ -2205,6 +2214,7 @@ export class Match {
     // 존 9칸 · 조준
     const aiming = this.phase === "aim" || this.phase === "gauge" || this.phase === "cutin" || this.phase === "windup";
     const z = drawPvZone(ctx, c, aiming ? 1 : 0.55);
+    this.drawPitchMark(ctx, P);
     if (aiming) {
       const t = P(this.target.x, this.target.y, 0);
       const inz = inZone(this.target.x, this.target.y);
@@ -2266,6 +2276,32 @@ export class Match {
     }
     // 게이지: 존 옆 (타자 반대쪽)
     if (this.phase === "gauge" || this.phase === "aim") this.drawGauge(ctx, lefty ? z.x1 + 26 : z.x0 - 62);
+  }
+
+  /** 미트에 꽂힌 자리 표시: 공 크기 원 + 스트라이크는 노랑 · 볼은 하늘색 테 · 꽂힐 때 살짝 커졌다 줄어듦 */
+  private drawPitchMark(ctx: CanvasRenderingContext2D, pj: (x: number, y: number, z: number) => { x: number; y: number; s: number }) {
+    const m = this.pitchMark;
+    if (!m || !(this.phase === "call" || this.phase === "result" || this.phase === "ready" || this.phase === "aim" || this.phase === "gauge")) return;
+    const c = pj(m.x, m.y, 0);
+    const R = Math.max(5, BALLR_PX(c.s));
+    const age = this.time - m.at;
+    const pop = 1 + 0.6 * (1 - smooth(0, 0.18, age));
+    const col = m.strike ? "#ffd23f" : "#7ad7ff";
+    ctx.save();
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = "rgba(255,255,255,0.9)";
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, R, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.55)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, R * pop + 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    ctx.restore();
   }
 
   private drawPitchBall(ctx: CanvasRenderingContext2D, p: Pitch, hand: { x: number; y: number }, pj: (x: number, y: number, z: number) => { x: number; y: number; s: number } = ballProj) {
