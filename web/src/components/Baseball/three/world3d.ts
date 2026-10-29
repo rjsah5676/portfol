@@ -28,6 +28,8 @@ export interface BatView3D {
   walk: number | null;
   /** 투구 동작 시계 (공 놓기 = PITCH_RELEASE_T) */
   pit: { throwing: boolean; t: number };
+  /** 스윙이 맞히러 가는 자리 (게임 좌표 x 옆 · y 높이, 홈플레이트 면) — 사용자 = 컨택존 가운데, CPU = 공 지나는 자리 */
+  aim: { x: number; y: number };
   /** 컨택존을 옮긴 만큼 타자도 (게임 m: x 옆 · z 투수 쪽) */
   shift: { x: number; z: number };
   /** 1 · 2 · 3루 주자 */
@@ -63,8 +65,8 @@ export interface World3D {
 }
 
 // ───────── 타석 화면 상수 ─────────
-/** 타자 자리 (우타 -x · 좌타 +x) */
-const BAT_X = 1.05;
+/** 타자 자리 (우타 -x · 좌타 +x) — 맞는 순간 배트 스윗스팟이 존 가운데 근처를 지나는 거리 (1.05m 는 바깥쪽 끝에도 못 미쳤음) */
+const BAT_X = 0.8;
 /**
  * 타석 카메라: 2D 타석 화면(view.ts CAM)과 같은 구도 — 세로 화각 45.4°, 투수판 땅이 화면 59% 높이,
  * 타자는 화면 폭 23%(좌타는 77%)에 발끝 93% ~ 머리 10% 로 크게. (타자 키 1.75m 에 맞춰 높이 0.83m · 홈 뒤 2.59m · 2° 올려 봄으로 풂)
@@ -1108,6 +1110,7 @@ export async function createWorld3D(base = "/baseball/3d"): Promise<World3D> {
   const pitHand = new THREE.Vector3();
   let relKey = "";
   function batting(v: BatView3D, dt: number) {
+    batClock += dt;
     if (mode !== "bat") {
       mode = "bat";
       fp.out = null;
@@ -1189,7 +1192,11 @@ export async function createWorld3D(base = "/baseball/3d"): Promise<World3D> {
     introActs.stepin.setEffectiveWeight(0);
     const tg = batTarget(v.bat);
     // 새 스윙이 시작되면 처음부터 (대기로 돌아가던 중이어도)
-    if (v.bat.anim !== drv.lastAnim || v.bat.t < drv.lastT - 1e-3) drv.returning = false;
+    if (v.bat.anim !== drv.lastAnim || v.bat.t < drv.lastT - 1e-3) {
+      drv.returning = false;
+      if (v.bat.anim === "swing") { B.root.position.copy(home); planAim(v); }
+      trHist.length = 0;
+    }
     drv.lastAnim = v.bat.anim;
     drv.lastT = v.bat.t;
     if (tg.on) {
@@ -1220,6 +1227,82 @@ export async function createWorld3D(base = "/baseball/3d"): Promise<World3D> {
       relKey = v.pitLefty ? "L" : "R";
     }
   }
+  /**
+   * 스윙 조준: 모션 그대로면 맞는 순간 배트가 늘 같은 자리를 지나 존 높낮이 · 안팎을 못 따라감.
+   * 스윙 시작 때 「맞는 순간 자세」를 한 번 계산해서, 그때 배트가 겨냥 자리(aim)를 가리키도록 돌리는 회전을 구해 둠 →
+   * 맞는 순간 앞뒤로만 그 회전을 서서히 걸었다 풂 (손잡이 = 손 자리는 그대로, 최대 40°)
+   */
+  const aimRot = new THREE.Quaternion();
+  let aimReach = 0;
+  function planAim(v: BatView3D) {
+    const B = batterP;
+    const keep = { t: swAct.time, w: swAct.getEffectiveWeight(), iw: idleAct.getEffectiveWeight(), bw: buntAct.getEffectiveWeight() };
+    swAct.time = SW.swing;
+    swAct.setEffectiveWeight(1);
+    idleAct.setEffectiveWeight(0);
+    buntAct.setEffectiveWeight(0);
+    B.mixer.update(0);
+    B.root.updateMatrixWorld(true);
+    const t = batRig.signs.get(MXSW);
+    const bp = mxBatPose(batRig, t ? t[Math.round(SW.swing * 60)] : 0);
+    const want = new THREE.Vector3(v.aim.x, ballH(v.aim.y), -0.12).sub(bp.knob).normalize();
+    const full = new THREE.Quaternion().setFromUnitVectors(bp.dir, want);
+    const ang = 2 * Math.acos(Math.min(1, Math.abs(full.w)));
+    aimRot.identity().slerp(full, ang > 0.7 ? 0.7 / ang : 1);
+    // 바깥쪽 먼 공: 배트 끝에도 안 닿는 만큼 손을 뻗음 (최대 15cm)
+    aimReach = Math.max(0, Math.min(0.15, new THREE.Vector3(v.aim.x, ballH(v.aim.y), -0.12).distanceTo(bp.knob) - 0.76));
+    swAct.time = keep.t;
+    swAct.setEffectiveWeight(keep.w);
+    idleAct.setEffectiveWeight(keep.iw);
+    buntAct.setEffectiveWeight(keep.bw);
+    B.mixer.update(0);
+  }
+
+  // 스윙 잔상: 배트 끝 쪽 띠 (최근 0.1초) — 2D 의 휘익 잔상과 같은 역할. 프레임 사이는 손잡이 기준 원호로 채움
+  const TRAIL_MAX = 240, TRAIL_AGE = 0.1;
+  const trHist: { knob: THREE.Vector3; q: THREE.Quaternion; at: number }[] = [];
+  const trGeo = new THREE.BufferGeometry();
+  const trPos = new Float32Array(TRAIL_MAX * 2 * 3), trCol = new Float32Array(TRAIL_MAX * 2 * 4);
+  trGeo.setAttribute("position", new THREE.BufferAttribute(trPos, 3).setUsage(THREE.DynamicDrawUsage));
+  trGeo.setAttribute("color", new THREE.BufferAttribute(trCol, 4).setUsage(THREE.DynamicDrawUsage));
+  {
+    const idx: number[] = [];
+    for (let i = 0; i < TRAIL_MAX - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    trGeo.setIndex(idx);
+  }
+  const swTrail = new THREE.Mesh(trGeo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  swTrail.frustumCulled = false;
+  swTrail.renderOrder = 2;
+  scene.add(swTrail);
+  let batClock = 0;
+  function drawTrail() {
+    while (trHist.length && batClock - trHist[0].at > TRAIL_AGE) trHist.shift();
+    let n = 0;
+    const up = new THREE.Vector3(0, 1, 0), d = new THREE.Vector3(), k = new THREE.Vector3(), q = new THREE.Quaternion();
+    const put = (knob: THREE.Vector3, dir: THREE.Vector3, age: number) => {
+      if (n >= TRAIL_MAX) return;
+      const a = Math.max(0, 1 - age / TRAIL_AGE);
+      const o = n * 6, c = n * 8;
+      trPos.set([knob.x + dir.x * 0.42, knob.y + dir.y * 0.42, knob.z + dir.z * 0.42, knob.x + dir.x * 0.86, knob.y + dir.y * 0.86, knob.z + dir.z * 0.86], o);
+      trCol.set([1, 1, 1, 0, 1, 1, 1, 0.55 * a * a], c);
+      n++;
+    };
+    for (let i = 0; i < trHist.length; i++) {
+      const A = trHist[i], Bn = trHist[i + 1];
+      if (!Bn) { put(A.knob, d.copy(up).applyQuaternion(A.q), batClock - A.at); break; }
+      const steps = Math.min(24, Math.max(1, Math.ceil(A.q.angleTo(Bn.q) / 0.07)));
+      for (let j = 0; j < steps; j++) {
+        const f = j / steps;
+        q.copy(A.q).slerp(Bn.q, f);
+        put(k.copy(A.knob).lerp(Bn.knob, f), d.copy(up).applyQuaternion(q), batClock - (A.at + (Bn.at - A.at) * f));
+      }
+    }
+    swTrail.visible = n > 1;
+    trGeo.setDrawRange(0, Math.max(0, n - 1) * 6);
+    trGeo.attributes.position.needsUpdate = true;
+    trGeo.attributes.color.needsUpdate = true;
+  }
+
   /** 방망이: 손 축(부호표로 안 뒤집히게) + 맞은 뒤엔 팔로스루 궤적, 대기로 돌아오는 동안 둘을 섞음 */
   function updateBat(v: BatView3D, intro: boolean) {
     const b = batRig, B = batterP;
@@ -1246,9 +1329,21 @@ export async function createWorld3D(base = "/baseball/3d"): Promise<World3D> {
       bp.dir.set(0, 1, 0).applyQuaternion(qa.slerp(qb, w));
       bp.knob.copy(bp.mid).addScaledVector(bp.dir, -bp.off);
     }
+    // 조준: 맞는 순간 앞뒤로만
+    const swinging = !intro && drv.layer === "sw" && v.bat.anim === "swing";
+    if (swinging) {
+      const k = smooth(SW.swing - 0.16, SW.swing - 0.03, drv.ct) * (1 - smooth(SW.swing + 0.04, SW.swing + 0.16, drv.ct)) * drv.w;
+      if (k > 0) {
+        bp.dir.applyQuaternion(new THREE.Quaternion().slerp(aimRot, k)).normalize();
+        bp.knob.copy(bp.mid).addScaledVector(bp.dir, aimReach * k - bp.off);
+      }
+    }
     b.q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), bp.dir);
     b.g.quaternion.copy(b.q);
     b.g.position.copy(bp.knob);
+    // 잔상: 레그킥 장전 뒤 ~ 팔로스루 끝까지
+    if (swinging && drv.ct > SW.load - 0.02 && drv.ct < SW.hold && drv.w > 0.5) trHist.push({ knob: bp.knob.clone(), q: b.q.clone(), at: batClock });
+    drawTrail();
   }
 
   // ───────── 수비 화면 ─────────
@@ -1259,6 +1354,8 @@ export async function createWorld3D(base = "/baseball/3d"): Promise<World3D> {
       startPlay(v.out);
       batterP.root.visible = false;
       batRig.g.visible = false;
+      trHist.length = 0;
+      swTrail.visible = false;
       fielders.forEach((f) => { f.root.visible = !v.ballOnly; f.root.scale.x = Math.abs(f.root.scale.x); });
       umps.forEach((u) => (u.root.visible = !v.ballOnly));
       for (const f of fielders) setTeam(f, fdG, fdLoG, "fd", v.colors.field);
@@ -1319,6 +1416,36 @@ export async function createWorld3D(base = "/baseball/3d"): Promise<World3D> {
     return { x: ((pv.x + 1) / 2) * DW, y: ((1 - pv.y) / 2) * DH, s };
   }
 
+  // 개발 중 측정용 (배포 빌드엔 안 씀)
+  if (process.env.NODE_ENV !== "production") {
+    (window as unknown as { __w3d?: unknown }).__w3d = {
+      SW,
+      probe(cts: number[], lefty = false, aim = { x: 0, y: 0.685 }) {
+        const out: unknown[] = [];
+        const mir = lefty ? -1 : 1;
+        const B = batterP;
+        B.root.scale.x = Math.abs(B.root.scale.x) * mir;
+        B.root.rotation.y = Math.PI + 0.15 * mir;
+        B.root.position.set(-BAT_X * mir, 0, 0);
+        const pv = { lefty, aim, bat: { anim: "swing", t: 0, sp: 1, strideAt: 0 } } as BatView3D;
+        planAim(pv);
+        for (const ct of cts) {
+          for (const a of [buntAct, idleAct, introActs.ondeck, introActs.stepin]) a.setEffectiveWeight(0);
+          swAct.setEffectiveWeight(1);
+          swAct.time = ct;
+          drv.ct = ct; drv.w = 1; drv.layer = "sw";
+          B.mixer.update(0);
+          updateBat(pv, false);
+          const d = new THREE.Vector3(0, 1, 0).applyQuaternion(batRig.g.quaternion);
+          const knob = batRig.g.position.clone(), tip = knob.clone().addScaledVector(d, 0.84), sweet = knob.clone().addScaledVector(d, 0.66);
+          const r = (v: THREE.Vector3) => [+v.x.toFixed(2), +v.y.toFixed(2), +v.z.toFixed(2)];
+          const s = toScreen(sweet);
+          out.push({ ct, knob: r(knob), sweet: r(sweet), tip: r(tip), scr: [Math.round(s.x), Math.round(s.y)] });
+        }
+        return out;
+      },
+    };
+  }
   return {
     canvas: renderer.domElement,
     setSize(cssW, cssH, pr) {

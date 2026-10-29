@@ -1851,6 +1851,7 @@ export class Match {
         walk: this.walkPending ? 0 : this.walkT < WALKIN_LEN ? this.walkT / WALKIN_LEN : null,
         pit: { throwing: this.pitAnim === PIT_THROW, t: this.pitAnimT },
         runners: [this.s.bases[0] !== null, this.s.bases[1] !== null, this.s.bases[2] !== null],
+        aim: this.userBat ? { x: this.cz.x, y: this.cz.y } : this.pitch ? (({ x, y }) => ({ x, y }))(pitchAt(this.pitch, this.pitch.dur)) : { x: 0, y: ZONE.mid },
         shift: this.userBat ? { x: this.cz.x * (inward ? 0.35 : 1), z: dy * (dy > 0 ? 0.25 : 1) } : { x: 0, z: 0 },
         colors,
         night: this.night,
