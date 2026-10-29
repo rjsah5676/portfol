@@ -399,7 +399,7 @@ export default function ClubScreen({ club, coin, onChange, onBack }: { club: Clu
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-[13px] text-white/50">
                 이 조건의 카드가 없어요
-                <span className="text-[11.5px] text-white/35">B 등급 이상 카드는 육성 모드 은퇴 선수(명예의 전당)로 얻어요 · 카드팩은 개발 예정</span>
+                <span className="text-[11.5px] text-white/35">B 등급 이상 카드는 육성 모드 명예의 전당 선수로 얻어요 · 카드팩은 개발 예정</span>
               </div>
             )}
           </div>

@@ -428,7 +428,7 @@ function BaseballMain() {
               <div className="grid grid-cols-2 gap-4 text-[13.5px] leading-relaxed text-white/80">
                 <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                   <div className={`${font.title} mb-2 text-lg text-[#ffd23f]`}>타격</div>
-                  <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> · 마우스 클릭 (휴대폰은 <b>스윙 버튼</b>).</p>
+                  <p>공이 홈플레이트에 닿는 순간에 맞춰 <Key>Space</Key> · 마우스 클릭 · 폰은 <b>스윙 버튼</b>.</p>
                   <p>빠르면 당겨 치고, 늦으면 밀어 쳐요. 가운데 맞추면 <b className="text-[#ffd23f]">PERFECT</b>.</p>
                   <p>
                     <Key>방향키</Key> · <Key>WASD</Key> · 폰은 <b>이동 패드</b>로 <b className="text-[#ffbe5a]">주황 상자</b>를 옮겨요 — 공이 날아오는 동안에도. <b className="text-[#6ab8ff]">파란 원</b>이 지금 공이 존 어디쯤인지 보여 줘요. 원을 따라가 상자 안에 넣고 치면 정타.

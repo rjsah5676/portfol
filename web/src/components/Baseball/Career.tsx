@@ -964,7 +964,7 @@ function PlayerCard({ c }: { c: Career }) {
         {/* 경기 화면 능력치는 신인 보정 · 축복 · 장비 · 컨디션까지 더한 값이라 여기랑 달라 보였음 → 같이 보여 줌 */}
         <div className="text-[10.5px] leading-tight text-white/45">
           경기에선 타격 <b className="text-white/75">{gs.hit}</b> · 파워 <b className="text-white/75">{gs.power}</b>
-          {c.season <= ROOKIE.seasons ? " (신인 보정 · 축복 · 장비 포함)" : " (축복 · 장비 · 컨디션 포함)"}
+          {c.season <= ROOKIE.seasons ? " · 신인 보정 · 축복 · 장비 포함" : " · 축복 · 장비 · 컨디션 포함"}
         </div>
         {c.season === 1 && <div className="text-[10.5px] leading-tight text-[#7ad7ff]/70">신인은 다 F · G 등급에서 시작해요 — 10년 뒤 종합 400 ~ 600 이 보통</div>}
       </div>
@@ -1320,7 +1320,7 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
         </div>
       </div>
       <div className="text-[11.5px] text-white/50">
-        경기 평가 {GAME_GRADES.map((g) => `${g.g} ⚡${ACTIVE_PER_GAME + g.act}`).join(" · ")} — 잘 칠수록 행동력 · 체력 · 컨디션을 더 받아요 (능력치는 훈련 · 활동으로) · 타순은 감독 신뢰 25 · 50 · 75에서 올라가요
+        경기 평가 {GAME_GRADES.map((g) => `${g.g} ⚡${ACTIVE_PER_GAME + g.act}`).join(" · ")} — 잘 칠수록 행동력 · 체력 · 컨디션을 더 받아요 · 능력치는 훈련 · 활동으로 올라요 · 타순은 감독 신뢰 25 · 50 · 75에서 올라가요
       </div>
       {canPlay(c) ? (
         <>
@@ -2006,7 +2006,7 @@ function Retire({ c, onHome, onNew, onHof, onEpilogue }: { c: Career; onHome: ()
           통산 {t.g}경기 · 타율 {fmtAvg(avg(t))} · {t.h}안타 · {t.hr}홈런 · {t.rbi}타점 · OPS {ops(t).toFixed(3)}
           {r.awards.length > 0 && <div className="font-['Nanum_Gothic'] text-[12px] text-[#ffd23f]">수상: {awardText}</div>}
           <div className="font-['Nanum_Gothic'] text-[12px] text-white/55">
-            특수능력 {c.skills.length}개 (세트 {c.skills.filter((s) => skill(s).set).length}){c.learned ? ` · 필살 「${charById(c.learned).swing.name}」 Lv${spLv(c)} +${LEARNED_VAL}~` : ""} · 최종 연봉{" "}
+            특수능력 {c.skills.length}개 · 세트 {c.skills.filter((s) => skill(s).set).length}{c.learned ? ` · 필살 「${charById(c.learned).swing.name}」 Lv${spLv(c)} +${LEARNED_VAL}~` : ""} · 최종 연봉{" "}
             {c.salary.toLocaleString()}만원
           </div>
         </div>
