@@ -2605,6 +2605,40 @@ export class Match {
     ctx.fillText(this.phase === "gauge" ? "멈춰!" : "게이지", x + 16, y + h + 20);
   }
 
+  /**
+   * 타구가 날아갈 길: 지금(t) 이후 프레임에서 잡히거나(hold) 땅에 처음 닿을 때까지의 공 자리 · 그 끝 = 떨어질 자리.
+   * 뜬공 · 라이너만 (낮게 굴러가는 공은 없음)
+   */
+  private arcCache: { frames: Frame[]; idx: number[]; landI: number } | null = null;
+  private flightArc(t: number) {
+    const F = this.frames;
+    if (!F.length) return undefined;
+    if (!this.arcCache || this.arcCache.frames !== F) {
+      let landI = -1;
+      let peak = 0;
+      for (let i = 1; i < F.length; i++) {
+        peak = Math.max(peak, F[i].bh);
+        if (F[i].hold >= 0 || (peak > 1 && F[i].bh <= 0.15)) {
+          landI = i;
+          break;
+        }
+      }
+      // 홈런처럼 잡히지도 떨어지지도 않고 끝나면 마지막 자리까지
+      if (landI < 0) {
+        landI = F.length - 1;
+        for (const fr of F) peak = Math.max(peak, fr.bh);
+      }
+      const idx: number[] = [];
+      if (landI > 0 && peak > 2) for (let i = 0; i <= landI; i += Math.max(1, Math.floor(landI / 40))) idx.push(i);
+      if (idx.length && idx[idx.length - 1] !== landI) idx.push(landI);
+      this.arcCache = { frames: F, idx, landI: peak > 2 ? landI : -1 };
+    }
+    const c = this.arcCache;
+    if (c.landI < 0) return undefined;
+    const pts = c.idx.filter((i) => F[i].t > t).map((i) => ({ x: F[i].bx, y: F[i].by, h: F[i].bh }));
+    return { pts, land: { x: F[c.landI].bx, y: F[c.landI].by } };
+  }
+
   private drawField(ctx: CanvasRenderingContext2D, q: number) {
     ctx.drawImage(fieldBg(q, this.night), 0, 0, DW, DH);
     const fr = this.frameAt(this.ft);
@@ -2645,7 +2679,7 @@ export class Match {
       ctx.textAlign = "center";
       ctx.fillText("GOLD", gb.x, gb.y + 2);
     } else {
-      drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, this.trail, sp);
+      drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, this.trail, sp, this.flightArc(this.ft));
     }
     if (this.hr) {
       const d = Math.round(this.hrDist);

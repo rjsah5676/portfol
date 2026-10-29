@@ -92,7 +92,7 @@ export const FV = { S: 3.95, ox: 512, oy: 552, k: 0.84, kh: 0.9 };
 export const FIELD_VIEW = { persp: true };
 const PC = (() => {
   const th = (20 * Math.PI) / 180;
-  return { cy: 60, ch: 45, cos: Math.cos(th), sin: Math.sin(th), F: 954, Y0: 241, hk: 0.85, dRef: 0 };
+  return { cy: 60, ch: 45, cos: Math.cos(th), sin: Math.sin(th), F: 954, Y0: 241, hk: 1, dRef: 0 };
 })();
 PC.dRef = (18.4 + PC.cy) * PC.cos + PC.ch * PC.sin; // 투수판 깊이 = 크기 1
 if (typeof window !== "undefined") {
@@ -569,7 +569,9 @@ export function drawFieldFrame(
   def: { body: string; cap: string },
   off: { body: string; cap: string },
   trail: { x: number; y: number; h: number }[],
-  special?: string
+  special?: string,
+  /** 이번 타구가 날아갈 길 (뜬공 · 라이너 첫 낙하까지) — 점선 호 · 떨어질 자리 링 */
+  arc?: { pts: { x: number; y: number; h: number }[]; land: { x: number; y: number } | null }
 ) {
   // 공 그림자 · 수비 · 주자 · 공 순 (y 순으로 겹침)
   const items: { y: number; draw: () => void }[] = [];
@@ -585,12 +587,79 @@ export function drawFieldFrame(
     items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, off.body, off.cap, r.st === 0 ? f.t : 0, 0, false, p.s * TINY_K()) });
   }
   items.sort((a, b) => a.y - b.y);
-  // 그림자
+  const flying = f.hold < 0 && f.bh > 0.4;
+  // 날아갈 길 (아직 안 간 쪽만 점선) · 떨어질 자리 링 — 높이 · 방향이 한눈에 읽히게
+  if (arc && flying && arc.pts.length > 1) {
+    // 땅 위 경로(그림자가 지나갈 길) — 위의 공 점선과 벌어진 만큼이 높이
+    ctx.save();
+    ctx.strokeStyle = "rgba(0,0,0,0.32)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath();
+    const g0 = fproj(f.bx, f.by);
+    ctx.moveTo(g0.x, g0.y);
+    for (const q of arc.pts) {
+      const p = fproj(q.x, q.y);
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.7)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 6]);
+    ctx.beginPath();
+    let started = false;
+    // (arc.pts 는 지금 이후 점만 — match.ts)
+    for (const q of arc.pts) {
+      const p = fproj(q.x, q.y, q.h);
+      if (!started) {
+        const b0 = fproj(f.bx, f.by, f.bh);
+        ctx.moveTo(b0.x, b0.y);
+        started = true;
+      }
+      ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+  if (arc?.land && flying) {
+    const L = fproj(arc.land.x, arc.land.y);
+    const pulse = 1 + Math.sin(f.t * 10) * 0.12;
+    ctx.save();
+    ctx.translate(L.x, L.y);
+    ctx.scale(1, FIELD_VIEW.persp ? 0.42 : 0.6);
+    ctx.strokeStyle = "rgba(255,210,63,0.95)";
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(0, 0, 13 * L.s * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(255,210,63,0.5)";
+    ctx.beginPath();
+    ctx.arc(0, 0, 7 * L.s * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // 그림자 — 높이 뜰수록 작고 옅게
   const sh = fproj(f.bx, f.by);
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
+  const hk = Math.min(1, f.bh / 35);
+  ctx.fillStyle = `rgba(0,0,0,${(0.4 - hk * 0.22).toFixed(3)})`;
   ctx.beginPath();
-  ctx.ellipse(sh.x, sh.y, 3.2 * sh.s, 1.6 * sh.s, 0, 0, Math.PI * 2);
+  ctx.ellipse(sh.x, sh.y, (4 - hk * 1.6) * sh.s, (2 - hk * 0.8) * sh.s, 0, 0, Math.PI * 2);
   ctx.fill();
+  // 높이 막대: 그림자 ↔ 공 (얼마나 떠 있는지)
+  if (flying) {
+    const top = fproj(f.bx, f.by, f.bh);
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.45)";
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([2, 3]);
+    ctx.beginPath();
+    ctx.moveTo(sh.x, sh.y);
+    ctx.lineTo(top.x, top.y);
+    ctx.stroke();
+    ctx.restore();
+  }
   for (const it of items) it.draw();
   // 꼬리
   if (trail.length > 1) {
@@ -608,8 +677,21 @@ export function drawFieldFrame(
   ctx.fillStyle = "#fff";
   ctx.strokeStyle = "#222";
   ctx.lineWidth = 1;
+  // 높이 뜰수록 카메라에 가까워 보이게 조금 크게 · 뜬 공은 둘레가 빛남
+  const br = (3.4 + Math.min(5, f.bh * 0.16)) * b.s;
+  if (flying) {
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, br * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = "#fff";
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 1;
+  }
   ctx.beginPath();
-  ctx.arc(b.x, b.y, (3.2 + Math.min(4, f.bh * 0.12)) * b.s, 0, Math.PI * 2);
+  ctx.arc(b.x, b.y, br, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 }
