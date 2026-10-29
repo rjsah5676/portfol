@@ -232,6 +232,9 @@ const NPC_FACE: Record<string, string> = {
 };
 const NPC_COLOR: Record<string, string> = { 감독: "#ffcf4a", 주장: "#7ad7ff", 선배: "#ff7a7a", 안경: "#b6ffb0", 후배: "#ffb0e6" };
 
+/** 타석 화면도 3D 로 (지금은 꺼 둠 — 수비 화면만 3D) */
+const BAT_3D = false;
+
 export class Match {
   cfg: MatchCfg;
   rng: Rng;
@@ -1829,7 +1832,8 @@ export class Match {
   sync3d(dt: number): boolean {
     const w = this.w3d;
     const fieldView = this.phase === "field" || (this.phase === "result" && this.frames.length > 0 && this.lastWasField());
-    this.on3d = !!w && !this.pitcherView && (!fieldView || !!this.fieldOut);
+    // 타석은 2D 그대로 (3D 스윙이 0.06초 판정 타이밍을 못 따라감) — 수비 화면만 3D. 타석도 3D 로 볼 땐 BAT_3D
+    this.on3d = !!w && (fieldView ? !!this.fieldOut : BAT_3D && !this.pitcherView);
     PROJ3D.bat = PROJ3D.field = PROJ3D.unbat = null;
     if (!w || !this.on3d) return false;
     const fsd = this.s.sides[fieldSide(this.s)], bsd = this.s.sides[batSide(this.s)];
