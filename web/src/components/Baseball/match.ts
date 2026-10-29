@@ -35,6 +35,7 @@ import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 const SIDE_CUT_DUR = 1.35;
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
+import { FieldPoser, preloadFieldSprites, type Pose } from "./fieldSprites";
 import { DH, DW, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
 
@@ -299,6 +300,9 @@ export class Match {
   fast = false;
   trail: { x: number; y: number; h: number }[] = [];
   hitPath: { x: number; y: number; h: number }[] = [];
+  /** 수비 화면 픽셀 스프라이트 동작 (타구마다) */
+  private poser: FieldPoser | null = null;
+  private lastPose: Pose[] = [];
   hr = false;
   hrDist = 0;
 
@@ -350,6 +354,7 @@ export class Match {
   constructor(cfg: MatchCfg, onUi: (u: UiState) => void) {
     this.cfg = cfg;
     this.onUi = onUi;
+    preloadFieldSprites();
     this.rng = makeRng(cfg.seed);
     this.night = this.rng() < 0.5;
     this.save = typeof window === "undefined" ? { pt: 0, derbyBest: 0, games: 0, wins: 0 } : loadSave();
@@ -1191,6 +1196,8 @@ export class Match {
     if ((o.call === "bip" || (o.call === "foul" && this.cfg.mode !== "derby")) && o.field && o.field.frames.length) {
       const f = o.field;
       this.frames = f.frames;
+      this.poser = new FieldPoser(f);
+      this.lastPose = [];
       this.events = f.events;
       this.evIdx = 0;
       this.ft = 0.15;
@@ -2717,7 +2724,7 @@ export class Match {
       ctx.textAlign = "center";
       ctx.fillText("GOLD", gb.x, gb.y + 2);
     } else {
-      drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, this.trail, sp, this.flightArc(this.ft));
+      drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, this.trail, sp, this.flightArc(this.ft), this.poser, this.ft, this.lastPose);
     }
     if (this.hr) {
       const d = Math.round(this.hrDist);

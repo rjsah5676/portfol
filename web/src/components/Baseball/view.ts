@@ -5,6 +5,7 @@
  * 배경은 한 번 그려서 캐시.
  */
 import { BASES, FENCE_H, HOME_POS, fenceDist, type Frame } from "@/lib/baseball/play";
+import { FieldPoser, drawFieldSprite, fieldSpritesReady, type Pose } from "./fieldSprites";
 import { BALL_R, ZONE } from "@/lib/baseball/pitch";
 
 export const DW = 1024;
@@ -532,6 +533,12 @@ export function drawTiny(ctx: CanvasRenderingContext2D, x: number, y: number, bo
     ctx.arc(7, -10 + bob, 3, 0, Math.PI * 2);
     ctx.fill();
   }
+  drawStateMark(ctx, state);
+  ctx.restore();
+}
+
+/** 수비 상태 표시 (기절 해골 · 멈춤 · 감전) — 발 자리 기준 위쪽, 작은 사람 크기 좌표 */
+function drawStateMark(ctx: CanvasRenderingContext2D, state: number) {
   if (state === 1) {
     // 기절 (해골 말풍선)
     ctx.fillStyle = "#fff";
@@ -556,11 +563,12 @@ export function drawTiny(ctx: CanvasRenderingContext2D, x: number, y: number, bo
     ctx.lineTo(0, -19);
     ctx.stroke();
   }
-  ctx.restore();
 }
 
 /** 원근이면 사람을 조금 크게 (투수판 자리 기준 1.3배) */
 const TINY_K = () => (FIELD_VIEW.persp ? 1.3 : 1);
+/** 픽셀 스프라이트: 스프라이트 1픽셀 = 투수판 자리에서 1.25px (사람 키 ≈ 51px) */
+const SPRITE_K = () => (FIELD_VIEW.persp ? 1.25 : 0.95);
 
 /** 필드 한 프레임 */
 export function drawFieldFrame(
@@ -571,21 +579,48 @@ export function drawFieldFrame(
   trail: { x: number; y: number; h: number }[],
   special?: string,
   /** 이번 타구가 날아갈 길 (뜬공 · 라이너 첫 낙하까지) — 점선 호 · 떨어질 자리 링 */
-  arc?: { pts: { x: number; y: number; h: number }[]; land: { x: number; y: number } | null }
+  arc?: { pts: { x: number; y: number; h: number }[]; land: { x: number; y: number } | null },
+  /** 픽셀 스프라이트 동작 (불러온 뒤) — 없으면 작은 코드 그림 */
+  poser?: FieldPoser | null,
+  /** 수비 화면 시계 (초) */
+  ft = f.t,
+  lastPose?: Pose[],
 ) {
   // 공 그림자 · 수비 · 주자 · 공 순 (y 순으로 겹침)
   const items: { y: number; draw: () => void }[] = [];
+  const spr = !!poser && fieldSpritesReady();
   for (let i = 0; i < 9; i++) {
     const p = fproj(f.fx[i * 2], f.fx[i * 2 + 1]);
     const st = f.fs[i];
     const moving = 1;
-    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, def.body, def.cap, moving * f.t, st, true, p.s * TINY_K()) });
+    if (spr) {
+      const pose = poser!.fielder(i, f, ft, lastPose?.[i]);
+      if (lastPose) lastPose[i] = pose;
+      const sc = p.s * SPRITE_K();
+      items.push({
+        y: p.y,
+        draw: () => {
+          drawFieldSprite(ctx, "fd", pose, p.x, p.y, sc, def.body);
+          if (st) {
+            ctx.save();
+            ctx.translate(p.x, p.y - 12 * sc);
+            ctx.scale(sc, sc);
+            drawStateMark(ctx, st);
+            ctx.restore();
+          }
+        },
+      });
+    } else items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, def.body, def.cap, moving * f.t, st, true, p.s * TINY_K()) });
   }
-  for (const r of f.rs) {
-    if (r.st === 2) continue;
+  f.rs.forEach((r, j) => {
+    if (r.st === 2) return;
     const p = fproj(r.x, r.y);
-    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, off.body, off.cap, r.st === 0 ? f.t : 0, 0, false, p.s * TINY_K()) });
-  }
+    if (spr) {
+      const pose = poser!.runner(j, f, ft);
+      const sc = p.s * SPRITE_K();
+      items.push({ y: p.y, draw: () => drawFieldSprite(ctx, "bt", pose, p.x, p.y, sc, off.body) });
+    } else items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, off.body, off.cap, r.st === 0 ? f.t : 0, 0, false, p.s * TINY_K()) });
+  });
   items.sort((a, b) => a.y - b.y);
   const flying = f.hold < 0 && f.bh > 0.4;
   // 날아갈 길 (아직 안 간 쪽만 점선) · 떨어질 자리 링 — 높이 · 방향이 한눈에 읽히게
