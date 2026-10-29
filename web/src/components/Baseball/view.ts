@@ -85,8 +85,36 @@ export function unprojPlate(sx: number, sy: number) {
 
 // ───────────── 필드 ─────────────
 export const FV = { S: 3.95, ox: 512, oy: 552, k: 0.84, kh: 0.9 };
+/**
+ * 필드 시점: 탑뷰(비스듬한 평면) ↔ 3/4 원근 (포수 뒤 높은 곳 · 목업 시점) — 비교용으로 둘 다 (localStorage pxb:fieldview)
+ * 원근 카메라: 홈 뒤 cy m · 높이 ch m · th 만큼 내려다봄. 홈 ≈ 화면 아래(530) · 중견 펜스 ≈ 140 · 좌우 폴 ≈ 화면 양끝. 높이는 hk 배로 눌러 큰 뜬공도 화면 안
+ */
+export const FIELD_VIEW = { persp: true };
+const PC = (() => {
+  const th = (20 * Math.PI) / 180;
+  return { cy: 60, ch: 45, cos: Math.cos(th), sin: Math.sin(th), F: 954, Y0: 241, hk: 0.85, dRef: 0 };
+})();
+PC.dRef = (18.4 + PC.cy) * PC.cos + PC.ch * PC.sin; // 투수판 깊이 = 크기 1
+if (typeof window !== "undefined") {
+  try {
+    FIELD_VIEW.persp = localStorage.getItem("pxb:fieldview") !== "top";
+  } catch {}
+}
+export function setFieldView(persp: boolean) {
+  FIELD_VIEW.persp = persp;
+  try {
+    localStorage.setItem("pxb:fieldview", persp ? "persp" : "top");
+  } catch {}
+}
+/** 필드 좌표(x 좌우 · y 홈에서 앞 · h 높이, m) → 화면. s = 그 자리 크기 배율 (탑뷰는 1) */
 export function fproj(x: number, y: number, h = 0) {
-  return { x: FV.ox + x * FV.S, y: FV.oy - y * FV.S * FV.k - h * FV.S * FV.kh };
+  if (!FIELD_VIEW.persp) return { x: FV.ox + x * FV.S, y: FV.oy - y * FV.S * FV.k - h * FV.S * FV.kh, s: 1 };
+  const ry = y + PC.cy;
+  const rz = h * PC.hk - PC.ch;
+  const d = Math.max(4, ry * PC.cos - rz * PC.sin);
+  const v = ry * PC.sin + rz * PC.cos;
+  // 멀수록 작게 — 그대로면 외야수가 점이 돼서 덜 줄임 (^0.6)
+  return { x: 512 + (PC.F * x) / d, y: PC.Y0 - (PC.F * v) / d, s: Math.pow(PC.dRef / d, 0.6) };
 }
 
 let bgCanvas: HTMLCanvasElement | null = null;
@@ -296,7 +324,7 @@ export function battingBg(q: number, night: boolean): HTMLCanvasElement {
 
 /** 필드 배경 */
 export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
-  const key = `${q}:${night}`;
+  const key = `${q}:${night}:${FIELD_VIEW.persp}`;
   if (fieldCanvas && fieldKey === key) return fieldCanvas;
   const c = document.createElement("canvas");
   c.width = Math.round(DW * q);
@@ -310,7 +338,8 @@ export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
   g.beginPath();
   for (let a = -55; a <= 55; a += 2) {
     const r = fenceDist(Math.max(-45, Math.min(45, a))) + 30;
-    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r);
+    // 원근: 관중석이 펜스 뒤로 올라가는 계단처럼
+    const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r, FIELD_VIEW.persp ? 22 : 0);
     if (a === -55) g.moveTo(p.x, p.y);
     else g.lineTo(p.x, p.y);
   }
@@ -325,6 +354,33 @@ export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
   g.clip();
   crowd(g, 0, 0, DW, 260, 11, 34);
   g.restore();
+  // 원근: 파울 지역 땅도 (안 칠하면 홈 양옆이 남색 빈칸으로 크게 보였음)
+  if (FIELD_VIEW.persp) {
+    g.beginPath();
+    for (let a = -62; a <= 62; a += 2) {
+      const r = fenceDist(Math.max(-45, Math.min(45, a))) + 2;
+      const p = fproj(Math.sin((a * Math.PI) / 180) * r, Math.cos((a * Math.PI) / 180) * r);
+      if (a === -62) g.moveTo(p.x, p.y);
+      else g.lineTo(p.x, p.y);
+    }
+    for (const [x, y] of [[60, -4], [12, -16], [-12, -16], [-60, -4]]) {
+      const p = fproj(x, y);
+      g.lineTo(p.x, p.y);
+    }
+    g.closePath();
+    g.fillStyle = "#347a3f";
+    g.fill();
+    // 홈 뒤 흙
+    g.beginPath();
+    for (let i = 0; i <= 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      const p = fproj(Math.cos(a) * 5, Math.sin(a) * 5 - 0.5);
+      if (i) g.lineTo(p.x, p.y);
+      else g.moveTo(p.x, p.y);
+    }
+    g.fillStyle = "#c08550";
+    g.fill();
+  }
   // 잔디
   g.beginPath();
   const fair: { x: number; y: number }[] = [];
@@ -390,10 +446,14 @@ export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
   g.fillStyle = "#4caf5a";
   g.fill();
   // 마운드
-  const m = fproj(0, 18.4);
   g.fillStyle = "#c08550";
   g.beginPath();
-  g.ellipse(m.x, m.y, 2.8 * FV.S, 2.8 * FV.S * FV.k, 0, 0, Math.PI * 2);
+  for (let i = 0; i <= 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const p = fproj(Math.cos(a) * 2.8, 18.4 + Math.sin(a) * 2.8);
+    if (i) g.lineTo(p.x, p.y);
+    else g.moveTo(p.x, p.y);
+  }
   g.fill();
   // 파울라인
   g.strokeStyle = "rgba(255,255,255,0.9)";
@@ -408,15 +468,17 @@ export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
   }
   // 베이스
   BASES.slice(0, 4).forEach(([x, y], i) => {
-    const p = fproj(x, y);
+    // 땅 위 마름모 (네 꼭짓점을 시점대로)
+    const r = (i === 0 ? 5 : 4.5) / FV.S;
     g.fillStyle = "#fff";
-    g.save();
-    g.translate(p.x, p.y);
-    g.scale(1, FV.k);
-    g.rotate(Math.PI / 4);
-    const s = i === 0 ? 5 : 4.5;
-    g.fillRect(-s, -s, s * 2, s * 2);
-    g.restore();
+    g.beginPath();
+    [[0, -r], [r, 0], [0, r], [-r, 0]].forEach(([dx, dy], j) => {
+      const q = fproj(x + dx * Math.SQRT2, y + dy * Math.SQRT2);
+      if (j) g.lineTo(q.x, q.y);
+      else g.moveTo(q.x, q.y);
+    });
+    g.closePath();
+    g.fill();
   });
   fieldCanvas = c;
   fieldKey = key;
@@ -424,10 +486,11 @@ export function fieldBg(q: number, night: boolean): HTMLCanvasElement {
 }
 
 /** 작은 사람 (필드) */
-export function drawTiny(ctx: CanvasRenderingContext2D, x: number, y: number, body: string, cap: string, run: number, state = 0, glove = false) {
+export function drawTiny(ctx: CanvasRenderingContext2D, x: number, y: number, body: string, cap: string, run: number, state = 0, glove = false, sc = 1) {
   const bob = Math.sin(run * 14) * (run ? 1.5 : 0);
   ctx.save();
   ctx.translate(x, y);
+  if (sc !== 1) ctx.scale(sc, sc);
   ctx.fillStyle = "rgba(0,0,0,0.28)";
   ctx.beginPath();
   ctx.ellipse(0, 0, 7, 2.6, 0, 0, Math.PI * 2);
@@ -496,6 +559,9 @@ export function drawTiny(ctx: CanvasRenderingContext2D, x: number, y: number, bo
   ctx.restore();
 }
 
+/** 원근이면 사람을 조금 크게 (투수판 자리 기준 1.3배) */
+const TINY_K = () => (FIELD_VIEW.persp ? 1.3 : 1);
+
 /** 필드 한 프레임 */
 export function drawFieldFrame(
   ctx: CanvasRenderingContext2D,
@@ -511,19 +577,19 @@ export function drawFieldFrame(
     const p = fproj(f.fx[i * 2], f.fx[i * 2 + 1]);
     const st = f.fs[i];
     const moving = 1;
-    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, def.body, def.cap, moving * f.t, st, true) });
+    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, def.body, def.cap, moving * f.t, st, true, p.s * TINY_K()) });
   }
   for (const r of f.rs) {
     if (r.st === 2) continue;
     const p = fproj(r.x, r.y);
-    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, off.body, off.cap, r.st === 0 ? f.t : 0) });
+    items.push({ y: p.y, draw: () => drawTiny(ctx, p.x, p.y, off.body, off.cap, r.st === 0 ? f.t : 0, 0, false, p.s * TINY_K()) });
   }
   items.sort((a, b) => a.y - b.y);
   // 그림자
   const sh = fproj(f.bx, f.by);
   ctx.fillStyle = "rgba(0,0,0,0.35)";
   ctx.beginPath();
-  ctx.ellipse(sh.x, sh.y, 3.2, 1.6, 0, 0, Math.PI * 2);
+  ctx.ellipse(sh.x, sh.y, 3.2 * sh.s, 1.6 * sh.s, 0, 0, Math.PI * 2);
   ctx.fill();
   for (const it of items) it.draw();
   // 꼬리
@@ -543,7 +609,7 @@ export function drawFieldFrame(
   ctx.strokeStyle = "#222";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(b.x, b.y, 3.2 + Math.min(4, f.bh * 0.12), 0, Math.PI * 2);
+  ctx.arc(b.x, b.y, (3.2 + Math.min(4, f.bh * 0.12)) * b.s, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 }
