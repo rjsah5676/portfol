@@ -1292,7 +1292,7 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
       <div className="flex items-center justify-between">
         <div className={`${font.title} text-[22px]`}>
           {c.post ? <span className="text-[#ffd23f]">🍂 {postName(c.post)}</span> : `${gameNo(c) + 1}경기`} <span className="text-white/50">vs</span> <span style={{ color: opp.color }}>{opp.name}</span>
-          {!c.post && <span className="ml-2 text-[13px] text-white/50">(이번 주 {c.gameInWeek + 1}/2)</span>}
+          {!c.post && <span className="ml-2 text-[13px] text-white/50">· 이번 주 {c.gameInWeek + 1}/2</span>}
         </div>
         <div className="text-[13px] text-white/60">
           {st.userHome ? "홈" : "원정"} · 9이닝
@@ -1333,8 +1333,9 @@ function GameCard({ c, mode, onMode, onPlay, onAutoWeek, onSitOut }: { c: Career
             ))}
           </div>
           <div className="mt-auto grid grid-cols-[2fr_1fr] gap-2">
-            <Btn className={`${font.title} py-3.5 text-[24px]`} onClick={onPlay}>
+            <Btn space className={`${font.title} py-3.5 text-[24px]`} onClick={onPlay}>
               ⚾ {MODE_NAME[mode]}로 경기 시작
+              <span className="ml-2 align-middle font-['Nanum_Gothic'] text-[11px] font-normal opacity-60">Space</span>
             </Btn>
             <Btn className={`${font.title} py-3.5 text-[16px] leading-tight`} color="#7ad7ff" onClick={onAutoWeek}>
               {c.post ? "⏩ 이 경기" : "⏩ 이번 주 남은 경기"}
