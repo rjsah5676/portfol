@@ -142,16 +142,12 @@ function BaseballMain() {
       ))}
     </div>
   );
-  const first = useRef(true);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장값
     setSave(loadSave());
     const c = loadClub();
     setClub(c);
-    if (first.current) {
-      first.current = false;
-      if (!c) setScreen("pick");
-    }
+    // (처음 들어오면 구단 고르기부터 띄우던 것 → 타이틀 먼저. 구단은 온라인 · 구단 관리 들어갈 때 고름)
   }, [screen]);
 
   const start = (c: MatchCfg) => {
@@ -305,17 +301,17 @@ function BaseballMain() {
                 <Btn className={`${font.title} w-[159px] py-3 text-[21px]`} color="#ffd23f" onClick={() => setScreen("derby")}>
                   홈런 더비
                 </Btn>
-                <Btn className={`${font.title} w-[159px] py-3 text-[21px]`} color="#b46bff" onClick={() => setScreen("shop")}>
-                  상점
-                </Btn>
+                {/* 상점은 아직 전부 준비 중이라 숨김 (알파) */}
               </div>
               <Btn className="w-[160px] py-2 text-sm" color="#7ad7ff" onClick={() => setScreen("howto")}>
                 조작법
               </Btn>
-              <div className="font-mono text-[13px] text-white/50">
-                코인 {save.pt.toLocaleString()} · {save.games}경기 {save.wins}승 · 더비 최고 {save.derbyBest.toLocaleString()}m
-                {club && ` · 대전 ${club.record.w}승 ${club.record.l}패 (${club.record.rating}점)`}
-              </div>
+              {(save.games > 0 || save.pt > 0 || save.derbyBest > 0 || !!club) && (
+                <div className="font-mono text-[13px] text-white/50">
+                  코인 {save.pt.toLocaleString()} · {save.games}경기 {save.wins}승 · 더비 최고 {save.derbyBest.toLocaleString()}m
+                  {club && ` · 대전 ${club.record.w}승 ${club.record.l}패 (${club.record.rating}점)`}
+                </div>
+              )}
             </div>
           )}
 
@@ -714,7 +710,7 @@ function Play({
                 {touch && ui.spHero && ui.spChar && <SpecialBtn ui={ui} round onPress={() => m?.toggleSpecial()} />}
                 {/* 터치: 스윙은 이 버튼으로만 · 엄지가 편하게 화면 가운데 쪽 아래로 조금 */}
                 {touch && (
-                  <div className="transition-opacity duration-200" style={{ transform: "translate(-34px, 56px)", opacity: ui.cards ? 0 : 1, pointerEvents: ui.cards ? "none" : undefined }}>
+                  <div className="transition-opacity duration-200" style={{ transform: "translate(-34px, 56px)", opacity: ui.cards ? 0.35 : 1, pointerEvents: ui.cards ? "none" : undefined }}>
                     <RoundBtn img="/baseball/ui/swing.webp" imgDown="/baseball/ui/swing-down.webp" label="스윙" disabled={!ui.canSwing} onClick={() => m?.pressSwing()} />
                   </div>
                 )}

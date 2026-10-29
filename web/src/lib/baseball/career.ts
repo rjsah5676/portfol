@@ -365,6 +365,8 @@ export const PLACES: Record<PlaceId, { name: string; icon: string; desc: string;
   tv: { name: "방송국", icon: "📺", desc: "방송 · 만남", x: 64, y: 86, spot: true },
 };
 export const PLACE_IDS = Object.keys(PLACES) as PlaceId[];
+/** 인연이 지도에 뜰 때 먼저 고르는 장소 (첫 만남 장면과 맞게) */
+const BOND_PLACE: Partial<Record<CharId, PlaceId>> = { kai: "river", lily: "park", zena: "tv", mei: "downtown", igna: "downtown", ivan: "downtown", soyoung: "park", violet: "library" };
 export const SPOT_IDS = PLACE_IDS.filter((p) => PLACES[p].spot);
 
 /** 장소 이벤트 (주마다 하나쯤, 지도에 ❗) */
@@ -1352,7 +1354,12 @@ function layout(c: Career) {
     const r = rng();
     const quiet = nextBeat(c, id).kind === "hang";
     const onMap = !out.some((x) => x.char);
-    if (onMap && r < (quiet ? 0.08 : 0.2)) out.push({ place: take(), char: id });
+    if (onMap && r < (quiet ? 0.08 : 0.2)) {
+      // 그 사람 이야기에 맞는 장소가 비어 있으면 거기로 (번화가에서 만났는데 장면은 「새벽 강변」이던 것)
+      const pref = BOND_PLACE[id];
+      const place = pref && free.includes(pref) ? free.splice(free.indexOf(pref), 1)[0] : take();
+      out.push({ place, char: id });
+    }
     else if (r < 0.55) {
       const k = BONDS[id].stat as TrainKey;
       if (!trainers[k]) trainers[k] = id;

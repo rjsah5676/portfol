@@ -69,6 +69,34 @@ export default function Stage({ children }: { children: ReactNode }) {
       document.body.classList.remove("game-full");
     };
   }, []);
+  // PC 창 모드: 사이트 머리글 · 전체화면 안내 높이를 실제로 재서 무대가 화면 안에 다 들어오게 너비를 정함
+  // (예전 공식은 위 여백 120px 가정 — 실제론 300px 가까워 「입단!」 · 「PLAY BALL」이 화면 아래로 잘렸음)
+  const [fitW, setFitW] = useState(0);
+  useEffect(() => {
+    const fit = () => {
+      const el = rootRef.current;
+      if (!el) return;
+      // (사이트가 게임 쪽으로 미리 스크롤해 둠 — 지금 화면 기준 위치로)
+      const top = el.getBoundingClientRect().top;
+      const banner = el.querySelector(":scope > button") as HTMLElement | null;
+      const bh = banner ? banner.offsetHeight + 12 : 0;
+      setFitW(Math.max(600, Math.floor(((window.innerHeight - top - bh - 14) * 16) / 9)));
+    };
+    fit();
+    // 사이트가 처음에 게임 쪽으로 스크롤해 주는 동안(첫 3초)엔 스크롤 때마다 다시 잼 — 그 뒤엔 크기 고정 (손으로 스크롤할 때 출렁이지 않게)
+    const t0 = Date.now();
+    const onScroll = () => {
+      if (Date.now() - t0 < 3000) fit();
+    };
+    const id = window.setTimeout(fit, 400);
+    window.addEventListener("resize", fit);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.clearTimeout(id);
+      window.removeEventListener("resize", fit);
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, []);
   const fs = fsReal || pseudoFs;
   const phone = scr.touch && Math.min(scr.w, scr.h) < 600;
   const land = scr.w > scr.h * 1.15;
@@ -99,6 +127,7 @@ export default function Stage({ children }: { children: ReactNode }) {
             ? "fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-black"
             : "isolate mx-auto w-full max-w-[min(1280px,calc((100dvh-120px)*16/9))]"
         }
+        style={!cover && fitW ? { maxWidth: Math.min(1280, fitW) } : undefined}
       >
         {!cover && canFs && (
           <button

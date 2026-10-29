@@ -9,7 +9,7 @@ import type { Diff } from "@/lib/baseball/ai";
 import {
   ACTIVE_MAX, ACTIVE_PER_DAY, ACTIVE_PER_GAME, BEATS, BEAT_NAME, BOND_MAX, CLINIC_PRICE, MIN_COST, COND_NAME, CONSUMABLES, CONSUMABLE_IDS, DECK_SIZE, GAMES, GAME_GRADES, GEAR, GEAR_IDS, GEAR_TIER,
   INJURY_NAME, LEARNED_VAL, MAX_SEASONS, OFF_TURNS, PLACES, PLACE_IDS, RETIRE_FROM, SPOT_EVENTS, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TRAINS,
-  CAREER_DIFF, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
+  CAREER_DIFF, ROOKIE, careerGameStats, PICK_POS, PICK_TYPES, TRAIN_KEYS, posOf, TYPES, act, advance, age, autoBattle, avg, buy, buyGear, canPlay, careerBatter, choose, choosePick, consumeItem, decideRetire, endSeason, finishBattle, trainersOf,
   awardRace, costOf, fmtAvg, gameNo, myRank, postName, standings, MOOD, moodName, gearNext, gradeOf, newCareer, ops, ovrOf, seasonGrade, retireCard, skill, spLv, spUses, spotsOf, statGrade, stepOf, tagCount, talentName,
   trainLv, trainMul, trainRisk, whenText, whyNot,
   type Action, type BatType, type Career, type FieldPos, type ConsumableId, type Delta, type GearId, type HofEntry, type PlaceId, type SeasonSummary,
@@ -19,7 +19,7 @@ import { slotName, slotOf } from "@/lib/baseball/careerGame";
 import { TEAM_DEFS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
 import { SPECIAL_DAY, ROLE, isBond, type BondId } from "@/lib/baseball/bonds";
 import { makeRng } from "@/lib/baseball/rng";
-import { BattleModal, BondCard, BondPanel, BondsModal, BoonPickModal, DeckStep, GuideModal, Hint, VnScene, artUrl, recommendDeck } from "./CareerBonds";
+import { BattleModal, BondCard, BondPanel, BondsModal, BoonPickModal, DeckStep, GuideModal, Hint, VnScene, artUrl, recommendDeck, seenHint } from "./CareerBonds";
 import { BAT_IDLE, BATS, BATTER_RIG, HELMETS, PITCHER_RIG, PIT_IDLE, baseSkin } from "@/lib/baseball/figures";
 import { DEFAULT_LOOK, LOOK_KEYS, LOOK_LABEL, LOOK_OPTS, SKINS, lookColors, lookSkin, type Look } from "@/lib/baseball/look";
 import { drawRig, pose } from "@/lib/baseball/rig";
@@ -120,8 +120,16 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
     setVnSeen(false);
     if (q[0]) playTone(q[0].tone);
   };
+  // 행동력이 많이 남았는데 「다음 날 ▶」를 누르면 한 번 더 확인 (첫 턴을 그냥 날리던 것) — 이월은 최대 10까지라 넘치는 만큼 사라짐
+  const advArmed = useRef(0);
   const doAdvance = () => {
     if (!c || stepOf(c) !== "turn") return;
+    const lost = c.active + (c.phase === "season" ? ACTIVE_PER_GAME : ACTIVE_PER_DAY) - ACTIVE_MAX;
+    if (c.active >= MIN_COST && Date.now() - advArmed.current > 2500) {
+      advArmed.current = Date.now();
+      return flash(`⚡ 행동력 ${c.active} 남았어요${lost > 0 ? ` (넘기면 ${lost} 사라짐)` : ""} — 한 번 더 누르면 넘어가요`);
+    }
+    advArmed.current = 0;
     const n = clone(c);
     advance(n);
     commit(n);
@@ -679,7 +687,7 @@ function Create({ hof, onBack, onStart }: { hof: HofEntry[]; onBack: () => void;
         <div className="text-[12.5px] leading-relaxed text-white/60">
           19세 입단 · 한 해 {GAMES}경기 · {RETIRE_FROM}년차부터 은퇴를 고를 수 있고 {MAX_SEASONS}년차엔 은퇴. 숨은 재능은 1년차가 끝나면 알려 줘요.
           <br />
-          결과는 운 · 선택 · 실력에 따라 갈려요 (보통 450~550 · 잘 풀리면 600~700대).
+          결과는 운 · 선택 · 실력에 따라 갈려요 (10년 뒤 종합 보통 400~500 · 잘 풀리면 600~700대).
         </div>
         <Btn space className={`${font.title} ml-4 shrink-0 px-8 py-3 text-2xl`} disabled={!name} onClick={() => setStepNo(2)}>
           다음 ▶
@@ -871,17 +879,18 @@ function Hub(p: {
         </div>
         <SideStatus c={c} />
       </div>
-      {!p.quiet && step === "turn" && c.turn === 0 && (
+      {/* 힌트는 한 번에 하나씩 (안 본 것 중 앞에서부터 — 예전엔 첫 행동 뒤엔 허브 힌트가 영영 안 떴음) */}
+      {!p.quiet && step === "turn" && !seenHint("hub") && (
         <Hint k="hub" title="관리 턴 — 지도에서 장소를 눌러요">
           ⚡ 행동력이 남아 있는 동안 훈련 · 휴식 · 만남을 해요. 다 쓰면(또는 그만하려면) 오른쪽 위 「{c.phase === "season" ? "경기 진행" : "다음 날"} ▶」. 체력 40 아래로 훈련하면 부상이 확 늘어요.
         </Hint>
       )}
-      {!p.quiet && step === "turn" && c.turn > 0 && spotsOf(c).some((s) => s.char) && (
+      {!p.quiet && step === "turn" && seenHint("hub") && !seenHint("bond") && spotsOf(c).some((s) => s.char) && (
         <Hint k="bond" title="❗ 인연이 나타났어요">
           얼굴이 뜬 장소에 가면 그 사람과 이야기가 이어져요. 대답에 따라 호감이 오르고, 그 사람다운 답을 고르면 「이해」가 쌓여요. 상단 「인연」에서 진행 상황을 볼 수 있어요.
         </Hint>
       )}
-      {!p.quiet && step === "turn" && Object.keys(trainersOf(c)).length > 0 && c.turn > 2 && (
+      {!p.quiet && step === "turn" && seenHint("hub") && (seenHint("bond") || !spotsOf(c).some((s) => s.char)) && Object.keys(trainersOf(c)).length > 0 && (
         <Hint k="mate" title="함께 훈련">
           운동장 훈련 버튼에 얼굴이 붙어 있으면 그 사람이 같이 해 줘요 — 효율 ×1.3 이상 + 호감 +3. 이번 관리 기간에 한 번만!
         </Hint>
@@ -892,6 +901,7 @@ function Hub(p: {
 
 function PlayerCard({ c }: { c: Career }) {
   const ovr = ovrOf(c);
+  const gs = careerGameStats(c).stats;
   const gr = gradeOf(ovr);
   const tc = tagCount(c);
   return (
@@ -942,6 +952,12 @@ function PlayerCard({ c }: { c: Career }) {
             </div>
           );
         })}
+        {/* 경기 화면 능력치는 신인 보정 · 축복 · 장비 · 컨디션까지 더한 값이라 여기랑 달라 보였음 → 같이 보여 줌 */}
+        <div className="text-[10.5px] leading-tight text-white/45">
+          경기에선 타격 <b className="text-white/75">{gs.hit}</b> · 파워 <b className="text-white/75">{gs.power}</b>
+          {c.season <= ROOKIE.seasons ? " (신인 보정 · 축복 · 장비 포함)" : " (축복 · 장비 · 컨디션 포함)"}
+        </div>
+        {c.season === 1 && <div className="text-[10.5px] leading-tight text-[#7ad7ff]/70">신인은 다 F · G 등급에서 시작해요 — 10년 뒤 종합 400 ~ 600 이 보통</div>}
       </div>
       {/* 태그 (세트까지 몇 장) */}
       <div className="mt-2 flex flex-wrap gap-1">

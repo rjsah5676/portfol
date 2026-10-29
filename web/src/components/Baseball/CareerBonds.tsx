@@ -507,7 +507,12 @@ export function BattleModal({ c, onDirect, onAuto }: { c: Career; onDirect: () =
 /** 타입에 맞는 추천 덱 */
 export function recommendDeck(type: BatType): BondId[] {
   const apt = TYPES[type].apt;
-  return [...BOND_IDS].sort((a, b) => apt[BONDS[b].stat as StatKey] - apt[BONDS[a].stat as StatKey] || a.localeCompare(b)).slice(0, DECK_SIZE);
+  const sorted = [...BOND_IDS].sort((a, b) => apt[BONDS[b].stat as StatKey] - apt[BONDS[a].stat as StatKey] || a.localeCompare(b));
+  // 같은 능력치 사람만 몰리지 않게 능력치마다 한 명씩 먼저 (만능은 적성이 다 같아서 이름순 = 파워 2명이 뽑히던 것)
+  const out: BondId[] = [];
+  for (const id of sorted) if (out.length < DECK_SIZE && !out.some((o) => BONDS[o].stat === BONDS[id].stat)) out.push(id);
+  for (const id of sorted) if (out.length < DECK_SIZE && !out.includes(id)) out.push(id);
+  return out;
 }
 
 export function DeckStep({
@@ -544,7 +549,7 @@ export function DeckStep({
             추천으로 채우기
           </Btn>
         </div>
-        <div className="mt-0.5 text-[11.5px] text-white/50">덱에 넣은 사람만 지도에 나타나고 · 자기 훈련에 「함께 훈련」 하러 와요 (효율 ×1.3~1.6). 듀오 축복은 덱 조합으로 열려요.</div>
+        <div className="mt-0.5 text-[11.5px] text-white/50">덱에 넣은 사람만 지도에 나타나고 · 자기 훈련에 「함께 훈련」 하러 와요 (효율 ×1.3~1.6). 만날수록 이야기가 이어지고 축복(특수능력) · 마지막엔 필살타법을 전수해 줘요. 썸 = 연애 · 친구 = 우정 · 동생 = 조력자 이야기. ▲ = 내 타입과 잘 맞는 능력치. 듀오 축복은 덱 조합으로 열려요.</div>
         <div className="mt-1.5 grid grid-cols-4 gap-2">
           {BOND_IDS.map((bid) => {
             const ch = charById(bid);
@@ -685,7 +690,8 @@ export function Hint({ k, title, children }: { k: string; title: string; childre
   }, [k]);
   if (!show) return null;
   return (
-    <div className="absolute bottom-[78px] left-1/2 z-20 w-[560px] -translate-x-1/2 rounded-2xl border-2 border-[#ffd23f]/70 bg-[#141a35]/97 px-4 py-3 shadow-2xl" onPointerDown={(e) => e.stopPropagation()}>
+    // 지도 아래쪽 장소(도서관 · 방송국 · 번화가 · 쇼핑몰)를 가리고 클릭을 막던 것 → 맨 아래(최근 소식 자리)로 · 판 밖 클릭은 통과
+    <div className="pointer-events-none absolute bottom-[6px] left-1/2 z-20 w-[600px] -translate-x-1/2 rounded-2xl border-2 border-[#ffd23f]/70 bg-[#141a35]/95 px-4 py-2 shadow-2xl">
       <div className="flex items-start gap-3">
         <span className="text-[26px] leading-none">💡</span>
         <div className="flex-1 text-left">
@@ -693,7 +699,7 @@ export function Hint({ k, title, children }: { k: string; title: string; childre
           <div className="mt-0.5 text-[13px] leading-relaxed text-white/85">{children}</div>
         </div>
         <Btn
-          className="shrink-0 px-3 py-1.5 text-[13px]"
+          className="pointer-events-auto shrink-0 px-3 py-1.5 text-[13px]"
           color="#ffd23f"
           onClick={() => {
             markHint(k);
