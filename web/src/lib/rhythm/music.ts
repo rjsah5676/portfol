@@ -25,6 +25,11 @@ import starlightData from "@/data/rhythm/starlight.json";
 import sugarcloudData from "@/data/rhythm/sugarcloud.json";
 import overloadData from "@/data/rhythm/overload.json";
 import etudeData from "@/data/rhythm/etude.json";
+import limitbreakData from "@/data/rhythm/limitbreak.json";
+import neonoverdriveData from "@/data/rhythm/neonoverdrive.json";
+import summerstaticData from "@/data/rhythm/summerstatic.json";
+import skybreakerData from "@/data/rhythm/skybreaker.json";
+import brassrocketData from "@/data/rhythm/brassrocket.json";
 
 export type Kind =
   | "kick"
@@ -447,6 +452,50 @@ const ETUDE = audioSong("etude", "Étude of Falling Stars", "/audio/etude.mp3", 
   desc: "170 BPM · PIANO HARDCORE · AI 자작곡 (tunee.ai)",
 });
 
+// 연주곡 5곡 (Gemini) — 가사 있는 곡은 잘 안 뽑혀서 보컬 없이
+const LIMITBREAK = audioSong("limitbreak", "LIMIT BREAK", "/audio/limitbreak.mp3", limitbreakData, {
+  color: "#DC2626",
+  desc: "172 BPM · K-POP 걸밴드 록 · AI 자작곡 (Gemini)",
+});
+
+const NEONOVERDRIVE = audioSong(
+  "neonoverdrive",
+  "NEON OVERDRIVE",
+  "/audio/neonoverdrive.mp3",
+  neonoverdriveData,
+  {
+    color: "#22D3EE",
+    desc: "150 BPM · EUROBEAT · AI 자작곡 (Gemini)",
+  }
+);
+
+const SUMMERSTATIC = audioSong(
+  "summerstatic",
+  "Summer Static",
+  "/audio/summerstatic.mp3",
+  summerstaticData,
+  {
+    color: "#34D399",
+    desc: "135 BPM · UK GARAGE / 2-STEP · AI 자작곡 (Gemini)",
+  }
+);
+
+const SKYBREAKER = audioSong("skybreaker", "SKYBREAKER", "/audio/skybreaker.mp3", skybreakerData, {
+  color: "#7DD3FC",
+  desc: "150 BPM · EUPHORIC HARDSTYLE · AI 자작곡 (Gemini)",
+});
+
+const BRASSROCKET = audioSong(
+  "brassrocket",
+  "BRASS ROCKET",
+  "/audio/brassrocket.mp3",
+  brassrocketData,
+  {
+    color: "#FBBF24",
+    desc: "170 BPM · SKA PUNK · AI 자작곡 (Gemini)",
+  }
+);
+
 // xi의 곡 — 제작자 표기 필수 (artist는 곡 선택·플레이·결과·랭킹에 함께 나옴)
 const ANIMA = audioSong("anima", "ANiMA", "/audio/anima.mp3", animaData, {
   color: "#D9A066",
@@ -490,6 +539,11 @@ const FREEDOMDIVE = audioSong(
  *   sugarcloud  --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
  *   overload    --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19   (ULTIMA는 18 — 하프타임이라 280으로 잡혀서 --single)
  *   etude       --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20   (NIGHTMARE는 16)
+ *   limitbreak  --bpm-label 172 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE 15 · ULTIMA 16)
+ *   neonoverdrive --bpm-label 150 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 15)
+ *   summerstatic --single --bpm-label 135 --boss '{}' --levels 3,5,8,11,14   (2배 템포 270으로 잡혀서 --single · NIGHTMARE 13)
+ *   skybreaker  --bpm-label 150 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17   (NIGHTMARE 14 · ULTIMA 16)
+ *   brassrocket --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18   (NIGHTMARE 15 · ULTIMA 16)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -538,6 +592,11 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  LIMITBREAK,
+  NEONOVERDRIVE,
+  SUMMERSTATIC,
+  SKYBREAKER,
+  BRASSROCKET,
   STARLIGHT,
   SUGARCLOUD,
   MIDNIGHT,

@@ -21,6 +21,11 @@ import starlightCover from "@/img/rhythm/starlight.jpg";
 import sugarcloudCover from "@/img/rhythm/sugarcloud.jpg";
 import overloadCover from "@/img/rhythm/overload.jpg";
 import etudeCover from "@/img/rhythm/etude.jpg";
+import limitbreakCover from "@/img/rhythm/limitbreak.jpg";
+import neonoverdriveCover from "@/img/rhythm/neonoverdrive.jpg";
+import summerstaticCover from "@/img/rhythm/summerstatic.jpg";
+import skybreakerCover from "@/img/rhythm/skybreaker.jpg";
+import brassrocketCover from "@/img/rhythm/brassrocket.jpg";
 
 export const COVERS: Record<string, StaticImageData> = {
   jilju: jiljuCover,
@@ -41,6 +46,11 @@ export const COVERS: Record<string, StaticImageData> = {
   sugarcloud: sugarcloudCover,
   overload: overloadCover,
   etude: etudeCover,
+  limitbreak: limitbreakCover,
+  neonoverdrive: neonoverdriveCover,
+  summerstatic: summerstaticCover,
+  skybreaker: skybreakerCover,
+  brassrocket: brassrocketCover,
 };
 
 /** 내 음악에 앨범 사진이 없을 때 쓰는 기본 재킷 */

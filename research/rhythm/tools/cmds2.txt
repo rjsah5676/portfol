@@ -16,3 +16,8 @@ starlight --boss '{}' --explus '{}' --levels 3,6,9,12,15,17
 sugarcloud --boss '{}' --explus '{}' --levels 3,6,9,12,15,18
 overload --single --bpm-label 140 --boss '{}' --explus '{}' --levels 3,6,10,13,16,19
 etude --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,10,13,17,20
+limitbreak --bpm-label 172 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18
+neonoverdrive --bpm-label 150 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17
+summerstatic --single --bpm-label 135 --boss '{}' --levels 3,5,8,11,14
+skybreaker --bpm-label 150 --boss '{}' --explus '{}' --levels 3,6,9,12,15,17
+brassrocket --bpm-label 170 --boss '{}' --explus '{}' --levels 3,6,9,13,16,18

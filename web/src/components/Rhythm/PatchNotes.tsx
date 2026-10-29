@@ -17,6 +17,19 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.12",
+    name: "새 곡 5곡",
+    date: "2026.10.29",
+    lines: [
+      "LIMIT BREAK — 172 BPM K-POP 걸밴드 록",
+      "NEON OVERDRIVE — 150 BPM 유로비트",
+      "Summer Static — 135 BPM UK 개러지 (2-step 셔플)",
+      "SKYBREAKER — 150 BPM 유포릭 하드스타일",
+      "BRASS ROCKET — 170 BPM 스카 펑크",
+      "모두 AI 자작곡(Gemini), EASY ~ ULTIMA (Summer Static 은 NIGHTMARE 까지)",
+    ],
+  },
+  {
     ver: "v2.11",
     name: "손 균형 · ULTIMA 손가락 흐름",
     date: "2026.10.23",
