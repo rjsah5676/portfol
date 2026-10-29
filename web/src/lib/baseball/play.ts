@@ -9,7 +9,7 @@
  */
 import type { BattedBall } from "./contact";
 import type { Rng } from "./rng";
-import { clamp } from "./rng";
+import { clamp, makeRng } from "./rng";
 
 export const DT = 1 / 60;
 const BASE_LEN = 27.43;
@@ -42,6 +42,8 @@ export const POS_NAME = ["투수", "포수", "1루수", "2루수", "3루수", "�
 const FIELD_DEF = 520;
 /** 필살타법 수비 쪽 효과 (예전: 릴리 중력 5.6 · 공기 0.0026, 건모 멈춤 1.5초, 제나 느려짐 2초, 카이 반응 +0.45, 이그나 화상 100%) */
 export const SP_FIELD = { lilyG: 8.4, lilyDrag: 0.0034, gunmoFreeze: 0.8, zenaSlow: 2.5, kaiReact: 0.3, ignaStunP: 0.4, ignaStun: 1.0 };
+/** 땅볼 포구 뒤 공 빼는 시간이 이보다 길면 글러브에서 공이 튀는 모습 (약 15%) */
+const BOBBLE_AT = 0.17;
 /** 몸을 날려 잡은 공 중 「필살수비!」 연출을 보여 주는 몫 */
 const DIVE_SHOW = 0.28;
 /** 낮은 라이너(타구각 범위)에 내야수 · 투수 반응 늦음 (초) */
@@ -121,33 +123,117 @@ interface BallPt {
   t: number;
 }
 
-/** 1. 타구 굴려 보기 */
-export function predictBall(b: BattedBall): { pts: BallPt[]; hr: boolean; foul: boolean; land: number; wallHit: boolean } {
+/**
+ * 공 물리 계수 (밸런스 맞춘 값 — 바꾸면 scripts 시뮬로 안타 · 장타 · 병살 분포 다시 확인)
+ * - 스핀: 뜬공 · 라이너는 백스핀(살짝 떠서 멀리 · 끝에 가파르게), 땅볼은 탑스핀(바운드 뒤 앞으로 차고 나감),
+ *   옆 스핀은 파울라인 쪽으로 휨 (당겨 친 공 훅 · 밀어 친 공 슬라이스)
+ * - 바닥: 흙 · 내야 잔디 · 외야 잔디마다 튀는 정도 · 구르는 저항이 다름 · 흙에선 가끔 불규칙 바운드
+ */
+export const PHYS = {
+  /** 중력 · 공기저항 (스핀 넣기 전 비거리 · 체공시간 · 홈런 수에 맞춘 값) */
+  grav: 10.0,
+  drag: 0.0042,
+  /** 마그누스 (스핀 × 속도) */
+  magnus: 1.6e-4,
+  /** 백스핀 rad/s = base + perLa × 발사각 (상한 max) · 땅볼 탑스핀 */
+  backBase: 0,
+  backPerLa: 1.5,
+  backMax: 300,
+  topSpin: 110,
+  /** 옆 스핀 최대 (방향 45° 일 때) */
+  side: 120,
+  /** 이 속도(m/s)보다 세게 꽂히면 튐 · 아래면 구름 */
+  bounceV: 0.6,
+  /** 반발 (세로 속도 남는 몫) */
+  eDirt: 0.55,
+  eGrass: 0.47,
+  eOut: 0.4,
+  /** 바운드 때 가로 속도 남는 몫 (낮게 깔린 공 · 높이 떠서 꽂힌 공) */
+  keepLow: 0.855,
+  keepHigh: 0.7,
+  /** 탑스핀이 바운드 때 더해 주는 몫 */
+  topKick: 0.035,
+  /** 구르는 감속 m/s² */
+  rollDirt: 3.6,
+  rollGrass: 4.6,
+  rollOut: 2.8,
+  /** 흙 위 불규칙 바운드 확률 · 꺾이는 각(°) */
+  badHopP: 0.12,
+  badHopDeg: 6,
+};
+
+/** 바닥 재질: 0 흙 (내야 흙 · 마운드 · 홈) · 1 내야 잔디 · 2 외야 잔디 */
+export function surfaceAt(x: number, y: number): 0 | 1 | 2 {
+  const r = Math.hypot(x, y);
+  if (Math.hypot(x, y - 18.4) < 2.8) return 0;
+  if (r < 5) return 0;
+  if (r < 29) return Math.abs(x) / 17.6 + Math.abs(y - 19.35) / 17.85 <= 1 ? 1 : 0;
+  return 2;
+}
+
+/** 타구마다 같은 결과가 나오게 공 값으로 시드 (미리보기 궤적 = 실제 궤적) */
+const ballSeed = (b: BattedBall) => (Math.round(b.ev * 997) * 73856093) ^ (Math.round(b.la * 991) * 19349663) ^ (Math.round(b.spray * 983) * 83492791);
+
+type BallPath = { pts: BallPt[]; hr: boolean; foul: boolean; land: number; wallHit: boolean };
+
+/**
+ * 1. 타구 굴려 보기
+ * 옆 스핀으로 휘는 만큼 처음 방향을 반대로 살짝 틀어서 떨어지는 방향은 원래 타구 방향 그대로 (휘는 모습만 생기고 파울 · 홈런 수는 그대로)
+ */
+export function predictBall(b: BattedBall): BallPath {
+  const first = flyBall(b, 0);
+  if (b.bunt || b.special) return first;
+  const end = first.pts.find((p) => !p.air) ?? first.pts[first.pts.length - 1];
+  // 처음 떨어진 곳 (출발점 기준 방향) — 바로 땅에 꽂힌 땅볼은 거의 안 휨
+  if (Math.hypot(end.x, end.y - 0.8) < 8) return first;
+  const drift = (Math.atan2(end.x, end.y - 0.8) * 180) / Math.PI - b.spray;
+  if (Math.abs(drift) < 0.05 || Math.abs(drift) > 20) return first;
+  return flyBall(b, -drift);
+}
+
+function flyBall(b: BattedBall, aimAdj: number): BallPath {
+  const P = PHYS;
+  const hrng = makeRng(ballSeed(b) >>> 0);
   const la = (b.la * Math.PI) / 180;
-  const sp = (b.spray * Math.PI) / 180;
+  const sp = ((b.spray + aimAdj) * Math.PI) / 180;
   let vx = b.ev * Math.cos(la) * Math.sin(sp);
   let vy = b.ev * Math.cos(la) * Math.cos(sp);
   let vh = b.ev * Math.sin(la);
   let x = 0;
   let y = 0.8;
   let h = 0.9;
-  const g = b.special === "lily" ? SP_FIELD.lilyG : 9.8;
-  const k = b.special === "lily" ? SP_FIELD.lilyDrag : 0.0042;
+  const lily = b.special === "lily";
+  const g = lily ? SP_FIELD.lilyG : P.grav;
+  const k = lily ? SP_FIELD.lilyDrag : P.drag;
+  // 스핀 (rad/s): 백(+) · 탑(−)은 진행 방향 오른쪽 축, 옆은 세로 축 — 번트 · 필살타법은 스핀 없음
+  const spinOn = !b.bunt && !b.special;
+  const wb = !spinOn ? 0 : b.la >= 4 ? Math.min(P.backMax, P.backBase + P.backPerLa * b.la) * (0.85 + hrng() * 0.3) : b.la < 0 ? -P.topSpin * (0.8 + hrng() * 0.4) : 0;
+  const wsMag = !spinOn ? 0 : P.side * clamp(Math.abs(b.spray) / 45, 0, 1) * (b.la < 4 ? 0.3 : 1) * (0.6 + hrng() * 0.8);
+  let wx = wb * Math.cos(sp);
+  let wy = -wb * Math.sin(sp);
+  let wh = -Math.sign(b.spray) * wsMag;
+  let topLeft = wb < 0 ? -wb : 0;
   let air = true;
   let land = -1;
   let wallHit = false;
   const pts: BallPt[] = [];
   let foul = false;
   let fairDecided = false;
+  const flyStep = (dt: number) => {
+    const v = Math.hypot(vx, vy, vh);
+    const m = P.magnus;
+    // 마그누스: ω × v
+    const ax = m * (wy * vh - wh * vy);
+    const ay = m * (wh * vx - wx * vh);
+    const ah = m * (wx * vy - wy * vx);
+    vx += (ax - k * v * vx) * dt;
+    vy += (ay - k * v * vy) * dt;
+    vh += (ah - g - k * v * vh) * dt;
+  };
   for (let i = 0; i < 60 * 14; i++) {
     const t = i * DT;
     pts.push({ x, y, h, air, t });
-    const v = Math.hypot(vx, vy, vh);
-    if (h > 0 || vh > 0) {
-      vx -= k * v * vx * DT;
-      vy -= k * v * vy * DT;
-      vh -= (g + k * v * vh) * DT;
-    }
+    if (h > 0 || vh > 0) flyStep(DT);
     x += vx * DT;
     y += vy * DT;
     h += vh * DT;
@@ -159,10 +245,7 @@ export function predictBall(b: BattedBall): { pts: BallPt[]; hr: boolean; foul: 
         pts.push({ x, y, h, air, t: t + DT });
         // 담장 넘어 떨어질 때까지 (비거리)
         for (let j = 0; j < 400 && h > 0; j++) {
-          const v2 = Math.hypot(vx, vy, vh);
-          vx -= k * v2 * vx * DT;
-          vy -= k * v2 * vy * DT;
-          vh -= (g + k * v2 * vh) * DT;
+          flyStep(DT);
           x += vx * DT;
           y += vy * DT;
           h += vh * DT;
@@ -179,6 +262,7 @@ export function predictBall(b: BattedBall): { pts: BallPt[]; hr: boolean; foul: 
         vy -= 1.4 * vr * ny;
         vx *= 0.6;
         vy *= 0.6;
+        wx = wy = wh = 0;
         wallHit = true;
         if (air) {
           air = false;
@@ -197,16 +281,41 @@ export function predictBall(b: BattedBall): { pts: BallPt[]; hr: boolean; foul: 
         }
       }
       h = 0;
-      if (vh < -1.6) {
+      const surf = surfaceAt(x, y);
+      // 번트는 예전 바운드 그대로 (희생 번트 · 번트 안타 밸런스)
+      if (b.bunt ? vh < -1.6 : vh < -P.bounceV) {
         // 낮게 깔려 튀는 땅볼은 속도를 덜 잃음 (높이 떠서 꽂힌 공만 크게 죽음)
-        const keep = -vh < 0.6 * Math.hypot(vx, vy) ? 0.86 : 0.7;
-        vh = -vh * 0.36;
+        const hs = Math.hypot(vx, vy);
+        let keep = -vh < 0.6 * hs ? P.keepLow : P.keepHigh;
+        // 탑스핀: 바닥을 차고 나감 (바운드마다 줄어듦)
+        if (topLeft > 0 && hs > 0.1) {
+          keep += (P.topKick * topLeft) / P.topSpin;
+          topLeft *= 0.5;
+        }
+        let e = b.bunt ? 0.36 : surf === 0 ? P.eDirt : surf === 1 ? P.eGrass : P.eOut;
+        if (b.bunt) keep = -vh < 0.6 * hs ? 0.86 : 0.7;
+        else if (surf === 0 && P.badHopP > 0 && hrng() < P.badHopP) {
+          // 불규칙 바운드: 옆으로 꺾이고 높이가 들쭉날쭉
+          const a = ((hrng() * 2 - 1) * P.badHopDeg * Math.PI) / 180;
+          const c = Math.cos(a);
+          const s2 = Math.sin(a);
+          const nvx = vx * c - vy * s2;
+          vy = vx * s2 + vy * c;
+          vx = nvx;
+          e *= 0.7 + hrng() * 0.9;
+        }
+        vh = -vh * e;
         vx *= keep;
         vy *= keep;
+        // 땅에 닿으면 백스핀은 거의 · 옆 스핀은 다 죽음 (바운드 뒤엔 곧게)
+        wx *= 0.3;
+        wy *= 0.3;
+        wh = 0;
       } else {
         vh = 0;
+        wx = wy = wh = 0;
         const s = Math.hypot(vx, vy);
-        const dec = (Math.hypot(x, y) > 32 ? 3.0 : 4.2) * DT;
+        const dec = (b.bunt ? 4.2 : surf === 0 ? P.rollDirt : surf === 1 ? P.rollGrass : P.rollOut) * DT;
         if (s <= dec) {
           vx = 0;
           vy = 0;
@@ -483,6 +592,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   let fielded = false;
   let fielder = -1;
   let extraFrames = 0;
+  let bobble = null as { t0: number; t1: number; dx: number; dy: number } | null;
   let batMax = 0;
   let ended = false;
   // 업화: 처음 잡으려는 수비가 화상으로 놓침 — 매번은 아님
@@ -665,6 +775,14 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
       bx = f.x;
       by = f.y;
       bh = 1.2;
+      if (bobble && ballHolder === fielder && t < bobble.t1) {
+        // 글러브 맞고 앞으로 튀었다가 다시 주움
+        const k = (t - bobble.t0) / (bobble.t1 - bobble.t0);
+        const out = Math.sin(k * Math.PI) * 0.9;
+        bx += bobble.dx * out;
+        by += bobble.dy * out;
+        bh = 0.5 + Math.sin(k * Math.PI) * 0.7 * (1 - k * 0.6);
+      }
     } else if (thrown) {
       const k = clamp((t - thrown.t0) / Math.max(0.05, thrown.t1 - thrown.t0), 0, 1);
       const [x, y] = B[thrown.base];
@@ -747,7 +865,18 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
           fielder = chaser;
           ballHolder = chaser;
           // 포구 → 송구 준비: 수비가 좋을수록 빠르고, 공을 빼는 데 흔들림이 있음 (발 빠른 타자의 내야안타가 「확률」로 나오게)
-          f.readyAt = t + (p.air ? 0.45 : chaser >= 6 ? 0.75 : 0.3 + (1 - FIELD_DEF / 1000) * 0.12 + Math.abs(rng.gauss()) * 0.12);
+          if (p.air || chaser >= 6) f.readyAt = t + (p.air ? 0.45 : 0.75);
+          else {
+            const fumble = Math.abs(rng.gauss()) * 0.12;
+            f.readyAt = t + 0.3 + (1 - FIELD_DEF / 1000) * 0.12 + fumble;
+            // 공 빼는 게 많이 늦은 땅볼은 글러브에서 튀는 모습으로 보여 줌 (늦는 시간은 그대로 — 결과는 안 바뀜)
+            if (fumble > BOBBLE_AT) {
+              const ix = pts[Math.max(0, ballIdx - 3)].x - p.x;
+              const iy = pts[Math.max(0, ballIdx - 3)].y - p.y;
+              const il = Math.hypot(ix, iy) || 1;
+              bobble = { t0: t, t1: t + Math.min(0.5, 0.18 + fumble), dx: ix / il, dy: iy / il };
+            }
+          }
           if (p.air) {
             caught = true;
             if (diveCatch && diveShow) events.push({ t, kind: "dive", x: f.x, y: f.y, text: "필살수비!" });
