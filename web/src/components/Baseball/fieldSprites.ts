@@ -181,8 +181,17 @@ export class FieldPoser {
       const dir = dirOf(faceX - f.fx[fi * 2], faceY - f.fx[fi * 2 + 1]);
       this.cues.push({ start: t - lead, end: t - lead + len, fi, act, dir });
     };
+    /** 공이 날아온 쪽 (잡는 순간 공은 글러브에 있어서 그 자리를 보면 방향이 엉뚱함 — 2.5m 이상 떨어져 있던 때의 공 자리) */
+    const from = (t: number, fi: number): [number, number] => {
+      const k0 = Math.min(F.length - 1, Math.max(0, Math.round(t * 60)));
+      const fx = F[k0].fx[fi * 2], fy = F[k0].fx[fi * 2 + 1];
+      for (let k = k0; k >= Math.max(0, k0 - 150); k--) {
+        if (Math.hypot(F[k].bx - fx, F[k].by - fy) > 2.5) return [F[k].bx, F[k].by];
+      }
+      return [0, 0]; // 못 찾으면 홈 쪽
+    };
     for (const e of out.events) {
-      if (e.kind === "catch" && out.fielder >= 0) add(e.t, out.fielder, "fly", e.x, e.y - 10);
+      if (e.kind === "catch" && out.fielder >= 0) add(e.t, out.fielder, "fly", ...from(e.t, out.fielder));
       if (e.kind === "dive" && out.fielder >= 0) {
         const fi = out.fielder, f0 = at(e.t - 0.35), f1 = at(e.t);
         const vx = f1.fx[fi * 2] - f0.fx[fi * 2], vy = f1.fx[fi * 2 + 1] - f0.fx[fi * 2 + 1];
@@ -202,8 +211,8 @@ export class FieldPoser {
     }
     for (let i = 1; i < F.length; i++) {
       const h = F[i].hold;
-      if (h >= 0 && F[i - 1].hold < 0 && F[i].bh < 1.5 && !out.events.some((e) => (e.kind === "catch" || e.kind === "dive") && Math.abs(e.t - F[i].t) < 0.2)) add(F[i].t, h, "pick", F[i].bx, F[i].by);
-      if (h === 2 && F[i - 1].hold < 0 && F[i].bh >= 1.5 && Math.hypot(F[i].fx[4] - BASES[1][0], F[i].fx[5] - BASES[1][1]) < 2.5) add(F[i].t, 2, "stretch", F[i].bx, F[i].by);
+      if (h >= 0 && F[i - 1].hold < 0 && F[i].bh < 1.5 && !out.events.some((e) => (e.kind === "catch" || e.kind === "dive") && Math.abs(e.t - F[i].t) < 0.2)) add(F[i].t, h, "pick", ...from(F[i].t, h));
+      if (h === 2 && F[i - 1].hold < 0 && F[i].bh >= 1.5 && Math.hypot(F[i].fx[4] - BASES[1][0], F[i].fx[5] - BASES[1][1]) < 2.5) add(F[i].t, 2, "stretch", ...from(F[i].t, 2));
     }
     // 같은 수비의 겹치는 동작은 나중 것이 이김
     this.cues.sort((a, b) => a.start - b.start);
@@ -239,7 +248,9 @@ export class FieldPoser {
       return { act, f: stepF(act, t, sp), dir: dirOf(vx, vy) };
     }
     const x = f.fx[i * 2], y = f.fx[i * 2 + 1];
-    const dir = f.hold === i ? last?.dir ?? 0 : dirOf(f.bx - x, f.by - y);
+    // 서 있으면 공 쪽을 봄 — 단, 공을 들고 있거나 공이 바로 옆(2.5m 안)이면 방향 그대로 (공이 몸을 지나갈 때 휙 뒤도는 것 막기)
+    const near = Math.hypot(f.bx - x, f.by - y) < 2.5;
+    const dir = f.hold === i || near ? last?.dir ?? dirOf(-x, -y) : dirOf(f.bx - x, f.by - y);
     if (i === 1 && t < 0.6) return { act: "squat", f: 0, dir: 4 };
     const act = t < 0.4 || f.hold < 0 ? "ready" : "idle";
     return { act, f: (t * 3) % 4, dir };

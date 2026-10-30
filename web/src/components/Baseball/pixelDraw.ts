@@ -45,8 +45,9 @@ export function pxPath(ctx: CanvasRenderingContext2D, pts: { x: number; y: numbe
 }
 /** 픽셀 공: 진한 외곽선 · 오른쪽 아래 그늘 · 흰 몸 */
 export function pxBall(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, px: number) {
-  const R = Math.max(px * 1.5, r);
+  const R = Math.max(px * 0.8, r);
   pxEllipse(ctx, x, y, R + px, R + px, px, "#17151f");
   pxEllipse(ctx, x, y, R, R, px, "#b9bcc8");
-  pxEllipse(ctx, x - px * 0.5, y - px * 0.5, R - px * 0.5, R - px * 0.5, px, "#ffffff");
+  if (R > px * 1.2) pxEllipse(ctx, x - px * 0.5, y - px * 0.5, R - px * 0.5, R - px * 0.5, px, "#ffffff");
+  else pxEllipse(ctx, x, y, R, R, px, "#ffffff");
 }

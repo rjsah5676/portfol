@@ -110,8 +110,8 @@ export function fproj(x: number, y: number, h = 0) {
   const rz = h * PC.hk - PC.ch;
   const d = Math.max(4, ry * PC.cos - rz * PC.sin);
   const v = ry * PC.sin + rz * PC.cos;
-  // 멀수록 작게 — 실제 원근(^1)이면 외야수가 점이 돼서 조금 덜 줄임 (^0.85, 예전 0.6)
-  return { x: 512 + (PC.F * x) / d, y: PC.Y0 - (PC.F * v) / d, s: Math.pow(PC.dRef / d, 0.85) };
+  // 멀수록 작게 — 실제 원근 그대로 (거리에 반비례). 선수 크기는 SPRITE_K 로 실제 키의 2배 (모든 거리에서 같은 비율)
+  return { x: 512 + (PC.F * x) / d, y: PC.Y0 - (PC.F * v) / d, s: PC.dRef / d };
 }
 
 let bgCanvas: HTMLCanvasElement | null = null;
@@ -822,7 +822,8 @@ function drawStateMark(ctx: CanvasRenderingContext2D, state: number) {
 /** 원근이면 사람을 조금 크게 (투수판 자리 기준 1.3배) */
 const TINY_K = () => (FIELD_VIEW.persp ? 1.3 : 1);
 /** 픽셀 스프라이트: 스프라이트 1픽셀 = 투수판 자리에서 1.25px (사람 키 ≈ 51px) */
-const SPRITE_K = () => (FIELD_VIEW.persp ? 1.25 : 0.95);
+/** 선수 그림 크기 — 원근 화면에서 실제 키(1.8m)의 약 2배 (1배면 외야수 10px 로 안 읽힘 · 예전 1.25 는 2.5 ~ 2.9배라 내야가 꽉 차 보였음) */
+const SPRITE_K = () => (FIELD_VIEW.persp ? 0.95 : 0.95);
 
 /** 필드 한 프레임 */
 export function drawFieldFrame(
@@ -892,15 +893,17 @@ export function drawFieldFrame(
     pxRing(ctx, L.x, L.y, 13 * L.s * pulse, 13 * L.s * pulse * ky, px, "#ffd23f");
     pxRing(ctx, L.x, L.y, 7 * L.s * pulse, 7 * L.s * pulse * ky, px, "rgba(255,210,63,0.6)");
   }
+  // 수비가 공을 들고 있으면(포구 ~ 송구 전) 공 · 그림자 · 꼬리 안 그림 — 글러브 · 손 안에 있음
+  const held = f.hold >= 0;
   // 그림자 — 높이 뜰수록 작고 옅게 (딱 끊기는 픽셀 타원)
   const sh = fproj(f.bx, f.by);
   const hk = Math.min(1, f.bh / 35);
-  pxEllipse(ctx, sh.x, sh.y, (4 - hk * 1.6) * sh.s, (2 - hk * 0.8) * sh.s, px, `rgba(0,0,0,${(0.4 - hk * 0.22).toFixed(3)})`);
+  if (!held) pxEllipse(ctx, sh.x, sh.y, (2.4 - hk) * sh.s, (1.1 - hk * 0.4) * sh.s, px, `rgba(0,0,0,${(0.4 - hk * 0.22).toFixed(3)})`);
   // 높이 막대: 그림자 ↔ 공 (얼마나 떠 있는지)
   if (flying) pxPath(ctx, [sh, fproj(f.bx, f.by, f.bh)], px, px * 3, "rgba(255,255,255,0.45)");
   for (const it of items) it.draw();
   // 꼬리 (픽셀 점 — 뒤로 갈수록 옅게)
-  if (trail.length > 1) {
+  if (!held && trail.length > 1) {
     const col = special === "igna" ? "255,120,40" : special === "zena" ? "255,230,80" : "255,255,255";
     const n = trail.length;
     trail.forEach((t, i) => {
@@ -912,9 +915,10 @@ export function drawFieldFrame(
       ctx.fillRect(snapPx(p.x, px) - w / 2, snapPx(p.y, px) - w / 2, w, w);
     });
   }
+  if (held) return;
   const b = fproj(f.bx, f.by, f.bh);
-  // 높이 뜰수록 카메라에 가까워 보이게 조금 크게
-  const br = (3.6 + Math.min(5, f.bh * 0.16)) * b.s;
+  // 공 크기: 선수 머리 폭의 1/3 쯤 (실제 공 7.4cm 는 1px 도 안 돼서 보이게만 키움) · 높이 뜰수록 카메라에 가까워 보이게 조금 크게
+  const br = (1.2 + Math.min(1.4, f.bh * 0.05)) * b.s;
   pxBall(ctx, b.x, b.y, br, px);
 }
 
