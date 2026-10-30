@@ -100,6 +100,15 @@ export function dirOf(vx: number, vy: number) {
 
 export interface Pose { act: string; f: number; dir: number }
 
+/**
+ * 달리기 한 바퀴(두 걸음)가 몇 m 인지 — 실제 주자 보폭(한 걸음 1.8 ~ 2.1m, 초당 4 걸음 안팎)에 맞춤.
+ * 예전 2.6m 는 초당 6 걸음이라 발이 너무 빨랐음.
+ */
+const CYCLE_M: Record<string, number> = { run: 3.4, sprint: 4.1 };
+function stepF(act: string, t: number, sp: number) {
+  return (((t * sp) / (CYCLE_M[act] ?? 3.6)) * 8) % 8;
+}
+
 /** 한 프레임 그리기. (x, y) = 발 자리 화면 좌표, sc = 스프라이트 1픽셀이 몇 px */
 export function drawFieldSprite(ctx: CanvasRenderingContext2D, kind: Kind, pose: Pose, x: number, y: number, sc: number, color: string) {
   const s0 = sheets[kind][0];
@@ -224,8 +233,7 @@ export class FieldPoser {
     const sp = Math.hypot(vx, vy);
     if (sp > 0.8) {
       const act = sp > 7 ? "sprint" : "run";
-      // 달리기 한 바퀴(8장) = 약 두 걸음 ≈ 2.6m (속도에 맞춰 발 구름)
-      return { act, f: ((t * sp) / 2.6) * 8 % 8, dir: dirOf(vx, vy) };
+      return { act, f: stepF(act, t, sp), dir: dirOf(vx, vy) };
     }
     const x = f.fx[i * 2], y = f.fx[i * 2 + 1];
     const dir = f.hold === i ? last?.dir ?? 0 : dirOf(f.bx - x, f.by - y);
@@ -240,7 +248,10 @@ export class FieldPoser {
     const [vx, vy] = this.vel(j, t, true);
     const sp = Math.hypot(vx, vy);
     if (r.st === 3 && this.out.hr) return { act: "jog", f: (t * 10) % 8, dir: dirOf(vx, vy) };
-    if (sp > 0.5) return { act: sp > 7 ? "sprint" : "run", f: ((t * sp) / 2.6) * 8 % 8, dir: dirOf(vx, vy) };
+    if (sp > 0.5) {
+      const act = sp > 7 ? "sprint" : "run";
+      return { act, f: stepF(act, t, sp), dir: dirOf(vx, vy) };
+    }
     // 서 있으면 공 쪽
     return { act: "idle", f: (t * 3) % 4, dir: dirOf(f.bx - r.x, f.by - r.y) };
   }
