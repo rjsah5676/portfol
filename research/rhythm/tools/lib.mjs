@@ -40,6 +40,8 @@ export const BUILTIN = {
   highlight: { boss: {}, explus: {}, levels: [3, 6, 8, 12, 15, 18] },
   tomeinauso: { boss: {}, explus: {}, levels: [3, 5, 7, 11, 15, 17] },
   picopico: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 16] },
+  neonseaside: { single: true, boss: {}, explus: {}, levels: [3, 4, 7, 10, 14, 16] },
+  riseofchampions: { boss: {}, explus: {}, levels: [3, 5, 8, 12, 14, 17] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

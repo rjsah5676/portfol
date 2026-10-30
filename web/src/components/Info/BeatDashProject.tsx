@@ -19,7 +19,7 @@ import playImg from "@/img/Page/info/beatdash/play.webp";
 
 const STATS = [
   { value: "4키", label: "D F J K" },
-  { value: "21곡", label: "내장곡 + 내 음악" },
+  { value: "23곡", label: "내장곡 + 내 음악" },
   { value: "5단계", label: "난이도 (Lv 1–18)" },
   { value: "v1.1", label: "2026.10" },
 ];
@@ -53,7 +53,7 @@ const FEATURES: { title: string; items: string[] }[] = [
   {
     title: "곡 · 랭킹",
     items: [
-      "내장곡 21곡: AI로 만든 자작곡 18곡 + xi의 곡 3곡(ANiMA · FREEDOM DiVE · Aragami, 제작자 표기)",
+      "내장곡 23곡: AI로 만든 자작곡 20곡 + xi의 곡 3곡(ANiMA · FREEDOM DiVE · Aragami, 제작자 표기)",
       "연습곡 「패턴 연습」 — 계단 · 트릴 · 잭 · 동시치기 · 롱노트를 구간마다 반복",
       "곡 · 난이도별 TOP 10, 결과 화면에서 바로 등록. 로그인한 회원은 별명으로 자동 등록",
       "서버가 점수 · 콤보를 그 채보의 노트 수와 맞춰 보고, 곡 길이보다 빨리 올라온 기록은 거절",

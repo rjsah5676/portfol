@@ -24,6 +24,8 @@ import etudeCover from "@/img/rhythm/etude.jpg";
 import highlightCover from "@/img/rhythm/highlight.jpg";
 import tomeinausoCover from "@/img/rhythm/tomeinauso.jpg";
 import picopicoCover from "@/img/rhythm/picopico.jpg";
+import neonseasideCover from "@/img/rhythm/neonseaside.jpg";
+import riseofchampionsCover from "@/img/rhythm/riseofchampions.jpg";
 
 export const COVERS: Record<string, StaticImageData> = {
   jilju: jiljuCover,
@@ -47,6 +49,8 @@ export const COVERS: Record<string, StaticImageData> = {
   highlight: highlightCover,
   tomeinauso: tomeinausoCover,
   picopico: picopicoCover,
+  neonseaside: neonseasideCover,
+  riseofchampions: riseofchampionsCover,
 };
 
 /** 내 음악에 앨범 사진이 없을 때 쓰는 기본 재킷 */

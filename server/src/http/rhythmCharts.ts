@@ -19,6 +19,8 @@ import etude from "../../../web/src/data/rhythm/etude.json";
 import highlight from "../../../web/src/data/rhythm/highlight.json";
 import tomeinauso from "../../../web/src/data/rhythm/tomeinauso.json";
 import picopico from "../../../web/src/data/rhythm/picopico.json";
+import neonseaside from "../../../web/src/data/rhythm/neonseaside.json";
+import riseofchampions from "../../../web/src/data/rhythm/riseofchampions.json";
 
 /*
  * 리듬게임 내장곡 채보에서 기록 검증에 쓰는 값만 뽑아 둠 (프론트와 같은 채보 파일을 읽음).
@@ -55,6 +57,8 @@ const SONGS: Record<string, SongData> = {
   highlight,
   tomeinauso,
   picopico,
+  neonseaside,
+  riseofchampions,
 };
 export const RHYTHM_SONG_IDS = Object.keys(SONGS);
 /** 곡 id → 길이(초)와 있는 난이도 (온라인 방에서 곡·난이도 확인용) */

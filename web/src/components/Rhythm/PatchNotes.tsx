@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.17",
+    name: "새 곡 2곡",
+    date: "2026.10.30",
+    lines: [
+      "Rise of Champions — 150 BPM 웅장한 아레나 록 앤섬 (EASY 3 ~ ULTIMA 16)",
+      "Neon Seaside Drive — 125 BPM 80년대 시티팝 (EASY 3 ~ ULTIMA 15)",
+      "둘 다 AI 자작곡(tunee.ai), 소개 페이지 23곡",
+    ],
+  },
+  {
     ver: "v2.16",
     name: "롱노트 정리",
     date: "2026.10.29",

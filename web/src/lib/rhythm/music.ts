@@ -28,6 +28,8 @@ import etudeData from "@/data/rhythm/etude.json";
 import highlightData from "@/data/rhythm/highlight.json";
 import tomeinausoData from "@/data/rhythm/tomeinauso.json";
 import picopicoData from "@/data/rhythm/picopico.json";
+import neonseasideData from "@/data/rhythm/neonseaside.json";
+import riseofchampionsData from "@/data/rhythm/riseofchampions.json";
 
 export type Kind =
   | "kick"
@@ -467,6 +469,28 @@ const TOMEINAUSO = audioSong(
   }
 );
 
+const RISEOFCHAMPIONS = audioSong(
+  "riseofchampions",
+  "Rise of Champions",
+  "/audio/riseofchampions.mp3",
+  riseofchampionsData,
+  {
+    color: "#F59E0B",
+    desc: "150 BPM · EPIC ARENA ROCK ANTHEM · AI 자작곡 (tunee.ai)",
+  }
+);
+
+const NEONSEASIDE = audioSong(
+  "neonseaside",
+  "Neon Seaside Drive",
+  "/audio/neonseaside.mp3",
+  neonseasideData,
+  {
+    color: "#2DD4BF",
+    desc: "125 BPM · 80s CITY POP · AI 자작곡 (tunee.ai)",
+  }
+);
+
 const PICOPICO = audioSong("picopico", "PIKO PIKO OVERKILL", "/audio/picopico.mp3", picopicoData, {
   color: "#FF2E97",
   desc: "188 BPM · J-CORE / DENPA HARDCORE · AI 자작곡 (tunee.ai)",
@@ -521,6 +545,8 @@ const FREEDOMDIVE = audioSong(
  *   highlight      --bpm-label 192 --boss '{}' --explus '{}' --levels 3,6,8,12,15,18   (ULT 16)
  *   tomeinauso     --bpm-label 149 --boss '{}' --explus '{}' --levels 3,5,7,11,15,17   (NM 14 · ULT 15)
  *   picopico       --bpm-label 188 --boss '{}' --explus '{}' --levels 3,6,9,13,16,16   (NM 14) (나이트메어 14 · ULTIMA 16 이 천장 — 그 위는 타격이 모자람)
+ *   neonseaside    --single --bpm-label 125 --boss '{}' --explus '{}' --levels 3,4,7,10,14,16   (NM 13 · ULT 15 — 2배 템포 250으로 잡혀서 --single)
+ *   riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --levels 3,5,8,12,14,17   (ULT 16 — NM 은 매우 어려움 12 위로 14 가 천장)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -569,6 +595,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  RISEOFCHAMPIONS,
+  NEONSEASIDE,
   PICOPICO,
   HIGHLIGHT,
   TOMEINAUSO,
