@@ -96,15 +96,10 @@ const PC = (() => {
   return { cy: 60, ch: 45, cos: Math.cos(th), sin: Math.sin(th), F: 954, Y0: 241, hk: 1, dRef: 0 };
 })();
 PC.dRef = (18.4 + PC.cy) * PC.cos + PC.ch * PC.sin; // 투수판 깊이 = 크기 1
+// 시점은 3/4 원근 하나로 고정 (탑뷰 비교 끝, 2026-10-30) — 예전에 고른 값(pxb:fieldview)은 지움
 if (typeof window !== "undefined") {
   try {
-    FIELD_VIEW.persp = localStorage.getItem("pxb:fieldview") !== "top";
-  } catch {}
-}
-export function setFieldView(persp: boolean) {
-  FIELD_VIEW.persp = persp;
-  try {
-    localStorage.setItem("pxb:fieldview", persp ? "persp" : "top");
+    localStorage.removeItem("pxb:fieldview");
   } catch {}
 }
 /** 필드 좌표(x 좌우 · y 홈에서 앞 · h 높이, m) → 화면. s = 그 자리 크기 배율 (탑뷰는 1) */
@@ -325,7 +320,7 @@ export function battingBg(q: number, night: boolean): HTMLCanvasElement {
 
 /** 필드 배경 */
 /** 필드 배경 한 픽셀 = 화면 몇 px (픽셀 그림처럼 낮은 해상도로 그려서 키움 — 수비 스프라이트 · 타석 그림과 맞춤) */
-export const FIELD_BG_PX = 1.6;
+export const FIELD_BG_PX = 1.3;
 /** 필드 배경 색 (저녁 구장) */
 const FC = {
   sky: "#141a36",

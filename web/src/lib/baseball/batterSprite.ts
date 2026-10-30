@@ -351,7 +351,7 @@ const hexRgb = (h: string) => {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255].map((c) => c / 255);
 };
 /**
- * 팀색 칠하기 — 시트마다 마스크(batter-*-tint.webp, 절반 크기 · R 헬멧 명암 · G 팀 명암 · A 비중, scripts/baseball-batter-tint).
+ * 팀색 칠하기 — 시트마다 마스크(batter-*-tint.webp, 원래 크기 · R 헬멧 명암 · G 팀 명암 · A 비중, scripts/baseball-batter-tint).
  * 받으면 헬멧 · 팀 두 장(회색 명암 + 비중)으로 나눠 두고, 그릴 때 칸마다 「명암 × 팀색」을 원래 그림 위에 덮음.
  * 원래 그림 색(주황)과 비슷한 팀이면 안 칠함.
  */
@@ -411,7 +411,7 @@ function isOrange(hex: string) {
   return h >= 14 && h <= 34;
 }
 let scratch: HTMLCanvasElement | null = null;
-/** 마스크 한 칸(절반 크기)에 색 곱해서 (dx, dy, dw, dh) 에 */
+/** 마스크 한 칸에 색 곱해서 (dx, dy, dw, dh) 에 */
 function tintCell(ctx: CanvasRenderingContext2D, part: HTMLCanvasElement, sx: number, sy: number, sw: number, sh: number, dx: number, dy: number, dw: number, dh: number, color: string) {
   const w = Math.ceil(sw), h = Math.ceil(sh);
   if (!scratch) scratch = document.createElement("canvas");
@@ -440,8 +440,8 @@ function cellDraw(ctx: CanvasRenderingContext2D, key: SheetKey, im: CanvasImageS
   if (!helmOn && !teamOn) return;
   const t = tintOf(key);
   if (!t) return;
-  if (helmOn) tintCell(ctx, t.helm, sx / 2, sy / 2, sw / 2, sh / 2, dx, dy, dw, dh, lk.helm);
-  if (teamOn) tintCell(ctx, t.team, sx / 2, sy / 2, sw / 2, sh / 2, dx, dy, dw, dh, lk.team);
+  if (helmOn) tintCell(ctx, t.helm, sx, sy, sw, sh, dx, dy, dw, dh, lk.helm);
+  if (teamOn) tintCell(ctx, t.team, sx, sy, sw, sh, dx, dy, dw, dh, lk.team);
 }
 
 /** 타자 시트 중 아직 한 번도 안 그린 것 (첫 그림 때 디코드 · GPU 업로드로 화면이 멈칫해서 미리 1px 로 한 번 그려 둠) */

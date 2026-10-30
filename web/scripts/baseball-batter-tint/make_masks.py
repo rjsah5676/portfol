@@ -1,5 +1,5 @@
 """
-타자 그림 팀색 마스크 만들기 — 주황 유니폼(헬멧 · 소매 · 양말) 자리를 찾아 batter-{이름}-tint.webp 로 저장 (절반 크기).
+타자 그림 팀색 마스크 만들기 — 주황 유니폼(헬멧 · 소매 · 양말) 자리를 찾아 batter-{이름}-tint.webp 로 저장 (원래 크기 · 무손실).
   R = 헬멧 명암 · G = 팀(소매 · 양말) 명암 · B = 0 / A = 그 자리 비중 (가장자리는 부드럽게)
   명암 = 밝기 / 기준 밝기 (주황 기본 = 1)
 게임은 칸마다: 원래 그림 → 마스크 명암 × 팀색을 그 비중만큼 덮어 칠함 (src/lib/baseball/batterSprite.ts)
@@ -41,16 +41,60 @@ def make(name):
     a = np.asarray(im).astype(np.float32) / 255
     h, s, v = hsv(a[..., :3])
     alpha = a[..., 3]
-    # 주황: 색상 8 ~ 34° · 채도 0.75+ · 밝기 0.22+ (방망이 나무색 · 피부는 채도가 낮아서 빠짐)
-    hw = ss(2, 9, h) * (1 - ss(31, 37, h))
-    w = hw * ss(0.7, 0.84, s) * ss(0.18, 0.3, v) * (alpha > 0.5)
-    # 유니폼 바로 옆의 덜 진한 주황(소매 윗선 · 양말 하이라이트)도 — 방망이 쪽(색상 30°+)은 빼고
-    w2 = ss(2, 9, h) * (1 - ss(26, 31, h)) * ss(0.38, 0.55, s) * ss(0.18, 0.3, v) * (alpha > 0.5)
-    near = ndimage.binary_dilation(w > 0.5, iterations=4)
-    w = np.maximum(w, w2 * near)
-    # 유니폼 안쪽의 가는 하이라이트 줄(양말 · 소매 윗선): 닫힘 연산으로 메워지는 자리 중 주황 기운 있는 곳
-    inner = ndimage.binary_closing(w > 0.5, iterations=3) & ~(w > 0.5)
-    w = np.where(inner & (hw > 0.5) & (s > 0.18), np.maximum(w, 1.0), w)
+    # 주황 유니폼 픽셀만 (픽셀 단위로 엄격하게 — 피부 · 흰 옷 · 외곽선으로 번지지 않게)
+    hr = np.where(h > 300, h - 360, h)  # 빨강 쪽(소매 줄무늬 · 그늘)은 음수로 이어서
+    hw = ss(-14, -6, hr) * (1 - ss(33, 38, hr))
+    w = hw * ss(0.58, 0.72, s) * ss(0.08, 0.16, v) * (alpha > 0.5)
+    # 양말 · 소매 안의 밝은 주름 줄 (노란 기 · 채도 조금 낮음): 유니폼으로 둘러싸인 가는 틈만
+    inner = ndimage.binary_closing(w > 0.5, iterations=2) & ~(w > 0.5)
+    stripe = inner & (h > 8) & (h < 50) & (s > 0.42) & (v > 0.55)
+    w = np.where(stripe, np.maximum(w, 0.9), w)
+    # 방망이 그늘 쪽: 밝은 나무색(채도 중간) 큰 덩어리 바로 옆의 얇은 주황 띠는 뺌
+    wood = (h > 18) & (h < 48) & (s > 0.2) & (s < 0.6) & (v > 0.72) & (alpha > 0.5)
+    wl, wn = ndimage.label(wood)
+    if wn:
+        sz = ndimage.sum(wood, wl, range(1, wn + 1))
+        wood = np.isin(wl, [i + 1 for i in range(wn) if sz[i] >= 150])
+    # 방망이: 밝은 나무 덩어리의 축을 따라 막대 모양 띠 (나무 폭의 2.2배 · 양끝 조금 더) 안은 칠하지 않음
+    #   (그늘진 쪽 나무가 주황 유니폼과 색이 겹쳐서 픽셀 색으로는 못 가름)
+    batband = np.zeros_like(w, dtype=bool)
+    wl, wn = ndimage.label(wood)
+    for sl, i in zip(ndimage.find_objects(wl), range(1, wn + 1)):
+        yy, xx = np.where(wl[sl] == i)
+        if len(yy) < 150:
+            continue
+        yy = yy + sl[0].start
+        xx = xx + sl[1].start
+        P = np.vstack([xx, yy]).astype(np.float64)
+        mu = P.mean(axis=1, keepdims=True)
+        ev, evec = np.linalg.eigh(np.cov(P))
+        if ev[0] <= 0 or np.sqrt(ev[1] / ev[0]) < 2.5:
+            continue  # 막대 모양 아님 (헬멧 하이라이트 등)
+        ax = evec[:, 1]
+        nrm = np.array([-ax[1], ax[0]])
+        al = ax @ (P - mu)
+        pe = nrm @ (P - mu)
+        half = np.percentile(np.abs(pe), 92) * 1.9 + 2
+        a0, a1 = al.min() - 12, al.max() + 12
+        y0b, y1b = max(0, int(yy.min() - 60)), min(w.shape[0], int(yy.max() + 60))
+        x0b, x1b = max(0, int(xx.min() - 60)), min(w.shape[1], int(xx.max() + 60))
+        gy, gx = np.mgrid[y0b:y1b, x0b:x1b]
+        dx, dy = gx - mu[0, 0], gy - mu[1, 0]
+        A = dx * ax[0] + dy * ax[1]
+        N = dx * nrm[0] + dy * nrm[1] - np.median(pe)
+        batband[y0b:y1b, x0b:x1b] |= (np.abs(N) < half) & (A > a0) & (A < a1)
+    # 띠 안에서도 진한 유니폼(채도 0.9+, 헬멧 · 소매)은 남기고 덜 진한 나무 그늘 · 나무 바로 옆만 지움
+    near_wood3 = ndimage.distance_transform_edt(~wood) <= 1.5
+    w = np.where(batband & ((s < 0.84) | near_wood3), 0, w)
+    # 어깨 줄무늬 (흰 상의 위 연한 주황 가는 줄): 작은 덩어리 · 소매에 붙어 있는 것만 (피부는 큰 덩어리라 빠짐)
+    pale = (hw > 0.5) & (s > 0.26) & (s < 0.62) & (v > 0.6) & (alpha > 0.5) & (w < 0.5) & ~batband
+    pl, pn = ndimage.label(pale)
+    if pn:
+        nearteam = ndimage.binary_dilation(w > 0.5, iterations=3)
+        sz = ndimage.sum(pale, pl, range(1, pn + 1))
+        touch = ndimage.maximum(nearteam, pl, range(1, pn + 1))
+        keep = [i + 1 for i in range(pn) if sz[i] < 90 and touch[i]]
+        w = np.where(np.isin(pl, keep), np.maximum(w, 0.85), w)
     shade = np.clip(v / REF, 0, 1)
     helm = np.zeros_like(w)
     CW, CH, cols, n = meta["CW"], meta["CH"], meta.get("cols", meta["n"]), meta["n"]
@@ -137,7 +181,6 @@ def make(name):
     out = np.dstack([np.where(helm > 0, g, 0), np.where(helm > 0, 0, g), np.zeros_like(g), (wt * 255).astype(np.uint8)])
     out[out[..., 3] == 0, :3] = 0
     img = Image.fromarray(out.astype(np.uint8), "RGBA")
-    img = img.resize((im.width // 2, im.height // 2), Image.LANCZOS)
     img.save(os.path.join(SPR, f"batter-{name}-tint.webp"), lossless=True, method=6)
     print(name, im.size, "팀", int((team > 0.5).sum()), "헬멧", int((helm > 0.5).sum()))
 

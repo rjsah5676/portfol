@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DIFF_NAME, type Diff } from "@/lib/baseball/ai";
 import { DH, DW, useStage } from "./Stage";
-import { FIELD_VIEW, setFieldView } from "./view";
 import { Match, loadSave, type MatchCfg, type Save, type UiState } from "./match";
 import { isMuted, setMuted } from "./sfx";
 import { ACCENT, Btn, MenuBg, Modal, font, useSpaceConfirm } from "./ui";
@@ -649,7 +648,6 @@ function Play({
       else if (k === "arrowup" || k === "w") (e.preventDefault(), m.moveAim(0, 1));
       else if (k === "arrowdown" || k === "s") (e.preventDefault(), m.moveAim(0, -1));
       else if (k === "f") m.toggleFast();
-      else if (k === "v") setFieldView(!FIELD_VIEW.persp);
     };
     const onBlur = () => {
       held.clear();
@@ -778,10 +776,6 @@ function Play({
               </Btn>
               <Btn className="px-3 py-1.5 text-[13px]" color="#7dff9a" onClick={() => m?.skipField()}>
                 건너뛰기
-              </Btn>
-              {/* 비교용: 탑뷰 ↔ 3/4 시점 (다음 타구부터가 아니라 바로) */}
-              <Btn className="px-3 py-1.5 text-[13px]" color="#7ad7ff" onClick={() => setFieldView(!FIELD_VIEW.persp)}>
-                시점 바꾸기 · V
               </Btn>
             </div>
           )}

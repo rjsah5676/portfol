@@ -7,7 +7,7 @@
 import { BASES, type FieldOut, type Frame } from "@/lib/baseball/play";
 
 interface ActMeta { n: number; loop: boolean; span: number; key: number; row: number }
-interface SheetMeta { cell: number; ax: number; ay: number; acts: Record<string, ActMeta> }
+interface SheetMeta { cell: number; ax: number; ay: number; acts: Record<string, ActMeta>; /** 렌더 몇 px = 시트 1px (예전 시트 5) */ f?: number }
 interface Sheet { meta: SheetMeta; img: HTMLImageElement; mask: HTMLImageElement; ready: boolean; tinted: Map<string, HTMLCanvasElement> }
 
 const BASE = "/baseball/sprites/field";
@@ -88,7 +88,9 @@ export function drawFieldSprite(ctx: CanvasRenderingContext2D, kind: "fd" | "bt"
   ctx.fill();
   const prev = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(tinted(s, color), sx, sy, C, C, x - s.meta.ax * sc, y - s.meta.ay * sc, C * sc, C * sc);
+  // sc 는 「렌더 5px = 1칸」 기준 — 더 촘촘한 시트(f 3)는 그만큼 작게 그려서 화면 크기는 같게
+  const u = (sc * (s.meta.f ?? 5)) / 5;
+  ctx.drawImage(tinted(s, color), sx, sy, C, C, x - s.meta.ax * u, y - s.meta.ay * u, C * u, C * u);
   ctx.imageSmoothingEnabled = prev;
   return true;
 }
