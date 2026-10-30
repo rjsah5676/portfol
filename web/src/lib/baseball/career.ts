@@ -16,7 +16,7 @@ import { TEAM_DEFS, charById, type Batter, type Boost, type CharId } from "./dat
 import type { BatLine, Clutch } from "./game";
 import { clamp, makeRng, type Rng } from "./rng";
 import { DEFAULT_LOOK, type Look } from "./look";
-import { BOND_IDS, BOONS, DUOS, EPILOGUE, ROLE, STORY, isBond, type BondId, type Choice, type Role } from "./bonds";
+import { BOND_IDS, BOONS, DUOS, EPILOGUE, ROLE, STORY, isBond, type BondId, type Choice, type ChoiceFx, type Role } from "./bonds";
 
 export type StatKey = "hit" | "power" | "run" | "def";
 export type Stats = Record<StatKey, number>;
@@ -148,6 +148,8 @@ export interface Skill {
   noPick?: boolean;
   /** 인연 축복 (그 사람 · 듀오면 두 사람) — 겹치면 레벨 업 (최대 3) */
   boon?: CharId | [CharId, CharId];
+  /** 전설 카드 (금색 — 3주차부터 고르기에 가끔 · 판을 바꿀 만큼 큼) */
+  legend?: boolean;
   fx: Fx;
 }
 
@@ -233,13 +235,21 @@ export const SKILLS = {
   clutchBad: { name: "찬스 약함", desc: "득점권에서 타격 -60", val: -6, bad: true, noPick: true, fx: { sit: { rispHit: -60 } } },
   fragile: { name: "부상 체질", desc: "부상 확률 +50%", val: -6, bad: true, noPick: true, fx: { injury: 0.5 } },
   // 세트 (같은 태그 SET_NEED 장)
-  set_clutch: { name: "클러치 히터", desc: "찬스 세트: 득점권 타격 · 파워 +60", val: 6, set: "clutch", noPick: true, fx: { sit: { rispHit: 60, rispPow: 60 } } },
-  set_contact: { name: "타격 기계", desc: "컨택 세트: 경기 타격 +60", val: 6, set: "contact", noPick: true, fx: { add: { hit: 60 } } },
-  set_power: { name: "거포 각성", desc: "파워 세트: 경기 파워 +60 · 홈런 치면 40% 확률로 컨디션 ▲", val: 6, set: "power", noPick: true, fx: { add: { power: 60 }, hrCond: 0.4 } },
-  set_speed: { name: "바람의 아들", desc: "스피드 세트: 경기 주루 +80", val: 6, set: "speed", noPick: true, fx: { add: { run: 80 } } },
-  set_glove: { name: "골든 글러브", desc: "수비 세트: 경기 수비 +80 · 호수비 찬스 +10%", val: 6, set: "glove", noPick: true, fx: { add: { def: 80 }, dive: 0.1 } },
+  set_clutch: { name: "클러치 히터", desc: "찬스 세트: 득점권 타격 · 파워 +80", val: 6, set: "clutch", noPick: true, fx: { sit: { rispHit: 80, rispPow: 80 } } },
+  set_contact: { name: "타격 기계", desc: "컨택 세트: 경기 타격 +80", val: 6, set: "contact", noPick: true, fx: { add: { hit: 80 } } },
+  set_power: { name: "거포 각성", desc: "파워 세트: 경기 파워 +80 · 홈런 치면 40% 확률로 컨디션 ▲", val: 6, set: "power", noPick: true, fx: { add: { power: 80 }, hrCond: 0.4 } },
+  set_speed: { name: "바람의 아들", desc: "스피드 세트: 경기 주루 +100", val: 6, set: "speed", noPick: true, fx: { add: { run: 100 } } },
+  set_glove: { name: "골든 글러브", desc: "수비 세트: 경기 수비 +100 · 호수비 찬스 +10%", val: 6, set: "glove", noPick: true, fx: { add: { def: 100 }, dive: 0.1 } },
   set_grit: { name: "불굴", desc: "근성 세트: 컨디션 최악 없음 · 부상 기간 절반", val: 6, set: "grit", noPick: true, fx: { condFloor: true, injuryDur: -0.5 } },
   set_luck: { name: "럭키 가이", desc: "행운 세트: 각성 확률 3배 · 대성공 +5%", val: 6, set: "luck", noPick: true, fx: { awaken: 2, great: 0.05 } },
+  // 전설 (금색 · 3주차부터 고르기 3장에 가끔 · 태그도 있어서 세트까지 밀어 줌)
+  lg_monster: { name: "괴물 신인", desc: "경기 타격 · 파워 · 주루 +55", val: 10, legend: true, noPick: true, tag: "luck", fx: { add: { hit: 55, power: 55, run: 55 } } },
+  lg_reversal: { name: "역전의 명수", desc: "7회부터 타격 · 파워 +140", val: 10, legend: true, noPick: true, tag: "clutch", fx: { sit: { late: 140 } } },
+  lg_genius: { name: "천재", desc: "모든 훈련 효율 +25%", val: 10, legend: true, noPick: true, tag: "contact", fx: { train: { all: 0.25 } } },
+  lg_titan: { name: "거인의 혈통", desc: "경기 파워 +150 / 경기 주루 -40", val: 10, legend: true, noPick: true, tag: "power", fx: { add: { power: 150, run: -40 } } },
+  lg_eye: { name: "매의 눈", desc: "경기 타격 +50 · 2스트라이크 타격 +150", val: 10, legend: true, noPick: true, tag: "contact", fx: { add: { hit: 50 }, sit: { twoK: 150 } } },
+  lg_flash: { name: "섬광", desc: "경기 주루 +130 · 호수비 찬스 +15%", val: 10, legend: true, noPick: true, tag: "speed", fx: { add: { run: 130 }, dive: 0.15 } },
+  lg_wall: { name: "만리장성", desc: "경기 수비 +150 · 파워 +40", val: 10, legend: true, noPick: true, tag: "glove", fx: { add: { def: 150, power: 40 } } },
 } satisfies Record<string, Skill>;
 
 export type SkillId = keyof typeof SKILLS;
@@ -252,6 +262,24 @@ export const SP_LV_VAL = 2;
 
 /** 세트 효과에 필요한 같은 태그 장수 */
 export const SET_NEED = 4;
+/**
+ * 태그 단계 (오토배틀러식 2 · 4 · 6): 2장 = 작은 덤 · 4장 = 세트 카드(자동 획득) · 6장 = 전설 세트
+ * 한 판마다 어떤 태그로 갈지가 빌드 — 후반에 6장이 터지면 크게 강해짐
+ */
+export const TRAIT_TIERS = [2, SET_NEED, 6] as const;
+export const TRAIT: Record<Tag, { t2: { desc: string; fx: Fx }; t6: { name: string; desc: string; fx: Fx } }> = {
+  clutch: { t2: { desc: "득점권 타격 +25", fx: { sit: { rispHit: 25 } } }, t6: { name: "승부의 신", desc: "득점권 타격 · 파워 +100 · 7회부터 +60", fx: { sit: { rispHit: 100, rispPow: 100, late: 60 } } } },
+  contact: { t2: { desc: "경기 타격 +20", fx: { add: { hit: 20 } } }, t6: { name: "안타 제조기", desc: "경기 타격 +130", fx: { add: { hit: 130 } } } },
+  power: { t2: { desc: "경기 파워 +20", fx: { add: { power: 20 } } }, t6: { name: "홈런왕의 혼", desc: "경기 파워 +130 · 홈런 치면 컨디션 ▲ +30%", fx: { add: { power: 130 }, hrCond: 0.3 } } },
+  speed: { t2: { desc: "경기 주루 +25", fx: { add: { run: 25 } } }, t6: { name: "광속", desc: "경기 주루 +150 · 타격 +30", fx: { add: { run: 150, hit: 30 } } } },
+  glove: { t2: { desc: "경기 수비 +25", fx: { add: { def: 25 } } }, t6: { name: "수비의 신", desc: "경기 수비 +150 · 호수비 찬스 +20%", fx: { add: { def: 150 }, dive: 0.2 } } },
+  grit: { t2: { desc: "부상 확률 -15% · 훈련 실패 -3%p", fx: { injury: -0.15, fail: 0.03 } }, t6: { name: "불사신", desc: "경기마다 체력 +6 · 2스트라이크 타격 +100", fx: { gameSta: 6, sit: { twoK: 100 } } } },
+  luck: { t2: { desc: "대성공 +3% · 스킬P +5%", fx: { great: 0.03, sp: 0.05 } }, t6: { name: "행운의 여신", desc: "대성공 +8% · 스킬P +25% · 각성 확률 3배", fx: { great: 0.08, sp: 0.25, awaken: 2 } } },
+};
+/** 지금 켜진 태그 단계 (0 · 2 · 4 · 6) */
+export const traitTier = (n: number) => (n >= 6 ? 6 : n >= SET_NEED ? 4 : n >= 2 ? 2 : 0);
+/** 특수능력 경기 효과 배율 (능력치 · 상황 덤) — 고른 카드가 체감되게 */
+export const SKILL_POW = 1.4;
 /** 태그 장수 (세트 · 나쁜 것 · 양날 빼고) */
 export function tagCount(c: Pick<Career, "skills">) {
   const n: Partial<Record<Tag, number>> = {};
@@ -278,11 +306,15 @@ export function fxOf(c: Pick<Career, "skills"> & { blv?: Partial<Record<SkillId,
     injury: 0, injuryDur: 0, great: 0, gameSta: 0, hrCond: 0, money: 0, sp: 0, exp: 0, dive: 0, awaken: 0, slump: 0, condFloor: false, calm: false,
     aff: 0, rest: 0, fail: 0, stam: 0,
   };
-  for (const id of c.skills) {
-    const x = skill(id).fx;
-    const m = lvMul(c, id);
-    for (const k of STAT_KEYS) f.add[k] += (x.add?.[k] ?? 0) * m;
-    if (x.sit) for (const [k, v] of Object.entries(x.sit) as [keyof typeof f.sit, number][]) f.sit[k] = (f.sit[k] ?? 0) + v * m;
+  const tc = tagCount(c);
+  const xs: { x: Fx; m: number }[] = c.skills.map((id) => ({ x: skill(id).fx, m: lvMul(c, id) }));
+  for (const [t, n] of Object.entries(tc) as [Tag, number][]) {
+    if (n >= 2) xs.push({ x: TRAIT[t].t2.fx, m: 1 });
+    if (n >= 6) xs.push({ x: TRAIT[t].t6.fx, m: 1 });
+  }
+  for (const { x, m } of xs) {
+    for (const k of STAT_KEYS) f.add[k] += (x.add?.[k] ?? 0) * m * SKILL_POW;
+    if (x.sit) for (const [k, v] of Object.entries(x.sit) as [keyof typeof f.sit, number][]) f.sit[k] = (f.sit[k] ?? 0) + v * m * SKILL_POW;
     if (x.train) for (const [k, v] of Object.entries(x.train) as [TrainKey | "all", number][]) f.train[k] += v * m;
     f.injury += (x.injury ?? 0) * m;
     f.injuryDur += (x.injuryDur ?? 0) * m;
@@ -316,13 +348,16 @@ function gainSkill(c: Career, id: SkillId): string[] {
   if (id === "iron") c.skills = c.skills.filter((s) => s !== "fragile");
   c.skills.push(id);
   const tag = skill(id).tag;
-  if (tag && (tagCount(c)[tag] ?? 0) >= SET_NEED) {
+  const n = tag ? tagCount(c)[tag] ?? 0 : 0;
+  if (tag && n === 2) out.push(`◆ ${TAG_NAME[tag]} 2단계 — ${TRAIT[tag].t2.desc}`);
+  if (tag && n >= SET_NEED) {
     const set = `set_${tag}` as SkillId;
     if (set in SKILLS && !c.skills.includes(set)) {
       c.skills.push(set);
       out.push(`★ 세트 완성 — 「${skill(set).name}」 · ${skill(set).desc}`);
     }
   }
+  if (tag && n === 6) out.push(`★★★ 전설 세트 「${TRAIT[tag].t6.name}」 — ${TRAIT[tag].t6.desc}`);
   return out;
 }
 
@@ -617,6 +652,26 @@ function setOrder(c: Career) {
   // 챔피언전: 필살타법을 배웠으면 필살 훈련
   if (ch === 7 && c.learned) key = "special";
   c.story.order = key ? { key, need: ch === 7 ? 1 : ORDER_NEED, done: 0, ok: false } : undefined;
+}
+/** 인연 고르기 덤 */
+function applyChoiceFx(c: Career, fx: ChoiceFx) {
+  if (fx.stat) for (const [k, v] of Object.entries(fx.stat) as [StatKey, number][]) if (v > 0) grow(c, k, v);
+  if (fx.sp) addSp(c, fx.sp);
+  if (fx.cond) addCond(c, fx.cond);
+  if (fx.money) addMoney(c, fx.money);
+  if (fx.stamina) addStamina(c, fx.stamina);
+}
+/** 고르기 버튼에 미리 보일 덤 칩 */
+export function choiceTags(o: Choice): string[] {
+  const t: string[] = [];
+  const f = o.fx ?? {};
+  for (const [k, v] of Object.entries(f.stat ?? {}) as [StatKey, number][]) t.push(`${STAT_NAME[k]} +${v}`);
+  if (f.sp) t.push(`스킬P +${f.sp}`);
+  if (f.cond) t.push(`컨디션 ${f.cond > 0 ? "▲" : "▼"}`);
+  if (f.money) t.push(`자금 +${f.money}`);
+  if (f.stamina) t.push(`체력 ${f.stamina > 0 ? "+" : ""}${f.stamina}`);
+  if (o.gamble) t.push(`성공 ${Math.round(o.gamble.p * 100)}%`);
+  return t;
 }
 /** 스토리 고르기 덤 (프롤로그 각오 등) */
 export function storyFx(c: Career, fx: { cond?: number; sp?: number; money?: number }) {
@@ -1163,7 +1218,7 @@ function makeBoonPick(c: Career, id: BondId, rng: Rng, from: string) {
   const hasFrom = (who: BondId) => (BOONS[who] as SkillId[]).some(own);
   const duos = DUOS.filter((d) => (d.a === id || d.b === id) && hasFrom(d.a) && hasFrom(d.b) && lv(d.id as SkillId) < 3).map((d) => d.id as SkillId);
   const opts: SkillId[] = [];
-  if (duos.length && rng() < 0.6) opts.push(rng.pick(duos));
+  if (duos.length && rng() < 0.9) opts.push(rng.pick(duos));
   const pool = [...mine];
   while (opts.length < 3 && pool.length) opts.push(pool.splice(Math.floor(rng() * pool.length), 1)[0]);
   if (!opts.length) {
@@ -1307,6 +1362,9 @@ function makePick(c: Career, rng: Rng, from: string) {
   const left = risky.filter((id) => !opts.includes(id));
   while (opts.length < 3 && left.length) opts.push(left.splice(Math.floor(rng() * left.length), 1)[0]);
   if (!opts.length) return false;
+  // 전설 카드: 3주차부터 가끔 한 장 (판마다 터지는 순간)
+  const legends = SKILL_IDS.filter((id) => skill(id).legend && !c.skills.includes(id));
+  if (legends.length && c.week >= 3 && rng() < (c.phase === "final" || c.phase === "end" ? 0.6 : 0.3)) opts[opts.length - 1] = rng.pick(legends);
   for (let i = opts.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [opts[i], opts[j]] = [opts[j], opts[i]];
@@ -1350,11 +1408,15 @@ export function skillShop(c: Career): SkillId[] {
   const tags = Object.entries(tagCount(c)).filter(([, n]) => (n ?? 0) > 0 && (n ?? 0) < SET_NEED).map(([t]) => t as Tag);
   const want = shuffled.find((id) => tags.includes(skill(id).tag as Tag));
   const list = [...(want ? [want] : []), ...shuffled.filter((id) => id !== want)].slice(0, 6);
-  return list.filter((id) => !c.skills.includes(id));
+  // 4주차부터 주마다 반쯤 전설 카드 한 장 (비쌈 — 모아 둔 스킬P 쓸 곳)
+  const legends = SKILL_IDS.filter((id) => skill(id).legend && !c.skills.includes(id));
+  if (c.week >= 4 && legends.length && rng() < 0.5) list[5] = legends[Math.floor(rng() * legends.length)];
+  return list.filter((id) => id && !c.skills.includes(id));
 }
 /** 스킬 값 (가진 일반 카드가 많을수록 비쌈) */
 export function skillPrice(c: Career, id: SkillId) {
   const n = c.skills.filter((x) => !skill(x).boon && !skill(x).set && !skill(x).bad).length;
+  if (skill(id).legend) return 240 + n * 10;
   return (skill(id).risk ? 50 : 70) + n * 15;
 }
 export function buySkill(c: Career, id: SkillId): string[] | string {
@@ -1520,10 +1582,18 @@ export function choose(c: Career, pick: number): TurnOut {
     const o = p.scene.opts[pick] ?? p.scene.opts[0];
     const aff = addAff(c, id, o.aff);
     if (o.know) c.know[id] = (c.know[id] ?? 0) + 1;
-    grow(c, BONDS[id].stat, 10 + o.aff * 0.8);
+    // 고른 답의 덤 (모험이면 성공률) — 덤이 없는 옛 대사는 그 사람 능력치 조금
+    const ok = !o.gamble || rng() < o.gamble.p;
+    const fx = ok ? o.fx : o.gamble!.bad;
+    grow(c, BONDS[id].stat, o.fx || o.gamble ? 4 : 10 + o.aff * 0.8);
+    if (fx) applyChoiceFx(c, fx);
+    if (o.gamble) {
+      lines.push(ok ? "모험 성공!" : "모험 실패…");
+      if (!ok) tone = "fail";
+    }
     lines.push(`호감 ${aff >= 0 ? "+" : ""}${aff}${o.know ? " · 마음이 통했다 · 이해 +1" : ""}`);
     pushLog(c, `${p.title}: ${o.text}`);
-    return { title: p.title, tone: o.know ? "great" : "event", lines, delta: diffOf(c, a), char: id, aff, vn: { char: id, lines: [`▶ ${o.text}`, o.reply] } };
+    return { title: p.title, tone: tone === "fail" ? "fail" : o.know ? "great" : "event", lines, delta: diffOf(c, a), char: id, aff, vn: { char: id, lines: [`▶ ${o.text}`, ok ? o.reply : o.gamble!.badReply] } };
   } else if (p.kind === "coach") {
     if (pick === 0) {
       if (rng() < injuryP(c) * 1.5 + 0.03) {

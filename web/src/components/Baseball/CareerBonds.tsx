@@ -58,6 +58,7 @@ export function VnScene({
   lines,
   title,
   choices,
+  tags,
   onChoose,
   result,
   onDone,
@@ -70,6 +71,8 @@ export function VnScene({
   lines: string[];
   title?: string;
   choices?: string[];
+  /** 고르기 버튼 옆 덤 칩 (능력치 · 성공률) */
+  tags?: string[][];
   onChoose?: (i: number) => void;
   result?: TurnOut;
   onDone?: () => void;
@@ -177,7 +180,16 @@ export function VnScene({
                 <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[13px]" style={{ background: `${ch.color}55` }}>
                   {k + 1}
                 </span>
-                <span>{t}</span>
+                <span className="flex-1">{t}</span>
+                {tags?.[k]?.length ? (
+                  <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                    {tags[k].map((x) => (
+                      <span key={x} className="rounded px-1.5 py-[1px] text-[11px] font-bold" style={{ background: x.startsWith("성공") ? "#ff9a3d33" : "#ffd23f22", color: x.startsWith("성공") ? "#ffb070" : "#ffd23f" }}>
+                        {x}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </Btn>
             ))}
           </div>

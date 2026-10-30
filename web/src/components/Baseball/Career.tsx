@@ -13,7 +13,7 @@ import {
   INJURY_NAME, LEARNED_VAL, MISSION_CATS, MISSION_TIER, SET_NEED, SPOT_EVENTS, STAT_COLOR, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TICKETS, TRAINS, TRAIN_KEYS, TRAIN_LV_EVERY, TYPES, WEEKS,
   CAREER_DIFF, PICK_POS, PICK_TYPES, act, autoBattle, avg, awardRace, buy, buyGear, buySkill, canPlay, careerBatter, careerGameStats, choose, chooseMissions, chooseOffer, choosePick, consumeItem, endSeason,
   finishBattle, fmtAvg, gameName, gearNext, gradeOf, matesOf, missionName, missionNeed, missionNow, myRank, newCareer, nextBeat, oppOf, ops, ovrOf, posOf, seasonGrade, skill, skillPrice, skillShop, spLv, spUses,
-  standings, statGrade, stepOf, tagCount, trainLv, trainPreview, whenText, whyNot, chapterOf, storyFx,
+  standings, statGrade, stepOf, tagCount, trainLv, trainPreview, whenText, whyNot, chapterOf, storyFx, choiceTags, traitTier, TRAIT,
   type Action, type BatType, type Career, type ConsumableId, type Delta, type FieldPos, type GearId, type HofEntry, type SeasonMission, type SkillId, type StatKey, type Tag, type TrainKey, type TurnOut,
 } from "@/lib/baseball/career";
 import { slotName } from "@/lib/baseball/careerGame";
@@ -370,6 +370,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
             lines={c.pending.scene.lines}
             title={c.pending.title}
             choices={c.pending.choices}
+            tags={c.pending.scene.opts.map(choiceTags)}
             onChoose={doChoose}
             seenKey={`${c.pending.char}:${c.pending.scene.beat}`}
             panel={isBond(c.pending.char) ? <BondPanel c={c} id={c.pending.char} label={`${BEAT_NAME[BEATS[c.pending.scene.beat]]} ${c.pending.scene.beat + 1}/${BOND_MAX}`} /> : undefined}
@@ -523,10 +524,10 @@ function StatChip({ k, v, gain }: { k: StatKey; v: number; gain?: number }) {
 
 function SkillChip({ id }: { id: SkillId }) {
   const s = skill(id);
-  const col = s.set ? "#ffd23f" : s.bad ? "#ff9a9a" : s.risk ? "#ffb070" : s.tag ? TAG_COLOR[s.tag] : "#cfe9ff";
+  const col = s.set || s.legend ? "#ffd23f" : s.bad ? "#ff9a9a" : s.risk ? "#ffb070" : s.tag ? TAG_COLOR[s.tag] : "#cfe9ff";
   return (
-    <span title={s.desc} className="rounded-md border px-1.5 py-0.5 text-[11px]" style={{ borderColor: `${col}88`, color: col, fontWeight: s.set ? 700 : 400, background: s.set ? "#ffd23f1a" : undefined }}>
-      {s.set ? "★ " : ""}
+    <span title={s.desc} className="rounded-md border px-1.5 py-0.5 text-[11px]" style={{ borderColor: `${col}88`, color: col, fontWeight: s.set || s.legend ? 700 : 400, background: s.set || s.legend ? "#ffd23f1a" : undefined }}>
+      {s.set || s.legend ? "★ " : ""}
       {s.name}
     </span>
   );
@@ -1143,8 +1144,13 @@ function SkillPanel({ c, onOpen }: { c: Career; onOpen: () => void }) {
         {(Object.keys(TAG_NAME) as Tag[])
           .filter((t) => tc[t])
           .map((t) => (
-            <span key={t} className="rounded px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: `${TAG_COLOR[t]}22`, color: TAG_COLOR[t] }}>
-              {TAG_NAME[t]} {Math.min(SET_NEED, tc[t] ?? 0)}/{SET_NEED}
+            <span key={t} title={`2장 ${TRAIT[t].t2.desc} · 4장 세트 · 6장 ${TRAIT[t].t6.name}`} className="flex items-center gap-1 rounded px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: `${TAG_COLOR[t]}22`, color: TAG_COLOR[t] }}>
+              {TAG_NAME[t]} {tc[t]}
+              <span className="flex gap-[2px]">
+                {[2, SET_NEED, 6].map((n) => (
+                  <span key={n} className="h-[6px] w-[6px] rotate-45" style={{ background: traitTier(tc[t] ?? 0) >= n ? TAG_COLOR[t] : "rgba(255,255,255,0.18)" }} />
+                ))}
+              </span>
             </span>
           ))}
       </div>
@@ -1611,18 +1617,28 @@ function OfferModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
 }
 
 /** 특수능력 3장 중 1장 */
+/** 태그 n → n+1 장이 되면 무엇이 켜지나 */
+function traitNext(t: Tag, have: number) {
+  const n = have + 1;
+  if (n === 2) return `${TAG_NAME[t]} 2단계 켜짐 — ${TRAIT[t].t2.desc}`;
+  if (n === SET_NEED) return `★ ${TAG_NAME[t]} 세트 완성!`;
+  if (n === 6) return `★★★ 전설 세트 「${TRAIT[t].t6.name}」!`;
+  const nx = n < 2 ? 2 : n < SET_NEED ? SET_NEED : 6;
+  return n > 6 ? `${TAG_NAME[t]} ${n}장` : `${TAG_NAME[t]} ${have} → ${n} (${nx}장에 다음 단계)`;
+}
+
 function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
   const p = c.pick!;
   const tc = tagCount(c);
   return (
     <Modal w={760}>
       <Banner color="#ffb020">{p.from}</Banner>
-      <div className="mt-2 text-[13px] text-white/60">특수능력 하나를 골라요 · 같은 태그 {SET_NEED}장이면 세트 효과 · 주황 테두리는 양날 카드</div>
+      <div className="mt-2 text-[13px] text-white/60">특수능력 하나를 골라요 · 같은 태그 2 · 4 · 6장마다 단계 효과 · 주황 테두리는 양날 · 금색은 전설</div>
       {!p.options.length && <div className="mt-4 text-[14px] text-white/70">더 고를 수 있는 특수능력이 없어요. 넘기기를 눌러 주세요.</div>}
       <div className="mt-3 grid grid-cols-3 gap-3">
         {p.options.map((id, i) => {
           const s = skill(id);
-          const col = s.risk ? "#ffb070" : s.tag ? TAG_COLOR[s.tag] : "#fff";
+          const col = s.legend ? "#ffd23f" : s.risk ? "#ffb070" : s.tag ? TAG_COLOR[s.tag] : "#fff";
           const have = s.tag ? tc[s.tag] ?? 0 : 0;
           return (
             <button
@@ -1632,17 +1648,19 @@ function PickModal({ c, onPick }: { c: Career; onPick: (i: number) => void }) {
                 sfx.ui();
                 onPick(i);
               }}
-              className="flex min-h-[170px] cursor-pointer flex-col items-center justify-between rounded-2xl border-[3px] bg-[#0b0e1c] p-3 transition-transform hover:-translate-y-1"
-              style={{ borderColor: col, boxShadow: `0 0 18px ${col}55` }}
+              className="flex min-h-[170px] cursor-pointer flex-col items-center justify-between rounded-2xl border-[3px] p-3 transition-transform hover:-translate-y-1"
+              style={{ borderColor: col, boxShadow: s.legend ? `0 0 30px ${col}aa, inset 0 0 24px ${col}33` : `0 0 18px ${col}55`, background: s.legend ? "linear-gradient(160deg, #3a2a05 0%, #0b0e1c 60%)" : "#0b0e1c" }}
             >
               <span className="rounded px-2 py-0.5 text-[11px] font-bold" style={{ background: `${col}22`, color: col }}>
-                {s.risk ? "양날" : s.tag ? TAG_NAME[s.tag] : ""}
+                {s.legend ? `★ 전설${s.tag ? ` · ${TAG_NAME[s.tag]}` : ""}` : s.risk ? "양날" : s.tag ? TAG_NAME[s.tag] : ""}
               </span>
               <span className={`${font.title} text-[24px]`} style={{ color: col }}>
                 {s.name}
               </span>
               <span className="text-[13px] text-white/80">{s.desc}</span>
-              <span className="text-[11px] text-white/45">{s.tag && !s.risk ? `${TAG_NAME[s.tag]} ${have} → ${have + 1}/${SET_NEED}${have + 1 >= SET_NEED ? " · 세트 완성!" : ""}` : `종합 +${s.val}`}</span>
+              <span className="text-[11px]" style={{ color: s.tag && [2, SET_NEED, 6].includes(have + 1) ? "#ffd23f" : "rgba(255,255,255,0.45)" }}>
+                {s.tag && !s.risk ? traitNext(s.tag, have) : `종합 +${s.val}`}
+              </span>
             </button>
           );
         })}
@@ -2022,7 +2040,7 @@ function SkillShopModal({ c, onClose, onBuy }: { c: Career; onClose: () => void;
           return (
             <div key={id} className="flex min-h-[150px] flex-col items-center justify-between rounded-2xl border-2 bg-[#0b0e1c] p-2.5" style={{ borderColor: `${col}aa` }}>
               <span className="rounded px-2 py-0.5 text-[11px] font-bold" style={{ background: `${col}22`, color: col }}>
-                {s.risk ? "양날" : s.tag ? `${TAG_NAME[s.tag]} ${have}/${SET_NEED}` : ""}
+                {s.risk ? "양날" : s.tag ? `${TAG_NAME[s.tag]} ${have}장` : ""}
               </span>
               <span className={`${font.title} text-[20px]`} style={{ color: col }}>
                 {s.name}
@@ -2046,7 +2064,7 @@ function SkillShopModal({ c, onClose, onBuy }: { c: Career; onClose: () => void;
           </div>
         </div>
       )}
-      <div className="mt-2 text-[11.5px] text-white/45">같은 태그 {SET_NEED}장이면 세트 효과 · 많이 가질수록 값이 올라요 · SP는 훈련 · 경기 평가 · 시즌 미션으로</div>
+      <div className="mt-2 text-[11.5px] text-white/45">같은 태그 2 · 4 · 6장마다 단계 효과(4장 세트 · 6장 전설 세트) · 많이 가질수록 값이 올라요 · SP는 훈련 · 경기 평가 · 시즌 미션으로</div>
       <Btn space className="mt-3 w-full py-2" color="#8b93b8" onClick={onClose}>
         닫기
       </Btn>
