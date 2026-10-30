@@ -39,6 +39,7 @@
   ],
   "exclude": [
     "node_modules",
+    "scripts/baseball-field-sprites",
     "build/static",
     "build/dev/static",
     ".next/static",
