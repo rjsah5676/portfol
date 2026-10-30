@@ -143,9 +143,14 @@ export function drawFieldSprite(ctx: CanvasRenderingContext2D, kind: Kind, pose:
   // 그림자 (스프라이트 픽셀 크기로 딱 끊기는 타원)
   pxEllipse(ctx, x, y, 7 * sc, 2.4 * sc, u, "rgba(0,0,0,0.3)");
   const prev = ctx.imageSmoothingEnabled;
-  ctx.imageSmoothingEnabled = false;
+  const pq = ctx.imageSmoothingQuality;
+  // 시트 1px 이 실제 화면 1px 보다 작으면(멀리 있는 선수) 픽셀 그대로 줄이면 점이 듬성듬성 빠져 깨져 보임 → 그때만 부드럽게 줄임
+  const dev = u * Math.abs(ctx.getTransform().a);
+  ctx.imageSmoothingEnabled = dev < 0.95;
+  if (dev < 0.95) ctx.imageSmoothingQuality = "high";
   ctx.drawImage(tinted(f, color), sx, sy, C, C, x - meta.ax * u, y - meta.ay * u, C * u, C * u);
   ctx.imageSmoothingEnabled = prev;
+  ctx.imageSmoothingQuality = pq;
   return true;
 }
 
