@@ -55,8 +55,7 @@ function loadSheet(k: Kind, lv: 0 | 1) {
 export function preloadFieldSprites() {
   for (const k of ["fd", "bt"] as Kind[]) {
     loadSheet(k, 0);
-    // 확대용 고해상도는 주자만 (수비수는 아직 100K 모델 없음 — 404 콘솔 에러 안 나게)
-    if (k === "bt") loadSheet(k, 1);
+    loadSheet(k, 1);
   }
 }
 const sheetReady = (s: Sheet | null) => !!s?.meta && (Object.values(s.meta.acts).some((a) => a.file) || !!s.files.get("")?.ready);

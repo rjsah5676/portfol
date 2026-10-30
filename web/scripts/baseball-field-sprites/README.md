@@ -14,7 +14,8 @@
 5. GPT 픽셀화 (주자 · 지금 쓰는 그림): 렌더 프레임을 동작 · 방향별 격자 시트(4×2 · 4×1 · 3×2, 흰 배경)로 묶어 GPT 에 「기준 그림(통과한 달리기 시트) + 새 시트」로 넣음
    - 프롬프트 요지: 기준 그림 화풍 그대로 · 포즈는 새 시트 칸마다 · 상의만 핀스트라이프, 바지 흰색 + 옆줄 하나 · 팀색 자리는 마젠타만 · 얼굴 작게 · 배경 #00FF00
    - 필요한 건 방향 d0~d4 다섯 (d5 · d6 · d7 = d3 · d2 · d1 좌우 반전)
-   - `python3 gpt2frames.py gptok bk_bt100 bk_gpt` — 칸마다 렌더 실루엣에 맞춰 크기 · 위치 정렬, 마젠타 · 빨강 → 회색 명암 + 팀색 마스크, 피부색 맞춤, 반전 방향 채움
+   - 수비수: 100K 수비수(맨손, 글러브는 렌더가 왼손 뼈에 붙임) → `node bake.js fielder100 bk_fd100 512` → 13동작 × d0~d4 시트 65장. 팀색 마스크는 마젠타만 (갈색 글러브가 빨강 색상대라 빼야 함)
+   - `python3 gpt2frames.py gptok bk_bt100 bk_gpt bt` · `python3 gpt2frames.py gptok_fd bk_fd100 bk_fdgpt fd` — 칸마다 렌더 실루엣에 맞춰 크기 · 위치 정렬, 마젠타 · 빨강 → 회색 명암 + 팀색 마스크, 피부색 맞춤, 반전 방향 채움
    - `ENH=0 OUTL=0 F=6 K=48 python3 pack.py bk_gpt bt` · `ENH=0 OUTL=0 F=3 K=64 SPLIT=1 python3 pack.py bk_gpt bt_hd` (외곽선은 GPT 그림에 이미 있음)
 6. `packout/field_*` → `public/baseball/sprites/`
 

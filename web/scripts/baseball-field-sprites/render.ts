@@ -84,7 +84,7 @@ async function main() {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   const MODEL = (window as unknown as { MODEL?: string }).MODEL ?? "fielder";
-  const GLOVE = MODEL === "fielder";
+  const GLOVE = MODEL.startsWith("fielder");
   const [fd, fdMx, gl] = await Promise.all([MODEL, MODEL + "_mx", "glove"].map((n) => loader.loadAsync(`../f3d/models/${n}.glb`)));
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(1);

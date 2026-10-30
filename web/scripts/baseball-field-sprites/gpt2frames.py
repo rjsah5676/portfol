@@ -5,10 +5,12 @@
 import os, sys, json, numpy as np
 from PIL import Image
 from multiprocessing import Pool
+import os as _os
 SRC, REN, OUT = sys.argv[1:4] if len(sys.argv) > 3 else ('gptok', 'bk_bt100', 'bk_gpt')
+PFX = sys.argv[4] if len(sys.argv) > 4 else 'bt'
 os.makedirs(OUT, exist_ok=True)
 meta = json.load(open(f'{REN}/meta.json'))
-COLS = {4: 4, 6: 3, 8: 4}
+COLS = {2: 2, 4: 4, 6: 3, 8: 4, 10: 5}
 def key(im):
     r, g, b = im[..., 0], im[..., 1], im[..., 2]
     k = (g - np.maximum(r, b)) / 255
@@ -23,7 +25,7 @@ def hsv(rgb):
 def skinsel(rgb):
     h, s, v, _ = hsv(rgb)
     return (h > 10) & (h < 45) & (s > .2) & (s < .75) & (v > .45)
-REF = np.asarray(Image.open(f'{SRC}/bt_run_d2.png').convert('RGB')).astype(np.float32) / 255
+REF = np.asarray(Image.open('gptok/bt_run_d2.png').convert('RGB')).astype(np.float32) / 255
 _, ra = key(REF * 255); REFSKIN = REF[skinsel(REF) & ra].mean(0)
 
 def place(cell, a, s, dx, dy, S):
@@ -52,13 +54,19 @@ def fitcell(a, ren, s, S):
 def job(args):
     act, d = args
     n = meta['acts'][act]['n']; cols = COLS[n]; rows = (n + cols - 1) // cols
-    im = np.asarray(Image.open(f'{SRC}/bt_{act}_d{d}.png').convert('RGB')).astype(np.float32)
+    im = np.asarray(Image.open(f'{SRC}/{PFX}_{act}_d{d}.png').convert('RGB')).astype(np.float32)
     im, al = key(im)
     H, W = al.shape; cw, ch = W / cols, H / rows
     cells = []
     for i in range(n):
         x0, y0 = int((i % cols) * cw), int((i // cols) * ch)
-        cells.append((im[y0:int(y0 + ch), x0:int(x0 + cw)] / 255, al[y0:int(y0 + ch), x0:int(x0 + cw)]))
+        a_ = al[y0:int(y0 + ch), x0:int(x0 + cw)].copy()
+        from scipy import ndimage as _ndi
+        lab, nl = _ndi.label(_ndi.binary_dilation(a_, iterations=6))
+        if nl > 1:
+            sz = _ndi.sum(a_, lab, range(1, nl + 1)); keep = 1 + int(np.argmax(sz))
+            a_ &= lab == keep
+        cells.append((im[y0:int(y0 + ch), x0:int(x0 + cw)] / 255, a_))
     S = 128
     rens = [np.asarray(Image.open(f'{REN}/{act}_d{d}_f{i}.png').convert('RGBA').resize((S, S), Image.BOX))[..., 3] > 128 for i in range(n)]
     # 크기: 시트 하나
@@ -89,7 +97,10 @@ def job(args):
         ssel = skinsel(rgb) & a
         rgb[ssel] = np.clip(rgb[ssel] + skd, 0, 1)
         h, sat, v, L = hsv(rgb)
-        team = a & (sat > .35) & (v > .18) & (((h > 265) & (h < 345)) | (((h < 18) | (h >= 345)) & (sat > .45)))
+        mag = (h > 265) & (h < 345)
+        # 빨강 남은 줄도 팀색 (주자) — 수비수는 갈색 글러브가 빨강 색상대라 마젠타만
+        redt = ((h < 18) | (h >= 345)) & (sat > .45) if PFX == 'bt' else ((h >= 345) & (sat > .45) & (v > .6))
+        team = a & (sat > .35) & (v > .18) & (mag | redt)
         g = np.clip(138 * (L / 0.5) / 255 * 1.0, 0, 1)  # 기준 마젠타(밝기 .5) → 회색 138
         rgb[team] = g[team][:, None]
         # 512 좌표로 (NEAREST — GPT 픽셀 그대로)
