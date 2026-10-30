@@ -7,14 +7,22 @@ beforeAll(async () => {
 });
 afterAll(() => s.close());
 
-const member = (uid: string) => s.token(uid, { email: `${uid}@example.com` });
+// 2026-10-31 내린 게임 → 관리자 · 테스터만 (테스터 = TESTER_EMAILS 기본값)
+const member = (uid: string) => s.token(uid, { email: "njontest@gunmo.my" });
 
-describe("야구 클라우드 세이브", () => {
-  it("비로그인 · 익명은 못 씀", async () => {
+describe("야구 클라우드 세이브 (내린 게임)", () => {
+  it("비로그인 · 익명은 401, 일반 회원은 403", async () => {
     expect((await s.http("/api/baseball/save")).status).toBe(401);
     const anon = await s.token("anon1", { anonymous: true });
     expect((await s.http("/api/baseball/save", { token: anon })).status).toBe(401);
     expect((await s.http("/api/baseball/save", { method: "PUT", token: anon, body: { data: {}, prev: 0 } })).status).toBe(401);
+    const user = await s.token("bb0", { email: "bb0@example.com" });
+    expect((await s.http("/api/baseball/save", { token: user })).status).toBe(403);
+    expect((await s.http("/api/baseball/save", { method: "PUT", token: user, body: { data: { "pxb:v1": "a" }, prev: 0 } })).status).toBe(403);
+  });
+
+  it("플레이 기록 보내기는 없어짐", async () => {
+    expect((await s.http("/api/baseball/log", { method: "POST", body: { pid: "abcdefgh", kind: "game", data: {} } })).status).toBe(404);
   });
 
   it("처음엔 없음 → 올리면 rev 1 → 받으면 그대로", async () => {

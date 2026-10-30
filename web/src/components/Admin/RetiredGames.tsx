@@ -12,6 +12,7 @@ const GAMES = [
   { href: "/games/patrol/", name: "PIXEL PATROL", desc: "뱀서라이크 + 장비 뽑기 (픽셀 순찰대)", at: "2026.10.18 내림" },
   { href: "/games/rogue/", name: "PIXEL RESET STORY", desc: "PIXEL FIGHT 외전 탑뷰 로그라이크 (ALPHA)", at: "2026.10.19 내림" },
   { href: "/games/town/", name: "TABLE TOWN", desc: "마을을 돌아다니다 들어가는 원카드 보드게임", at: "2026.10.22 내림" },
+  { href: "/games/baseball/", name: "픽셀 프로야구", desc: "타이밍 타격 · 게이지 투구 · 선수 육성 · 구단 (ALPHA) — 클라우드 세이브는 관리자 · 테스터만", at: "2026.10.31 내림" },
 ];
 
 export default function RetiredGames() {

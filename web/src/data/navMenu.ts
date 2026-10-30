@@ -11,7 +11,6 @@ import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
 import imgLove from "@/img/menu/love.jpg";
-import imgBaseball from "@/img/menu/baseball.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
 import imgRoulette from "@/img/menu/roulette.jpg";
 import imgCalorie from "@/img/menu/calorie.jpg";
@@ -121,15 +120,6 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "홀덤펍 딜러의 4주, ANIME POKER 외전 미연시 · 풀 CG · 엔딩 18종",
         icon: "px:love",
         featured: true,
-      },
-      {
-        href: "/games/baseball",
-        image: imgBaseball,
-        label: "픽셀 프로야구",
-        desc: "타이밍 타격 · 게이지 투구, 선수 육성 · 구단 · 온라인 대전",
-        icon: "⚾",
-        featured: true,
-        badge: "ALPHA",
       },
       {
         href: "/games/sketch",

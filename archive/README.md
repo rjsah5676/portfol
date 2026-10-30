@@ -40,3 +40,13 @@
 - 서버는 `gateway.adminOnly(["marble", "survivor", "rogue", "patrol", "town"])` 로 그 게임 요청 · 구독을 관리자에게만 받음, 마블 로비 AI 방은 끔
 - 업적 · 일일 미션 · 관리자 초기화 · 테스트 · 시뮬 스크립트 · 메뉴 그림 · 공유 이미지는 여기(archive) 그대로
 - 디펜스가 쓰던 마블 효과음 · 건물 그림은 `public/defense/town` 과 `public/marble` 양쪽에 있음
+
+## 2026-10-31 픽셀 프로야구 (`baseball`) 내림
+디테일 챙길 게 너무 많아 현실적으로 힘들다고 보고 폐기. 다른 내린 게임처럼 관리자 「내린 게임」 탭에서만 들어감.
+- 코드 · 에셋(`web/src/{components/Baseball,lib/baseball,data/baseball}`, `web/public/baseball`, `web/scripts/baseball-*`)은 제자리 · 빌드에 그대로. 페이지는 noindex + `AdminGate`
+- 메뉴(`navMenu.ts` 항목 · 메인 추천 칸)에서 뺌, 메뉴 사진은 `archive/web/src/img/menu/baseball.jpg`
+- 서버: 클라우드 세이브(`/api/baseball/save`)만 남기고 관리자 · 테스터만 받음. 밸런스 분석용 플레이 기록(`POST /api/baseball/log` · `/api/admin/baseball/*`)과 관리자 「야구 플레이 데이터」 탭(`archive/web/src/components/Admin/BaseballData.tsx`)은 뺌, 브라우저 `lib/baseball/telemetry.ts` 는 빈 함수
+- DB 컬렉션 `baseball_logs` · `baseball_saves` 는 지우지 않았습니다
+- 안 쓰던 스프라이트 6개(`batter-stance` · 타자 마스크 3개 · `fielder-*-stand`) 지움
+- 3D 시험(트리포 · 메시 모델, three.js 시험 페이지)은 레포 밖(작업 폴더 · 다운로드 폴더)에만 있었음
+- 살릴 때: `navMenu.ts` 에 메뉴 다시 넣고(사진 `git mv`), `layout.tsx` 의 `AdminGate` 빼고, 세이브 권한 · 기록 API 는 이 커밋 diff 참고

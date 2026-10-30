@@ -60,7 +60,8 @@ export async function createAppServer(
   const poker = registerPoker(deps, overrides.poker);
   const rhythm = registerRhythmOnline(deps);
   const defense = registerDefense(deps);
-  // 내린 게임 5개 (메뉴에 없음 — 관리자 「내린 게임」 탭에서 들어가 해 보기만): 요청 · 구독을 관리자에게만 열어 둠
+  // 내린 게임 (메뉴에 없음 — 관리자 「내린 게임」 탭에서 들어가 해 보기만): 요청 · 구독을 관리자에게만 열어 둠
+  // (픽셀 프로야구는 실시간이 없어서 여기 대신 http/baseball.ts 의 클라우드 세이브가 관리자 · 테스터만 받음)
   gateway.adminOnly(["marble", "survivor", "rogue", "patrol", "town"]);
   const marble = registerMarble(deps, { lobbyBots: false });
   registerSurvivor(deps, marble.meta);

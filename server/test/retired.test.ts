@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ADMIN_EMAIL, RpcError, startTestServer, type TestServer } from "./helpers";
 
-/* 메뉴에서 내린 게임 5개: 서버가 요청 · 구독을 관리자에게만 받음 (gateway.adminOnly) */
+/* 메뉴에서 내린 게임: 서버가 요청 · 구독을 관리자에게만 받음 (gateway.adminOnly). 픽셀 프로야구 세이브는 baseball.test.ts */
 
 let srv: TestServer;
 beforeAll(async () => {
