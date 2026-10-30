@@ -15,8 +15,10 @@ type Kind = "fd" | "bt";
 const BASE = "/baseball/sprites/field";
 /** [보통, 고해상도(확대용 · 없으면 null)] — 고해상도는 동작별 파일, 크게 보일 때 처음 쓰면서 받음 */
 const sheets: Record<Kind, [Sheet | null, Sheet | null]> = { fd: [null, null], bt: [null, null] };
+import { pxEllipse } from "./pixelDraw";
+
 /** 고해상도로 바꾸는 크기: 보통 시트 1px 이 실제 화면 몇 px 넘으면 */
-const HD_AT = 1.6;
+export const HD_AT = 1.6;
 
 function sheetImg(s: Sheet, file: string): SheetImg {
   let f = s.files.get(file);
@@ -137,15 +139,12 @@ export function drawFieldSprite(ctx: CanvasRenderingContext2D, kind: Kind, pose:
   const C = meta.cell;
   const fi = Math.max(0, Math.min(a.n - 1, Math.floor(pose.f)));
   const sx = fi * C, sy = (a.row + pose.dir) * C;
-  // 그림자
-  ctx.fillStyle = "rgba(0,0,0,0.3)";
-  ctx.beginPath();
-  ctx.ellipse(x, y, 7 * sc, 2.4 * sc, 0, 0, Math.PI * 2);
-  ctx.fill();
-  const prev = ctx.imageSmoothingEnabled;
-  ctx.imageSmoothingEnabled = false;
   // sc 는 「256칸 렌더 5px = 1칸」 기준 — 시트마다 f 로 맞춰서 화면 크기는 같게
   const u = (sc * (meta.f ?? 5)) / 5;
+  // 그림자 (스프라이트 픽셀 크기로 딱 끊기는 타원)
+  pxEllipse(ctx, x, y, 7 * sc, 2.4 * sc, u, "rgba(0,0,0,0.3)");
+  const prev = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false;
   ctx.drawImage(tinted(f, color), sx, sy, C, C, x - meta.ax * u, y - meta.ay * u, C * u, C * u);
   ctx.imageSmoothingEnabled = prev;
   return true;

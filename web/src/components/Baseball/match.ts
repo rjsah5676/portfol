@@ -35,8 +35,9 @@ import { clamp, lerp, makeRng, smooth, type Rng } from "@/lib/baseball/rng";
 const SIDE_CUT_DUR = 1.35;
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
-import { FieldPoser, preloadFieldSprites, type Pose } from "./fieldSprites";
-import { DH, DW, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, shadowProj, unprojPlate } from "./view";
+import { FieldPoser, HD_AT, preloadFieldSprites, type Pose } from "./fieldSprites";
+import { DH, DW, FIELD_BG_PX, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, setFieldGrid, shadowProj, unprojPlate } from "./view";
+import { pxBall, pxEllipse, pxPath } from "./pixelDraw";
 import { PixelLayer, pixelated } from "./pixelLayer";
 import { teamTinted } from "./teamTint";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
@@ -2417,6 +2418,9 @@ export class Match {
    * 타자가 컨택존을 어디로 옮겼는지는 안 보임 (타자도 안 움직임)
    */
   /** 투수 뷰 사람 픽셀 레이어 (먼 쪽: 심판 · 포수 · 타자 / 가까운 쪽: 내 투수) */
+  /** 필드 바닥 고해상도 쓰는 중 · 미리 만들어 둠 */
+  private bgHd = false;
+  private bgWarm = false;
   private pxFar = new PixelLayer(PV_PX);
   private pxNear = new PixelLayer(PV_PX);
   private drawPitching(ctx: CanvasRenderingContext2D, q: number) {
@@ -3008,10 +3012,21 @@ export class Match {
     ctx.translate(DW / 2, DH / 2);
     ctx.scale(cam.z, cam.z);
     ctx.translate(-cam.x, -cam.y);
+    // 바닥도 스프라이트처럼 크게 보이면 고해상도 (실제 화면 픽셀 기준 — 스프라이트와 같은 기준)
+    const devPx = FIELD_BG_PX * Math.abs(ctx.getTransform().a);
+    if (devPx > HD_AT) this.bgHd = true;
+    else if (devPx < HD_AT * 0.9) this.bgHd = false;
+    setFieldGrid(this.bgHd ? FIELD_BG_PX / 2 : FIELD_BG_PX);
     const sm = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(fieldBg(q, this.night), 0, 0, DW, DH);
+    ctx.drawImage(fieldBg(q, this.night, this.bgHd), 0, 0, DW, DH);
     ctx.imageSmoothingEnabled = sm;
+    // 고해상도 바닥은 처음 바뀔 때 멈칫 안 하게 미리 (한 번)
+    if (!this.bgWarm) {
+      this.bgWarm = true;
+      const night = this.night;
+      setTimeout(() => fieldBg(q, night, true), 0);
+    }
     if (!fr) {
       ctx.restore();
       return;
@@ -3026,23 +3041,10 @@ export class Match {
       // 홈런더비: 수비 없이 공만
       const b = fproj(fr.bx, fr.by, fr.bh);
       const sh = fproj(fr.bx, fr.by);
-      ctx.fillStyle = "rgba(0,0,0,0.35)";
-      ctx.beginPath();
-      ctx.ellipse(sh.x, sh.y, 3, 1.5, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,255,255,0.6)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      this.trail.forEach((t, i) => {
-        const p = fproj(t.x, t.y, t.h);
-        if (i) ctx.lineTo(p.x, p.y);
-        else ctx.moveTo(p.x, p.y);
-      });
-      ctx.stroke();
-      ctx.fillStyle = "#fff";
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
-      ctx.fill();
+      const gpx = this.bgHd ? FIELD_BG_PX / 2 : FIELD_BG_PX;
+      pxEllipse(ctx, sh.x, sh.y, 3, 1.5, gpx, "rgba(0,0,0,0.35)");
+      pxPath(ctx, this.trail.map((t) => fproj(t.x, t.y, t.h)), gpx, gpx * 2, "rgba(255,255,255,0.6)");
+      pxBall(ctx, b.x, b.y, 3.2, gpx);
       // 골든 보드
       const gb = fproj(0, 128, 6);
       ctx.fillStyle = "#ffd23f";

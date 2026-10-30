@@ -4,6 +4,7 @@
  *   필드 화면: 경기장 전체를 비스듬히 내려다봄 (타구 · 수비 · 주자)
  * 배경은 한 번 그려서 캐시.
  */
+import { pxBall, pxEllipse, pxPath, pxRing, snapPx } from "./pixelDraw";
 import { BASES, FENCE_H, HOME_POS, fenceDist, type Frame } from "@/lib/baseball/play";
 import { FieldPoser, drawFieldSprite, fieldSpritesReady, type Pose } from "./fieldSprites";
 import { BALL_R, ZONE } from "@/lib/baseball/pitch";
@@ -115,8 +116,7 @@ export function fproj(x: number, y: number, h = 0) {
 
 let bgCanvas: HTMLCanvasElement | null = null;
 let bgKey = "";
-let fieldCanvas: HTMLCanvasElement | null = null;
-let fieldKey = "";
+const fieldCanvases = new Map<string, HTMLCanvasElement>();
 
 function crowd(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, seed: number, rows: number) {
   let s = seed;
@@ -341,13 +341,114 @@ const FC = {
   track: "#9c6a3e",
   line: "#f3f3ee",
   base: "#ffffff",
+  // 픽셀 다듬기 (잔디 결 · 흙 알갱이 · 경계 테두리)
+  grassDark: "#337f3a",
+  grassLight: "#5cbb5d",
+  grassEdge: "#2c6c33",
+  dirtShade: "#97603a",
 };
 
-/** 필드 배경 (관중석 · 펜스 · 워닝 트랙 · 잔디 무늬 · 내야 흙 · 베이스) — 낮은 해상도로 한 번 그려 캐시, 그릴 땐 픽셀 그대로 키움 */
-export function fieldBg(_q: number, night: boolean): HTMLCanvasElement {
-  const key = `${night}:${FIELD_VIEW.persp}`;
-  if (fieldCanvas && fieldKey === key) return fieldCanvas;
-  const PX = FIELD_BG_PX;
+/** 배경 픽셀 다듬기: 반투명 경계(안티에일리어싱) 없애고 팔레트 색으로 딱 맞춤 → 경계 테두리 · 잔디 결 · 흙 알갱이 (스프라이트와 같은 픽셀 그림) */
+function pixelFinish(c: HTMLCanvasElement, seed0: number) {
+  const g = c.getContext("2d", { willReadFrequently: true })!;
+  const w = c.width, h = c.height;
+  const id = g.getImageData(0, 0, w, h);
+  const d = id.data;
+  const hexes: string[] = [];
+  for (const v of Object.values(FC)) for (const x of Array.isArray(v) ? v : [v]) if (x.startsWith("#")) hexes.push(x);
+  const pal = hexes.map((x) => [parseInt(x.slice(1, 3), 16), parseInt(x.slice(3, 5), 16), parseInt(x.slice(5, 7), 16)]);
+  const idx = (x: string) => hexes.indexOf(x);
+  const GRASS = new Set([FC.grassA, FC.grassB, FC.foulA, FC.foulB].map(idx));
+  const DIRT = new Set([FC.dirt, FC.dirtDark, FC.dirtLight, FC.track].map(idx));
+  const WHITE = new Set([FC.line, FC.base].map(idx));
+  const MOUND = idx(FC.dirtLight);
+  const m = new Int16Array(w * h);
+  // 가장 가까운 팔레트 색
+  const near = new Map<number, number>();
+  for (let p = 0, i = 0; p < w * h; p++, i += 4) {
+    const key = (d[i] << 16) | (d[i + 1] << 8) | d[i + 2];
+    let k = near.get(key);
+    if (k === undefined) {
+      let best = 1e9;
+      k = 0;
+      for (let j = 0; j < pal.length; j++) {
+        const dr = d[i] - pal[j][0], dg = d[i + 1] - pal[j][1], db = d[i + 2] - pal[j][2];
+        const e = dr * dr * 3 + dg * dg * 4 + db * db * 2;
+        if (e < best) {
+          best = e;
+          k = j;
+        }
+      }
+      near.set(key, k);
+    }
+    m[p] = k;
+  }
+  const out = Int16Array.from(m);
+  const set = (p: number, col: string) => (out[p] = idx(col));
+  let seed = seed0;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const p = y * w + x;
+      const k = m[p];
+      const up = m[p - w], dn = m[p + w], lf = m[p - 1], rt = m[p + 1];
+      if (GRASS.has(k)) {
+        // 흙과 닿은 잔디 = 진한 테두리
+        if (DIRT.has(up) || DIRT.has(dn) || DIRT.has(lf) || DIRT.has(rt)) set(p, FC.grassEdge);
+        // 흰 선 · 베이스 바로 아래 = 그늘
+        else if (WHITE.has(up)) set(p, FC.grassEdge);
+      } else if (DIRT.has(k)) {
+        if (GRASS.has(up)) set(p, FC.dirtShade); // 잔디 턱 그늘
+        else if (GRASS.has(dn)) set(p, FC.dirtLight); // 햇빛 받는 턱
+        else if (WHITE.has(up)) set(p, FC.dirtShade); // 베이스 · 선 그늘
+        else if (k !== MOUND && up === MOUND) set(p, FC.dirtShade); // 마운드 아래 둘레
+      }
+    }
+  }
+  // 잔디 결 (작은 ㅅ 모양) · 흙 알갱이 (두 칸 + 위 하이라이트)
+  for (let y = 2; y < h - 2; y++) {
+    for (let x = 2; x < w - 2; x++) {
+      const p = y * w + x;
+      const k = m[p];
+      if (GRASS.has(k) && out[p] === k) {
+        const r = rnd();
+        if (r < 0.011) {
+          if (GRASS.has(m[p + w - 1])) set(p + w - 1, FC.grassDark);
+          set(p, FC.grassDark);
+          if (GRASS.has(m[p + w + 1])) set(p + w + 1, FC.grassDark);
+        } else if (r < 0.016) set(p, FC.grassLight);
+      } else if (DIRT.has(k) && k !== MOUND && out[p] === k) {
+        const r = rnd();
+        if (r < 0.012) {
+          set(p, FC.dirtShade);
+          if (DIRT.has(m[p + 1])) set(p + 1, FC.dirtShade);
+          if (DIRT.has(m[p - w])) set(p - w, FC.dirtLight);
+        }
+      }
+    }
+  }
+  for (let p = 0, i = 0; p < w * h; p++, i += 4) {
+    const c2 = pal[out[p]];
+    d[i] = c2[0];
+    d[i + 1] = c2[1];
+    d[i + 2] = c2[2];
+    d[i + 3] = 255;
+  }
+  g.putImageData(id, 0, 0);
+}
+
+/**
+ * 필드 배경 (관중석 · 펜스 · 워닝 트랙 · 잔디 무늬 · 내야 흙 · 베이스) — 낮은 해상도로 한 번 그려 캐시, 그릴 땐 픽셀 그대로 키움.
+ * hd = 확대용 (픽셀 절반 크기) — 스프라이트가 고해상도 시트로 바뀌는 때 같이 바꿔서 바닥 · 선수 픽셀 크기를 맞춤
+ */
+export function fieldBg(_q: number, night: boolean, hd = false): HTMLCanvasElement {
+  const key = `${night}:${FIELD_VIEW.persp}:${hd}`;
+  const hit = fieldCanvases.get(key);
+  if (hit) return hit;
+  const PX = hd ? FIELD_BG_PX / 2 : FIELD_BG_PX;
   const c = document.createElement("canvas");
   c.width = Math.round(DW / PX);
   c.height = Math.round(DH / PX);
@@ -378,10 +479,6 @@ export function fieldBg(_q: number, night: boolean): HTMLCanvasElement {
   const dot = (x: number, y: number, col: string) => {
     g.fillStyle = col;
     g.fillRect(Math.floor(x / PX) * PX, Math.floor(y / PX) * PX, PX, PX);
-  };
-  /** 지금 클립 영역 안에 흙 알갱이 */
-  const speckle = (x0: number, y0: number, x1: number, y1: number, n: number, cols: string[]) => {
-    for (let i = 0; i < n; i++) dot(x0 + rnd() * (x1 - x0), y0 + rnd() * (y1 - y0), cols[Math.floor(rnd() * cols.length)]);
   };
 
   g.fillStyle = FC.sky;
@@ -502,18 +599,6 @@ export function fieldBg(_q: number, night: boolean): HTMLCanvasElement {
   poly(circle(0, 0, 4.2));
   g.fillStyle = FC.dirt;
   g.fill();
-  // 흙 알갱이 (내야)
-  {
-    // 흙 위에만: 클립을 흙 모양으로
-    g.save();
-    poly(fair);
-    g.clip();
-    poly(circle(0, 18.4, 29, 64));
-    g.clip();
-    const box = { x0: W(-35, 40).x, x1: W(35, 40).x, y0: W(0, 48).y - 8, y1: W(0, 0).y + 12 };
-    speckle(box.x0, box.y0, box.x1, box.y1, 1600, [FC.dirtDark, FC.dirtLight, FC.dirtDark]);
-    g.restore();
-  }
   // 내야 잔디 (베이스 길 안쪽 정사각) — 1 · 3루 베이스 자리는 흙 원으로 깎음
   poly([W(0, 2.6), W(17.6, 19.4), W(0, 36.2), W(-17.6, 19.4)]);
   g.fillStyle = FC.grassB;
@@ -545,23 +630,6 @@ export function fieldBg(_q: number, night: boolean): HTMLCanvasElement {
   poly(circle(0, 18.6, 1.6, 16));
   g.fillStyle = FC.dirt;
   g.fill();
-  // 흙 알갱이 (내야 · 워닝 트랙)
-  {
-    g.save();
-    const pts: { x: number; y: number }[] = [];
-    for (let a = -46; a <= 46; a += 1.5) pts.push(arcPt(a, fenceDist(a) + 1));
-    for (let a = 46; a >= -46; a -= 1.5) pts.push(arcPt(a, fenceDist(a) - 4.6));
-    poly(pts);
-    g.clip();
-    speckle(0, 0, DW, W(0, 70).y, 2200, [FC.dirtDark, "#8a5c34"]);
-    g.restore();
-  }
-  // 잔디 알갱이 (조금)
-  g.save();
-  poly(fair);
-  g.clip();
-  speckle(0, W(0, 120).y, DW, DH, 2600, ["rgba(20,60,25,0.35)", "rgba(255,255,255,0.08)"]);
-  g.restore();
 
   // ── 펜스 (패딩 벽 · 이음매 · 노란 윗선) + 파울폴
   {
@@ -626,12 +694,14 @@ export function fieldBg(_q: number, night: boolean): HTMLCanvasElement {
   g.fill();
   poly([W(-0.35, 18.3), W(0.35, 18.3), W(0.35, 18.5), W(-0.35, 18.5)]);
   g.fill();
+  // 흙 알갱이 · 잔디 결 · 경계 테두리는 픽셀 다듬기에서 (픽셀 단위라 해상도 바뀌어도 같은 느낌)
+  pixelFinish(c, hd ? 4242 : 97);
   if (night) {
+    g.setTransform(1, 0, 0, 1, 0, 0);
     g.fillStyle = "rgba(8,10,30,0.25)";
-    g.fillRect(0, 0, DW, DH);
+    g.fillRect(0, 0, c.width, c.height);
   }
-  fieldCanvas = c;
-  fieldKey = key;
+  fieldCanvases.set(key, c);
   return c;
 }
 
@@ -772,114 +842,50 @@ export function drawFieldFrame(
   });
   items.sort((a, b) => a.y - b.y);
   const flying = f.hold < 0 && f.bh > 0.4;
-  // 날아갈 길 (아직 안 간 쪽만 점선) · 떨어질 자리 링 — 높이 · 방향이 한눈에 읽히게
+  const px = FGRID;
+  // 날아갈 길 (아직 안 간 쪽만 픽셀 점선) · 떨어질 자리 링 — 높이 · 방향이 한눈에 읽히게
   if (arc && flying && arc.pts.length > 1) {
     // 땅 위 경로(그림자가 지나갈 길) — 위의 공 점선과 벌어진 만큼이 높이
-    ctx.save();
-    ctx.strokeStyle = "rgba(0,0,0,0.32)";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([3, 5]);
-    ctx.beginPath();
-    const g0 = fproj(f.bx, f.by);
-    ctx.moveTo(g0.x, g0.y);
-    for (const q of arc.pts) {
-      const p = fproj(q.x, q.y);
-      ctx.lineTo(p.x, p.y);
-    }
-    ctx.stroke();
-    ctx.restore();
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.7)";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 6]);
-    ctx.beginPath();
-    let started = false;
+    pxPath(ctx, [fproj(f.bx, f.by), ...arc.pts.map((q) => fproj(q.x, q.y))], px, px * 4, "rgba(0,0,0,0.32)");
     // (arc.pts 는 지금 이후 점만 — match.ts)
-    for (const q of arc.pts) {
-      const p = fproj(q.x, q.y, q.h);
-      if (!started) {
-        const b0 = fproj(f.bx, f.by, f.bh);
-        ctx.moveTo(b0.x, b0.y);
-        started = true;
-      }
-      ctx.lineTo(p.x, p.y);
-    }
-    ctx.stroke();
-    ctx.restore();
+    pxPath(ctx, [fproj(f.bx, f.by, f.bh), ...arc.pts.map((q) => fproj(q.x, q.y, q.h))], px, px * 4, "rgba(255,255,255,0.75)");
   }
   if (arc?.land && flying) {
     const L = fproj(arc.land.x, arc.land.y);
     const pulse = 1 + Math.sin(f.t * 10) * 0.12;
-    ctx.save();
-    ctx.translate(L.x, L.y);
-    ctx.scale(1, FIELD_VIEW.persp ? 0.42 : 0.6);
-    ctx.strokeStyle = "rgba(255,210,63,0.95)";
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, 13 * L.s * pulse, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(255,210,63,0.5)";
-    ctx.beginPath();
-    ctx.arc(0, 0, 7 * L.s * pulse, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.restore();
+    const ky = FIELD_VIEW.persp ? 0.42 : 0.6;
+    pxRing(ctx, L.x, L.y, 13 * L.s * pulse, 13 * L.s * pulse * ky, px, "#ffd23f");
+    pxRing(ctx, L.x, L.y, 7 * L.s * pulse, 7 * L.s * pulse * ky, px, "rgba(255,210,63,0.6)");
   }
-  // 그림자 — 높이 뜰수록 작고 옅게
+  // 그림자 — 높이 뜰수록 작고 옅게 (딱 끊기는 픽셀 타원)
   const sh = fproj(f.bx, f.by);
   const hk = Math.min(1, f.bh / 35);
-  ctx.fillStyle = `rgba(0,0,0,${(0.4 - hk * 0.22).toFixed(3)})`;
-  ctx.beginPath();
-  ctx.ellipse(sh.x, sh.y, (4 - hk * 1.6) * sh.s, (2 - hk * 0.8) * sh.s, 0, 0, Math.PI * 2);
-  ctx.fill();
+  pxEllipse(ctx, sh.x, sh.y, (4 - hk * 1.6) * sh.s, (2 - hk * 0.8) * sh.s, px, `rgba(0,0,0,${(0.4 - hk * 0.22).toFixed(3)})`);
   // 높이 막대: 그림자 ↔ 공 (얼마나 떠 있는지)
-  if (flying) {
-    const top = fproj(f.bx, f.by, f.bh);
-    ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.45)";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([2, 3]);
-    ctx.beginPath();
-    ctx.moveTo(sh.x, sh.y);
-    ctx.lineTo(top.x, top.y);
-    ctx.stroke();
-    ctx.restore();
-  }
+  if (flying) pxPath(ctx, [sh, fproj(f.bx, f.by, f.bh)], px, px * 3, "rgba(255,255,255,0.45)");
   for (const it of items) it.draw();
-  // 꼬리
+  // 꼬리 (픽셀 점 — 뒤로 갈수록 옅게)
   if (trail.length > 1) {
-    ctx.strokeStyle = special === "igna" ? "rgba(255,120,40,0.7)" : special === "zena" ? "rgba(255,230,80,0.8)" : "rgba(255,255,255,0.55)";
-    ctx.lineWidth = special ? 4 : 2;
-    ctx.beginPath();
+    const col = special === "igna" ? "255,120,40" : special === "zena" ? "255,230,80" : "255,255,255";
+    const n = trail.length;
     trail.forEach((t, i) => {
+      if (i === n - 1) return;
       const p = fproj(t.x, t.y, t.h);
-      if (i) ctx.lineTo(p.x, p.y);
-      else ctx.moveTo(p.x, p.y);
+      const a = ((i + 1) / n) * (special ? 0.8 : 0.55);
+      const w = special ? px * 2 : px;
+      ctx.fillStyle = `rgba(${col},${a.toFixed(2)})`;
+      ctx.fillRect(snapPx(p.x, px) - w / 2, snapPx(p.y, px) - w / 2, w, w);
     });
-    ctx.stroke();
   }
   const b = fproj(f.bx, f.by, f.bh);
-  ctx.fillStyle = "#fff";
-  ctx.strokeStyle = "#222";
-  ctx.lineWidth = 1;
-  // 높이 뜰수록 카메라에 가까워 보이게 조금 크게 · 뜬 공은 둘레가 빛남
-  const br = (4.3 + Math.min(5, f.bh * 0.16)) * b.s;
-  if (flying) {
-    ctx.save();
-    ctx.fillStyle = "rgba(255,255,255,0.25)";
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, br * 2.2, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    ctx.fillStyle = "#fff";
-    ctx.strokeStyle = "#222";
-    ctx.lineWidth = 1;
-  }
-  ctx.lineWidth = 1.4;
-  ctx.strokeStyle = "#1a1a1a";
-  ctx.beginPath();
-  ctx.arc(b.x, b.y, br, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
+  // 높이 뜰수록 카메라에 가까워 보이게 조금 크게
+  const br = (3.6 + Math.min(5, f.bh * 0.16)) * b.s;
+  pxBall(ctx, b.x, b.y, br, px);
 }
 
+/** 지금 필드 배경 한 픽셀 크기 (공 · 그림자 · 점선을 같은 격자에) */
+let FGRID = FIELD_BG_PX;
+export function setFieldGrid(px: number) {
+  FGRID = px;
+}
 export { BALL_R, HOME_POS, ZONE };
