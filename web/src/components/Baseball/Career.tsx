@@ -13,10 +13,12 @@ import {
   INJURY_NAME, LEARNED_VAL, MISSION_CATS, MISSION_TIER, SET_NEED, SPOT_EVENTS, STAT_COLOR, STAT_KEYS, STAT_NAME, TAG_COLOR, TAG_NAME, TICKETS, TRAINS, TRAIN_KEYS, TRAIN_LV_EVERY, TYPES, WEEKS,
   CAREER_DIFF, PICK_POS, PICK_TYPES, act, autoBattle, avg, awardRace, buy, buyGear, buySkill, canPlay, careerBatter, careerGameStats, choose, chooseMissions, chooseOffer, choosePick, consumeItem, endSeason,
   finishBattle, fmtAvg, gameName, gearNext, gradeOf, matesOf, missionName, missionNeed, missionNow, myRank, newCareer, nextBeat, oppOf, ops, ovrOf, posOf, seasonGrade, skill, skillPrice, skillShop, spLv, spUses,
-  standings, statGrade, stepOf, tagCount, trainLv, trainPreview, whenText, whyNot,
+  standings, statGrade, stepOf, tagCount, trainLv, trainPreview, whenText, whyNot, chapterOf, storyFx,
   type Action, type BatType, type Career, type ConsumableId, type Delta, type FieldPos, type GearId, type HofEntry, type SeasonMission, type SkillId, type StatKey, type Tag, type TrainKey, type TurnOut,
 } from "@/lib/baseball/career";
 import { slotName } from "@/lib/baseball/careerGame";
+import { ending, orderText, pendingStory, postGame, scouting } from "@/lib/baseball/story";
+import { StoryLines, StorySceneView } from "./CareerStory";
 import { TEAM_DEFS, charById, faceUrl, type CharId } from "@/lib/baseball/data";
 import { isBond, type BondId } from "@/lib/baseball/bonds";
 import { makeRng } from "@/lib/baseball/rng";
@@ -95,6 +97,11 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
       }
     }
     if (cur?.phase === "done") addHof(cur);
+    // 스토리 전 저장: 프롤로그 · 지난 챕터는 건너뛰고 이어감
+    if (cur && !cur.story && cur.phase !== "done") {
+      cur.story = { pro: true, ch: chapterOf(cur) };
+      saveCareer(cur);
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저 저장값 불러오기
     setC(cur);
     setHof(loadHof());
@@ -235,6 +242,20 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
   const step = c ? stepOf(c) : null;
   const overlayBusy = queue.length > 0 || reports.length > 0;
   const hub = view === "hub" && c;
+  // 메인 스토리: 프롤로그 · 주가 바뀌면 챕터 · 시즌 끝 엔딩 (다른 창이 다 닫힌 뒤)
+  const story = hub && !overlayBusy && !modal ? (c.phase === "done" ? (c.story && c.story.ch < 8 ? ending(c) : null) : step === "turn" ? pendingStory(c) : null) : null;
+  const doneStory = (pick: number) => {
+    if (!c?.story || !story) return;
+    const n = clone(c);
+    const st = n.story!;
+    if (story.key === "story:pro") {
+      st.pro = true;
+      if (pick >= 0 && story.choices) storyFx(n, story.choices[pick].fx);
+    } else if (story.key.startsWith("story:end")) st.ch = 8;
+    else st.ch = chapterOf(n);
+    logPlay("story", { ...careerSnap(n), key: story.key, pick });
+    commit(n);
+  };
 
   return (
     <MenuBg>
@@ -302,6 +323,7 @@ export default function CareerMode({ onExit, onPlay }: { onExit: () => void; onP
           />
         ))}
 
+      {story && c && <StorySceneView key={story.key} c={c} scene={story} onDone={doneStory} />}
       {/* 결과 팝업들 (턴 결과 → 경기 평가 → 이벤트 고르기 → 특수능력 고르기 · 대결) */}
       {queue.length > 0 &&
         (queue[0].vn && !vnSeen ? (
@@ -1167,6 +1189,18 @@ function PracticeField({ c, onTrain }: { c: Career; onTrain: (k?: TrainKey) => v
           <>스프링 캠프 · 행동권 {CAMP_TICKETS}장 · 끝나면 시즌 미션 고르기</>
         )}
       </div>
+      {/* 이번 주 감독 지시 (챕터 장면에서 받음) */}
+      {c.story?.order && (
+        <button
+          type="button"
+          disabled={!canAct || c.story.order.ok}
+          onClick={() => onTrain(c.story!.order!.key)}
+          className="absolute top-[40px] left-1/2 z-10 flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-0.5 text-[12px] font-bold whitespace-nowrap disabled:cursor-default"
+          style={{ borderColor: c.story.order.ok ? "#7dff9a88" : "#ffcf4aaa", background: c.story.order.ok ? "#7dff9a1f" : "#ffcf4a24", color: c.story.order.ok ? "#7dff9a" : "#ffcf4a" }}
+        >
+          📣 감독 지시 · {orderText(c.story.order)} {c.story.order.ok ? "✓ 달성" : `${c.story.order.done}/${c.story.order.need}`}
+        </button>
+      )}
       {/* 내 선수 */}
       <div className="absolute top-[54%] left-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center">
         <Portrait c={c} w={92} h={120} />
@@ -1275,8 +1309,13 @@ function TrainModal({ c, tab, setTab, onClose, onAct }: { c: Career; tab: TrainK
               >
                 <span className="text-[22px]">{TRAIN_ICON[k]}</span>
                 <div className="min-w-0 flex-1">
-                  <div className={`${font.title} text-[16px]`} style={{ color: TRAIN_COLOR[k] }}>
+                  <div className={`${font.title} flex items-center gap-1.5 text-[16px]`} style={{ color: TRAIN_COLOR[k] }}>
                     {TRAINS[k].name}
+                    {c.story?.order?.key === k && !c.story.order.ok && (
+                      <span className="rounded bg-[#ffcf4a] px-1 font-sans text-[10px] font-bold text-black">
+                        📣 지시 {c.story.order.done}/{c.story.order.need}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1">
                     {Array.from({ length: 5 }, (_, i) => (
@@ -1731,6 +1770,7 @@ function PreGame({ c, mode, onMode, onPlay }: { c: Career; mode: PlayMode; onMod
           {c.learned && <span className="text-[#ff7ae0]">필살 {spUses(c)}회</span>}
         </div>
       </div>
+      <StoryLines c={c} lines={scouting(c)} />
       {canPlay(c) ? (
         <>
           <div className="grid grid-cols-3 gap-2">
@@ -1944,6 +1984,9 @@ function ReportModal({ c, r, more, onClose }: { c: Career; r: GameReport; more: 
         </div>
       )}
       {s.dnp && <div className="mt-3 text-[13px] text-white/70">{s.lines.join(" · ")}</div>}
+      <div className="mt-2 text-left">
+        <StoryLines c={c} lines={postGame(c, s)} />
+      </div>
       {race && (
         <div className="mt-2 rounded-lg border px-2.5 py-1 text-[12px]" style={{ borderColor: race.lead ? "#ffd23f" : "rgba(255,255,255,0.2)" }}>
           👑 {race.title} 레이스 <b style={{ color: race.lead ? "#ffd23f" : "#fff" }}>{race.lead ? "1위 페이스!" : `1위 페이스와 ${race.fmt(Math.abs(race.gap))} 차`}</b>

@@ -33,14 +33,14 @@ const PLACE_BG: Record<string, string> = {
   tv: "radial-gradient(ellipse at 50% 0%, rgba(255,255,255,0.35) 0%, transparent 45%), linear-gradient(180deg, #101423 0%, #1c2236 60%, #0b0e1c 100%)",
 };
 const SEEN = "pxb:seen:v1";
-const seenSet = (): Set<string> => {
+export const seenSet = (): Set<string> => {
   try {
     return new Set(JSON.parse(localStorage.getItem(SEEN) ?? "[]"));
   } catch {
     return new Set();
   }
 };
-const markSeen = (k: string) => {
+export const markSeen = (k: string) => {
   try {
     const s = seenSet();
     s.add(k);

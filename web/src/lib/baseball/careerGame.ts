@@ -2,6 +2,7 @@
  * 육성(커리어) 경기 — 내 타석만 진짜 엔진(투구 · 스윙 · 수비 시뮬)으로, 나머지 타석은 확률로 빠르게.
  * 화면(직접 출전) · 자동 진행 · 밸런스 시뮬이 같이 씀.
  */
+import { CAST, RIVALS } from "./story";
 import { cpuGauge, cpuPlan, cpuSwing, cpuUseSpecial, humanSwing, SPEED_SCALE, type Diff } from "./ai";
 import { TEAM_DEFS, makeTeam, playStat, swingOf, type Batter, type CharId, type Team } from "./data";
 import {
@@ -82,6 +83,20 @@ export function careerSetup(seed: number, key: number, me: Batter, slot: number,
   }
   rest.splice(slot, 0, me);
   my.batters = rest;
+  // 스토리 이름 (능력치는 그대로 — 이름만): 상대 에이스 · 우리 주장 · 주전 경쟁 선배(4 · 5주차는 손목 부상으로 벤치)
+  const oi = TEAM_DEFS.indexOf(def);
+  const rv = RIVALS[oi];
+  if (rv) {
+    if (oi === 1) {
+      if (opp.batters[3] && !opp.batters[3].special) opp.batters[3].name = rv.ace;
+    } else if (opp.pitchers[0]) opp.pitchers[0].name = rv.ace;
+  }
+  const named = (i: number, n: string) => {
+    const b = my.batters[i];
+    if (b && b !== me && !b.special) b.name = n;
+  };
+  named(slot === 2 ? 1 : 2, CAST.seo.name);
+  if (key !== 4 && key !== 5) named(slot === 3 ? 4 : 3, CAST.kang.name);
   return { my, opp, myIdx: slot, userHome: rOpp() < 0.5, diff, innings: 9, spUses, bondChars };
 }
 

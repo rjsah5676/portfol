@@ -584,6 +584,45 @@ export interface Career {
   inGame?: boolean;
   /** 시즌 결산 (끝나면) */
   summary?: SeasonSummary;
+  /** 메인 스토리 (없으면 예전 저장 — 프롤로그 없이 이어감) */
+  story?: StoryState;
+}
+
+/* ─────────────── 메인 스토리: 주차 챕터 · 감독 지시 (대사는 story.ts) ─────────────── */
+
+/** 이번 주 감독 지시: 이 훈련을 need 번 하면 보상 */
+export interface Order {
+  key: TrainKey;
+  need: number;
+  done: number;
+  ok: boolean;
+}
+export interface StoryState {
+  /** 프롤로그 봤나 */
+  pro: boolean;
+  /** 본 챕터 (0 프롤로그 · 1 ~ 6 주차 · 7 챔피언전 · 8 엔딩) */
+  ch: number;
+  order?: Order;
+}
+/** 주차마다 감독 지시 (상대 팀 색깔에 맞춰: 타격전엔 근력 · 투수전엔 타격 …) — 0 = 캠프(없음) */
+export const ORDER_PLAN: (TrainKey | null)[] = [null, "power", "hit", "def", "run", "hit", "power", "hit"];
+export const ORDER_NEED = 2;
+export const ORDER_REWARD = { sp: 20, money: 100 };
+/** 지금 챕터 번호 */
+export const chapterOf = (c: Pick<Career, "phase" | "week">) => (c.phase === "camp" ? 0 : c.phase === "season" ? c.week : c.phase === "final" ? 7 : 8);
+function setOrder(c: Career) {
+  if (!c.story) return;
+  const ch = chapterOf(c);
+  let key = ORDER_PLAN[ch] ?? null;
+  // 챔피언전: 필살타법을 배웠으면 필살 훈련
+  if (ch === 7 && c.learned) key = "special";
+  c.story.order = key ? { key, need: ch === 7 ? 1 : ORDER_NEED, done: 0, ok: false } : undefined;
+}
+/** 스토리 고르기 덤 (프롤로그 각오 등) */
+export function storyFx(c: Career, fx: { cond?: number; sp?: number; money?: number }) {
+  if (fx.cond) addCond(c, fx.cond);
+  if (fx.sp) addSp(c, fx.sp);
+  if (fx.money) addMoney(c, fx.money);
 }
 
 export interface NewCareerOpts {
@@ -665,6 +704,7 @@ export function newCareer(o: NewCareerOpts): Career {
     legacy: o.legacy ? { name: o.legacy.name, skill: skills[0] } : undefined,
     look: o.look ?? { ...DEFAULT_LOOK },
     log: ["라이징스타 리그 입단! 캠프가 시작됐다."],
+    story: { pro: false, ch: 0 },
   };
 }
 
@@ -1049,6 +1089,17 @@ function train(c: Career, k: TrainKey, rng: Rng): TurnOut {
   if (tone === "fail") {
     addCond(c, -1);
     lines.unshift("몸이 무거워서 집중이 안 됐다… 컨디션 ↓");
+  }
+  // 감독 지시
+  const od = c.story?.order;
+  if (od && !od.ok && od.key === k) {
+    od.done++;
+    if (od.done >= od.need) {
+      od.ok = true;
+      addSp(c, ORDER_REWARD.sp);
+      addMoney(c, ORDER_REWARD.money);
+      lines.push(`감독 지시 달성! 스킬P +${ORDER_REWARD.sp} · 자금 +${ORDER_REWARD.money}`);
+    } else lines.push(`감독 지시 ${od.done}/${od.need}`);
   }
   const title = tone === "great" ? "훈련 대성공!" : tone === "fail" ? "훈련 실패…" : "훈련 성공";
   return { title, tone, lines, delta: diffOf(c, a), char: mates[0], mates: mo, bonus, train: k };
@@ -1532,6 +1583,7 @@ export function chooseMissions(c: Career, ms: SeasonMission[]): string | null {
   c.week = 1;
   c.tickets = TICKETS;
   c.weekStart = { ...c.stats };
+  setOrder(c);
   pushLog(c, "시즌 개막! 시즌 미션: " + c.missions.map(missionName).join(" · "));
   return null;
 }
@@ -1767,6 +1819,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
         c.week = WEEKS + 1;
         c.finalOpp = st[1].i;
         c.tickets = FINAL_TICKETS;
+        setOrder(c);
         lines.push(`1위! 챔피언 결정전 — ${TEAM_DEFS[c.finalOpp].name}. 보너스 행동권 ${FINAL_TICKETS}장!`);
         next = "final";
       } else {
@@ -1778,6 +1831,7 @@ export function applyGame(c: Career, g: GameIn | null): GameSummary {
     } else {
       c.week++;
       c.tickets = TICKETS;
+      setOrder(c);
     }
   }
   c.weekStart = { ...c.stats };
