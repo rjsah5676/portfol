@@ -37,7 +37,7 @@ import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
 import { FieldPoser, HD_AT, preloadFieldSprites, type Pose } from "./fieldSprites";
 import { DH, DW, FIELD_BG_PX, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, preloadFieldArt, proj, setFieldGrid, shadowProj, unprojPlate } from "./view";
-import { pxBall, pxEllipse, pxPath } from "./pixelDraw";
+import { pxBall, pxEllipse, pxStreak } from "./pixelDraw";
 import { PixelLayer, pixelated } from "./pixelLayer";
 import { teamTinted } from "./teamTint";
 import { drawCatcher, drawPvBatter, drawPvPitcher, drawPvZone, drawUmpire, pvBackground, pvCam, pvProj, pvUnproj, type PvBatPose } from "./pitchView";
@@ -69,6 +69,12 @@ const BOOST_DUR = 2.8;
  * call: 볼 · 스트라이크 판정 보여 주는 시간 · ready: 다음 공 전 숨 고르기 · first: 타석 첫 공 전 ·
  * result: 타석 결과 배너 · change: 공수 교대
  */
+/** 필드 카메라: 내야 줌 · 외야 줌 · 홈런 줌 · 줌 바꾸는 시간 · 데드존(반폭 비율) · 따라가기 시정수 · 최고 속도(화면 폭/초) */
+const CAM = { zIn: 1.45, zOut: 1.8, zHr: 1.3, zDur: 0.6, dzX: 0.4, dzY: 0.3, tau: 0.25, vmax: 1.2 };
+/** 아슬아슬 판정 컷인 길이 (초) */
+const CLOSE_CUT = 0.75;
+/** 수비 화면 → 타석 전환 와이프 (패미스타 · SMB4 스팅거): 덮기 · 멈춤 · 걷기 (초) */
+const WIPE = { in: 0.3, hold: 0.2, out: 0.3 };
 const TEMPO = { call: 1.1, ready: 1.4, first: 1.9, result: 2.0, change: 2.4 };
 /** 타석에 걸어 들어오기 재생 속도 · 다 들어온 뒤 첫 공까지 숨 고르기 */
 const WALK_SPEED = WALKIN_LEN / 3.3;
@@ -188,6 +194,10 @@ interface Popup {
   cam?: boolean;
   /** 판정 도장 (크게 튀어나옴) */
   big?: boolean;
+  /** 떠 있는 시간 (기본 1.4초) */
+  life?: number;
+  /** 타격 의성어 (딱! · 깡!) */
+  onoma?: boolean;
 }
 
 const SAVE = "pxb:v1";
@@ -507,7 +517,7 @@ export class Match {
   private setBanner(text: string, sub: string | undefined, color: string, dur = 1.2, big = false) {
     this.banner = { text, sub, color, t: 0, dur, big };
   }
-  private popup(x: number, y: number, text: string, color = "#fff", o?: { cam?: boolean; big?: boolean }) {
+  private popup(x: number, y: number, text: string, color = "#fff", o?: { cam?: boolean; big?: boolean; life?: number; onoma?: boolean }) {
     this.popups.push({ x, y, text, color, t: 0, ...o });
   }
   /** 스윙 버튼 때 스트라이드(디딤발 내딛기) 진행도 — 1 이면 배트만 돌림 */
@@ -1375,10 +1385,27 @@ export class Match {
       this.fast = false;
       this.trail = [];
       this.holdAt = -1;
+      this.lastThrow = null;
+      this.callAt = -1;
+      this.fieldOuts = 0;
+      this.closeCut = null;
+      this.camZ = { from: CAM.zIn, to: CAM.zIn, k: 1, out: false };
+      // 라인 근처로 떨어진 페어 타구: 첫 바운드에 「FAIR」 (BS2 · 컴프야)
+      this.fair = null;
+      if (o.call === "bip" && !f.hr) {
+        for (let i = 1; i < f.frames.length; i++) {
+          const q = f.frames[i];
+          if (q.hold >= 0) break;
+          if (q.bh <= 0.05 && Math.hypot(q.bx, q.by) > 30) {
+            if (Math.abs(Math.atan2(q.bx, q.by)) > (33 * Math.PI) / 180) this.fair = { t: q.t, x: q.bx, y: q.by };
+            break;
+          }
+        }
+      }
       // 타석에서 이어지게: 홈 근처를 당겨 본 채로 시작 → 공을 따라 빠짐 (+ 짧은 흰 전환)
       {
         const h = fproj(0, 4);
-        const z = 1.45;
+        const z = CAM.zIn;
         this.fcam = { x: clamp(h.x, DW / 2 / z, DW - DW / 2 / z), y: clamp(h.y - 60, DH / 2 / z, DH - DH / 2 / z), z };
         if (this.cfg.mode !== "derby") this.flash = Math.max(this.flash, 0.35);
       }
@@ -1619,7 +1646,11 @@ export class Match {
       if (this.banner.t > this.banner.dur) this.banner = null;
     }
     for (const p of this.popups) p.t += dt;
-    this.popups = this.popups.filter((p) => p.t < 1.4);
+    if (this.wipe) {
+      this.wipe.t += dt;
+      if (this.wipe.t > WIPE.in + WIPE.hold + WIPE.out) this.wipe = null;
+    }
+    this.popups = this.popups.filter((p) => p.t < (p.life ?? 1.4));
     this.shake = Math.max(0, this.shake - dt);
     this.flash = Math.max(0, this.flash - dt * 3);
     for (const p of this.particles) {
@@ -1806,6 +1837,8 @@ export class Match {
             const at = this.scr(o.at.x, o.at.y, 0);
             this.impact.x = at.x;
             this.impact.y = at.y;
+            // 의성어 (파워프로 「カッキーン!!」처럼) — 정타 이상만
+            if (!foul && q > 0.35) this.popup(at.x + (this.shownBatter.bats === "L" ? -70 : 70), at.y - 70, perfect || q > 0.75 ? "깡!" : "딱!", perfect ? "#ffd23f" : "#ffffff", { onoma: true, life: 0.6 });
             // 그림 이펙트: 섬광(세기 = 맞은 질) · 정타 이상이면 충격파 링
             this.fxs.push({ src: UI.burst, x: at.x, y: at.y, t: 0, dur: perfect ? 0.32 : 0.22, size: (foul ? 70 : 90) + q * 70 + (perfect ? 40 : 0), grow: 0.25, rot: this.rng() * Math.PI });
             if (perfect || (!foul && q > 0.6)) this.fxs.push({ src: UI.ring, x: at.x, y: at.y, t: 0, dur: perfect ? 0.45 : 0.32, size: perfect ? 120 : 80, grow: perfect ? 2.6 : 1.8, rot: 0 });
@@ -1867,6 +1900,9 @@ export class Match {
         if (this.pt > (this.cfg.mode === "derby" ? 0.8 : TEMPO.call)) this.toPitchNext();
         break;
       case "result":
+        // 수비 화면에서 끝났으면 팀 색 사선 와이프로 덮고 그 뒤에서 타석으로
+        if (this.cfg.mode !== "derby" && !this.wipe && this.frames.length > 0 && this.lastWasField() && this.pt > TEMPO.result - WIPE.in)
+          this.wipe = { t: 0, team: this.s.sides[batSide(this.s)].team };
         if (this.pt > (this.cfg.mode === "derby" ? 1.3 : TEMPO.result)) this.afterResult();
         break;
       case "change":
@@ -1929,12 +1965,33 @@ export class Match {
     this.beginPA();
   }
 
+  /** 판정 순간: 아슬아슬하면 전체 화면 컷인 + 잠깐 느리게 (BS2 — 남발 안 하게 접전만) */
+  private onCall(e: FieldEvent, out: boolean) {
+    if (this.callAt < 0) this.callAt = this.ft;
+    if (!e.close || this.cfg.mode === "derby" || this.closeCut) return;
+    this.closeCut = { t: 0, out };
+    if (!this.reduceMotion) {
+      this.hitStop = Math.max(this.hitStop, 0.08);
+      this.slowmo = Math.max(this.slowmo, 0.5);
+      this.shake = Math.max(this.shake, 0.12);
+    }
+  }
   private updateField(dt: number) {
     // 공을 잡고 0.6초 지나면 (송구 · 주루 마무리) 조금 빨리 — 2 · 3루타 중계가 9 ~ 12초씩 걸리던 것
     const cur = this.frameAt(this.ft);
     if (cur && cur.hold >= 0 && this.holdAt < 0) this.holdAt = this.ft;
-    const settle = this.holdAt >= 0 && this.ft - this.holdAt > 0.6 && this.cfg.mode !== "derby";
-    const sp = this.fast ? 2.6 : settle ? 1.6 : 1;
+    // 첫 판정 뒤 · 오래 끄는 장타(4초+)만 조금 빨리 — 타격 → 판정은 제 속도 (벤치마크: 내야 땅볼 3.2 ~ 3.8초)
+    const settle = this.cfg.mode !== "derby" && ((this.callAt >= 0 && this.ft - this.callAt > 0.5) || (this.holdAt >= 0 && this.ft > 4));
+    const sp = this.fast ? 2.6 : settle ? 1.5 : 1;
+    if (this.closeCut) {
+      this.closeCut.t += dt;
+      if (this.closeCut.t > CLOSE_CUT) this.closeCut = null;
+    }
+    if (this.fair && this.ft >= this.fair.t) {
+      const p = fproj(this.fair.x, this.fair.y, 1);
+      this.popup(p.x, p.y - 24, "FAIR", "#ffd23f", { cam: true, life: 0.9 });
+      this.fair = null;
+    }
     this.ft += dt * sp;
     if (cur) this.updateFieldCam(cur, dt);
     const last = this.frames[this.frames.length - 1];
@@ -1951,10 +2008,14 @@ export class Match {
           const at = fr ? fproj(fr.bx, fr.by, 1.5) : p;
           this.popup(at.x, at.y - 30, "OUT", "#ff5a5a", { cam: true, big: true });
           sfx.out();
+          this.onCall(e, true);
+          this.fieldOuts++;
+          if (this.s.outs + this.fieldOuts >= 3) this.popup(DW / 2, DH / 2 - 20, "3 OUT CHANGE", "#ffd23f", { big: true, life: 1.8 });
           break;
         }
         case "safe":
           this.popup(p.x, p.y - 30, "SAFE", "#7dff9a", { cam: true, big: true });
+          this.onCall(e, false);
           break;
         case "catch":
           sfx.catchBall();
@@ -1973,6 +2034,7 @@ export class Match {
           break;
         case "throw":
           sfx.throwBall();
+          this.lastThrow = e;
           break;
         case "hr":
           break;
@@ -2045,18 +2107,46 @@ export class Match {
     if (this.sideCut) this.drawSideCut(ctx);
     this.drawBanner(ctx);
     for (const p of this.popups) {
-      const a = 1 - smooth(0.9, 1.4, p.t);
+      const life = p.life ?? 1.4;
+      const a = 1 - smooth(life - 0.5, life, p.t);
       const at = p.cam ? this.camPt(p.x, p.y) : p;
       ctx.globalAlpha = a;
       ctx.textAlign = "center";
-      if (p.big) {
-        // 판정 도장: 크게 튀어나왔다 자리 잡음
-        const k = p.t < 0.12 ? 1.8 - (p.t / 0.12) * 0.9 : p.t < 0.22 ? 0.9 + ((p.t - 0.12) / 0.1) * 0.1 : 1;
+      if (p.onoma) {
+        // 의성어: 비스듬히 크게 튀어나왔다 살짝 줄며 흔들림
+        const k = p.t < 0.08 ? 0.6 + (p.t / 0.08) * 0.9 : 1.5 - Math.min(0.3, (p.t - 0.08) * 0.8);
         ctx.save();
-        ctx.translate(at.x, at.y - Math.max(0, p.t - 0.5) * 20);
+        ctx.translate(at.x + Math.sin(p.t * 60) * Math.max(0, 0.15 - p.t) * 20, at.y);
+        ctx.rotate(-0.18);
         ctx.scale(k, k);
-        ctx.font = '34px "Black Han Sans", sans-serif';
-        ctx.lineWidth = 7;
+        ctx.font = '46px "Black Han Sans", sans-serif';
+        ctx.lineJoin = "round";
+        ctx.lineWidth = 12;
+        ctx.strokeStyle = "#1a1030";
+        ctx.strokeText(p.text, 0, 0);
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "#ff5a3d";
+        ctx.strokeText(p.text, 0, 0);
+        ctx.fillStyle = p.color;
+        ctx.fillText(p.text, 0, 0);
+        ctx.restore();
+      } else if (p.big) {
+        // 판정 도장: 크게 튀어나왔다 자리 잡음 (베이스 옆 · 색 판 위에)
+        const k = p.t < 0.12 ? 1.6 - (p.t / 0.12) * 0.7 : p.t < 0.22 ? 0.9 + ((p.t - 0.12) / 0.1) * 0.1 : 1;
+        ctx.save();
+        ctx.translate(at.x, at.y - Math.max(0, p.t - 0.9) * 20);
+        // 화면 가운데 고정 글자(3 OUT CHANGE 등)는 더 크게
+        const big = p.cam ? 1 : 1.6;
+        ctx.scale(k * big, k * big);
+        ctx.font = '32px "Black Han Sans", sans-serif';
+        const w = ctx.measureText(p.text).width + 26;
+        ctx.fillStyle = "rgba(14,12,30,0.82)";
+        ctx.beginPath();
+        ctx.roundRect(-w / 2, -30, w, 40, 6);
+        ctx.fill();
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-w / 2, 6, w, 4);
+        ctx.lineWidth = 6;
         ctx.strokeStyle = "rgba(0,0,0,0.85)";
         ctx.strokeText(p.text, 0, 0);
         ctx.fillStyle = p.color;
@@ -2072,11 +2162,116 @@ export class Match {
       }
       ctx.globalAlpha = 1;
     }
+    if (this.closeCut) this.drawCloseCut(ctx);
     if (this.phase === "mission" && this.s.mission) this.drawMission(ctx);
     this.drawMissionFx(ctx);
     if (this.phase === "recap") this.drawRecap(ctx);
     if (this.phase === "chance") this.drawChance(ctx);
     else if (this.cfg.career?.missions?.length && !this.cfg.bond && this.phase !== "recap") this.drawSeasonMissions(ctx);
+    if (this.wipe) this.drawWipe(ctx);
+  }
+
+  /** 아슬아슬 판정 컷인: 화면 가로지르는 띠 + 집중선 + 큰 「SAFE!」 「OUT!」 (BS2 만화 컷 — 접전만) */
+  private drawCloseCut(ctx: CanvasRenderingContext2D) {
+    const c = this.closeCut!;
+    const t = c.t;
+    const inK = Math.min(1, t / 0.1);
+    const outK = Math.max(0, (t - (CLOSE_CUT - 0.15)) / 0.15);
+    const col = c.out ? "#ff4d5e" : "#3ee07a";
+    const H = 170 * (1 - outK);
+    if (H < 1) return;
+    const cy = DH / 2 - 10;
+    ctx.save();
+    // 처음 한 프레임 흰 번쩍
+    if (t < 0.05) {
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.fillRect(0, 0, DW, DH);
+    }
+    ctx.translate(DW / 2, cy);
+    ctx.rotate(-0.08);
+    const W = DW * 1.3 * inK;
+    ctx.fillStyle = "rgba(10,8,24,0.9)";
+    ctx.fillRect(-W / 2, -H / 2, W, H);
+    ctx.fillStyle = col;
+    ctx.fillRect(-W / 2, -H / 2, W, 6);
+    ctx.fillRect(-W / 2, H / 2 - 6, W, 6);
+    // 집중선 (가로로 쓸리는 속도선)
+    ctx.beginPath();
+    ctx.rect(-W / 2, -H / 2 + 6, W, H - 12);
+    ctx.clip();
+    for (let i = 0; i < 26; i++) {
+      const yy = ((i * 37) % 150) - 75;
+      const len = 120 + ((i * 53) % 220);
+      const xx = (((i * 97 + t * 2600) % (DW * 1.6)) - DW * 0.8) * (i % 2 ? 1 : -1);
+      ctx.fillStyle = `rgba(255,255,255,${0.08 + (i % 4) * 0.05})`;
+      ctx.fillRect(xx - len / 2, yy, len, 2 + (i % 3));
+    }
+    // 큰 글자: 오른쪽에서 빠르게 미끄러져 들어와 살짝 튕김
+    const sl = t < 0.12 ? 1 - t / 0.12 : 0;
+    const bounce = t >= 0.12 && t < 0.22 ? Math.sin(((t - 0.12) / 0.1) * Math.PI) * 0.08 : 0;
+    ctx.translate(sl * DW * 0.7, 0);
+    ctx.scale(1 + bounce, 1 + bounce);
+    ctx.font = 'italic 92px "Black Han Sans", sans-serif';
+    ctx.textAlign = "center";
+    ctx.lineJoin = "round";
+    const txt = c.out ? "OUT!" : "SAFE!";
+    ctx.lineWidth = 16;
+    ctx.strokeStyle = "#0a0818";
+    ctx.strokeText(txt, 0, 32);
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "#ffffff";
+    ctx.strokeText(txt, 0, 32);
+    ctx.fillStyle = col;
+    ctx.fillText(txt, 0, 32);
+    ctx.font = '16px "Black Han Sans", sans-serif';
+    ctx.fillStyle = "#ffd23f";
+    ctx.fillText("아슬아슬!", 0, -52);
+    ctx.restore();
+  }
+
+  /** 끝 전환: 팀 색 사선 띠가 왼쪽에서 덮고 → 팀 마크 → 오른쪽으로 걷힘 */
+  private drawWipe(ctx: CanvasRenderingContext2D) {
+    const w = this.wipe!;
+    const sk = 220;
+    const e = (k: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, k)), 3);
+    // 앞 가장자리 · 뒤 가장자리 (x, 위쪽 기준 · 아래는 sk 만큼 왼쪽)
+    const front = -sk + (DW + sk * 2) * e(w.t / WIPE.in);
+    const back = -sk + (DW + sk * 2) * e((w.t - WIPE.in - WIPE.hold) / WIPE.out);
+    if (front <= back) return;
+    const band = (x0: number, x1: number, col: string) => {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(x0, 0);
+      ctx.lineTo(x1, 0);
+      ctx.lineTo(x1 - sk, DH);
+      ctx.lineTo(x0 - sk, DH);
+      ctx.closePath();
+      ctx.fill();
+    };
+    band(back, front, w.team.dark ?? "#111");
+    band(back + 14, front - 14, w.team.color);
+    band(front - 60, front - 46, "rgba(255,255,255,0.35)");
+    for (let i = 0; i < 4; i++) {
+      const x = back + 120 + i * 190 + w.t * 160;
+      if (x + 40 < front) band(x, Math.min(front - 14, x + 40), "rgba(0,0,0,0.08)");
+    }
+    // 다 덮인 동안만 팀 마크 (덮이는 끝 무렵 나타나 걷히기 시작하면 사라짐)
+    const a = Math.min(1, Math.max(0, (w.t - WIPE.in + 0.06) / 0.08)) * (1 - Math.min(1, Math.max(0, (w.t - WIPE.in - WIPE.hold) / 0.1)));
+    if (a > 0) {
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.font = 'italic 44px "Black Han Sans", sans-serif';
+      const tw = ctx.measureText(w.team.name).width;
+      const x0 = DW / 2 - (tw + 92) / 2;
+      this.teamTile(ctx, x0, DH / 2 - 40, 76, w.team);
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "left";
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "rgba(0,0,0,0.35)";
+      ctx.strokeText(w.team.name, x0 + 92, DH / 2 + 14);
+      ctx.fillText(w.team.name, x0 + 92, DH / 2 + 14);
+      ctx.restore();
+    }
   }
 
   /** 육성: 시즌 미션 (오른쪽 위 · 이 경기 기록까지 더해서) */
@@ -2944,61 +3139,81 @@ export class Match {
     return { pts, land: { x: F[c.landI].bx, y: F[c.landI].by } };
   }
 
-  // ───────────── 필드 카메라 (공 · 쫓는 수비 · 주자를 따라 당겨 봄) ─────────────
+  // ───────────── 필드 카메라: 중계 문법 (MLB · 컴프야 · 파워프로 벤치마크) ─────────────
+  // 여러 점을 다 넣으려 매 프레임 박스를 다시 잡던 것(쉴 새 없이 패닝 · 줌) 대신
+  // 줌은 공이 내야를 벗어날 때 한 번만 한 방향으로, 따라가는 대상은 하나 (공 · 공 든 수비), 데드존 안이면 안 움직임
   /** 화면 가운데에 둘 필드 화면 좌표(줌 1 기준) · 줌 */
   fcam = { x: DW / 2, y: DH / 2, z: 1 };
+  private camZ = { from: CAM.zIn, to: CAM.zIn, k: 1, out: false };
   /** 공을 처음 잡은 필드 시각 (-1 = 아직) */
   private holdAt = -1;
-  private fieldCamTarget(fr: Frame) {
-    const pts: { x: number; y: number }[] = [];
-    const add = (x: number, y: number, h = 0) => pts.push(fproj(x, y, h));
-    add(fr.bx, fr.by, fr.bh);
-    add(fr.bx, fr.by);
-    if (!this.hr) {
-      const arc = this.flightArc(this.ft);
-      if (arc?.land) add(arc.land.x, arc.land.y);
-      if (fr.hold >= 0) {
-        add(fr.fx[fr.hold * 2], fr.fx[fr.hold * 2 + 1]);
-        // 공 잡은 뒤엔 뛰는 주자까지 (송구 · 태그 승부)
-        for (const r of fr.rs) if (r.st === 0) add(r.x, r.y);
-      } else {
-        const tx = arc?.land?.x ?? fr.bx;
-        const ty = arc?.land?.y ?? fr.by;
-        let bi = -1;
-        let bd = 1e9;
-        for (let i = 0; i < 9; i++) {
-          const d = Math.hypot(fr.fx[i * 2] - tx, fr.fx[i * 2 + 1] - ty);
-          if (d < bd) {
-            bd = d;
-            bi = i;
-          }
-        }
-        if (bi >= 0) add(fr.fx[bi * 2], fr.fx[bi * 2 + 1]);
+  /** 지금 날아가는 송구 (받을 베이스 쪽으로 카메라를 조금 앞세움) */
+  private lastThrow: FieldEvent | null = null;
+  /** 첫 판정(아웃 · 세이프) 필드 시각 */
+  private callAt = -1;
+  /** 이번 플레이 아웃 수 (3아웃 CHANGE) */
+  private fieldOuts = 0;
+  /** 라인 근처 페어 (첫 바운드 시각 · 자리) */
+  private fair: { t: number; x: number; y: number } | null = null;
+  /** 아슬아슬 판정 컷인 */
+  private closeCut: { t: number; out: boolean } | null = null;
+  /** 끝 전환 와이프 */
+  private wipe: { t: number; team: Team } | null = null;
+  private camSubject(fr: Frame) {
+    if (fr.hold >= 0) return fproj(fr.fx[fr.hold * 2], fr.fx[fr.hold * 2 + 1], 0.9);
+    // 공과 땅 그림자 사이 (높이 뜬 공도 둘 다 화면에)
+    const b = fproj(fr.bx, fr.by, fr.bh);
+    const g = fproj(fr.bx, fr.by);
+    let x = (b.x + g.x) / 2;
+    let y = (b.y + g.y) / 2;
+    if (this.holdAt < 0) {
+      // 타구: 떨어질 자리 쪽으로 30% 앞서기
+      const arc = this.hr ? null : this.flightArc(this.ft);
+      if (arc?.land) {
+        const L = fproj(arc.land.x, arc.land.y);
+        x += (L.x - x) * 0.3;
+        y += (L.y - y) * 0.3;
       }
+    } else if (this.lastThrow && this.lastThrow.tx !== undefined) {
+      // 송구: 받는 베이스 쪽으로 25%
+      const T = fproj(this.lastThrow.tx, this.lastThrow.ty ?? 0);
+      x += (T.x - x) * 0.25;
+      y += (T.y - y) * 0.25;
     }
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const p of pts) {
-      x0 = Math.min(x0, p.x);
-      x1 = Math.max(x1, p.x);
-      y0 = Math.min(y0, p.y);
-      y1 = Math.max(y1, p.y);
-    }
-    y0 -= 50; // 사람 키 · 공 위
-    const z = clamp(Math.min(DW / (x1 - x0 + 260), DH / (y1 - y0 + 170)), 1, this.hr ? 1.25 : 1.6);
-    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 + 6, z };
+    return { x, y };
   }
   private updateFieldCam(fr: Frame, dt: number) {
-    const t = this.fieldCamTarget(fr);
     const c = this.fcam;
-    const kp = 1 - Math.exp(-dt * 3.2);
-    const kz = 1 - Math.exp(-dt * 2.2);
-    c.z += (t.z - c.z) * kz;
-    c.x += (t.x - c.x) * kp;
-    c.y += (t.y - c.y) * kp;
+    const Z = this.camZ;
+    // 공이 내야를 벗어나면(홈에서 35m+) 한 번만 줌 바꿈 — 외야는 당겨서(멀어 작아지니까) · 홈런은 살짝 빼서 관중석까지
+    if (!Z.out && this.holdAt < 0 && Math.hypot(fr.bx, fr.by) > 35) {
+      Z.out = true;
+      Z.from = c.z;
+      Z.to = this.hr ? CAM.zHr : CAM.zOut;
+      Z.k = 0;
+    }
+    Z.k = Math.min(1, Z.k + dt / CAM.zDur);
+    const e = Z.k < 0.5 ? 2 * Z.k * Z.k : 1 - Math.pow(2 - 2 * Z.k, 2) / 2;
+    c.z = Z.from + (Z.to - Z.from) * e;
     const hw = DW / 2 / c.z;
     const hh = DH / 2 / c.z;
-    c.x = clamp(c.x, hw, DW - hw);
-    c.y = clamp(c.y, hh, DH - hh);
+    const sj = this.camSubject(fr);
+    // 데드존 (가로 40% · 세로 30%) 밖으로 나간 만큼만
+    const dx0 = hw * CAM.dzX, dy0 = hh * CAM.dzY;
+    const tx = sj.x > c.x + dx0 ? sj.x - dx0 : sj.x < c.x - dx0 ? sj.x + dx0 : c.x;
+    const ty = sj.y > c.y + dy0 ? sj.y - dy0 : sj.y < c.y - dy0 ? sj.y + dy0 : c.y;
+    const kf = 1 - Math.exp(-dt / CAM.tau);
+    let mx = (tx - c.x) * kf;
+    let my = (ty - c.y) * kf;
+    // 최고 속도 (화면 폭 1.2배 / 초)
+    const vmax = CAM.vmax * 2 * hw * dt;
+    const m = Math.hypot(mx, my);
+    if (m > vmax) {
+      mx *= vmax / m;
+      my *= vmax / m;
+    }
+    c.x = clamp(c.x + mx, hw, DW - hw);
+    c.y = clamp(c.y + my, hh, DH - hh);
   }
   /** 필드 좌표(줌 1) → 지금 카메라 화면 */
   private camPt(x: number, y: number) {
@@ -3008,56 +3223,8 @@ export class Match {
 
   private drawField(ctx: CanvasRenderingContext2D, q: number) {
     const fr = this.frameAt(this.ft);
-    const cam = this.fcam;
-    ctx.save();
-    ctx.translate(DW / 2, DH / 2);
-    ctx.scale(cam.z, cam.z);
-    ctx.translate(-cam.x, -cam.y);
-    // 바닥도 스프라이트처럼 크게 보이면 고해상도 (실제 화면 픽셀 기준 — 스프라이트와 같은 기준)
-    const devPx = FIELD_BG_PX * Math.abs(ctx.getTransform().a);
-    if (devPx > HD_AT) this.bgHd = true;
-    else if (devPx < HD_AT * 0.9) this.bgHd = false;
-    setFieldGrid(this.bgHd ? FIELD_BG_PX / 2 : FIELD_BG_PX);
-    const sm = ctx.imageSmoothingEnabled;
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(fieldBg(q, this.night, this.bgHd), 0, 0, DW, DH);
-    ctx.imageSmoothingEnabled = sm;
-    // 고해상도 바닥은 처음 바뀔 때 멈칫 안 하게 미리 (한 번)
-    if (!this.bgWarm) {
-      this.bgWarm = true;
-      const night = this.night;
-      setTimeout(() => fieldBg(q, night, true), 0);
-    }
-    if (!fr) {
-      ctx.restore();
-      return;
-    }
-    const fsd = this.s.sides[fieldSide(this.s)];
-    const bsd = this.s.sides[batSide(this.s)];
-    this.trail.push({ x: fr.bx, y: fr.by, h: fr.bh });
-    if (this.trail.length > 18) this.trail.shift();
-    const sp = this.outcome?.sw?.kind === "bip" ? this.outcome.sw.ball.special : undefined;
-    const deriv = this.cfg.mode === "derby";
-    if (deriv) {
-      // 홈런더비: 수비 없이 공만
-      const b = fproj(fr.bx, fr.by, fr.bh);
-      const sh = fproj(fr.bx, fr.by);
-      const gpx = this.bgHd ? FIELD_BG_PX / 2 : FIELD_BG_PX;
-      pxEllipse(ctx, sh.x, sh.y, 3, 1.5, gpx, "rgba(0,0,0,0.35)");
-      pxPath(ctx, this.trail.map((t) => fproj(t.x, t.y, t.h)), gpx, gpx * 2, "rgba(255,255,255,0.6)");
-      pxBall(ctx, b.x, b.y, 3.2, gpx);
-      // 골든 보드
-      const gb = fproj(0, 128, 6);
-      ctx.fillStyle = "#ffd23f";
-      ctx.fillRect(gb.x - 22, gb.y - 10, 44, 16);
-      ctx.fillStyle = "#3a2a00";
-      ctx.font = '800 10px "JetBrains Mono", monospace';
-      ctx.textAlign = "center";
-      ctx.fillText("GOLD", gb.x, gb.y + 2);
-    } else {
-      drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, this.trail, sp, this.flightArc(this.ft), this.poser, this.ft, this.lastPose);
-    }
-    ctx.restore();
+    this.drawFieldScene(ctx, q, fr, this.fcam, DW, DH, true);
+    if (fr) this.drawPip(ctx, q, fr);
     if (this.hr) {
       const d = Math.round(this.hrDist);
       ctx.font = '30px "Black Han Sans", sans-serif';
@@ -3085,6 +3252,133 @@ export class Match {
       }
       ctx.globalAlpha = 1;
     }
+  }
+
+  /** 공 꼬리: 지난 0.16초 공 자리 (오래된 것부터) — 그리는 프레임 수와 상관없이 같은 길이 */
+  private ballTrail() {
+    const out: { x: number; y: number; h: number }[] = [];
+    for (let k = 8; k >= 0; k--) {
+      const f = this.frameAt(this.ft - k * 0.02);
+      if (!f || f.hold >= 0) {
+        out.length = 0;
+        continue;
+      }
+      out.push({ x: f.bx, y: f.by, h: f.bh });
+    }
+    return out;
+  }
+  /** 필드 한 장면 (cam 가운데 · 줌으로 w × h 화면에) — 본 화면 · 주자 창(PiP) 같이 씀 */
+  private drawFieldScene(ctx: CanvasRenderingContext2D, q: number, fr: Frame | null, cam: { x: number; y: number; z: number }, w: number, h: number, main: boolean) {
+    ctx.save();
+    ctx.translate(w / 2, h / 2);
+    ctx.scale((cam.z * w) / DW, (cam.z * w) / DW);
+    ctx.translate(-cam.x, -cam.y);
+    // 바닥도 스프라이트처럼 크게 보이면 고해상도 (실제 화면 픽셀 기준 — 스프라이트와 같은 기준)
+    if (main) {
+      const devPx = FIELD_BG_PX * Math.abs(ctx.getTransform().a);
+      if (devPx > HD_AT) this.bgHd = true;
+      else if (devPx < HD_AT * 0.9) this.bgHd = false;
+    }
+    setFieldGrid(this.bgHd ? FIELD_BG_PX / 2 : FIELD_BG_PX);
+    const sm = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(fieldBg(q, this.night, this.bgHd), 0, 0, DW, DH);
+    ctx.imageSmoothingEnabled = sm;
+    // 고해상도 바닥은 처음 바뀔 때 멈칫 안 하게 미리 (한 번)
+    if (!this.bgWarm) {
+      this.bgWarm = true;
+      const night = this.night;
+      setTimeout(() => fieldBg(q, night, true), 0);
+    }
+    if (!fr) {
+      ctx.restore();
+      return;
+    }
+    const fsd = this.s.sides[fieldSide(this.s)];
+    const bsd = this.s.sides[batSide(this.s)];
+    const trail = this.ballTrail();
+    const sp = this.outcome?.sw?.kind === "bip" ? this.outcome.sw.ball.special : undefined;
+    if (this.cfg.mode === "derby") {
+      // 홈런더비: 수비 없이 공만
+      const b = fproj(fr.bx, fr.by, fr.bh);
+      const sh = fproj(fr.bx, fr.by);
+      const gpx = this.bgHd ? FIELD_BG_PX / 2 : FIELD_BG_PX;
+      pxEllipse(ctx, sh.x, sh.y, 3, 1.5, gpx, "rgba(0,0,0,0.35)");
+      pxStreak(ctx, trail.map((t) => fproj(t.x, t.y, t.h)), gpx, gpx * 3, "255,255,255");
+      pxBall(ctx, b.x, b.y, 3.2, gpx);
+      // 골든 보드
+      const gb = fproj(0, 128, 6);
+      ctx.fillStyle = "#ffd23f";
+      ctx.fillRect(gb.x - 22, gb.y - 10, 44, 16);
+      ctx.fillStyle = "#3a2a00";
+      ctx.font = '800 10px "JetBrains Mono", monospace';
+      ctx.textAlign = "center";
+      ctx.fillText("GOLD", gb.x, gb.y + 2);
+    } else {
+      drawFieldFrame(ctx, fr, { body: fsd.team.color, cap: fsd.team.dark }, { body: bsd.team.color, cap: bsd.team.dark }, trail, sp, this.flightArc(this.ft), this.poser, this.ft, this.lastPose);
+    }
+    ctx.restore();
+  }
+  /** 주자 창 (파워프로): 공이 외야에 있는 동안 화면 밖에서 뛰는 선두 주자를 오른쪽 위 작은 창으로 */
+  private pipK = 0;
+  private pipCam = { x: 0, y: 0, z: 2.4 };
+  private drawPip(ctx: CanvasRenderingContext2D, q: number, fr: Frame) {
+    if (this.cfg.mode === "derby" || this.hr) return;
+    // 선두 주자: 다이아 가운데 기준 홈 → 1루 → 2루 → 3루 방향으로 가장 많이 간 사람
+    let lead: { x: number; y: number } | null = null;
+    let best = -1;
+    for (const r of fr.rs) {
+      if (r.st !== 0) continue;
+      const a = (Math.atan2(r.y - 19.4, r.x) * 180) / Math.PI;
+      const prog = (a + 90 + 360) % 360;
+      if (prog > best) {
+        best = prog;
+        lead = r;
+      }
+    }
+    const bx = fr.hold >= 0 ? fr.fx[fr.hold * 2] : fr.bx;
+    const by = fr.hold >= 0 ? fr.fx[fr.hold * 2 + 1] : fr.by;
+    const c = this.fcam;
+    let want = false;
+    if (lead && Math.hypot(bx, by) > 45) {
+      const p = fproj(lead.x, lead.y);
+      const hw = DW / 2 / c.z, hh = DH / 2 / c.z;
+      want = Math.abs(p.x - c.x) > hw * 0.92 || Math.abs(p.y - 20 - c.y) > hh * 0.92;
+    }
+    const dt = 1 / 60;
+    this.pipK = clamp(this.pipK + (want ? dt / 0.18 : -dt / 0.18), 0, 1);
+    if (this.pipK <= 0 || !lead) return;
+    const p = fproj(lead.x, lead.y, 1);
+    if (this.pipK < 0.05 || want) {
+      // 처음 뜰 땐 바로 그 자리 · 그 뒤엔 부드럽게 따라감
+      if (this.pipK < 0.1) this.pipCam = { x: p.x, y: p.y, z: 2.4 };
+      else {
+        this.pipCam.x += (p.x - this.pipCam.x) * 0.2;
+        this.pipCam.y += (p.y - this.pipCam.y) * 0.2;
+      }
+    }
+    const w = 248, h = 140;
+    const k = 1 - Math.pow(1 - this.pipK, 3);
+    // 오른쪽 아래 (오른쪽 위는 배속 · 건너뛰기 버튼)
+    const x = DW - 12 - w + (1 - k) * (w + 20), y = DH - 12 - h;
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, 8);
+    ctx.save();
+    ctx.clip();
+    ctx.translate(x, y);
+    this.drawFieldScene(ctx, q, fr, this.pipCam, w, h, false);
+    ctx.restore();
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.stroke();
+    ctx.fillStyle = "rgba(14,12,30,0.8)";
+    ctx.fillRect(x + 6, y + 6, 46, 18);
+    ctx.fillStyle = "#ffd23f";
+    ctx.font = '12px "Black Han Sans", sans-serif';
+    ctx.textAlign = "left";
+    ctx.fillText("주자", x + 14, y + 20);
+    ctx.restore();
   }
 
   private frameAt(t: number) {
@@ -4262,6 +4556,29 @@ export class Match {
       ctx.fillRect(-r, -r, r * 2, r * 2);
       ctx.restore();
     };
+    // 수비 화면: 주자 실제 자리로 (서 있는 베이스 불 · 뛰는 주자는 점) — 모든 벤치마크 게임에 상시
+    const fr = this.phase === "field" && this.cfg.mode !== "derby" ? this.frameAt(this.ft) : null;
+    if (fr) {
+      const on = [false, false, false];
+      const dots: { x: number; y: number }[] = [];
+      for (const r of fr.rs) {
+        if (r.st === 2 || r.st === 3) continue;
+        const bi = [[19.4, 19.4], [0, 38.8], [-19.4, 19.4]].findIndex(([bx, by]) => Math.hypot(r.x - bx, r.y - by) < 1.5);
+        if (r.st === 1 && bi >= 0) on[bi] = true;
+        else dots.push({ x: cx + (r.x * d) / 19.4, y: cy + ((19.4 - r.y) * d) / 19.4 });
+      }
+      base(cx + d, cy, on[0]);
+      base(cx, cy - d, on[1]);
+      base(cx - d, cy, on[2]);
+      base(cx, cy + d + 4, false, true);
+      for (const p of dots) {
+        ctx.fillStyle = "#0a0818";
+        ctx.fillRect(Math.round(p.x) - 4, Math.round(p.y) - 4, 8, 8);
+        ctx.fillStyle = "#ffcf3a";
+        ctx.fillRect(Math.round(p.x) - 3, Math.round(p.y) - 3, 6, 6);
+      }
+      return;
+    }
     base(cx + d, cy, s.bases[0] !== null);
     base(cx, cy - d, s.bases[1] !== null);
     base(cx - d, cy, s.bases[2] !== null);

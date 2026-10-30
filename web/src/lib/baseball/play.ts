@@ -91,6 +91,11 @@ export interface FieldEvent {
   x: number;
   y: number;
   text: string;
+  /** 아슬아슬 (아웃 · 세이프 차 0.25초 안) — 화면 컷인 */
+  close?: boolean;
+  /** 송구 받을 베이스 자리 (throw) */
+  tx?: number;
+  ty?: number;
 }
 
 export type BatterResult = "HR" | "1B" | "2B" | "3B" | "IPHR" | "OUT" | "FC" | "SF" | "SH" | "DP" | "FOUL";
@@ -789,12 +794,12 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     });
   };
 
-  const markOut = (r: Runner, t: number, base: number, force: boolean, why: string) => {
+  const markOut = (r: Runner, t: number, base: number, force: boolean, why: string, close = false) => {
     r.st = "out";
     outs++;
     lastOutForce = force || (r.isBatter && r.s < 1);
     const [x, y] = B[base];
-    events.push({ t, kind: "out", x, y, text: why });
+    events.push({ t, kind: "out", x, y, text: why, close });
     if (r.isBatter) for (const o of R) if (!o.isBatter) o.forced = false;
   };
 
@@ -882,7 +887,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     t0 = Math.max(t0, recvAt - flight);
     thrown = { thrower: fi, from: [f.x, f.y, 1.8], to: recv, t0, t1: t0 + flight, base, receiver: recv };
     ballHolder = -1;
-    events.push({ t: t0, kind: "throw", x: f.x, y: f.y, text: "" });
+    events.push({ t: t0, kind: "throw", x: f.x, y: f.y, text: "", tx: B[base][0], ty: B[base][1] });
   };
 
   /** 수비수 fi 가 베이스 위에서 공을 들고 있음 → 포스 · 태그 */
@@ -897,7 +902,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
         const forced = r.forced || r.isBatter;
         if (Math.round(r.target) === b && r.s < b - 1e-3) {
           // 포스: 그냥 아웃 · 태그: 베이스 가까이 오는 주자
-          if (forced || b - r.s < 0.6 || r.waitFly) markOut(r, now, base, forced, forced ? "포스 아웃" : "태그 아웃");
+          if (forced || b - r.s < 0.6 || r.waitFly) markOut(r, now, base, forced, forced ? "포스 아웃" : "태그 아웃", ((b - r.s) * BASE_LEN) / r.speed < 0.25);
         }
       }
     }
@@ -1082,7 +1087,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
         r.s = r.target;
         // 아슬아슬 세이프 (송구가 그 베이스로 오는 중) — 화면 「SAFE」 도장
         const sb = r.s >= 4 ? 0 : Math.round(r.s);
-        if (dir > 0 && thrown && thrown.base === sb && thrown.t1 - t < 0.7) events.push({ t, kind: "safe", x: B[sb][0], y: B[sb][1], text: "세이프" });
+        if (dir > 0 && thrown && thrown.base === sb && thrown.t1 - t < 0.7) events.push({ t, kind: "safe", x: B[sb][0], y: B[sb][1], text: "세이프", close: thrown.t1 - t < 0.25 });
         if (r.s >= 4) {
           r.st = "scored";
           r.scoredAt = t;

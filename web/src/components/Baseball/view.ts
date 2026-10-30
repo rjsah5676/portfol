@@ -4,7 +4,7 @@
  *   필드 화면: 경기장 전체를 비스듬히 내려다봄 (타구 · 수비 · 주자)
  * 배경은 한 번 그려서 캐시.
  */
-import { pxBall, pxEllipse, pxPath, pxRing, snapPx } from "./pixelDraw";
+import { pxBall, pxEllipse, pxRing, pxStreak } from "./pixelDraw";
 import { BASES, FENCE_H, HOME_POS, fenceDist, type Frame } from "@/lib/baseball/play";
 import { FieldPoser, drawFieldSprite, fieldSpritesReady, type Pose } from "./fieldSprites";
 import { BALL_R, ZONE } from "@/lib/baseball/pitch";
@@ -879,11 +879,7 @@ export function drawFieldFrame(
   items.sort((a, b) => a.y - b.y);
   const flying = f.hold < 0 && f.bh > 0.4;
   const px = FGRID;
-  // 날아갈 길 (아직 안 간 쪽만 픽셀 점선) · 떨어질 자리 링 — 높이 · 방향이 한눈에 읽히게
-  if (arc && flying && arc.pts.length > 1) {
-    // (arc.pts 는 지금 이후 점만 — match.ts) · 땅 위 그림자 길 · 높이 막대는 지저분해서 뺌
-    pxPath(ctx, [fproj(f.bx, f.by, f.bh), ...arc.pts.map((q) => fproj(q.x, q.y, q.h))], px, px * 4, "rgba(255,255,255,0.75)");
-  }
+  // 떨어질 자리 링만 (날아갈 길 점선 · 땅 그림자 길 · 높이 막대는 지저분해서 뺌 — 다른 야구 게임 관전 화면에도 없음)
   if (arc?.land && flying) {
     const L = fproj(arc.land.x, arc.land.y);
     const pulse = 1 + Math.sin(f.t * 10) * 0.12;
@@ -898,18 +894,10 @@ export function drawFieldFrame(
   const hk = Math.min(1, f.bh / 35);
   if (!held) pxEllipse(ctx, sh.x, sh.y, (2.4 - hk) * sh.s, (1.1 - hk * 0.4) * sh.s, px, `rgba(0,0,0,${(0.4 - hk * 0.22).toFixed(3)})`);
   for (const it of items) it.draw();
-  // 꼬리 (픽셀 점 — 뒤로 갈수록 옅게)
+  // 꼬리: 지난 0.16초 공 자리를 굵어지는 픽셀 띠로 (패미스타 노란 꼬리처럼 속도감)
   if (!held && trail.length > 1) {
-    const col = special === "igna" ? "255,120,40" : special === "zena" ? "255,230,80" : "255,255,255";
-    const n = trail.length;
-    trail.forEach((t, i) => {
-      if (i === n - 1) return;
-      const p = fproj(t.x, t.y, t.h);
-      const a = ((i + 1) / n) * (special ? 0.8 : 0.55);
-      const w = special ? px * 2 : px;
-      ctx.fillStyle = `rgba(${col},${a.toFixed(2)})`;
-      ctx.fillRect(snapPx(p.x, px) - w / 2, snapPx(p.y, px) - w / 2, w, w);
-    });
+    const col = special === "igna" ? "255,120,40" : special === "zena" ? "255,230,80" : "255,244,200";
+    pxStreak(ctx, trail.map((t) => fproj(t.x, t.y, t.h)), px, px * (special ? 4 : 3), col);
   }
   if (held) return;
   const b = fproj(f.bx, f.by, f.bh);

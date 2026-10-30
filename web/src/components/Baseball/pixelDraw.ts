@@ -51,3 +51,22 @@ export function pxBall(ctx: CanvasRenderingContext2D, x: number, y: number, r: n
   if (R > px * 1.2) pxEllipse(ctx, x - px * 0.5, y - px * 0.5, R - px * 0.5, R - px * 0.5, px, "#ffffff");
   else pxEllipse(ctx, x, y, R, R, px, "#ffffff");
 }
+/** 픽셀 꼬리: 오래된 점 → 새 점으로 갈수록 굵고 진하게 (rgb = "255,255,255") */
+export function pxStreak(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[], px: number, maxW: number, rgb: string) {
+  if (pts.length < 2) return;
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  if (total < px) return;
+  let run = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    const L = Math.hypot(b.x - a.x, b.y - a.y);
+    for (let t = 0; t < L; t += px * 0.5) {
+      const k = (run + t) / total;
+      const w = Math.max(px, Math.round((maxW * k) / px) * px);
+      ctx.fillStyle = `rgba(${rgb},${(0.12 + 0.7 * k).toFixed(2)})`;
+      ctx.fillRect(snapPx(a.x + ((b.x - a.x) * t) / L, px) - w / 2, snapPx(a.y + ((b.y - a.y) * t) / L, px) - w / 2, w, w);
+    }
+    run += L;
+  }
+}
