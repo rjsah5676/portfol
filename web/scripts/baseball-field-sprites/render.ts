@@ -4,7 +4,8 @@ import { GLTFLoader, type GLTF } from "three/examples/jsm/loaders/GLTFLoader.js"
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import * as SkeletonUtils from "three/examples/jsm/utils/SkeletonUtils.js";
 
-const CELL = 256;
+/** 칸 크기 (px) — window.CELL 로 바꿀 수 있음 (고해상도 굽기 512) */
+const CELL = (window as unknown as { CELL?: number }).CELL ?? 256;
 const VIEW_H = 2.2; // 칸 세로 = 2.2m
 const smooth = (e0: number, e1: number, x: number) => { const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 function rgb2hsl(r: number, g: number, b: number): [number, number, number] {
@@ -42,6 +43,21 @@ function teamTexture(src: THREE.Texture, hex: number, maskOut?: { t?: THREE.Text
     const [nr, ng, nb] = hsl2rgb(th, Math.min(1, ts * Math.min(1.2, s2 / 0.85)), Math.min(1, tl * (l / 0.5)));
     d.data[i] = (r + (nr - r) * w) * 255; d.data[i + 1] = (gg + (ng - gg) * w) * 255; d.data[i + 2] = (b + (nb - b) * w) * 255;
   }
+  // CEL: 텍스처 무늬 · 구운 명암 다 지우고 재질별 한 색으로 → 명암은 빛 단계만 (만화식 깔끔한 덩어리)
+  if ((window as unknown as { CEL?: number }).CEL) {
+    for (let i = 0; i < d.data.length; i += 4) {
+      const r = d.data[i] / 255, gg = d.data[i + 1] / 255, b = d.data[i + 2] / 255;
+      const [h, s2, l] = rgb2hsl(r, gg, b);
+      let c: number[];
+      if (mk[i] > 110) c = [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
+      else if (l < 0.2) c = [40, 40, 48];
+      else if (s2 > 0.38 && (h < 14 || h > 330) && l > 0.22) c = [214, 40, 56];
+      else if (s2 > 0.18 && h >= 14 && h < 48 && l > 0.32) c = [242, 190, 150];
+      else if (l < 0.55 && s2 < 0.2) c = [120, 122, 134];
+      else c = [240, 241, 247];
+      d.data[i] = c[0]; d.data[i + 1] = c[1]; d.data[i + 2] = c[2];
+    }
+  }
   g.putImageData(d, 0, 0);
   if (maskOut) {
     const mc = document.createElement("canvas");
@@ -77,11 +93,14 @@ async function main() {
   renderer.setClearColor(0x000000, 0);
   document.body.appendChild(renderer.domElement);
   const scene = new THREE.Scene();
-  scene.add(new THREE.HemisphereLight(0xffffff, 0x6a7a5a, 1.2));
-  const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+  const CEL = (window as unknown as { CEL?: number }).CEL;
+  scene.add(CEL ? new THREE.AmbientLight(0xffffff, 1.15) : new THREE.HemisphereLight(0xffffff, 0x6a7a5a, 1.2));
+  const sun = new THREE.DirectionalLight(0xffffff, CEL ? 1.9 : 1.7);
   sun.position.set(-40, 80, 50);
   scene.add(sun);
-  const grad = new THREE.DataTexture(new Uint8Array([120, 200, 255]), 3, 1, THREE.RedFormat);
+  const grad = CEL
+    ? new THREE.DataTexture(new Uint8Array([40, 120, 200, 255]), 4, 1, THREE.RedFormat)
+    : new THREE.DataTexture(new Uint8Array([120, 200, 255]), 3, 1, THREE.RedFormat);
   grad.minFilter = grad.magFilter = THREE.NearestFilter;
   grad.needsUpdate = true;
   const TEAM = (window as unknown as { TEAM?: number }).TEAM ?? 0x8a8a8a;

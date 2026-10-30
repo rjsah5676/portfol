@@ -6,48 +6,76 @@
  */
 import { BASES, type FieldOut, type Frame } from "@/lib/baseball/play";
 
-interface ActMeta { n: number; loop: boolean; span: number; key: number; row: number }
-interface SheetMeta { cell: number; ax: number; ay: number; acts: Record<string, ActMeta>; /** 렌더 몇 px = 시트 1px (예전 시트 5) */ f?: number }
-interface Sheet { meta: SheetMeta; img: HTMLImageElement; mask: HTMLImageElement; ready: boolean; tinted: Map<string, HTMLCanvasElement> }
+interface ActMeta { n: number; loop: boolean; span: number; key: number; row: number; /** 동작별로 나눈 시트면 그 파일 이름 끝 */ file?: string }
+interface SheetMeta { cell: number; ax: number; ay: number; acts: Record<string, ActMeta>; /** 시트 1px = 256칸 렌더 몇 px (예전 시트 5) */ f?: number }
+interface SheetImg { img: HTMLImageElement; mask: HTMLImageElement; ready: boolean; tinted: Map<string, HTMLCanvasElement> }
+interface Sheet { base: string; meta: SheetMeta | null; files: Map<string, SheetImg> }
 
+type Kind = "fd" | "bt";
 const BASE = "/baseball/sprites/field";
-const sheets: Record<"fd" | "bt", Sheet | null> = { fd: null, bt: null };
+/** [보통, 고해상도(확대용 · 없으면 null)] — 고해상도는 동작별 파일, 크게 보일 때 처음 쓰면서 받음 */
+const sheets: Record<Kind, [Sheet | null, Sheet | null]> = { fd: [null, null], bt: [null, null] };
+/** 고해상도로 바꾸는 크기: 보통 시트 1px 이 실제 화면 몇 px 넘으면 */
+const HD_AT = 1.6;
 
-function loadSheet(k: "fd" | "bt") {
-  if (sheets[k] || typeof window === "undefined") return;
-  const s: Sheet = { meta: null as unknown as SheetMeta, img: new Image(), mask: new Image(), ready: false, tinted: new Map() };
-  sheets[k] = s;
-  let left = 3;
-  const done = () => { if (--left === 0) s.ready = true; };
-  fetch(`${BASE}_${k}.json`).then((r) => r.json()).then((m: SheetMeta) => { s.meta = m; done(); }).catch(() => {});
-  s.img.onload = done;
-  s.mask.onload = done;
-  s.img.src = `${BASE}_${k}.webp`;
-  s.mask.src = `${BASE}_${k}_mask.png`;
+function sheetImg(s: Sheet, file: string): SheetImg {
+  let f = s.files.get(file);
+  if (f) return f;
+  f = { img: new Image(), mask: new Image(), ready: false, tinted: new Map() };
+  s.files.set(file, f);
+  let left = 2;
+  const ff = f;
+  const done = () => {
+    if (--left === 0) ff.ready = true;
+  };
+  f.img.onload = done;
+  f.mask.onload = done;
+  const name = file ? `${s.base}_${file}` : s.base;
+  f.img.src = `${name}.webp`;
+  f.mask.src = `${name}_mask.png`;
+  return f;
+}
+function loadSheet(k: Kind, lv: 0 | 1) {
+  if (sheets[k][lv] || typeof window === "undefined") return;
+  const s: Sheet = { base: lv ? `${BASE}_${k}_hd` : `${BASE}_${k}`, meta: null, files: new Map() };
+  sheets[k][lv] = s;
+  fetch(`${s.base}.json`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((m: SheetMeta | null) => {
+      if (!m) return;
+      s.meta = m;
+      // 보통 시트는 한 장이면 바로 받음
+      if (!lv && !Object.values(m.acts).some((a) => a.file)) sheetImg(s, "");
+    })
+    .catch(() => {});
 }
 /** 수비 화면 들어가기 전에 미리 */
 export function preloadFieldSprites() {
-  loadSheet("fd");
-  loadSheet("bt");
+  for (const k of ["fd", "bt"] as Kind[]) {
+    loadSheet(k, 0);
+    // 확대용 고해상도는 주자만 (수비수는 아직 100K 모델 없음 — 404 콘솔 에러 안 나게)
+    if (k === "bt") loadSheet(k, 1);
+  }
 }
-export const fieldSpritesReady = () => !!sheets.fd?.ready && !!sheets.bt?.ready;
+const sheetReady = (s: Sheet | null) => !!s?.meta && (Object.values(s.meta.acts).some((a) => a.file) || !!s.files.get("")?.ready);
+export const fieldSpritesReady = () => sheetReady(sheets.fd[0]) && sheetReady(sheets.bt[0]);
 
 /** 팀색 입힌 시트 (팀 색마다 한 번): 마스크 자리 = 팀 색 × 그 픽셀 밝기 (회색으로 구워 둠) */
-function tinted(s: Sheet, color: string) {
-  let c = s.tinted.get(color);
+function tinted(f: SheetImg, color: string) {
+  let c = f.tinted.get(color);
   if (c) return c;
-  const w = s.img.naturalWidth, h = s.img.naturalHeight;
+  const w = f.img.naturalWidth, h = f.img.naturalHeight;
   c = document.createElement("canvas");
   c.width = w;
   c.height = h;
   const g = c.getContext("2d", { willReadFrequently: true })!;
-  g.drawImage(s.img, 0, 0);
+  g.drawImage(f.img, 0, 0);
   const d = g.getImageData(0, 0, w, h);
   const mc = document.createElement("canvas");
   mc.width = w;
   mc.height = h;
   const mg = mc.getContext("2d", { willReadFrequently: true })!;
-  mg.drawImage(s.mask, 0, 0);
+  mg.drawImage(f.mask, 0, 0);
   const m = mg.getImageData(0, 0, w, h).data;
   const hex = parseInt(color.replace("#", ""), 16);
   const tr = (hex >> 16) & 255, tg = (hex >> 8) & 255, tb = hex & 255;
@@ -60,7 +88,7 @@ function tinted(s: Sheet, color: string) {
     d.data[i + 2] = Math.min(255, tb * k);
   }
   g.putImageData(d, 0, 0);
-  s.tinted.set(color, c);
+  f.tinted.set(color, c);
   return c;
 }
 
@@ -73,12 +101,31 @@ export function dirOf(vx: number, vy: number) {
 export interface Pose { act: string; f: number; dir: number }
 
 /** 한 프레임 그리기. (x, y) = 발 자리 화면 좌표, sc = 스프라이트 1픽셀이 몇 px */
-export function drawFieldSprite(ctx: CanvasRenderingContext2D, kind: "fd" | "bt", pose: Pose, x: number, y: number, sc: number, color: string) {
-  const s = sheets[kind];
-  if (!s?.ready) return false;
-  const a = s.meta.acts[pose.act] ?? s.meta.acts.idle ?? s.meta.acts.ready;
+export function drawFieldSprite(ctx: CanvasRenderingContext2D, kind: Kind, pose: Pose, x: number, y: number, sc: number, color: string) {
+  const s0 = sheets[kind][0];
+  if (!s0?.meta) return false;
+  // 크게 보이면 (확대 · 가까이) 고해상도 시트 — 아직 덜 받았으면 받기 시작하고 이번엔 보통으로
+  let s: Sheet = s0;
+  let f: SheetImg | null = null;
+  // 실제 화면 픽셀 기준 (캔버스 배율 · 필드 카메라 확대 포함)
+  const u0 = ((sc * (s0.meta.f ?? 5)) / 5) * Math.abs(ctx.getTransform().a);
+  const hd = sheets[kind][1];
+  if (u0 > HD_AT * 0.85 && hd?.meta) {
+    const a = hd.meta.acts[pose.act] ?? hd.meta.acts.idle ?? hd.meta.acts.ready;
+    const hf = a ? sheetImg(hd, a.file ?? "") : null;
+    if (u0 > HD_AT && hf?.ready) {
+      s = hd;
+      f = hf;
+    }
+  }
+  const meta = s.meta!;
+  const a = meta.acts[pose.act] ?? meta.acts.idle ?? meta.acts.ready;
   if (!a) return false;
-  const C = s.meta.cell;
+  if (!f) {
+    f = sheetImg(s, a.file ?? "");
+    if (!f.ready) return false;
+  }
+  const C = meta.cell;
   const fi = Math.max(0, Math.min(a.n - 1, Math.floor(pose.f)));
   const sx = fi * C, sy = (a.row + pose.dir) * C;
   // 그림자
@@ -88,9 +135,9 @@ export function drawFieldSprite(ctx: CanvasRenderingContext2D, kind: "fd" | "bt"
   ctx.fill();
   const prev = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
-  // sc 는 「렌더 5px = 1칸」 기준 — 더 촘촘한 시트(f 3)는 그만큼 작게 그려서 화면 크기는 같게
-  const u = (sc * (s.meta.f ?? 5)) / 5;
-  ctx.drawImage(tinted(s, color), sx, sy, C, C, x - s.meta.ax * u, y - s.meta.ay * u, C * u, C * u);
+  // sc 는 「256칸 렌더 5px = 1칸」 기준 — 시트마다 f 로 맞춰서 화면 크기는 같게
+  const u = (sc * (meta.f ?? 5)) / 5;
+  ctx.drawImage(tinted(f, color), sx, sy, C, C, x - meta.ax * u, y - meta.ay * u, C * u, C * u);
   ctx.imageSmoothingEnabled = prev;
   return true;
 }
@@ -106,7 +153,7 @@ export class FieldPoser {
   constructor(private out: FieldOut) {}
   /** 시트 정보(동작 길이 · 핵심 장)가 있어야 짤 수 있어서 처음 쓸 때 */
   private build() {
-    const fd = sheets.fd?.meta;
+    const fd = sheets.fd[0]?.meta;
     if (this.built || !fd) return;
     this.built = true;
     const out = this.out;
@@ -165,7 +212,7 @@ export class FieldPoser {
   /** 수비 i 의 지금 동작 */
   fielder(i: number, f: Frame, t: number, last: Pose | undefined): Pose {
     this.build();
-    const fd = sheets.fd?.meta;
+    const fd = sheets.fd[0]?.meta;
     for (let k = this.cues.length - 1; k >= 0; k--) {
       const c = this.cues[k];
       if (c.fi !== i || t < c.start || t >= c.end) continue;

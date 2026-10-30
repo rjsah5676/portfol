@@ -2,6 +2,8 @@
 const { chromium } = require("/home/claude/.npm-global/lib/node_modules/playwright");
 const fs = require("fs");
 const MODEL = process.argv[2], OUT = process.argv[3];
+const CELL = Number(process.argv[4] || 256);
+const KIND = MODEL.startsWith("batter") ? "batter" : "fielder";
 fs.mkdirSync(OUT, { recursive: true });
 const ACT = {
   fielder: [
@@ -27,17 +29,19 @@ const ACT = {
     { tag: "slide", clip: "m_slide", n: 8 },
     { tag: "cheer", clip: "m_cheer", n: 6, loop: true },
   ],
-}[MODEL];
+}[KIND];
 (async () => {
   const browser = await chromium.launch({ args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
-  const page = await browser.newPage({ viewport: { width: 300, height: 300 } });
+  const page = await browser.newPage({ viewport: { width: CELL + 40, height: CELL + 40 } });
   page.on("pageerror", (e) => console.log("PAGEERR", e.message));
-  await page.addInitScript((m) => { window.MODEL = m; window.BLUR = 6; }, MODEL);
+  await page.addInitScript(([m, c, bl, cel]) => { window.MODEL = m; window.BLUR = bl; window.CELL = c; window.CEL = cel; }, [MODEL, CELL, Number(process.env.BLUR ?? 6), Number(process.env.CEL ?? 0)]);
   await page.goto("http://127.0.0.1:8790/spr/index.html");
   await page.waitForFunction(() => window.ready, null, { timeout: 180000 });
   const info = await page.evaluate(() => ({ anchor: window.anchor, clips: window.clipNames, durs: window.durs }));
-  const meta = { anchor: info.anchor, cell: 256, acts: {} };
+  const meta = { anchor: info.anchor, cell: CELL, acts: {} };
+  const ONLY = process.env.ONLY ? process.env.ONLY.split(",") : null;
   for (const a of ACT) {
+    if (ONLY && !ONLY.includes(a.tag)) continue;
     const name = info.clips.find((c) => c === a.clip) ?? info.clips.find((c) => c.startsWith(a.clip));
     if (!name) { console.log("MISSING", a.tag, a.clip); continue; }
     const dur = info.durs[name];

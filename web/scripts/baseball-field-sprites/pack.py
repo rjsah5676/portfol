@@ -57,14 +57,11 @@ n0 = next(iter(cells.values()))[1].shape[0]
 C = n0 + 2  # 외곽선 1px 여백
 # 배치: 동작마다 8방향 줄, 한 줄 = 그 동작 프레임
 maxn = max(A['n'] for A in acts.values())
-rows = sum(8 for _ in acts)
-W, H = maxn * C, rows * C
-sheet = np.zeros((H, W, 4), np.uint8)
-msheet = np.zeros((H, W), np.uint8)
-row = 0
+SPLIT = os.environ.get('SPLIT') == '1'  # 동작마다 따로 (큰 고해상도 시트 — 폰 캔버스 한도 · 팀색 칠하기 부담 줄임)
+ax, ay = meta['anchor']
 jacts = {}
-for tag, A in acts.items():
-    jacts[tag] = {**A, 'row': row}
+
+def draw_act(tag, A, sheet, msheet, row):
     for d in range(8):
         for i in range(A['n']):
             rgb, op, team = cells[(tag, d, i)]
@@ -76,14 +73,38 @@ for tag, A in acts.items():
             ring = np.zeros_like(mm)
             ring[1:, :] |= mm[:-1, :]; ring[:-1, :] |= mm[1:, :]; ring[:, 1:] |= mm[:, :-1]; ring[:, :-1] |= mm[:, 1:]
             ring &= ~mm
-            out[ring, :3] = OUTLINE; out[ring, 3] = 255
+            if os.environ.get('OUTL', '1') == '1':
+                out[ring, :3] = OUTLINE; out[ring, 3] = 255
             y, x = (row + d) * C, i * C
             sheet[y:y + C, x:x + C] = out
             tm = np.zeros((C, C), np.uint8); tm[1:-1, 1:-1] = team * 255
             msheet[y:y + C, x:x + C] = tm
-    row += 8
-Image.fromarray(sheet, 'RGBA').save(f'{OUT}/field_{NAME}.webp', lossless=True, quality=100, method=6)
-Image.fromarray(msheet, 'L').save(f'{OUT}/field_{NAME}_mask.png', optimize=True)
-ax, ay = meta['anchor']
-json.dump({'cell': C, 'f': F, 'ax': ax / F + 1, 'ay': ay / F + 1, 'acts': jacts}, open(f'{OUT}/field_{NAME}.json', 'w'))
-print(NAME, 'sheet', W, H, 'cell', C, os.path.getsize(f'{OUT}/field_{NAME}.webp'), os.path.getsize(f'{OUT}/field_{NAME}_mask.png'))
+
+def save(sheet, msheet, base):
+    Image.fromarray(sheet, 'RGBA').save(f'{OUT}/{base}.webp', lossless=True, quality=100, method=6)
+    Image.fromarray(msheet, 'L').save(f'{OUT}/{base}_mask.png', optimize=True)
+
+total = 0
+if SPLIT:
+    for tag, A in acts.items():
+        sheet = np.zeros((8 * C, A['n'] * C, 4), np.uint8)
+        msheet = np.zeros((8 * C, A['n'] * C), np.uint8)
+        draw_act(tag, A, sheet, msheet, 0)
+        save(sheet, msheet, f'field_{NAME}_{tag}')
+        total += os.path.getsize(f'{OUT}/field_{NAME}_{tag}.webp') + os.path.getsize(f'{OUT}/field_{NAME}_{tag}_mask.png')
+        jacts[tag] = {**A, 'row': 0, 'file': tag}
+else:
+    rows = sum(8 for _ in acts)
+    W, H = maxn * C, rows * C
+    sheet = np.zeros((H, W, 4), np.uint8)
+    msheet = np.zeros((H, W), np.uint8)
+    row = 0
+    for tag, A in acts.items():
+        jacts[tag] = {**A, 'row': row}
+        draw_act(tag, A, sheet, msheet, row)
+        row += 8
+    save(sheet, msheet, f'field_{NAME}')
+    total = os.path.getsize(f'{OUT}/field_{NAME}.webp') + os.path.getsize(f'{OUT}/field_{NAME}_mask.png')
+# f = 그 시트 1px 이 256칸 렌더 몇 px 인지 (게임 크기 맞추기 — 예전 시트 5)
+json.dump({'cell': C, 'f': F * 256 / meta['cell'], 'ax': ax / F + 1, 'ay': ay / F + 1, 'acts': jacts}, open(f'{OUT}/field_{NAME}.json', 'w'))
+print(NAME, 'cell', C, 'split' if SPLIT else 'one', 'bytes', total)

@@ -109,8 +109,8 @@ export function fproj(x: number, y: number, h = 0) {
   const rz = h * PC.hk - PC.ch;
   const d = Math.max(4, ry * PC.cos - rz * PC.sin);
   const v = ry * PC.sin + rz * PC.cos;
-  // 멀수록 작게 — 그대로면 외야수가 점이 돼서 덜 줄임 (^0.6)
-  return { x: 512 + (PC.F * x) / d, y: PC.Y0 - (PC.F * v) / d, s: Math.pow(PC.dRef / d, 0.6) };
+  // 멀수록 작게 — 실제 원근(^1)이면 외야수가 점이 돼서 조금 덜 줄임 (^0.85, 예전 0.6)
+  return { x: 512 + (PC.F * x) / d, y: PC.Y0 - (PC.F * v) / d, s: Math.pow(PC.dRef / d, 0.85) };
 }
 
 let bgCanvas: HTMLCanvasElement | null = null;
