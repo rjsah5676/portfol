@@ -36,7 +36,7 @@ const SIDE_CUT_DUR = 1.35;
 import pitcherThrowData from "@/data/baseball/pitcher-throw.json";
 import { sfx } from "./sfx";
 import { FieldPoser, HD_AT, preloadFieldSprites, type Pose } from "./fieldSprites";
-import { DH, DW, FIELD_BG_PX, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, proj, setFieldGrid, shadowProj, unprojPlate } from "./view";
+import { DH, DW, FIELD_BG_PX, PITCHER_FEET, ballProj, battingBg, drawFieldFrame, fieldBg, fproj, preloadFieldArt, proj, setFieldGrid, shadowProj, unprojPlate } from "./view";
 import { pxBall, pxEllipse, pxPath } from "./pixelDraw";
 import { PixelLayer, pixelated } from "./pixelLayer";
 import { teamTinted } from "./teamTint";
@@ -369,6 +369,7 @@ export class Match {
     this.cfg = cfg;
     this.onUi = onUi;
     preloadFieldSprites();
+    preloadFieldArt();
     this.rng = makeRng(cfg.seed);
     this.night = this.rng() < 0.5;
     this.save = typeof window === "undefined" ? { pt: 0, derbyBest: 0, games: 0, wins: 0 } : loadSave();

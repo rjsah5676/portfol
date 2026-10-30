@@ -348,6 +348,26 @@ const FC = {
   dirtShade: "#97603a",
 };
 
+/** 지피티로 그린 구장 그림 (보통 · 확대용) — 받기 전엔 코드 그림 */
+const FIELD_ART = ["/baseball/field/field_bg.webp", "/baseball/field/field_bg_hd.webp"];
+const fieldArtImgs: (HTMLImageElement | null)[] = [null, null];
+function fieldArt(hd: boolean): HTMLImageElement | null {
+  if (typeof Image === "undefined") return null;
+  const i = hd ? 1 : 0;
+  let im = fieldArtImgs[i];
+  if (!im) {
+    im = new Image();
+    im.src = FIELD_ART[i];
+    fieldArtImgs[i] = im;
+  }
+  return im.complete && im.naturalWidth > 0 ? im : null;
+}
+/** 수비 화면 전에 구장 그림 미리 받기 */
+export function preloadFieldArt() {
+  fieldArt(false);
+  fieldArt(true);
+}
+
 /** 배경 픽셀 다듬기: 반투명 경계(안티에일리어싱) 없애고 팔레트 색으로 딱 맞춤 → 경계 테두리 · 잔디 결 · 흙 알갱이 (스프라이트와 같은 픽셀 그림) */
 function pixelFinish(c: HTMLCanvasElement, seed0: number) {
   const g = c.getContext("2d", { willReadFrequently: true })!;
@@ -445,10 +465,25 @@ function pixelFinish(c: HTMLCanvasElement, seed0: number) {
  * hd = 확대용 (픽셀 절반 크기) — 스프라이트가 고해상도 시트로 바뀌는 때 같이 바꿔서 바닥 · 선수 픽셀 크기를 맞춤
  */
 export function fieldBg(_q: number, night: boolean, hd = false): HTMLCanvasElement {
-  const key = `${night}:${FIELD_VIEW.persp}:${hd}`;
+  const art = fieldArt(hd);
+  const key = `${night}:${FIELD_VIEW.persp}:${hd}:${art ? "art" : "code"}`;
   const hit = fieldCanvases.get(key);
   if (hit) return hit;
   const PX = hd ? FIELD_BG_PX / 2 : FIELD_BG_PX;
+  if (art) {
+    // 지피티 픽셀 구장 그림 (구장 배치 그대로 맞춰 둠 — scripts/baseball-field-bg)
+    const c = document.createElement("canvas");
+    c.width = art.naturalWidth;
+    c.height = art.naturalHeight;
+    const g = c.getContext("2d")!;
+    g.drawImage(art, 0, 0);
+    if (night) {
+      g.fillStyle = "rgba(8,10,30,0.25)";
+      g.fillRect(0, 0, c.width, c.height);
+    }
+    fieldCanvases.set(key, c);
+    return c;
+  }
   const c = document.createElement("canvas");
   c.width = Math.round(DW / PX);
   c.height = Math.round(DH / PX);

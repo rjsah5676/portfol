@@ -1,0 +1,18 @@
+
+Image 1 = finished pixel-art style reference (a baseball runner sprite). Image 2 = the exact layout of a baseball stadium seen from behind home plate, high camera, evening.
+
+Repaint Image 2 as a polished retro pixel-art game background in the SAME pixel-art style as Image 1: crisp hard-edged pixels, no anti-aliasing, no blur, no gradients, no dithering noise, flat colors with 3–4 shading tones per material, small dark outlines where surfaces meet.
+
+LAYOUT MUST STAY IDENTICAL to Image 2: same camera, same perspective, same output size (1536×864, 16:9). Every shape stays exactly where it is: the infield dirt arc, the base paths, the infield grass square, the pitcher's mound, home plate area, the warning track, the outfield fence line, both foul poles, the foul lines, the stands. Do not move, rotate, crop, zoom or redraw the composition. Only change the rendering style and add detail.
+
+Use FINE pixels: one art pixel = about 2 image pixels. This image will be zoomed in-game, so keep the pixel grid small and detailed, not chunky.
+
+Details to add:
+- Grass: mowed checkerboard stripes like Image 2 (two greens), plus small grass tufts and subtle blade texture in pixel art.
+- Infield dirt and warning track: warm brown dirt with small pebble clusters, a darker lip where the dirt meets the grass, raked texture.
+- Pitcher's mound: slightly raised, light top, darker shaded rim.
+- Bases and foul lines: thin clean white chalk lines and small white bases exactly where they are in Image 2.
+- Outfield fence: dark green padded wall with vertical seams and a yellow top rail; yellow foul poles.
+- Stands: tiered evening stadium seats with a crowd of tiny pixel spectators (many small colored heads and shirts), aisles, under a dark navy evening sky. A few stadium lights glowing at the top edge.
+
+No players, no ball, no text, no logos, no UI, no people on the field. Keep the colors close to Image 2 (same greens, browns, navy) so it matches the game.
