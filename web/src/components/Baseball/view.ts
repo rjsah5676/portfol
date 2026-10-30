@@ -881,9 +881,7 @@ export function drawFieldFrame(
   const px = FGRID;
   // 날아갈 길 (아직 안 간 쪽만 픽셀 점선) · 떨어질 자리 링 — 높이 · 방향이 한눈에 읽히게
   if (arc && flying && arc.pts.length > 1) {
-    // 땅 위 경로(그림자가 지나갈 길) — 위의 공 점선과 벌어진 만큼이 높이
-    pxPath(ctx, [fproj(f.bx, f.by), ...arc.pts.map((q) => fproj(q.x, q.y))], px, px * 4, "rgba(0,0,0,0.32)");
-    // (arc.pts 는 지금 이후 점만 — match.ts)
+    // (arc.pts 는 지금 이후 점만 — match.ts) · 땅 위 그림자 길 · 높이 막대는 지저분해서 뺌
     pxPath(ctx, [fproj(f.bx, f.by, f.bh), ...arc.pts.map((q) => fproj(q.x, q.y, q.h))], px, px * 4, "rgba(255,255,255,0.75)");
   }
   if (arc?.land && flying) {
@@ -899,8 +897,6 @@ export function drawFieldFrame(
   const sh = fproj(f.bx, f.by);
   const hk = Math.min(1, f.bh / 35);
   if (!held) pxEllipse(ctx, sh.x, sh.y, (2.4 - hk) * sh.s, (1.1 - hk * 0.4) * sh.s, px, `rgba(0,0,0,${(0.4 - hk * 0.22).toFixed(3)})`);
-  // 높이 막대: 그림자 ↔ 공 (얼마나 떠 있는지)
-  if (flying) pxPath(ctx, [sh, fproj(f.bx, f.by, f.bh)], px, px * 3, "rgba(255,255,255,0.45)");
   for (const it of items) it.draw();
   // 꼬리 (픽셀 점 — 뒤로 갈수록 옅게)
   if (!held && trail.length > 1) {
@@ -917,8 +913,8 @@ export function drawFieldFrame(
   }
   if (held) return;
   const b = fproj(f.bx, f.by, f.bh);
-  // 공 크기: 선수 머리 폭의 1/3 쯤 (실제 공 7.4cm 는 1px 도 안 돼서 보이게만 키움) · 높이 뜰수록 카메라에 가까워 보이게 조금 크게
-  const br = (1.2 + Math.min(1.4, f.bh * 0.05)) * b.s;
+  // 공 크기: 선수 머리 폭의 0.4 쯤 (실제 공 7.4cm 는 1px 도 안 돼서 보이게만 키움) · 높이 뜰수록 카메라에 가까워 보이게 조금 크게
+  const br = (1.6 + Math.min(1.4, f.bh * 0.05)) * b.s;
   pxBall(ctx, b.x, b.y, br, px);
 }
 

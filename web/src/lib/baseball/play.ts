@@ -710,7 +710,8 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
   let ballIdx = 0;
   let caught = false;
   let lastOutForce = false;
-  type Throw = { from: [number, number, number]; to: number; t0: number; t1: number; base: number; receiver: number };
+  /** thrower = 던진 수비 (공이 손을 떠나는 t0 전까지는 이 수비가 들고 있음) */
+  type Throw = { thrower: number; from: [number, number, number]; to: number; t0: number; t1: number; base: number; receiver: number };
   let thrown = null as Throw | null;
   let fielded = false;
   let fielder = -1;
@@ -780,7 +781,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
       fs[i] = t < f.stunUntil ? 1 : t < freezeUntil ? 2 : t < slowUntil ? 3 : 0;
     });
     frames.push({
-      t, bx, by, bh, hold: ballHolder, fx, fs,
+      t, bx, by, bh, hold: ballHolder >= 0 ? ballHolder : thrown && t < thrown.t0 ? thrown.thrower : -1, fx, fs,
       rs: R.map((r) => {
         const [x, y] = pathPos(r.s);
         return { id: r.id, x, y, st: r.st === "run" ? 0 : r.st === "stand" ? 1 : r.st === "out" ? 2 : 3 };
@@ -838,7 +839,15 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     const [x, y] = B[base];
     const own = dist(f.x, f.y, x, y);
     const cover = coverOf[base];
-    if (own < 7 && own / f.speed < 0.3 + own / f.arm) {
+    // 직접 밟기 vs 던지기: 던지면 받을 사람(베이스 커버)이 베이스에 닿을 때까지 기다려야 함 → 그 시간까지 넣어서 비교
+    // (1루만: 1루수가 땅볼 잡고 1루가 몇 걸음인데 투수 커버를 기다리던 것 · 2루 병살 피벗 같은 건 그대로 던짐)
+    const selfT = own / f.speed;
+    let throwT = 0.3 + own / f.arm;
+    if (cover >= 0 && cover !== fi) {
+      const c = F[cover];
+      throwT = Math.max(throwT, runTime(c, dist(c.x, c.y, x, y), now) - Math.max(0, f.readyAt - now));
+    }
+    if ((own < 7 && selfT < 0.3 + own / f.arm) || (base === 1 && own < 22 && fi <= 5 && selfT < throwT - 0.1)) {
       // 직접 밟으러 감
       f.tx = x;
       f.ty = y;
@@ -871,7 +880,7 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
     const flight = own / f.arm;
     const recvAt = now + runTime(rf, Math.max(0, dist(rf.x, rf.y, x, y) - 1.2), now);
     t0 = Math.max(t0, recvAt - flight);
-    thrown = { from: [f.x, f.y, 1.8], to: recv, t0, t1: t0 + flight, base, receiver: recv };
+    thrown = { thrower: fi, from: [f.x, f.y, 1.8], to: recv, t0, t1: t0 + flight, base, receiver: recv };
     ballHolder = -1;
     events.push({ t: t0, kind: "throw", x: f.x, y: f.y, text: "" });
   };
@@ -911,6 +920,16 @@ export function simulatePlay(inp: FieldIn, rng: Rng): FieldOut {
         by += bobble.dy * out;
         bh = 0.5 + Math.sin(k * Math.PI) * 0.7 * (1 - k * 0.6);
       }
+    } else if (thrown && t < thrown.t0) {
+      // 아직 손을 안 떠남 (받을 사람 기다리는 중 · 던지는 동작 중) — 던질 수비 손에
+      const f = F[thrown.thrower];
+      bx = f.x;
+      by = f.y;
+      bh = 1.2;
+      // 손을 떠나는 자리: 몸에서 던지는 쪽으로 0.6m 앞, 어깨 높이
+      const [gx, gy] = B[thrown.base];
+      const dd = Math.max(1e-3, dist(f.x, f.y, gx, gy));
+      thrown.from = [f.x + ((gx - f.x) / dd) * 0.6, f.y + ((gy - f.y) / dd) * 0.6, 1.9];
     } else if (thrown) {
       const k = clamp((t - thrown.t0) / Math.max(0.05, thrown.t1 - thrown.t0), 0, 1);
       const [x, y] = B[thrown.base];
