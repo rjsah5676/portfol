@@ -24,6 +24,8 @@ import {
   VOWEL_SLOTS,
   draw,
   DRAW_EVERY,
+  HOLD_MAX,
+  START_DRAW,
   finishSentence,
   fromLine,
   lineCells,
@@ -419,7 +421,7 @@ export default function HangulApp() {
   const start = () => {
     const ng = newGame();
     // 처음엔 자모 한 줌을 쥐고 시작 (newGame 안에서 하면 서버 렌더와 무작위가 어긋나서 여기서)
-    draw(ng, 20);
+    draw(ng, START_DRAW);
     setG(ng);
     setSel(null);
     setSelling(false);
@@ -1060,7 +1062,10 @@ export default function HangulApp() {
             자모를 누르고 글자를 누르면: 받침(가+ㄱ → 각) · 겹받침(업+ㅅ → 없, 일+ㄱ → 읽) · 모음
             바꾸기(기+ㆍ → 가, 그+ㆍ → 구, 가+ㅣ → 개)
           </li>
-          <li>자모는 {DRAW_EVERY}초마다 하나씩 저절로 들어와요 (뽑기 · 엽전 없음)</li>
+          <li>
+            자모는 {DRAW_EVERY}초마다 하나씩 저절로 들어와요 (뽑기 · 엽전 없음). {HOLD_MAX}개가
+            쌓이면 쓸 때까지 멈춰요
+          </li>
           <li>말 안 되는 낱말 · 안 쓰는 글자는 단어칸 위 [버리기]를 켜고 누르면 치워져요</li>
           <li>
             같은 자모는 한 칸에 쌓여요(×n). [글자 짝짓기]는 재료로 모음을 알아서 만들어 글자까지,

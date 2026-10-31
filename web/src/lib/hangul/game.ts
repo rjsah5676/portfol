@@ -130,8 +130,15 @@ export interface Sentence {
 }
 
 // 주인공은 문장 만들기 — 디펜스는 가벼운 압박만 (자모는 저절로 계속, 먹물 체력은 천천히)
-/** 자모가 저절로 하나씩 들어오는 간격(초) — 엽전 · 뽑기 없음 */
-export const DRAW_EVERY = 0.3;
+/**
+ * 자모가 저절로 하나씩 들어오는 간격(초) — 엽전 · 뽑기 없음.
+ * 0.3초는 문장 만드는 속도보다 훨씬 빨라서 칸마다 ×20 넘게 쌓였음(사용자) → 0.8초 + 가진 자모가 HOLD_MAX 개면 멈춤
+ */
+export const DRAW_EVERY = 0.8;
+/** 자음칸 · 모음칸에 쌓인 자모가 이만큼이면 더 안 들어옴 (쓰면 다시 들어옴) */
+export const HOLD_MAX = 36;
+/** 시작할 때 쥐고 시작하는 자모 수 */
+export const START_DRAW = 16;
 export const LOAD_MAX = 100;
 const WAVE_SEC = 20;
 /** 문장칸 문장이 다시 낭독하는 간격(초) */
@@ -264,6 +271,8 @@ function put(g: Game, z: Zone, u: Unit, at = free(g, z)): boolean {
 
 export const zoneOfJamo = (j: string): Zone => (isCons(j) ? "c" : "v");
 const countOf = (u: Unit | null) => (u ? (u.n ?? 1) : 0);
+/** 자음칸 · 모음칸에 쌓인 자모 총수 */
+const heldJamo = (g: Game) => [...g.zones.c, ...g.zones.v].reduce((s, u) => s + countOf(u), 0);
 
 /**
  * 자모 칸 자리: 자음은 19자(기본 14 + 된소리 5)가 자기 자리를 하나씩 가짐(자판처럼 늘 그 자리).
@@ -705,10 +714,10 @@ export function step(g: Game, dt: number) {
     emit(g, boss ? "boss" : "wave");
     if (boss) say(g, `${g.wave}웨이브 · 왕먹물 (얼룩 10마리 몫)`);
   }
-  // 자모는 저절로 계속 들어옴 (자음칸 · 모음칸 자리가 있는 동안)
+  // 자모는 저절로 계속 들어옴 (쌓인 자모가 HOLD_MAX 개 아래일 때만)
   if ((g.drawT -= dt) <= 0) {
     g.drawT = DRAW_EVERY;
-    draw(g, 1);
+    if (heldJamo(g) < HOLD_MAX) draw(g, 1);
   }
   if (g.spawnLeft > 0 && (g.spawnT -= dt) <= 0) {
     spawn(g, g.spawnBoss);
