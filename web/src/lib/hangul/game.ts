@@ -86,8 +86,9 @@ export interface Sentence {
   grade: string;
 }
 
-// 주인공은 문장 만들기 — 디펜스는 가벼운 압박만 (뽑기 싸게, 체력은 천천히)
-export const DRAW_COST = 1;
+// 주인공은 문장 만들기 — 디펜스는 가벼운 압박만 (자모는 저절로 계속, 먹물 체력은 천천히)
+/** 자모가 저절로 하나씩 들어오는 간격(초) — 엽전 · 뽑기 없음 */
+export const DRAW_EVERY = 0.3;
 export const LOAD_MAX = 100;
 const WAVE_SEC = 20;
 /** 문장칸 문장이 다시 낭독하는 간격(초) */
@@ -111,7 +112,8 @@ const styleOf = (pos?: string) => POS_STYLE[pos ?? "명사"] ?? POS_STYLE["명�
 
 export interface Game {
   t: number;
-  gold: number;
+  /** 다음 자모가 들어올 때까지(초) */
+  drawT: number;
   wave: number;
   nextWave: number;
   spawnLeft: number;
@@ -142,9 +144,9 @@ export interface Game {
 }
 
 export function newGame(): Game {
-  return {
+  const g: Game = {
     t: 0,
-    gold: 36,
+    drawT: 0,
     wave: 0,
     nextWave: 4,
     spawnLeft: 0,
@@ -166,6 +168,7 @@ export function newGame(): Game {
     seq: 1,
     note: null,
   };
+  return g;
 }
 
 export const say = (g: Game, text: string) => (g.note = { text, at: g.t });
@@ -235,18 +238,15 @@ const hasRoomFor = (g: Game, j: string) => {
 export function draw(g: Game, n = 1): number {
   let got = 0;
   for (let k = 0; k < n; k++) {
-    if (g.gold < DRAW_COST) break;
     let j = "";
     for (let t = 0; t < 12 && !j; t++) {
       const c = pick(Math.random() < 0.42 ? CONS_W : VOWS_W);
       if (hasRoomFor(g, c)) j = c;
     }
     if (!j) break;
-    g.gold -= DRAW_COST;
     addJamo(g, j);
     got++;
   }
-  if (!got) say(g, g.gold < DRAW_COST ? "엽전이 모자라요" : "자음칸 · 모음칸이 꽉 찼어요");
   return got;
 }
 
@@ -425,7 +425,6 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
   const dmg = j.points * 0.6 * g.power;
   for (const e of g.enemies) e.hp -= dmg;
   g.power += 0.02 * n;
-  g.gold += n * 2;
   g.fx.push({ x: g.path.x + g.path.w / 2, y: g.path.y + g.path.h / 2, t: 0, kind: "read", r: Math.max(g.path.w, g.path.h) });
   return s;
 }
@@ -472,16 +471,13 @@ export function dropSentence(g: Game, k: number) {
   g.shelf.splice(k, 1);
 }
 
-/** 팔기: 말 안 되는 낱말 · 안 쓰는 글자 · 남는 자모를 엽전으로 (쌓인 자모는 하나씩) */
-export function sell(g: Game, z: Zone, i: number): number {
+/** 버리기: 말 안 되는 낱말 · 안 쓰는 글자 · 남는 자모 (쌓인 자모는 하나씩) */
+export function discard(g: Game, z: Zone, i: number): boolean {
   const u = g.zones[z][i];
-  if (!u) return 0;
-  const v = u.kind === "j" ? 1 : u.kind === "s" ? 2 : hangulLen(u.text) * 3;
+  if (!u) return false;
   if (u.kind === "j") takeJamo(g, z, i);
   else g.zones[z][i] = null;
-  g.gold += v;
-  say(g, `「${u.text}」 ${v}냥에 팔았어요`);
-  return v;
+  return true;
 }
 
 /** 유닛 하나가 싸우는 값 (설명용으로도 씀) */
@@ -535,11 +531,13 @@ export function step(g: Game, dt: number) {
     g.spawnBoss = boss;
     g.spawnT = 0;
     g.nextWave = WAVE_SEC;
-    g.gold += 8 + g.wave;
     if (boss) say(g, `${g.wave}웨이브 · 왕먹물 (얼룩 10마리 몫)`);
   }
-  // 뽑기 주구장창: 1초에 1냥씩 꾸준히 들어옴
-  if (Math.floor(g.t) > Math.floor(g.t - dt)) g.gold += 1;
+  // 자모는 저절로 계속 들어옴 (자음칸 · 모음칸 자리가 있는 동안)
+  if ((g.drawT -= dt) <= 0) {
+    g.drawT = DRAW_EVERY;
+    draw(g, 1);
+  }
   if (g.spawnLeft > 0 && (g.spawnT -= dt) <= 0) {
     spawn(g, g.spawnBoss);
     g.spawnLeft--;
@@ -587,7 +585,6 @@ export function step(g: Game, dt: number) {
   for (const e of g.enemies)
     if (e.hp <= 0) {
       g.kills++;
-      g.gold += e.boss ? 30 : 2;
       g.fx.push({ x: e.x, y: e.y, t: 0, kind: "die" });
     }
   g.enemies = g.enemies.filter((e) => e.hp > 0);

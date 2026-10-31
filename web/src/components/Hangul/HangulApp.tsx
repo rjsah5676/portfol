@@ -15,7 +15,7 @@ import {
   CONS_SLOTS,
   VOWEL_SLOTS,
   draw,
-  DRAW_COST,
+  DRAW_EVERY,
   finishSentence,
   fromLine,
   lineCells,
@@ -34,7 +34,7 @@ import {
   score,
   SHELF_ID,
   writingPower,
-  sell,
+  discard,
   setPath,
   statsOf,
   step,
@@ -209,6 +209,8 @@ export default function HangulApp() {
 
   const start = () => {
     const ng = newGame();
+    // 처음엔 자모 한 줌을 쥐고 시작 (newGame 안에서 하면 서버 렌더와 무작위가 어긋나서 여기서)
+    draw(ng, 20);
     setG(ng);
     setSel(null);
     setSelling(false);
@@ -222,7 +224,7 @@ export default function HangulApp() {
     if (phase !== "play") return;
     const u = g.zones[z][i];
     if (selling) {
-      if (u) sell(g, z, i);
+      if (u) discard(g, z, i);
       return refresh();
     }
     if (sel) {
@@ -403,7 +405,6 @@ export default function HangulApp() {
       <div className="hg-hud">
         <div><span>웨이브</span><b>{g.wave}</b></div>
         <div className={ld >= LOAD_MAX * 0.7 ? "is-warn" : ""}><span>먹물</span><b>{ld}/{LOAD_MAX}</b></div>
-        <div><span>엽전</span><b>{g.gold}</b></div>
         <div><span>점수</span><b>{fmt(score(g))}</b></div>
         <div><span>기세</span><b>×{g.power.toFixed(2)}</b></div>
       </div>
@@ -454,7 +455,7 @@ export default function HangulApp() {
                     </button>
                   ))
                 ) : (
-                  <span className="hg-dim">가진 글자로는 안 보여요 — 더 뽑아 보세요</span>
+                  <span className="hg-dim">가진 글자로는 안 보여요 — 자모가 더 들어오면 다시 눌러 보세요</span>
                 ))}
             </div>
             <div className="hg-punct">
@@ -519,14 +520,14 @@ export default function HangulApp() {
             </div>
           </section>
           <div className="hg-right">
-            {/* 팔기 모드: 켜면 누르는 칸을 팔아요 (말 안 되는 낱말 정리용) */}
+            {/* 버리기 모드: 켜면 누르는 칸을 버려요 (말 안 되는 낱말 정리용) */}
             <button
               type="button"
               className={`hg-sellbtn${selling ? " is-on" : ""}`}
               onClick={() => (setSelling((s) => !s), setSel(null))}
               disabled={phase !== "play"}
             >
-              {selling ? "팔기 켜짐 — 누르는 칸을 팔아요 (낱말 글자당 3냥 · 글자 2냥 · 자모 1냥) · 끄기" : "팔기"}
+              {selling ? "버리기 켜짐 — 누르는 칸을 버려요 (쌓인 자모는 하나씩) · 끄기" : "🗑 버리기"}
             </button>
             {zone("w", "단어칸")}
             {zone("s", "글자칸")}
@@ -593,12 +594,6 @@ export default function HangulApp() {
       <p className="hg-note">{note}</p>
 
       <div className="hg-ctrl">
-        <button type="button" onClick={() => (draw(g, 1), refresh())} disabled={phase !== "play" || g.gold < DRAW_COST}>
-          뽑기<small>{DRAW_COST}냥</small>
-        </button>
-        <button type="button" onClick={() => (draw(g, 10), refresh())} disabled={phase !== "play" || g.gold < DRAW_COST}>
-          10번 뽑기<small>{DRAW_COST * 10}냥</small>
-        </button>
         <button type="button" onClick={() => (autoPair(g), refresh())} disabled={phase !== "play"}>
           글자 짝짓기<small>자음+모음 → 글자</small>
         </button>
@@ -621,7 +616,8 @@ export default function HangulApp() {
             ㅏ→ㅣ = ㅐ · ㅓ→ㅣ = ㅔ
           </li>
           <li>자모를 누르고 글자를 누르면: 받침(가+ㄱ → 각) · 겹받침(업+ㅅ → 없, 일+ㄱ → 읽) · 모음 바꾸기(기+ㆍ → 가, 그+ㆍ → 구, 가+ㅣ → 개)</li>
-          <li>말 안 되는 낱말 · 안 쓰는 글자는 단어칸 위 [팔기]를 켜고 누르면 엽전으로 바꿔요 (낱말 글자당 3냥 · 글자 2냥 · 자모 1냥)</li>
+          <li>자모는 {DRAW_EVERY}초마다 하나씩 저절로 들어와요 (뽑기 · 엽전 없음)</li>
+          <li>말 안 되는 낱말 · 안 쓰는 글자는 단어칸 위 [버리기]를 켜고 누르면 치워져요</li>
           <li>같은 자모는 한 칸에 쌓여요(×n). [글자 짝짓기]는 재료로 모음을 알아서 만들어 글자까지, [낱말 짝짓기]는 글자칸 글자로 되는 낱말을 찾아 단어칸까지 만들어 줘요</li>
           <li>글자 · 낱말을 누르면 원고지에 이어 붙어요. 원고지 칸을 누르면 다시 빠져요</li>
           <li>원고지가 낱말 하나면 [낱말로 묶기] → 단어칸에서 품사대로 싸워요 (명사 강타 · 동사 범위 · 형용사 감속 · 부사 연사 · 감탄사 기절)</li>

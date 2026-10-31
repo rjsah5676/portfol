@@ -27,7 +27,7 @@
 .hg-head h1 { margin: 0; font-family: "Black Han Sans", sans-serif; font-weight: 400; font-size: clamp(28px, 6vw, 38px); letter-spacing: -0.02em; }
 .hg-head p { margin: 2px 0 0; font-size: 13px; color: rgba(255,255,255,0.55); }
 
-.hg-hud { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.hg-hud { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .hg-hud > div { background: var(--paper); border-radius: 8px; padding: 5px 8px; min-width: 0; }
 .hg-hud span { display: block; font-size: 11px; color: var(--ink2); }
 .hg-hud b { display: block; font-family: "Nanum Gothic Coding", monospace; font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -207,7 +207,7 @@
 .hg-line-btns .hg-go:not(:disabled) { animation: hg-pulse 1s ease-in-out infinite; }
 @keyframes hg-pulse { 50% { box-shadow: 0 0 0 5px rgba(192,57,43,0.25); } }
 
-.hg-ctrl { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.hg-ctrl { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 6px; }
 .hg-ctrl button { background: var(--paper); border-color: var(--paper); }
 .hg-ctrl button:first-child, .hg-ctrl button:nth-child(2) { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .hg-ctrl button.is-on { background: var(--red); border-color: var(--red); color: #fff; }
@@ -297,7 +297,7 @@
 @media (max-width: 520px) {
   .hg-paper { grid-template-columns: repeat(10, minmax(0, 1fr)); }
   .hg-field { padding: 28px 26px; }
-  .hg-hud { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+  .hg-hud { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
   .hg-hud > div { padding: 4px 5px; }
   .hg-hud b { font-size: 13px; }
   .hg-slot { height: 40px; }
