@@ -123,6 +123,15 @@ export const NAV_GROUPS: NavGroup[] = [
         featured: true,
       },
       {
+        href: "/games/suspect",
+        image: imgSuspect,
+        label: "오늘의 용의자",
+        desc: "단서만으로 범인을 가려내는 하루 한 판 추리 퍼즐, 난이도별 일일 랭킹",
+        icon: "🕵️",
+        featured: true,
+        badge: "NEW",
+      },
+      {
         href: "/games/sketch",
         image: imgSketch,
         label: "DOODLE PARTY",
@@ -142,14 +151,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "온라인 보드게임",
         desc: "체스·장기·오목 한곳에서, 실시간 대국·관전·AI 랭킹전",
         icon: "♟️",
-      },
-      {
-        href: "/games/suspect",
-        image: imgSuspect,
-        label: "오늘의 용의자",
-        desc: "단서만으로 범인을 가려내는 하루 한 판 추리 퍼즐, 난이도별 일일 랭킹",
-        icon: "🕵️",
-        badge: "NEW",
       },
       {
         href: "/games/mine",
