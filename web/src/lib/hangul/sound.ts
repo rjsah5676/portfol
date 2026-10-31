@@ -67,8 +67,43 @@ export function setSound(patch: Partial<SoundSettings>) {
   try {
     localStorage.setItem(KEY, JSON.stringify(settings));
   } catch {}
+  syncBgm();
   for (const l of listeners) l();
 }
+
+// 배경음악: public/hangul/bgm/bgm-<이름>.mp3 (없으면 조용히 넘어감). 받는 동안 기다리지 않고 흘려 받음
+export type BgmName = "title" | "play" | "boss";
+let bgmWant: BgmName | null = null;
+let bgmEl: HTMLAudioElement | null = null;
+let bgmOf: BgmName | null = null;
+const bgmVolume = () => Math.min(1, getSound().bgm * LEVEL.hangul.bgm);
+function syncBgm() {
+  if (typeof window === "undefined") return;
+  const s = getSound();
+  if (!bgmWant || s.mute || s.bgm <= 0 || document.hidden) {
+    bgmEl?.pause();
+    return;
+  }
+  if (bgmOf !== bgmWant) {
+    bgmEl?.pause();
+    const el = new Audio(`/hangul/bgm/bgm-${bgmWant}.mp3`);
+    el.loop = true;
+    el.onerror = () => {
+      if (bgmEl === el) bgmEl = null; // 아직 없는 곡
+    };
+    bgmEl = el;
+    bgmOf = bgmWant;
+  }
+  if (!bgmEl) return;
+  bgmEl.volume = bgmVolume();
+  if (bgmEl.paused) void bgmEl.play().catch(() => {});
+}
+/** 배경음악 바꾸기 (null 이면 끔) — 첫 입력(클릭) 뒤에 불러야 재생됨 */
+export function playBgm(name: BgmName | null) {
+  bgmWant = name;
+  syncBgm();
+}
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", syncBgm);
 export function onSoundChange(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);

@@ -83,6 +83,7 @@ import {
   getSound,
   onSoundChange,
   playAll,
+  playBgm,
   playSfx,
   preloadSounds,
   setSound,
@@ -172,6 +173,11 @@ export default function HangulApp() {
   const [g, setG] = useState<Game>(newGame);
   const [, setTick] = useState(0);
   const [phase, setPhase] = useState<"ready" | "play" | "over">("ready");
+  // 배경음악: 판 중엔 play, 그 밖엔 title (파일 없으면 조용)
+  useEffect(() => {
+    playBgm(phase === "play" ? "play" : "title");
+  }, [phase]);
+  useEffect(() => () => playBgm(null), []);
   const [sel, setSel] = useState<{ z: Zone; i: number } | null>(null);
   const [wordBusy, setWordBusy] = useState(false);
   const [selling, setSelling] = useState(false);
