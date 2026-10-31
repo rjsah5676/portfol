@@ -112,6 +112,19 @@
   font-weight: 400;
   color: var(--ink2);
 }
+/* 자음칸 · 모음칸 쌓인 수 (차면 빨갛게) */
+.hg-hold {
+  margin-left: 6px;
+  font-family: "Nanum Gothic Coding", monospace;
+  font-size: 11px;
+  opacity: 0.75;
+}
+.hg-hold.is-full {
+  color: var(--red);
+  font-family: var(--body);
+  font-weight: 700;
+  opacity: 1;
+}
 .hg-line h3 small {
   font-family: "Nanum Gothic Coding", monospace;
   margin-left: 4px;

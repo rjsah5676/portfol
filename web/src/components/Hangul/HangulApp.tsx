@@ -24,7 +24,9 @@ import {
   VOWEL_SLOTS,
   draw,
   DRAW_EVERY,
-  HOLD_MAX,
+  HOLD_C,
+  HOLD_V,
+  held,
   START_DRAW,
   finishSentence,
   fromLine,
@@ -669,7 +671,20 @@ export default function HangulApp() {
   };
   const zone = (z: Zone, title: string, cls = "") => (
     <section className={`hg-zone ${cls}`}>
-      <h3>{title}</h3>
+      <h3>
+        {title}
+        {(z === "c" || z === "v") &&
+          (() => {
+            // 칸마다 상한 — 차면 그 칸 자모는 안 들어옴 (쓰면 다시)
+            const n = held(g, z),
+              max = z === "c" ? HOLD_C : HOLD_V;
+            return (
+              <small className={`hg-hold${n >= max ? " is-full" : ""}`}>
+                {n >= max ? `꽉 참 — 써야 더 들어와요` : `${n}/${max}`}
+              </small>
+            );
+          })()}
+      </h3>
       <div className={`hg-grid hg-grid-${z}`}>
         {Array.from({ length: CAP[z] }, (_, i) => slot(z, i))}
       </div>
@@ -1078,8 +1093,8 @@ export default function HangulApp() {
             바꾸기(기+ㆍ → 가, 그+ㆍ → 구, 가+ㅣ → 개)
           </li>
           <li>
-            자모는 {DRAW_EVERY}초마다 하나씩 저절로 들어와요 (뽑기 · 엽전 없음). {HOLD_MAX}개가
-            쌓이면 쓸 때까지 멈춰요
+            자모는 {DRAW_EVERY}초마다 하나씩 저절로 들어와요 (뽑기 · 엽전 없음). 자음은 {HOLD_C}개 ·
+            모음은 {HOLD_V}개까지 쌓이고, 차면 그 칸만 쓸 때까지 멈춰요
           </li>
           <li>말 안 되는 낱말 · 안 쓰는 글자는 단어칸 위 [버리기]를 켜고 누르면 치워져요</li>
           <li>

@@ -132,11 +132,15 @@ export interface Sentence {
 // 주인공은 문장 만들기 — 디펜스는 가벼운 압박만 (자모는 저절로 계속, 먹물 체력은 천천히)
 /**
  * 자모가 저절로 하나씩 들어오는 간격(초) — 엽전 · 뽑기 없음.
- * 0.3초는 문장 만드는 속도보다 훨씬 빨라서 칸마다 ×20 넘게 쌓였음(사용자) → 0.8초 + 가진 자모가 HOLD_MAX 개면 멈춤
+ * 0.3초는 문장 만드는 속도보다 훨씬 빨라서 칸마다 ×20 넘게 쌓였음(사용자) → 0.8초 + 칸마다 상한
  */
 export const DRAW_EVERY = 0.8;
-/** 자음칸 · 모음칸에 쌓인 자모가 이만큼이면 더 안 들어옴 (쓰면 다시 들어옴) */
-export const HOLD_MAX = 36;
+/** 자음칸에 쌓인 자음이 이만큼이면 자음은 그만 (모음은 계속) */
+export const HOLD_C = 24;
+/** 모음칸에 쌓인 모음 재료가 이만큼이면 모음은 그만 (자음은 계속) */
+export const HOLD_V = 20;
+/** 둘 다 차면 멈춤 (도움말 표시용) */
+export const HOLD_MAX = HOLD_C + HOLD_V;
 /** 시작할 때 쥐고 시작하는 자모 수 */
 export const START_DRAW = 16;
 export const LOAD_MAX = 100;
@@ -271,8 +275,8 @@ function put(g: Game, z: Zone, u: Unit, at = free(g, z)): boolean {
 
 export const zoneOfJamo = (j: string): Zone => (isCons(j) ? "c" : "v");
 const countOf = (u: Unit | null) => (u ? (u.n ?? 1) : 0);
-/** 자음칸 · 모음칸에 쌓인 자모 총수 */
-const heldJamo = (g: Game) => [...g.zones.c, ...g.zones.v].reduce((s, u) => s + countOf(u), 0);
+/** 자음칸 / 모음칸에 쌓인 자모 수 */
+export const held = (g: Game, z: "c" | "v") => g.zones[z].reduce((s, u) => s + countOf(u), 0);
 
 /**
  * 자모 칸 자리: 자음은 19자(기본 14 + 된소리 5)가 자기 자리를 하나씩 가짐(자판처럼 늘 그 자리).
@@ -347,13 +351,14 @@ export function drawOdds(g: Game): { cons: number; vows: Record<string, number> 
 }
 
 /** 뽑기 한 번 (확률은 drawOdds). 쌓을 데가 없는 자모가 나오면 쌓을 수 있는 걸로 다시 뽑음 */
-export function draw(g: Game, n = 1): number {
+export function draw(g: Game, n = 1, only?: Zone): number {
   let got = 0;
   for (let k = 0; k < n; k++) {
     const odds = drawOdds(g);
     let j = "";
     for (let t = 0; t < 12 && !j; t++) {
-      const c = pick(Math.random() < odds.cons ? CONS_W : odds.vows);
+      const cons = only ? only === "c" : Math.random() < odds.cons;
+      const c = pick(cons ? CONS_W : odds.vows);
       if (hasRoomFor(g, c)) j = c;
     }
     if (!j) break;
@@ -721,10 +726,12 @@ export function step(g: Game, dt: number) {
     emit(g, boss ? "boss" : "wave");
     if (boss) say(g, `${g.wave}웨이브 · 왕먹물 (얼룩 10마리 몫)`);
   }
-  // 자모는 저절로 계속 들어옴 (쌓인 자모가 HOLD_MAX 개 아래일 때만)
+  // 자모는 저절로 계속 들어옴. 자음 · 모음 따로 상한 — 합쳐서 막으면 자음만 잔뜩 쥐고 모음이 안 와서 멈춰 버림(사용자)
   if ((g.drawT -= dt) <= 0) {
     g.drawT = DRAW_EVERY;
-    if (heldJamo(g) < HOLD_MAX) draw(g, 1);
+    const cFull = held(g, "c") >= HOLD_C,
+      vFull = held(g, "v") >= HOLD_V;
+    if (!cFull || !vFull) draw(g, 1, cFull ? "v" : vFull ? "c" : undefined);
   }
   if (g.spawnLeft > 0 && (g.spawnT -= dt) <= 0) {
     spawn(g, g.spawnBoss);
