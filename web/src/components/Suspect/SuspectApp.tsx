@@ -278,10 +278,18 @@ export default function SuspectApp() {
       (p) => setPuzzle(p),
       () => setGenErr(true)
     );
-    document
-      .querySelector("[data-game-header]")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // 다 푼 사건은 결과 화면이 머리말 바로 아래 → 머리말로. 풀 사건은 판이 그려지면 판으로 (아래 effect)
+    if (s?.done)
+      document
+        .querySelector("[data-game-header]")
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
+
+  // 판이 그려지면 위쪽 막대부터 보드 맨 아랫줄까지 한 화면에 들어오게 판으로 스크롤 (머리말은 위로 넘김)
+  useEffect(() => {
+    if (phase !== "play" || !puzzle) return;
+    document.querySelector("[data-sp-play]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [phase, puzzle]);
 
   const startDaily = (tier: TierId) =>
     start({ mode: "daily", tier, day: today, seed: dailySeed(today, tier) });

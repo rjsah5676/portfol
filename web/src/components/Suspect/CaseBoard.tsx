@@ -226,7 +226,7 @@ export default function CaseBoard({
           </span>
           <Quote text={puzzle.clues[guideStep.speaker].text} />
           <span className="why">
-            {guided === 0 && "빛나는 카드들이 이 단서가 가리키는 사람이에요. "}
+            {guided === 0 && "주황 테두리 카드들이 이 단서가 가리키는 사람이에요. "}
             {explain(P, x, puzzle.clues[guideStep.speaker], guideStep.i, guideStep.v)}
           </span>
         </>
@@ -316,7 +316,7 @@ export default function CaseBoard({
         setInfo(null);
       } else {
         setFocus(i);
-        setInfo(clueInfo(i, `${x[i] ? "범인" : "무고"} · 빛나는 카드가 이 단서가 가리키는 사람들`));
+        setInfo(clueInfo(i, `${x[i] ? "범인" : "무고"} · 주황 테두리 카드가 이 단서가 가리키는 사람들`));
       }
       return;
     }
@@ -511,7 +511,7 @@ export default function CaseBoard({
   const left = N - known;
 
   return (
-    <div className="flex flex-col gap-2.5">
+    <div className="sp-play flex flex-col gap-2.5" data-sp-play>
       {/* 맨 위 막대 */}
       <div className="sp-bar justify-between">
         <div className="flex min-w-0 items-center gap-2">{head}</div>
@@ -599,7 +599,7 @@ export default function CaseBoard({
               <span key={r}>{r + 1}</span>
             ))}
           </div>
-          <div className="sp-board" style={cols}>
+          <div className={`sp-board${hl.length ? " has-hl" : ""}`} style={cols}>
             {b.all.map((i) => {
               const p = P[i];
               const v = x[i];
@@ -673,9 +673,14 @@ export default function CaseBoard({
         )}
       </div>
 
-      {/* 지목 창 — 화면 아래에 붙어 있음 */}
+      {/*
+        지목 창 — 떠 있음 (fixed): 넓은 화면은 보드 오른쪽 옆, 그 밖엔 화면 아래.
+        문서 흐름에 끼우면 열고 닫을 때마다 페이지 길이가 바뀌어 스크롤이 튐.
+        대신 보드 아래에 늘 같은 높이의 빈 자리를 둬서, 맨 아랫줄도 창 위로 올려 볼 수 있게
+      */}
+      <div className="sp-pick-room" aria-hidden />
       {sel >= 0 && x[sel] < 0 && (
-        <div className="sp-card sp-pick sticky bottom-2 z-20">
+        <div className="sp-card sp-pick sp-pick-float">
           <div className="flex items-center gap-2.5">
             <img className="sp-face" src={faceOf(P[sel])} alt="" />
             <div className="min-w-0 flex-1 leading-tight">

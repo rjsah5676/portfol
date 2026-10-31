@@ -129,8 +129,8 @@ export default function Page() {
           <h2 className={h2}>플레이 방법</h2>
           <ol className={`${p} list-decimal space-y-1.5 pl-5`}>
             <li>
-              밝혀진 사람의 카드를 누르면 단서 전체 문장이 보이고, 그 단서가 가리키는 사람들이
-              호박색으로 빛납니다.
+              밝혀진 사람의 카드를 누르면 단서 전체 문장이 보이고, 그 단서가 가리키는 사람들은
+              주황 테두리로 떠오르고 나머지는 어두워집니다.
             </li>
             <li>
               단서로 정체가 확실해진 사람을 누르고 <b className="text-white/80">범인이다</b> 또는{" "}
