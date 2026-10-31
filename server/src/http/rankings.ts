@@ -17,6 +17,8 @@ import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
 import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
 import { CASE_RE as SUSPECT_CASE_RE, kstDay, scoreOf as suspectScore } from "../../../web/src/lib/suspect/engine";
+import { HANGUL_WAVE_PTS, LINE_MAX, LINE_RE } from "../../../web/src/lib/hangul/judge";
+import { judge as judgeHangul } from "../hangul/kiwi";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -110,6 +112,8 @@ interface Board {
   split?: { field: string; of: (d: Data) => string; valid: (v: string) => boolean };
   /** 첫 기록만 남김 (오늘의 용의자: 다시 풀면 답을 알고 푸는 거라) */
   firstOnly?: boolean;
+  /** 서버에서 다시 따져 보는 확인 (오래 걸릴 수 있는 것 — 니들이 한글을 알아?: 대표 문장을 다시 판정) */
+  verify?: (d: Data) => Promise<boolean>;
 }
 
 /** AI 대국: 상대 단계 */
@@ -169,6 +173,25 @@ export const BOARDS: Record<string, Board> = {
       ),
   },
   // 격투 AI 랭킹(fight_ai_rankings)은 랭크전 도입(10.08)으로 없앰 — 컬렉션은 남겨 둠 (관리자 데이터 화면)
+  // 니들이 한글을 알아? (점수 = 완성한 문장 점수 합 + 버틴 웨이브 × 100). 대표글(그 판 최고 점수 문장)은 서버가 다시 판정
+  hangul_rankings: {
+    sort: { score: -1 },
+    schema: z.strictObject({
+      name,
+      score: int.min(0).max(1_000_000_000),
+      wave: int.min(0).max(100_000),
+      best: z.string().max(LINE_MAX),
+      bestPts: int.min(0).max(1_000_000),
+    }),
+    // 웨이브 하나는 20초
+    minSec: (d) => Math.max(0, d.wave - 1) * 20,
+    check: (d) => d.score >= d.wave * HANGUL_WAVE_PTS + d.bestPts && (d.best === "" ? d.bestPts === 0 : LINE_RE.test(d.best)),
+    verify: async (d) => {
+      if (d.best === "") return true;
+      const j = await judgeHangul(d.best);
+      return j.sentence && j.points === d.bestPts;
+    },
+  },
 };
 
 const CHART_RE = /^[a-z0-9-]+_(easy|normal|hard|expert|nightmare|explus)$/;
@@ -439,7 +462,9 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
           ? "too-fast"
           : board.check && !board.check(data)
             ? "mismatch"
-            : null;
+            : board.verify && !(await board.verify(data).catch(() => false))
+              ? "verify"
+              : null;
     if (why) {
       console.warn(
         `[rank] 거절(${why}) ${key} uid=${user.uid} ${Math.round(elapsed)}s ${JSON.stringify(data)}`,
