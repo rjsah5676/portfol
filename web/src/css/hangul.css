@@ -37,7 +37,21 @@
 .hg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
 /* 가로로 긴 판: 왼쪽 문장칸(원고지), 오른쪽 단어 · 글자 · 자모칸 — 좁으면 위아래로 */
 .hg-panel { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 14px; align-items: start; }
-.hg-right { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.hg-right { position: relative; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* 팔기: 단어칸 제목 줄 오른쪽에 작게, 켜면 줄 전체로 */
+.hg-sellbtn {
+  position: absolute;
+  top: -3px;
+  right: 0;
+  z-index: 1;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  font-size: 11.5px;
+  color: var(--ink2);
+}
+.hg-sellbtn.is-on { left: 0; background: var(--red); border-color: var(--red); color: #fff; font-weight: 700; }
 
 .hg-zone h3, .hg-line h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ink2); }
 .hg-line h3 small { font-family: "Nanum Gothic Coding", monospace; margin-left: 4px; }

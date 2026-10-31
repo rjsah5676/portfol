@@ -472,6 +472,18 @@ export function dropSentence(g: Game, k: number) {
   g.shelf.splice(k, 1);
 }
 
+/** 팔기: 말 안 되는 낱말 · 안 쓰는 글자 · 남는 자모를 엽전으로 (쌓인 자모는 하나씩) */
+export function sell(g: Game, z: Zone, i: number): number {
+  const u = g.zones[z][i];
+  if (!u) return 0;
+  const v = u.kind === "j" ? 1 : u.kind === "s" ? 2 : hangulLen(u.text) * 3;
+  if (u.kind === "j") takeJamo(g, z, i);
+  else g.zones[z][i] = null;
+  g.gold += v;
+  say(g, `「${u.text}」 ${v}냥에 팔았어요`);
+  return v;
+}
+
 /** 유닛 하나가 싸우는 값 (설명용으로도 씀) */
 export function statsOf(g: Game, u: Unit) {
   if (u.kind === "j") return null;

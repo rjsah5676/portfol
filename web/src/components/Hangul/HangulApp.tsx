@@ -34,6 +34,7 @@ import {
   score,
   SHELF_ID,
   writingPower,
+  sell,
   setPath,
   statsOf,
   step,
@@ -77,6 +78,7 @@ export default function HangulApp() {
   const [phase, setPhase] = useState<"ready" | "play" | "over">("ready");
   const [sel, setSel] = useState<{ z: Zone; i: number } | null>(null);
   const [wordBusy, setWordBusy] = useState(false);
+  const [selling, setSelling] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [judge, setJudge] = useState<Judge | null>(null);
   const [judgeErr, setJudgeErr] = useState<string | null>(null);
@@ -209,6 +211,7 @@ export default function HangulApp() {
     const ng = newGame();
     setG(ng);
     setSel(null);
+    setSelling(false);
     setJudge(null);
     setSent("idle");
     setPhase("play");
@@ -218,6 +221,10 @@ export default function HangulApp() {
   const onSlot = (z: Zone, i: number) => {
     if (phase !== "play") return;
     const u = g.zones[z][i];
+    if (selling) {
+      if (u) sell(g, z, i);
+      return refresh();
+    }
     if (sel) {
       // 같은 칸을 또 누르면: 쌓인 것끼리 합치기(ㄱ×2 → ㄲ, ㆍ×2 → ㆍㆍ), 안 되면 선택 취소
       if (sel.z === z && sel.i === i) {
@@ -357,7 +364,7 @@ export default function HangulApp() {
       <button
         key={i}
         type="button"
-        className={`hg-slot hg-${z}${u ? "" : " is-empty"}${on ? " is-on" : ""}`}
+        className={`hg-slot hg-${z}${u ? "" : " is-empty"}${on ? " is-on" : ""}${selling && u ? " is-sell" : ""}`}
         data-uid={u?.id}
         onClick={() => onSlot(z, i)}
         aria-label={u ? u.text : "빈 칸"}
@@ -512,6 +519,15 @@ export default function HangulApp() {
             </div>
           </section>
           <div className="hg-right">
+            {/* 팔기 모드: 켜면 누르는 칸을 팔아요 (말 안 되는 낱말 정리용) */}
+            <button
+              type="button"
+              className={`hg-sellbtn${selling ? " is-on" : ""}`}
+              onClick={() => (setSelling((s) => !s), setSel(null))}
+              disabled={phase !== "play"}
+            >
+              {selling ? "팔기 켜짐 — 누르는 칸을 팔아요 (낱말 글자당 3냥 · 글자 2냥 · 자모 1냥) · 끄기" : "팔기"}
+            </button>
             {zone("w", "단어칸")}
             {zone("s", "글자칸")}
             <div className="hg-jamo">
@@ -605,7 +621,8 @@ export default function HangulApp() {
             ㅏ→ㅣ = ㅐ · ㅓ→ㅣ = ㅔ
           </li>
           <li>자모를 누르고 글자를 누르면: 받침(가+ㄱ → 각) · 겹받침(업+ㅅ → 없, 일+ㄱ → 읽) · 모음 바꾸기(기+ㆍ → 가, 그+ㆍ → 구, 가+ㅣ → 개)</li>
-          <li>같은 자모는 한 칸에 쌓여요(×n). [자동 짝짓기]는 재료로 모음을 알아서 만들어 글자까지 만들어 줘요</li>
+          <li>말 안 되는 낱말 · 안 쓰는 글자는 단어칸 위 [팔기]를 켜고 누르면 엽전으로 바꿔요 (낱말 글자당 3냥 · 글자 2냥 · 자모 1냥)</li>
+          <li>같은 자모는 한 칸에 쌓여요(×n). [글자 짝짓기]는 재료로 모음을 알아서 만들어 글자까지, [낱말 짝짓기]는 글자칸 글자로 되는 낱말을 찾아 단어칸까지 만들어 줘요</li>
           <li>글자 · 낱말을 누르면 원고지에 이어 붙어요. 원고지 칸을 누르면 다시 빠져요</li>
           <li>원고지가 낱말 하나면 [낱말로 묶기] → 단어칸에서 품사대로 싸워요 (명사 강타 · 동사 범위 · 형용사 감속 · 부사 연사 · 감탄사 기절)</li>
           <li>
