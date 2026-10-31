@@ -486,8 +486,8 @@
     max-width: 100%;
   }
   .sp-cell.known .sp-face {
-    width: 22px;
-    height: 26px;
+    width: 26px;
+    height: 30px;
     border-width: 1.5px;
   }
   .sp-cell.known .sp-name {
@@ -495,6 +495,18 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  /* 밝혀진 사람: 이름 아래 직업 표 (도장과 겹치지 않게 세로로) */
+  .sp-cell.known .sp-nj {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+  }
+  .sp-cell.known .sp-job {
+    font-size: 9.5px;
+    padding: 1px 4px 0;
   }
   /* 고무도장 */
   .sp-stamp {
@@ -924,6 +936,15 @@
   }
 
   @media (max-width: 420px) {
+    /* 폰: 밝혀진 카드는 칸이 좁아 도장과 겹치므로 작은 사진은 빼고 이름 · 직업만 */
+    .sp-cell.known .sp-face {
+      display: none;
+    }
+    .sp-stamp {
+      font-size: 10.5px;
+      padding: 0 3px;
+      border-width: 1.5px;
+    }
     .sp-stage {
       padding: 10px 6px 12px;
     }

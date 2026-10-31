@@ -632,7 +632,11 @@ export default function CaseBoard({
                       <span className="sp-stamp">{v ? "범인" : "무고"}</span>
                       <span className="sp-head">
                         <img className="sp-face" src={faceOf(p)} alt="" draggable={false} />
-                        <span className="sp-name">{p.name}</span>
+                        {/* 이름 아래 직업 (밝혀진 뒤에도 직업 단서를 볼 수 있게) */}
+                        <span className="sp-nj">
+                          <span className="sp-name">{p.name}</span>
+                          <span className="sp-job">{p.job}</span>
+                        </span>
                       </span>
                       <span className="sp-cs">{puzzle.clues[i].short[0]}</span>
                       <span className="sp-cv">{puzzle.clues[i].short[1]}</span>
