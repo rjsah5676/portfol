@@ -53,15 +53,21 @@ export interface HangulRanking {
   best: string;
   bestSpaced?: string;
   bestPts: number;
+  /** 시크릿(익명)으로 올린 기록 */
+  secret?: boolean;
   createdAt: Date | null;
 }
 
-export async function getHangulRanking(limit = 30): Promise<HangulRanking[]> {
-  const rows = await api<(Omit<HangulRanking, "createdAt"> & { createdAt: number | null })[]>(`${PATH}?limit=${limit}`);
+/** sort: top = 점수순, new = 최신순 (판마다 따로 쌓이는 랭킹) */
+export async function getHangulRanking(limit = 30, sort: "top" | "new" = "top"): Promise<HangulRanking[]> {
+  const rows = await api<(Omit<HangulRanking, "createdAt"> & { createdAt: number | null })[]>(
+    `${PATH}?limit=${limit}${sort === "new" ? "&sort=new" : ""}`,
+  );
   return rows.map((r) => ({ ...r, member: !!r.member, avatar: r.avatar ?? null, createdAt: toDate(r.createdAt) }));
 }
 
 export const beginHangul = () => beginRun(BOARD);
 
-export const submitHangul = (rec: { name: string; score: number; wave: number; best: string; bestPts: number }) =>
+/** secret = 시크릿 등록 (이름 · 별명 · 사진 없이 "익명"으로). 판마다 하나씩 올라감 */
+export const submitHangul = (rec: { name: string; score: number; wave: number; best: string; bestPts: number; secret?: boolean }) =>
   submitRun(BOARD, PATH, rec);

@@ -534,3 +534,34 @@ describe("랭킹: 오늘의 용의자", () => {
     ).toBe(400);
   });
 });
+
+describe("랭킹: 니들이 한글을 알아?", () => {
+  const B = "hangul_rankings";
+  // 대표글이 없는 판(best "")은 판정기 없이 확인됨
+  const row = { name: "글쟁이", score: 300, wave: 3, best: "", bestPts: 0 };
+
+  it("한 사람이 판마다 여러 개 올릴 수 있음 (더 낮은 점수도 남음) · 최신순", async () => {
+    expect(await status("h1", B, row)).toBe(200);
+    expect(await status("h1", B, { ...row, score: 200, wave: 2 })).toBe(200);
+    expect(await status("h1", B, { ...row, score: 500, wave: 5 })).toBe(200);
+    const top = (await s.http(`/api/rankings/${B}`)).body;
+    expect(top.map((r: { score: number }) => r.score)).toEqual([500, 300, 200]);
+    const recent = (await s.http(`/api/rankings/${B}?sort=new`)).body;
+    expect(recent[0].score).toBe(500);
+    expect(recent.at(-1).score).toBe(300);
+  });
+
+  it("시크릿: 보낸 이름 대신 「익명」, 회원 표시 없음", async () => {
+    expect(await status("h2", B, { ...row, name: "진짜이름", secret: true })).toBe(200);
+    const mine = (await s.http(`/api/rankings/${B}?sort=new`)).body[0];
+    expect(mine).toMatchObject({ name: "익명", secret: true, avatar: null });
+    expect(mine.member).toBeUndefined();
+    expect(mine.uid).toBeUndefined();
+  });
+
+  it("시크릿은 허용한 랭킹에서만 (다른 랭킹은 secret 필드로 거절)", async () => {
+    expect(await status("h3", "score", { name: "멜론", score: 10, secret: true }, 600)).toBe(200);
+    const melon = (await s.http("/api/rankings/score")).body.find((r: { name: string }) => r.name === "멜론");
+    expect(melon?.secret).toBeUndefined();
+  });
+});

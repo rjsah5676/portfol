@@ -263,16 +263,100 @@
 .hg-help summary { cursor: pointer; color: var(--ink2); }
 .hg-help ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; }
 
-.hg-ranks { background: var(--paper); border-radius: 12px; padding: 12px 14px; }
-.hg-ranks h2 { margin: 0 0 8px; font-family: "Black Han Sans", sans-serif; font-weight: 400; font-size: 22px; }
-.hg-ranks ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.hg-ranks li { display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
-.hg-ranks li:first-child { border-top: 0; }
-.hg-rk { font-family: "Nanum Gothic Coding", monospace; text-align: right; color: var(--ink2); }
-.hg-ranks li:first-child .hg-rk { color: var(--red); font-weight: 700; }
-.hg-rq { margin: 0; font-family: var(--brush); font-size: 18px; line-height: 1.3; word-break: keep-all; }
-.hg-rn { margin: 2px 0 0; font-size: 11.5px; color: var(--ink2); }
-.hg-ranks b { font-family: "Nanum Gothic Coding", monospace; font-size: 14px; }
+/* 위쪽 랭킹 버튼 */
+.hg-head { position: relative; }
+.hg-root .hg-rankbtn {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  border: 1px solid rgba(244,237,220,0.4);
+  border-radius: 999px;
+  background: rgba(244,237,220,0.1);
+  color: var(--paper);
+  padding: 6px 14px;
+  font-size: 13.5px;
+}
+.hg-root .hg-rankbtn:hover { background: var(--paper); color: var(--ink); }
+.hg-secret { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12.5px; color: var(--ink2); cursor: pointer; }
+.hg-root .hg-linkbtn { border: 0; background: none; color: var(--red); font-size: 13px; text-decoration: underline; }
+
+/* 랭킹 창: 문장이 주인공 — 한 줄에 하나씩 크게 읽히게 (body 에 붙음 — 껍데기는 변수 · 글꼴만 물려줌) */
+.hg-root.hg-portal { display: contents; }
+.hg-rankpop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000; /* 사이트 공통 모달과 같은 높이 — 메뉴 버튼(99999)보다 위 */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: max(16px, 6vh) 16px 16px;
+  background: rgba(10,9,8,0.72);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.hg-ranks {
+  width: 100%;
+  max-width: 720px;
+  background: var(--paper);
+  border-radius: 14px;
+  padding: 0 0 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+}
+.hg-ranks > header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px 10px;
+  background: var(--paper);
+  border-radius: 14px 14px 0 0;
+  border-bottom: 2px solid var(--ink);
+}
+.hg-ranks h2 { margin: 0; font-family: "Black Han Sans", sans-serif; font-weight: 400; font-size: 24px; }
+.hg-rtabs { display: flex; gap: 4px; margin-left: auto; }
+.hg-root .hg-rtabs button { border: 1px solid var(--line); border-radius: 999px; background: transparent; padding: 4px 12px; font-size: 13px; color: var(--ink2); }
+.hg-root .hg-rtabs button.is-on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+.hg-root .hg-rclose { border: 0; background: none; font-size: 18px; padding: 2px 4px; color: var(--ink2); }
+.hg-ranks > .hg-dim { margin: 14px 18px 0; }
+.hg-ranks .hg-rpause { margin: 8px 18px 0; font-size: 11.5px; }
+.hg-ranks ol { list-style: none; margin: 0; padding: 0 18px; display: flex; flex-direction: column; }
+.hg-ranks li { position: relative; padding: 16px 0 14px 44px; border-bottom: 1px dashed var(--line); }
+.hg-ranks li:last-child { border-bottom: 0; }
+.hg-rtabs + .hg-rclose { margin-left: 0; }
+.hg-rk {
+  position: absolute;
+  left: 0;
+  top: 18px;
+  width: 32px;
+  text-align: center;
+  font-family: "Black Han Sans", sans-serif;
+  font-size: 20px;
+  color: var(--ink2);
+}
+/* 방금 올라온 탭은 순위 없이 */
+.hg-ranks ol:not(:has(.hg-rk)) li { padding-left: 0; }
+.hg-rq {
+  margin: 0;
+  font-family: var(--brush);
+  font-size: 21px;
+  line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.hg-rq::before { content: "“"; color: var(--red); margin-right: 2px; }
+.hg-rq::after { content: "”"; color: var(--red); margin-left: 2px; }
+.hg-rq.is-none { font-size: 15px !important; color: var(--ink2); }
+.hg-rq.is-none::before, .hg-rq.is-none::after { content: none; }
+.hg-ranks li.is-top .hg-rq { font-size: 26px; }
+.hg-ranks li.t1 .hg-rk { color: var(--red); font-size: 26px; }
+.hg-ranks li.t1 { background: linear-gradient(90deg, rgba(192,57,43,0.08), transparent 70%); margin: 0 -18px; padding-left: 62px; padding-right: 18px; }
+.hg-ranks li.t1 .hg-rk { left: 18px; }
+.hg-rn { margin: 6px 0 0; display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink2); }
+.hg-rn span:first-child { color: var(--ink); font-weight: 700; }
+.hg-rn span:last-child { margin-left: auto; }
+.hg-rn b { font-family: "Nanum Gothic Coding", monospace; color: var(--red); }
 
 .hg-note { min-height: 1.4em; }
 @media (max-width: 900px) {
@@ -290,6 +374,13 @@
   .hg-w { height: 46px; }
   .hg-glyph { font-size: 22px; }
   .hg-ctrl button, .hg-line-btns button { font-size: 12px; padding: 7px 2px; }
+  .hg-root .hg-rankbtn { position: static; margin-top: 8px; }
+  .hg-ranks > header { flex-wrap: wrap; padding: 12px 14px 8px; }
+  .hg-ranks ol { padding: 0 14px; }
+  .hg-rq { font-size: 18px; }
+  .hg-ranks li.is-top .hg-rq { font-size: 21px; }
+  .hg-ranks li.t1 { margin: 0 -14px; padding-right: 14px; padding-left: 58px; }
+  .hg-ranks li.t1 .hg-rk { left: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hg-line-btns .hg-go:not(:disabled) { animation: none; }

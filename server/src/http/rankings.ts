@@ -114,7 +114,14 @@ interface Board {
   firstOnly?: boolean;
   /** 서버에서 다시 따져 보는 확인 (오래 걸릴 수 있는 것 — 니들이 한글을 알아?: 대표 문장을 다시 판정) */
   verify?: (d: Data) => Promise<boolean>;
+  /** 한 사람이 판마다 따로 여러 개 올릴 수 있음 (가장 좋은 것 하나로 바꾸지 않고 쌓음 — 니들이 한글을 알아?) */
+  many?: boolean;
+  /** 시크릿 등록 허용: { secret: true } 로 보내면 별명 · 사진 없이 "익명" 으로 */
+  secret?: boolean;
 }
+
+/** 시크릿 등록 때 랭킹에 보이는 이름 */
+export const SECRET_NAME = "익명";
 
 /** AI 대국: 상대 단계 */
 const tierOf = (d: Data) => Math.floor(d.score / 1_000_000);
@@ -193,6 +200,9 @@ export const BOARDS: Record<string, Board> = {
       d.bestSpaced = j.spaced;
       return j.sentence && j.points === d.bestPts;
     },
+    // 웃긴 문장은 판마다 다르니 판마다 따로 쌓임 · 익명(시크릿)으로도 올릴 수 있음
+    many: true,
+    secret: true,
   },
 };
 
@@ -440,12 +450,15 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
     if (!user) throw unauthenticated();
     // 티켓을 쓰기 전에 (확인하고 다시 보내도 같은 티켓으로 등록되게)
     if (user.anonymous) await captcha?.check(req, { remember: user.uid });
-    const { ticket, ...body } = (req.body ?? {}) as Record<string, unknown>;
+    const { ticket, secret: secretReq, ...body } = (req.body ?? {}) as Record<string, unknown>;
+    // 시크릿: 이름은 "익명", 회원 표시 · 사진 없음 (uid 는 남지만 밖으로는 안 나감)
+    const secret = secretReq === true && !!board.secret;
     // 회원은 별명으로 등록 (보낸 이름은 무시). 비회원은 적은 이름 그대로 — member 표시가 없는 기록이 비회원 기록
-    const nick = await users.nickOf(user);
-    if (nick) body.name = nick;
+    const nick = secret ? null : await users.nickOf(user);
+    if (secret) body.name = SECRET_NAME;
+    else if (nick) body.name = nick;
     const data = board.schema.parse(body) as Data;
-    const owner = nick ? { uid: user.uid, member: true } : { uid: user.uid };
+    const owner = secret ? { uid: user.uid, secret: true } : nick ? { uid: user.uid, member: true } : { uid: user.uid };
 
     const now = Date.now();
     const t =
@@ -476,6 +489,12 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
 
     if (board.split) scope = { ...scope, [board.split.field]: board.split.of(data) };
     const [field, dir] = Object.entries(board.sort)[0];
+    if (board.many) {
+      // 판마다 하나씩 (티켓이 1회용이라 한 판에 한 번만 올라감)
+      const _id = newId();
+      await db.col(col).insertOne({ _id, ...scope, ...data, ...owner, createdAt: new Date() });
+      return { id: _id };
+    }
     return mutex.run(`${col}:${JSON.stringify(scope)}:${user.uid}`, async () => {
       const mine = await db.col(col).findOne({ ...scope, uid: user.uid });
       if (mine && board.firstOnly) return { id: mine._id, kept: true };
@@ -658,7 +677,9 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
           .toArray();
         return rows(db, docs);
       }
-      const docs = await db.col(key).find({}).sort(board.sort).limit(limit).toArray();
+      // 여러 개 올리는 랭킹은 최신순도 (?sort=new — 막 올라온 문장 구경)
+      const sort = board.many && req.query.sort === "new" ? { createdAt: -1 as const } : board.sort;
+      const docs = await db.col(key).find({}).sort(sort).limit(limit).toArray();
       return rows(db, docs);
     }),
   );
