@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 
 export default function Page() {
   return (
-    <div className="mx-auto flex max-w-[800px] flex-col items-center px-3 pt-6 pb-16 sm:px-6">
+    <div className="mx-auto flex max-w-[1240px] flex-col items-center px-3 pt-6 pb-16 sm:px-6">
       <HangulApp />
     </div>
   );

@@ -32,6 +32,7 @@ import {
   type Zone,
 } from "@/lib/hangul/game";
 import { gradeOf, HANGUL_WAVE_PTS, LINE_MAX, type Judge, type Morph } from "@/lib/hangul/judge";
+import { shown } from "@/lib/hangul/jamo";
 import {
   beginHangul,
   getHangulRanking,
@@ -205,7 +206,11 @@ export default function HangulApp() {
       return refresh();
     }
     if (sel) {
-      if (sel.z === z && sel.i === i) return setSel(null);
+      // 같은 칸을 또 누르면: 쌓인 것끼리 합치기(ㄱ×2 → ㄲ, ㆍ×2 → ㆍㆍ), 안 되면 선택 취소
+      if (sel.z === z && sel.i === i) {
+        if (combine(g, z, i, z, i)) refresh();
+        return setSel(null);
+      }
       if (combine(g, sel.z, sel.i, z, i)) {
         setSel(null);
         return refresh();
@@ -276,7 +281,13 @@ export default function HangulApp() {
 
   const ld = load(g);
   const cells = lineCells(g);
-  const note = g.note && g.t - g.note.at < 2.5 ? g.note.text : null;
+  const selU = sel ? g.zones[sel.z][sel.i] : null;
+  const note =
+    g.note && g.t - g.note.at < 2.5
+      ? g.note.text
+      : selU?.kind === "j"
+        ? `「${shown(selU.text)}」 골랐어요 — 다음에 누르는 자모 · 글자와 누른 순서대로 합쳐요${(selU.n ?? 1) > 1 ? " (같은 칸을 또 누르면 둘끼리)" : ""}`
+        : null;
   const unknown = j?.morphs.filter((m) => !m.k) ?? [];
   const endsLikeSentence = !!j && j.morphs.length >= 2 && j.morphs[j.morphs.length - 1].t === "EF";
   const lineMsg = !text
@@ -313,10 +324,14 @@ export default function HangulApp() {
       >
         {u && (
           <>
-            <span className="hg-glyph" style={len > 2 ? { fontSize: `${Math.max(11, 26 - len * 3.2)}px` } : undefined}>
-              {u.text}
+            <span
+              className={`hg-glyph${u.kind === "j" && shown(u.text) !== u.text ? " is-dot" : ""}`}
+              style={len > 2 ? { fontSize: `${Math.max(11, 26 - len * 3.2)}px` } : undefined}
+            >
+              {u.kind === "j" ? shown(u.text) : u.text}
             </span>
             {u.kind === "w" && <span className="hg-pos">{u.pos}</span>}
+            {u.kind === "j" && (u.n ?? 1) > 1 && <span className="hg-n">×{u.n}</span>}
           </>
         )}
       </button>
@@ -352,7 +367,7 @@ export default function HangulApp() {
               문장칸 <small>{cells.length}/{LINE_MAX}</small>
             </h3>
             <div className="hg-paper" role="list">
-              {Array.from({ length: Math.max(12, Math.ceil((cells.length + 1) / 12) * 12) }, (_, k) => {
+              {Array.from({ length: LINE_MAX }, (_, k) => {
                 const c = cells[k];
                 return (
                   <button
@@ -402,11 +417,13 @@ export default function HangulApp() {
               </button>
             </div>
           </section>
-          {zone("w", "단어칸")}
-          {zone("s", "글자칸")}
-          <div className="hg-jamo">
-            {zone("c", "자음칸")}
-            {zone("v", "모음칸")}
+          <div className="hg-right">
+            {zone("w", "단어칸")}
+            {zone("s", "글자칸")}
+            <div className="hg-jamo">
+              {zone("c", "자음칸")}
+              {zone("v", "모음칸 · 천지인")}
+            </div>
           </div>
         </div>
 
@@ -462,7 +479,7 @@ export default function HangulApp() {
         )}
       </div>
 
-      {note && <p className="hg-note">{note}</p>}
+      <p className="hg-note">{note}</p>
 
       <div className="hg-ctrl">
         <button type="button" onClick={() => (draw(g, 1), refresh())} disabled={phase !== "play" || g.gold < DRAW_COST}>
@@ -485,8 +502,13 @@ export default function HangulApp() {
       <details className="hg-help">
         <summary>어떻게 하나요</summary>
         <ul>
-          <li>자모를 누르고 다른 자모를 누르면 합쳐요: 자음+모음 → 글자 · ㄱ+ㄱ → ㄲ · ㅗ+ㅏ → ㅘ</li>
-          <li>자모를 누르고 글자를 누르면 받침(가+ㄱ → 각)이나 겹모음(가+ㅣ → 개)</li>
+          <li>자모를 누르고 다른 자모를 누르면 합쳐요: 자음+모음 → 글자 · ㄱ×2 칸을 두 번 → ㄲ</li>
+          <li>
+            모음은 천지인(ㆍ ㅡ ㅣ)으로, 누른 순서대로: ㅣ→ㆍ = ㅏ · ㆍ→ㅣ = ㅓ · ㆍ→ㅡ = ㅗ · ㅡ→ㆍ = ㅜ · ㆍ→ㆍ = ㆍㆍ · ㅏ→ㆍ = ㅑ ·
+            ㆍㆍ→ㅣ = ㅕ · ㆍㆍ→ㅡ = ㅛ · ㅜ→ㆍ = ㅠ · ㅏ→ㅣ = ㅐ · ㅓ→ㅣ = ㅔ
+          </li>
+          <li>자모를 누르고 글자를 누르면: 받침(가+ㄱ → 각) · 모음 바꾸기(기+ㆍ → 가, 그+ㆍ → 구, 가+ㅣ → 개)</li>
+          <li>같은 자모는 한 칸에 쌓여요(×n). [자동 짝짓기]는 재료로 모음을 알아서 만들어 글자까지 만들어 줘요</li>
           <li>글자 · 낱말을 누르면 문장칸에 이어 붙어요. 원고지 칸을 누르면 다시 빠져요</li>
           <li>문장칸이 낱말 하나면 [낱말로 묶기] → 단어칸에서 품사대로 싸워요 (명사 강타 · 동사 범위 · 형용사 감속 · 부사 연사 · 감탄사 기절)</li>
           <li>종결어미로 끝나면 [문장 완성!] → 화면 전체 공격 + 점수 + 기세(모든 피해) 영구 상승. 쓴 글자는 사라져요</li>

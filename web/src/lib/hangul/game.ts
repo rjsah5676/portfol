@@ -1,4 +1,4 @@
-import { addToSyllable, CONS_W, decompose, isCons, joinJamo, pick, syllableStroke, VOWS_W } from "./jamo";
+import { addToSyllable, CONS_W, decompose, isCons, joinJamo, JUNG, pick, syllableStroke, VOWEL_RECIPES, VOWS_W } from "./jamo";
 import { gradeOf, hangulLen, LINE_MAX, type Judge } from "./judge";
 
 /*
@@ -13,7 +13,9 @@ import { gradeOf, hangulLen, LINE_MAX, type Judge } from "./judge";
  */
 
 export type Zone = "c" | "v" | "s" | "w";
-export const CAP: Record<Zone, number> = { c: 8, v: 6, s: 10, w: 8 };
+/** 칸 수. 자음 · 모음칸은 같은 자모가 한 칸에 STACK_MAX 개까지 쌓임 */
+export const CAP: Record<Zone, number> = { c: 10, v: 6, s: 16, w: 12 };
+export const STACK_MAX = 99;
 export const ZONE_NAME: Record<Zone, string> = { c: "자음칸", v: "모음칸", s: "글자칸", w: "단어칸" };
 
 export interface Unit {
@@ -26,6 +28,8 @@ export interface Unit {
   cd: number;
   /** 문장칸에 넣기 전에 있던 칸 (되돌릴 때) */
   from?: Zone;
+  /** 자모: 이 칸에 쌓인 개수 */
+  n?: number;
 }
 
 export interface Enemy {
@@ -67,12 +71,13 @@ export interface Sentence {
   grade: string;
 }
 
-export const DRAW_COST = 2;
+// 주인공은 문장 만들기 — 디펜스는 가벼운 압박만 (뽑기 싸게, 체력은 천천히)
+export const DRAW_COST = 1;
 export const LOAD_MAX = 100;
 const WAVE_SEC = 20;
 const LAP_SEC = 15;
 
-export const waveHp = (w: number) => Math.round(14 * 1.12 ** (w - 1));
+export const waveHp = (w: number) => Math.round(14 * 1.1 ** (w - 1));
 
 /** 낱말 품사마다 싸우는 방식 (dmg = 기본 × 글자 수^1.5) */
 export const POS_STYLE: Record<string, { dmg: number; rate: number; splash?: number; slow?: number; stun?: number; color: string; desc: string }> = {
@@ -155,61 +160,126 @@ function put(g: Game, z: Zone, u: Unit, at = free(g, z)): boolean {
   return true;
 }
 
-/** 뽑기 한 번: 자음 55% · 모음 45% (한쪽 칸이 꽉 차면 다른 쪽) */
+export const zoneOfJamo = (j: string): Zone => (isCons(j) ? "c" : "v");
+const countOf = (u: Unit | null) => (u ? (u.n ?? 1) : 0);
+
+/** 자모 하나 넣기: 같은 자모가 있으면 그 칸에 쌓고(×n), 없으면 빈 칸에 */
+function addJamo(g: Game, j: string): boolean {
+  const z = zoneOfJamo(j);
+  const same = g.zones[z].find((u) => u?.text === j && countOf(u) < STACK_MAX);
+  if (same) return (same.n = countOf(same) + 1), true;
+  const u = unit(g, "j", j);
+  u.n = 1;
+  return put(g, z, u);
+}
+/** 자모 칸에서 하나 덜어냄 (다 쓰면 칸이 빔) */
+function takeJamo(g: Game, z: Zone, i: number) {
+  const u = g.zones[z][i];
+  if (!u) return;
+  if (countOf(u) > 1) u.n = countOf(u) - 1;
+  else g.zones[z][i] = null;
+}
+const hasRoomFor = (g: Game, j: string) => {
+  const z = zoneOfJamo(j);
+  return g.zones[z].some((u) => !u || (u.text === j && countOf(u) < STACK_MAX));
+};
+
+/** 뽑기 한 번: 자음 42% · 모음 재료(천지인) 58% — 모음은 보통 재료 두 개가 듦. 쌓을 데가 없는 자모가 나오면 쌓을 수 있는 걸로 다시 뽑음 */
 export function draw(g: Game, n = 1): number {
   let got = 0;
   for (let k = 0; k < n; k++) {
     if (g.gold < DRAW_COST) break;
-    const cFree = free(g, "c") >= 0, vFree = free(g, "v") >= 0;
-    if (!cFree && !vFree) break;
-    const cons = cFree && (!vFree || Math.random() < 0.55);
+    let j = "";
+    for (let t = 0; t < 12 && !j; t++) {
+      const c = pick(Math.random() < 0.42 ? CONS_W : VOWS_W);
+      if (hasRoomFor(g, c)) j = c;
+    }
+    if (!j) break;
     g.gold -= DRAW_COST;
-    const j = pick(cons ? CONS_W : VOWS_W);
-    put(g, cons ? "c" : "v", unit(g, "j", j));
+    addJamo(g, j);
     got++;
   }
   if (!got) say(g, g.gold < DRAW_COST ? "엽전이 모자라요" : "자음칸 · 모음칸이 꽉 찼어요");
   return got;
 }
 
-export const zoneOfJamo = (j: string): Zone => (isCons(j) ? "c" : "v");
-
-/** 자모(a, zone za idx ia)를 b(zone zb idx ib)에 합치기. 합쳤으면 true */
+/**
+ * 자모(먼저 누른 a)를 b 에 합치기. 합쳤으면 true. 누른 순서가 곧 천지인 입력 순서 (a → b).
+ * 같은 칸을 두 번 누르면 그 칸끼리 (ㄱ×2 → ㄲ, ㆍ×2 → ㆍㆍ)
+ */
 export function combine(g: Game, za: Zone, ia: number, zb: Zone, ib: number): boolean {
   const A = g.zones[za][ia], B = g.zones[zb][ib];
   if (!A || !B || A.kind !== "j") return false;
+  const self = za === zb && ia === ib;
   if (B.kind === "j") {
+    if (self && countOf(A) < 2) return false;
     const r = joinJamo(A.text, B.text);
     if (!r) return false;
     if ("syllable" in r) {
       const at = free(g, "s");
       if (at < 0) return say(g, "글자칸이 꽉 찼어요"), false;
-      g.zones[za][ia] = null;
-      g.zones[zb][ib] = null;
+      takeJamo(g, za, ia);
+      takeJamo(g, zb, ib);
       put(g, "s", unit(g, "s", r.syllable), at);
     } else {
-      g.zones[za][ia] = null;
-      g.zones[zb][ib] = unit(g, "j", r.jamo);
+      takeJamo(g, za, ia);
+      takeJamo(g, zb, ib);
+      if (!addJamo(g, r.jamo)) {
+        addJamo(g, A.text);
+        addJamo(g, B.text);
+        return say(g, "칸이 꽉 차서 못 합쳐요"), false;
+      }
     }
     return true;
   }
   if (B.kind === "s") {
     const s = addToSyllable(B.text, A.text);
     if (!s) return false;
-    g.zones[za][ia] = null;
+    takeJamo(g, za, ia);
     B.text = s;
     return true;
   }
   return false;
 }
 
-/** 자음칸 · 모음칸의 자모를 아무렇게나 짝지어 글자로 (글자칸이 찰 때까지) */
+/**
+ * 자동 짝짓기: 자음마다 가진 재료로 만들 수 있는 모음을 하나 골라(자주 쓰는 모음일수록 잘 고름) 글자로.
+ * 이미 만들어 둔 모음(ㅏ 등)이 있으면 그것부터 씀.
+ */
 export function autoPair(g: Game): number {
   let n = 0;
-  const idx = (z: Zone) => g.zones[z].map((u, i) => (u ? i : -1)).filter((i) => i >= 0).sort(() => Math.random() - 0.5);
-  const cs = idx("c"), vs = idx("v");
-  while (cs.length && vs.length && free(g, "s") >= 0) {
-    combine(g, "c", cs.pop()!, "v", vs.pop()!);
+  const stock = () => {
+    const m = new Map<string, number>();
+    for (const u of g.zones.v) if (u) m.set(u.text, (m.get(u.text) ?? 0) + countOf(u));
+    return m;
+  };
+  const slotOf = (z: Zone, j: string) => g.zones[z].findIndex((u) => u?.text === j);
+  for (let guard = 0; guard < 40 && free(g, "s") >= 0; guard++) {
+    const cs = g.zones.c.map((u, i) => (u ? i : -1)).filter((i) => i >= 0);
+    if (!cs.length) break;
+    const st = stock();
+    // 이미 만들어 둔 모음(ㅏ ㅓ …)부터. ㅡ ㅣ 는 재료이기도 해서 여기선 빼고 아래 만드는 법에서 같이 고름
+    const ready = [...st.keys()].filter((v) => JUNG.includes(v) && v !== "ㅡ" && v !== "ㅣ");
+    let vowel: string | null = null;
+    if (ready.length) vowel = ready[Math.floor(Math.random() * ready.length)];
+    else {
+      const ok = VOWEL_RECIPES.filter((r) => {
+        const need = new Map<string, number>();
+        for (const x of r.need) need.set(x, (need.get(x) ?? 0) + 1);
+        return [...need].every(([x, c]) => (st.get(x) ?? 0) >= c);
+      });
+      if (!ok.length) break;
+      let roll = Math.random() * ok.reduce((s, r) => s + r.w, 0);
+      const r = ok.find((x) => (roll -= x.w) < 0) ?? ok[0];
+      for (const x of r.need) takeJamo(g, "v", slotOf("v", x));
+      if (!addJamo(g, r.v)) {
+        for (const x of r.need) addJamo(g, x);
+        break;
+      }
+      vowel = r.v;
+    }
+    const ci = cs[Math.floor(Math.random() * cs.length)];
+    if (!combine(g, "c", ci, "v", slotOf("v", vowel))) break;
     n++;
   }
   if (!n) say(g, free(g, "s") < 0 ? "글자칸이 꽉 찼어요" : "짝지을 자음 · 모음이 없어요");
@@ -287,7 +357,8 @@ export function sell(g: Game, z: Zone, i: number): number {
   const u = g.zones[z][i];
   if (!u) return 0;
   const v = u.kind === "j" ? 1 : u.kind === "s" ? 2 : hangulLen(u.text) * 3;
-  g.zones[z][i] = null;
+  if (u.kind === "j") takeJamo(g, z, i); // 쌓인 자모는 하나씩
+  else g.zones[z][i] = null;
   g.gold += v;
   return v;
 }
@@ -346,6 +417,8 @@ export function step(g: Game, dt: number) {
     g.gold += 8 + g.wave;
     if (boss) say(g, `${g.wave}웨이브 · 왕먹물 (얼룩 10마리 몫)`);
   }
+  // 뽑기 주구장창: 1초에 1냥씩 꾸준히 들어옴
+  if (Math.floor(g.t) > Math.floor(g.t - dt)) g.gold += 1;
   if (g.spawnLeft > 0 && (g.spawnT -= dt) <= 0) {
     spawn(g, g.spawnBoss);
     g.spawnLeft--;

@@ -12,7 +12,7 @@
   --brush: "Song Myung", serif;
   --body: "Gowun Dodum", "Nanum Gothic", sans-serif;
   width: 100%;
-  max-width: 760px;
+  max-width: 1180px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
@@ -24,7 +24,7 @@
 .hg-root button:disabled { cursor: default; }
 
 .hg-head { text-align: center; color: #fff; }
-.hg-head h1 { margin: 0; font-family: "Black Han Sans", sans-serif; font-weight: 400; font-size: clamp(30px, 8vw, 46px); letter-spacing: -0.02em; }
+.hg-head h1 { margin: 0; font-family: "Black Han Sans", sans-serif; font-weight: 400; font-size: clamp(28px, 6vw, 38px); letter-spacing: -0.02em; }
 .hg-head p { margin: 2px 0 0; font-size: 13px; color: rgba(255,255,255,0.55); }
 
 .hg-hud { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
@@ -33,18 +33,29 @@
 .hg-hud b { display: block; font-family: "Nanum Gothic Coding", monospace; font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hg-hud .is-warn b { color: var(--red); }
 
-.hg-field { position: relative; background: var(--paper2); border-radius: 14px; padding: 34px; }
+.hg-field { position: relative; background: var(--paper2); border-radius: 14px; padding: 30px; }
 .hg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
-.hg-panel { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 10px; }
+/* 가로로 긴 판: 왼쪽 문장칸(원고지), 오른쪽 단어 · 글자 · 자모칸 — 좁으면 위아래로 */
+.hg-panel { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 14px; align-items: start; }
+.hg-right { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 
 .hg-zone h3, .hg-line h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ink2); }
 .hg-line h3 small { font-family: "Nanum Gothic Coding", monospace; margin-left: 4px; }
 .hg-grid { display: grid; gap: 5px; }
-.hg-grid-w { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.hg-grid-s { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.hg-grid-c { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.hg-grid-w { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+.hg-grid-s { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+.hg-grid-c { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .hg-grid-v { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.hg-jamo { display: grid; grid-template-columns: 4fr 3fr; gap: 10px; }
+.hg-jamo { display: grid; grid-template-columns: 5fr 3fr; gap: 10px; }
+.hg-n {
+  position: absolute;
+  right: 3px;
+  bottom: 2px;
+  font-family: "Nanum Gothic Coding", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--red);
+}
 
 .hg-slot {
   position: relative;
@@ -66,6 +77,7 @@
 .hg-glyph { font-family: var(--brush); font-size: 26px; line-height: 1; white-space: nowrap; }
 .hg-c .hg-glyph { color: #3b3631; }
 .hg-v .hg-glyph { color: #2f5e8c; }
+.hg-glyph.is-dot { font-family: Arial, sans-serif; font-weight: 700; letter-spacing: -0.05em; }
 .hg-w { height: 52px; flex-direction: column; gap: 2px; background: #fffaf0; border-color: currentColor; border-width: 1.5px; }
 .hg-w.is-empty { border-color: var(--line); border-width: 1px; }
 .hg-pos { font-size: 10px; opacity: 0.75; }
@@ -74,7 +86,7 @@
 .hg-line { background: #fffdf6; border-radius: 10px; padding: 8px 10px 10px; }
 .hg-paper {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-template-columns: repeat(15, minmax(0, 1fr));
   border-top: 1px solid var(--grid);
   border-left: 1px solid var(--grid);
 }
@@ -85,7 +97,7 @@
   border-bottom: 1px solid var(--grid);
   background: transparent;
   font-family: var(--brush);
-  font-size: clamp(15px, 4.4vw, 26px);
+  font-size: clamp(13px, 2.1vw, 24px);
   padding: 0;
 }
 .hg-cell.is-a { background: rgba(217,130,110,0.06); }
@@ -209,7 +221,14 @@
 .hg-rn { margin: 2px 0 0; font-size: 11.5px; color: var(--ink2); }
 .hg-ranks b { font-family: "Nanum Gothic Coding", monospace; font-size: 14px; }
 
+.hg-note { min-height: 1.4em; }
+@media (max-width: 900px) {
+  .hg-panel { grid-template-columns: minmax(0, 1fr); }
+  .hg-grid-w { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .hg-cell { font-size: clamp(13px, 4vw, 24px); }
+}
 @media (max-width: 520px) {
+  .hg-paper { grid-template-columns: repeat(10, minmax(0, 1fr)); }
   .hg-field { padding: 28px 26px; }
   .hg-hud { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
   .hg-hud > div { padding: 4px 5px; }

@@ -1,7 +1,7 @@
 /*
  * 니들이 한글을 알아? — 자모 모아쓰기
- *   자음 + 모음 → 글자(가) · 글자 + 자음 → 받침(각) · 글자 + 모음 → 겹모음 글자(가+ㅣ=개)
- *   같은 자음 둘 → 된소리(ㄱ+ㄱ=ㄲ) · 모음 둘 → 겹모음(ㅗ+ㅏ=ㅘ)
+ *   자음 + 모음 → 글자(가) · 글자 + 자음 → 받침(각) · 글자 + 모음 재료 → 모음 바뀐 글자(기+ㆍ=가, 가+ㅣ=개)
+ *   같은 자음 둘 → 된소리(ㄱ+ㄱ=ㄲ) · 모음은 천지인(ㆍ ㅡ ㅣ)으로 조립 (아래)
  */
 
 export const CHO = ["ㄱ","ㄲ","ㄴ","ㄷ","ㄸ","ㄹ","ㅁ","ㅂ","ㅃ","ㅅ","ㅆ","ㅇ","ㅈ","ㅉ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
@@ -10,11 +10,29 @@ export const JONG = ["","ㄱ","ㄲ","ㄳ","ㄴ","ㄵ","ㄶ","ㄷ","ㄹ","ㄺ","�
 /** 홑받침 + ㄲ ㅆ (겹받침은 조립 안 함) */
 const OK_JONG = new Set(["ㄱ","ㄲ","ㄴ","ㄷ","ㄹ","ㅁ","ㅂ","ㅅ","ㅆ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"]);
 const TENSE: Record<string, string> = { ㄱ: "ㄲ", ㄷ: "ㄸ", ㅂ: "ㅃ", ㅅ: "ㅆ", ㅈ: "ㅉ" };
-const VCOMP: Record<string, string> = {
-  "ㅏㅣ": "ㅐ", "ㅓㅣ": "ㅔ", "ㅑㅣ": "ㅒ", "ㅕㅣ": "ㅖ", "ㅗㅏ": "ㅘ", "ㅗㅐ": "ㅙ", "ㅗㅣ": "ㅚ",
-  "ㅜㅓ": "ㅝ", "ㅜㅔ": "ㅞ", "ㅜㅣ": "ㅟ", "ㅡㅣ": "ㅢ", "ㅘㅣ": "ㅙ", "ㅝㅣ": "ㅞ",
+
+/*
+ * 모음은 천지인: 뽑기에서는 ㆍ(하늘) ㅡ(땅) ㅣ(사람) 셋만 나오고, 누르는 순서대로 겹쳐 모음을 만듦 (폰 천지인 자판과 같은 규칙).
+ *   ㅣ→ㆍ = ㅏ · ㆍ→ㅣ = ㅓ · ㆍ→ㅡ = ㅗ · ㅡ→ㆍ = ㅜ · ㆍ→ㆍ = ᆢ(ㆍㆍ) · ㅏ→ㆍ = ㅑ · ᆢ→ㅣ = ㅕ · ᆢ→ㅡ = ㅛ · ㅜ→ㆍ = ㅠ
+ *   ㅏ→ㅣ = ㅐ · ㅓ→ㅣ = ㅔ · ㅗ→ㅣ = ㅚ → ㆍ = ㅘ → ㅣ = ㅙ · ㅜ→ㅣ = ㅟ · ㅠ→ㅣ = ㅝ → ㅣ = ㅞ · ㅡ→ㅣ = ㅢ
+ * 순서를 거꾸로 눌러도 그쪽 조합이 따로 없으면 받아 줌 (ㆍ→ㅏ 도 ㅑ). 옛 방식 ㅗ+ㅏ = ㅘ 같은 것도 그대로.
+ */
+export const DOT = "ㆍ";
+export const DOTS = "ᆢ";
+const CJI: Record<string, string> = {
+  "ㆍㆍ": DOTS, "ㅣᆢ": "ㅑ", "ㅡᆢ": "ㅠ",
+  "ㅣㆍ": "ㅏ", "ㅏㆍ": "ㅑ", "ㆍㅣ": "ㅓ", "ᆢㅣ": "ㅕ",
+  "ㆍㅡ": "ㅗ", "ᆢㅡ": "ㅛ", "ㅡㆍ": "ㅜ", "ㅜㆍ": "ㅠ",
+  "ㅏㅣ": "ㅐ", "ㅑㅣ": "ㅒ", "ㅓㅣ": "ㅔ", "ㅕㅣ": "ㅖ",
+  "ㅗㅣ": "ㅚ", "ㅚㆍ": "ㅘ", "ㅘㅣ": "ㅙ",
+  "ㅜㅣ": "ㅟ", "ㅠㅣ": "ㅝ", "ㅝㅣ": "ㅞ", "ㅡㅣ": "ㅢ",
+  "ㅗㅏ": "ㅘ", "ㅗㅐ": "ㅙ", "ㅜㅓ": "ㅝ", "ㅜㅔ": "ㅞ",
 };
-const vcomp = (a: string, b: string): string | null => VCOMP[a + b] ?? VCOMP[b + a] ?? null;
+const vcomp = (a: string, b: string): string | null => CJI[a + b] ?? CJI[b + a] ?? null;
+/** 모음 재료 (완성 모음 + ㆍ · ᆢ) */
+export const isVowelish = (j: string) => JUNG.includes(j) || j === DOT || j === DOTS;
+/** 화면에 쓰는 모양 (ㆍ 는 붓글씨 글꼴에서 너무 작고 ᆢ 는 글꼴에 없는 경우가 많아 점으로) */
+export const shown = (j: string) => (j === DOT ? "•" : j === DOTS ? "••" : j);
 
 export const isCons = (j: string) => CHO.includes(j);
 export const compose = (c: string, v: string, f = "") =>
@@ -31,16 +49,34 @@ const BASE_STROKE: Record<string, number> = {
 /** 획 수 (된소리 = 2배, 겹모음 = 합) */
 export function stroke(j: string): number {
   if (!j) return 0;
+  if (j === DOT) return 1;
   if (BASE_STROKE[j]) return BASE_STROKE[j];
   for (const [b, t] of Object.entries(TENSE)) if (t === j) return BASE_STROKE[b] * 2;
-  for (const [k, v] of Object.entries(VCOMP)) if (v === j) return [...k].reduce((s, x) => s + stroke(x), 0);
-  return 2;
+  return 3;
 }
 export const syllableStroke = (ch: string) => decompose(ch).reduce((s, j) => s + stroke(j), 0);
 
 /** 실제 한국어에서 자주 쓰는 자모일수록 잘 나옴 (조사 · 어미에 많이 쓰는 ㅇ ㄴ ㄱ ㄹ, ㅏ ㅣ ㅓ ㅡ) */
 export const CONS_W: Record<string, number> = { ㄱ: 10, ㄴ: 10, ㄷ: 8, ㄹ: 8, ㅁ: 6, ㅂ: 5, ㅅ: 8, ㅇ: 13, ㅈ: 6, ㅊ: 3, ㅋ: 2, ㅌ: 2, ㅍ: 2, ㅎ: 6 };
-export const VOWS_W: Record<string, number> = { ㅏ: 13, ㅑ: 1, ㅓ: 8, ㅕ: 3, ㅗ: 7, ㅛ: 1, ㅜ: 6, ㅠ: 1, ㅡ: 7, ㅣ: 12 };
+/** 천지인 재료: ㆍ 는 거의 모든 모음에 들어가서 가장 잘 나옴 */
+export const VOWS_W: Record<string, number> = { "ㆍ": 40, ㅣ: 38, ㅡ: 22 };
+/**
+ * 자동 짝짓기용 모음 만드는 법 (자주 쓰는 모음일수록 w 큼) — 가진 재료로 되는 것 중에서 고름
+ */
+export const VOWEL_RECIPES: { v: string; need: string[]; w: number }[] = [
+  { v: "ㅏ", need: ["ㅣ", DOT], w: 13 },
+  { v: "ㅣ", need: ["ㅣ"], w: 10 },
+  { v: "ㅓ", need: [DOT, "ㅣ"], w: 8 },
+  { v: "ㅗ", need: [DOT, "ㅡ"], w: 7 },
+  { v: "ㅡ", need: ["ㅡ"], w: 6 },
+  { v: "ㅜ", need: ["ㅡ", DOT], w: 6 },
+  { v: "ㅐ", need: ["ㅣ", DOT, "ㅣ"], w: 3 },
+  { v: "ㅔ", need: [DOT, "ㅣ", "ㅣ"], w: 3 },
+  { v: "ㅕ", need: [DOT, DOT, "ㅣ"], w: 3 },
+  { v: "ㅑ", need: ["ㅣ", DOT, DOT], w: 1 },
+  { v: "ㅛ", need: [DOT, DOT, "ㅡ"], w: 1 },
+  { v: "ㅠ", need: ["ㅡ", DOT, DOT], w: 1 },
+];
 export function pick(W: Record<string, number>, rnd: () => number = Math.random): string {
   const ks = Object.keys(W);
   let r = rnd() * ks.reduce((s, k) => s + W[k], 0);
@@ -70,5 +106,5 @@ export function addToSyllable(s: string, j: string): string | null {
   if (f) return null;
   if (isCons(j)) return OK_JONG.has(j) ? compose(c, v, j) : null;
   const nv = vcomp(v, j);
-  return nv ? compose(c, nv) : null;
+  return nv && JUNG.includes(nv) ? compose(c, nv) : null;
 }
