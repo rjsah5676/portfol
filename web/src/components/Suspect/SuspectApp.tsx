@@ -463,7 +463,7 @@ export default function SuspectApp() {
   return (
     <>
       <GameHeader
-        icon="🕵️"
+        icon="px:suspect"
         title="오늘의 용의자"
         en="Daily Deduction Puzzle"
         accent="#C9A15B"

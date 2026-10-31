@@ -127,7 +127,7 @@ export const NAV_GROUPS: NavGroup[] = [
         image: imgSuspect,
         label: "오늘의 용의자",
         desc: "단서만으로 범인을 가려내는 하루 한 판 추리 퍼즐, 난이도별 일일 랭킹",
-        icon: "🕵️",
+        icon: "px:suspect",
         featured: true,
         badge: "NEW",
       },
