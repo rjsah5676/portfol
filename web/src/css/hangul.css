@@ -790,6 +790,206 @@
   border-radius: 14px;
   padding: 16px;
 }
+/* ── 메인 화면: 한지 두루마리 + 붓글씨 제목 + 모드 둘 ── */
+.hg-title {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  padding: 18px 26px 18px;
+  border-radius: 14px;
+  background: radial-gradient(120% 80% at 50% 0%, #fffdf6 0%, var(--paper) 70%), var(--paper);
+  box-shadow:
+    0 0 0 1px var(--line),
+    0 14px 40px rgba(10, 9, 8, 0.35);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+/* 훈장님 + 양옆 먹물 괴물 */
+.hg-title-art {
+  position: relative;
+  height: 128px;
+  width: 100%;
+  margin-top: -78px;
+}
+.hg-title-teacher {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 150px;
+  height: 150px;
+  margin-left: -75px;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 8px rgba(26, 23, 20, 0.3));
+  animation: hg-bob 3.2s ease-in-out infinite;
+}
+.hg-title-ink {
+  position: absolute;
+  bottom: 6px;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  animation: hg-bob 2.4s ease-in-out infinite;
+}
+.hg-title-ink.i0 {
+  left: calc(50% - 170px);
+  animation-delay: -0.6s;
+}
+.hg-title-ink.i1 {
+  left: calc(50% + 100px);
+  bottom: 30px;
+  width: 44px;
+  height: 44px;
+  animation-delay: -1.2s;
+}
+.hg-title-ink.i2 {
+  left: calc(50% + 140px);
+  animation-delay: -1.8s;
+}
+@keyframes hg-bob {
+  50% {
+    transform: translateY(-5px);
+  }
+}
+.hg-logo {
+  margin: 2px 0 0;
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: clamp(30px, 6.4vw, 46px);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.hg-logo em {
+  font-style: normal;
+  color: var(--red);
+}
+.hg-title-sub {
+  margin: 0;
+  font-size: 14px;
+  color: var(--ink2);
+}
+.hg-title-sub b {
+  color: var(--ink);
+}
+.hg-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+  margin-top: 6px;
+}
+.hg-root .hg-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--ink);
+  background: #fffdf6;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+.hg-root .hg-mode:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 0 var(--ink);
+}
+.hg-mode i {
+  font-style: normal;
+  font-size: 26px;
+  line-height: 1.1;
+}
+.hg-mode b {
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 22px;
+}
+.hg-mode small {
+  font-size: 12px;
+  color: var(--ink2);
+}
+.hg-root .hg-mode.is-solo {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.hg-root .hg-mode.is-solo:hover {
+  box-shadow: 0 4px 0 #8e2a1f;
+}
+.hg-mode.is-solo small {
+  color: rgba(255, 255, 255, 0.85);
+}
+.hg-root .hg-mode.is-vs {
+  border-style: dashed;
+}
+.hg-title .hg-loading {
+  width: 100%;
+  margin-top: 6px;
+}
+.hg-vsnote {
+  margin: 0;
+  min-height: 1.5em;
+  font-size: 13.5px;
+  color: var(--red);
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.hg-vsnote.is-on {
+  opacity: 1;
+}
+.hg-title-rule {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink2);
+}
+.hg-overbtns {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.hg-overbtns .hg-go {
+  flex: 1;
+}
+@media (max-width: 520px) {
+  .hg-title {
+    padding: 14px 14px 14px;
+  }
+  .hg-title-art {
+    height: 104px;
+    margin-top: -60px;
+  }
+  .hg-title-teacher {
+    width: 120px;
+    height: 120px;
+    margin-left: -60px;
+  }
+  .hg-title-ink.i0 {
+    left: calc(50% - 130px);
+  }
+  .hg-title-ink.i1 {
+    left: calc(50% + 70px);
+  }
+  .hg-title-ink.i2 {
+    left: calc(50% + 100px);
+  }
+  .hg-modes {
+    grid-template-columns: 1fr;
+  }
+  .hg-root .hg-mode {
+    padding: 9px 10px 8px;
+  }
+  .hg-mode i {
+    font-size: 20px;
+  }
+}
+
 .hg-card {
   background: var(--paper);
   border-radius: 12px;

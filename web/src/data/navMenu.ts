@@ -5,6 +5,7 @@ import imgMelongame from "@/img/menu/melongame.jpg";
 import imgRspeed from "@/img/menu/rspeed.jpg";
 import imgMine from "@/img/menu/mine.jpg";
 import imgSuspect from "@/img/menu/suspect.jpg";
+import imgHangul from "@/img/menu/hangul.jpg";
 import imgBoard from "@/img/menu/board.jpg";
 import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
@@ -132,11 +133,22 @@ export const NAV_GROUPS: NavGroup[] = [
         badge: "NEW",
       },
       {
+        href: "/games/hangul",
+        image: imgHangul,
+        label: "니들이 한글을 알아?",
+        desc: "자모로 아무 문장이나 지어 먹물 괴물을 막는 한글 문장 디펜스, 대표글 랭킹",
+        icon: "px:hangul",
+        featured: true,
+        badge: "NEW",
+      },
+      {
         href: "/games/sketch",
         image: imgSketch,
         label: "DOODLE PARTY",
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
+        // 메인 큰 그림은 2칸씩이라 짝수로 — 한글 게임(7번째)이 들어와서 두들파티(8번째)도 큰 그림으로
+        featured: true,
       },
       {
         href: "/games/melongame",

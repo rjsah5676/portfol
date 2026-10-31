@@ -136,9 +136,9 @@ export interface Sentence {
  */
 export const DRAW_EVERY = 0.8;
 /** 자음칸에 쌓인 자음이 이만큼이면 자음은 그만 (모음은 계속) */
-export const HOLD_C = 24;
-/** 모음칸에 쌓인 모음 재료가 이만큼이면 모음은 그만 (자음은 계속) */
-export const HOLD_V = 20;
+export const HOLD_C = 48;
+/** 모음칸에 쌓인 모음 재료가 이만큼이면 모음은 그만 (자음은 계속) — 24/20 은 빡빡하다 해서(사용자) 두 배로 */
+export const HOLD_V = 40;
 /** 둘 다 차면 멈춤 (도움말 표시용) */
 export const HOLD_MAX = HOLD_C + HOLD_V;
 /** 시작할 때 쥐고 시작하는 자모 수 */
