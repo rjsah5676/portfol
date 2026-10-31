@@ -130,7 +130,7 @@ export default function Page() {
           <ol className={`${p} list-decimal space-y-1.5 pl-5`}>
             <li>
               밝혀진 사람의 카드를 누르면 단서 전체 문장이 보이고, 그 단서가 가리키는 사람들이
-              노랗게 표시됩니다.
+              호박색으로 빛납니다.
             </li>
             <li>
               단서로 정체가 확실해진 사람을 누르고 <b className="text-white/80">범인이다</b> 또는{" "}
@@ -195,7 +195,7 @@ export default function Page() {
                 className="group rounded-xl border border-white/10 bg-[#1C1E24] px-4 py-3"
               >
                 <summary className="cursor-pointer list-none font-['Nanum_Gothic',sans-serif] text-sm text-white/85 marker:hidden">
-                  <span className="mr-2 font-mono text-[#FFC93C]">Q.</span>
+                  <span className="mr-2 font-mono text-[#C9A15B]">Q.</span>
                   {f.q}
                 </summary>
                 <p className={`${p} mt-2`}>{f.a}</p>
@@ -206,7 +206,7 @@ export default function Page() {
 
         <p className={p}>
           머리를 더 쓰고 싶다면{" "}
-          <Link href="/games/mine/" className="text-[#FFC93C] underline-offset-2 hover:underline">
+          <Link href="/games/mine/" className="text-[#C9A15B] underline-offset-2 hover:underline">
             찍기 없는 지뢰찾기
           </Link>
           도 있어요.

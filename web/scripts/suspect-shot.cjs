@@ -13,7 +13,9 @@ const sharp = require(path.join(web, "node_modules/sharp"));
   await page.goto("http://localhost:3000/games/suspect/");
   await page.waitForSelector(".sp-tier", { timeout: 60000 });
   // 오늘의 보통 사건을 엔진으로 똑같이 만들어 두고, 확정되는 사람만 차례로 지목 (실수 · 힌트 0)
-  const E = await import(require("node:url").pathToFileURL(path.join(web, "src/lib/suspect/engine.ts")).href);
+  const E = await import(
+    require("node:url").pathToFileURL(path.join(web, "src/lib/suspect/engine.ts")).href
+  );
   const day = E.kstDay();
   const pz = E.generate(E.dailySeed(day, "normal"), "normal");
   await page.evaluate(() =>
@@ -45,12 +47,16 @@ const sharp = require(path.join(web, "node_modules/sharp"));
   await page.evaluate((y) => window.scrollTo(0, y), box.top - 110);
   await page.waitForTimeout(500);
   // 메뉴 썸네일 800x500 + 링크 미리보기 1200x630 (lib/og/shots.ts)
-  for (const [w, h, out] of [
-    [800, 500, "src/img/menu/suspect.jpg"],
-    [1200, 630, "assets/og/shots/games__suspect.jpg"],
+  // 메뉴 카드는 작게 보여서 단서 쪽지 · 카드 쪽만 바짝, 링크 미리보기는 화면 전체
+  const info = await page.evaluate(
+    () => document.querySelector(".sp-info").getBoundingClientRect().top
+  );
+  for (const [w, h, out, cw, cy] of [
+    [800, 500, "src/img/menu/suspect.jpg", 560, info - 6],
+    [1200, 630, "assets/og/shots/games__suspect.jpg", 800, 100],
   ]) {
     const buf = await page.screenshot({
-      clip: { x: box.cx - 400, y: 100, width: 800, height: (800 * h) / w },
+      clip: { x: box.cx - cw / 2, y: cy, width: cw, height: (cw * h) / w },
     });
     await sharp(buf).resize(w, h).jpeg({ quality: 82 }).toFile(path.join(web, out));
   }

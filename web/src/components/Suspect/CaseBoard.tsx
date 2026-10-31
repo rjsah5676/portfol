@@ -1,6 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   Board,
   explain,
@@ -10,6 +18,7 @@ import {
   josa,
   PENALTY,
   singleClueSteps,
+  type Person,
   type Puzzle,
   type Verdict,
 } from "@/lib/suspect/engine";
@@ -39,9 +48,20 @@ type Tone = "normal" | "mark" | "bad";
 interface Info {
   body: ReactNode;
   tone: Tone;
+  /** 쪽지에 클립으로 같이 꽂는 초상 (단서를 말한 사람) */
+  pic?: string;
 }
 
 const GUIDED_STEPS = 3;
+
+/** 직업 색 — 초상 배경색과 맞춤 (카드 윗선 · 직업 딱지) */
+const JOB_COLOR: Record<Person["job"], string> = {
+  경찰: "#3d5878",
+  요리사: "#a35f2a",
+  의사: "#2f6b66",
+  교사: "#6b3f62",
+  화가: "#9a4a5c",
+};
 
 export default function CaseBoard({
   puzzle,
@@ -158,16 +178,17 @@ export default function CaseBoard({
     setTarget(guideStep.i);
     setInfo({
       tone: "mark",
+      pic: faceOf(P[guideStep.speaker]),
       body: (
         <>
-          <b className="sp-hand text-[19px]">
+          <b className="sp-hand text-[16px]">
             {guided === 0 ? "카드 읽는 법 · " : `추리 ${guided + 1} · `}
           </b>
           {guided === 0 && (
             <>
-              초록 도장이 찍힌 <b>{sp}</b>
+              청록 도장 '무고'가 찍힌 <b>{sp}</b>
               {josa(sp, "은", "는")} 무고로 밝혀진 사람이에요. 밝혀진 사람 카드에는 단서가 적혀
-              있고, 노랗게 표시된 카드가 그 단서가 가리키는 사람들이에요.{" "}
+              있고, 호박색으로 빛나는 카드가 그 단서가 가리키는 사람들이에요.{" "}
             </>
           )}
           <span className="who">“{puzzle.clues[guideStep.speaker].text}”</span>
@@ -216,7 +237,7 @@ export default function CaseBoard({
         body: (
           <>
             모든 정체가 밝혀진 판이에요. 카드를 누르면 그 사람의 단서를 다시 볼 수 있어요.
-            <small>파란 테두리는 내가 실수했던 사람이에요.</small>
+            <small>남색 테두리는 내가 실수했던 사람이에요.</small>
           </>
         ),
       }
@@ -224,7 +245,7 @@ export default function CaseBoard({
         tone: "normal",
         body: (
           <>
-            밝혀진 사람 카드를 누르면 <b>단서</b>가 여기 뜨고, 가리키는 사람이 노랗게 보여요.
+            밝혀진 사람 카드를 누르면 <b>단서</b>가 여기 뜨고, 가리키는 사람이 빛나요.
             <small>
               모르는 사람을 눌러 지목 · 확실한 사람만!
               {strict && ` 근거 없이 지목해도 실수(+${PENALTY.miss}초)`}
@@ -237,6 +258,7 @@ export default function CaseBoard({
     const p = P[s];
     return {
       tone: "normal",
+      pic: faceOf(p),
       body: (
         <>
           <span className="who">
@@ -259,7 +281,7 @@ export default function CaseBoard({
         setInfo(null);
       } else {
         setFocus(i);
-        setInfo(clueInfo(i, `${x[i] ? "범인" : "무고"} · 노란 카드가 이 단서가 가리키는 사람들`));
+        setInfo(clueInfo(i, `${x[i] ? "범인" : "무고"} · 빛나는 카드가 이 단서가 가리키는 사람들`));
       }
       return;
     }
@@ -350,7 +372,7 @@ export default function CaseBoard({
           tone: "mark",
           body: (
             <>
-              <b className="sp-hand text-[19px]">잘했어요! 이제 혼자 풀어 보세요.</b> 방금 밝혀진{" "}
+              <b className="sp-hand text-[16px]">잘했어요! 이제 혼자 풀어 보세요.</b> 방금 밝혀진{" "}
               {name}의 카드에도 새 단서가 생겼어요.
               <small>
                 막히면 위의 힌트 버튼. 헷갈리는 사람은 “연필 메모”로 범인? · 무고? 표시를 해 둘 수
@@ -366,7 +388,7 @@ export default function CaseBoard({
       setFocus(-1);
       setInfo({
         tone: "mark",
-        body: <b className="sp-hand text-[22px]">모든 용의자의 정체가 밝혀졌어요!</b>,
+        body: <b className="sp-hand text-[19px]">모든 용의자의 정체가 밝혀졌어요!</b>,
       });
       return;
     }
@@ -386,6 +408,7 @@ export default function CaseBoard({
       setFocus(hintState.speaker);
       setInfo({
         tone: "mark",
+        pic: faceOf(P[hintState.speaker]),
         body: (
           <>
             <span className="who">“{puzzle.clues[hintState.speaker].text}”</span>
@@ -408,6 +431,7 @@ export default function CaseBoard({
       const sp = P[st.speaker].name;
       setInfo({
         tone: "mark",
+        pic: faceOf(P[st.speaker]),
         body: (
           <>
             <b>{sp}</b>의 단서를 다시 보세요. 이 단서 하나만으로 정체가 확정되는 사람이 있어요.
@@ -511,6 +535,7 @@ export default function CaseBoard({
         className={`sp-soft sp-info ${shown.tone === "mark" ? "mark" : shown.tone === "bad" ? "bad" : ""}`}
         aria-live="polite"
       >
+        {shown.pic && <img className="sp-info-pic" src={shown.pic} alt="" draggable={false} />}
         {shown.body}
       </div>
 
@@ -554,6 +579,7 @@ export default function CaseBoard({
                   type="button"
                   key={shake?.i === i ? `${i}-${shake.k}` : i}
                   className={cls}
+                  style={{ "--job": JOB_COLOR[p.job] } as CSSProperties}
                   onClick={() => tapCell(i)}
                   aria-label={`${b.code(i)} ${p.name} ${p.job} ${v === 1 ? "범인" : v === 0 ? "무고" : "미확인"}`}
                 >
@@ -594,7 +620,7 @@ export default function CaseBoard({
             }}
           >
             <span className="sp-card block px-6 py-4 text-center">
-              <span className="sp-hand block text-[30px]">잠깐 멈춤</span>
+              <span className="sp-hand block text-[26px]">잠깐 멈춤</span>
               <span className="block text-[13px] text-[var(--ink2)]">
                 누르면 이어서 · 멈춘 동안 시간은 안 흘러요
               </span>
@@ -609,7 +635,7 @@ export default function CaseBoard({
           <div className="flex items-center gap-2.5">
             <img className="sp-face" src={faceOf(P[sel])} alt="" />
             <div className="min-w-0 flex-1 leading-tight">
-              <b className="sp-hand text-[23px]">{P[sel].name}</b>{" "}
+              <b className="sp-hand text-[20px]">{P[sel].name}</b>{" "}
               <span className="text-[13px] text-[var(--ink2)]">
                 {b.code(sel)} · {P[sel].job}
               </span>

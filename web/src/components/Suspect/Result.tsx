@@ -84,7 +84,7 @@ function SharePreview({
 function Confetti() {
   const bits = useMemo(() => {
     const r = rng(42);
-    const colors = ["#ff6b6b", "#ffc93c", "#4ea8de", "#1fa37a", "#9b5de5"];
+    const colors = ["#8e2a2a", "#c98a2b", "#1f5c56", "#3d5878", "#efe3c4"];
     return Array.from({ length: 34 }, (_, i) => ({
       left: `${r() * 100}%`,
       bg: colors[i % colors.length],
@@ -230,7 +230,7 @@ export default function Result({
       <div className={`sp-big-stamp ${perfect ? "perfect" : ""}`}>
         {perfect ? "완벽 해결!" : "사건 해결!"}
       </div>
-      <p className="sp-hand m-0 text-[21px] leading-tight">
+      <p className="sp-hand m-0 text-[18px] leading-tight">
         {daily
           ? `사건 #${caseNo(day)} · ${TIERS[tier].label}`
           : mode === "tutorial"
@@ -275,7 +275,7 @@ export default function Result({
                 <span className="text-[var(--crim)]">{err}</span>
               ) : null}
               {rank && (
-                <div className="sp-hand mt-1 text-[22px]">
+                <div className="sp-hand mt-1 text-[19px]">
                   오늘 {TIERS[tier].label} {rank.pos}위{" "}
                   <span className="text-[16px] text-[var(--ink2)]">/ {rank.total}명</span>
                 </div>

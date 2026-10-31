@@ -111,6 +111,8 @@ function SoundBtn() {
 // ───────────────────────── 로딩 ─────────────────────────
 
 const FACES = ALL_FACES;
+/** 로딩 화면에서 미리 받는 그림 (얼굴 10장 + 책상 나무결) */
+const IMAGES = [...ALL_FACES, "/suspect/desk.webp"];
 
 function useAssets() {
   const [pct, setPct] = useState(0);
@@ -120,10 +122,10 @@ function useAssets() {
     let img = 0;
     let snd = 0;
     let sndTotal = 7;
-    const total = () => FACES.length + sndTotal + 1;
+    const total = () => IMAGES.length + sndTotal + 1;
     let font = 0;
     const bump = () => !off && setPct(Math.round(((img + snd + font) / total()) * 100));
-    const faces = FACES.map(
+    const faces = IMAGES.map(
       (src) =>
         new Promise<void>((ok) => {
           const im = new Image();
@@ -141,7 +143,7 @@ function useAssets() {
       bump();
     });
     const fonts = Promise.race([
-      document.fonts?.load('700 20px "Gaegu"').catch(() => {}) ?? Promise.resolve(),
+      document.fonts?.load('700 20px "Gowun Batang"').catch(() => {}) ?? Promise.resolve(),
       new Promise((ok) => setTimeout(ok, 2500)),
     ]).then(() => {
       font = 1;
@@ -173,7 +175,7 @@ function Loading({ pct }: { pct: number }) {
           />
         ))}
       </div>
-      <p className="sp-hand m-0 text-[26px]">사건 파일을 펼치는 중…</p>
+      <p className="sp-hand m-0 text-[22px]">사건 파일을 펼치는 중…</p>
       <div className="sp-loadbar w-[240px]">
         <i style={{ width: `${pct}%` }} />
       </div>
@@ -338,7 +340,7 @@ export default function SuspectApp() {
   const pill = (on: boolean) =>
     `cursor-pointer rounded-full border px-3 py-1 text-xs ${
       on
-        ? "border-[#FFC93C] bg-[#FFC93C]/15 font-bold text-white"
+        ? "border-[#C9A15B] bg-[#C9A15B]/15 font-bold text-white"
         : "border-white/10 text-white/55 hover:text-white"
     }`;
 
@@ -362,7 +364,7 @@ export default function SuspectApp() {
         >
           ←
         </button>
-        <span className="sp-chip" style={{ borderColor: TIER_COLOR[run.tier] }}>
+        <span className="sp-chip" style={{ borderLeftColor: TIER_COLOR[run.tier] }}>
           {label}
         </span>
         <SoundBtn />
@@ -373,14 +375,14 @@ export default function SuspectApp() {
         <div className="flex min-h-[380px] flex-col items-center justify-center gap-3 text-center">
           {genErr ? (
             <>
-              <p className="sp-hand m-0 text-[24px]">사건 파일을 만들지 못했어요</p>
+              <p className="sp-hand m-0 text-[20px]">사건 파일을 만들지 못했어요</p>
               <button type="button" className="sp-btn" onClick={() => start(run)}>
                 다시 시도
               </button>
             </>
           ) : (
             <>
-              <p className="sp-hand m-0 text-[26px]">용의자를 불러 모으는 중…</p>
+              <p className="sp-hand m-0 text-[22px]">용의자를 불러 모으는 중…</p>
               <p className="m-0 text-[13px] text-[var(--ink2)]">
                 {run.tier === "hell"
                   ? "지옥 난이도는 조건이 까다로워서 몇 초 걸릴 수 있어요"
@@ -464,7 +466,7 @@ export default function SuspectApp() {
         icon="🕵️"
         title="오늘의 용의자"
         en="Daily Deduction Puzzle"
-        accent="#FFC93C"
+        accent="#C9A15B"
         desc="단서만으로 범인을 가려내는 하루 한 판 추리 퍼즐"
         tags={["데일리 퍼즐", "논리 추리", "4단계 난이도", "날마다 랭킹"]}
         className="w-full max-w-[560px]"
@@ -572,7 +574,7 @@ function Home({
           style={{ left: "50%", top: -10, translate: "-50% 0", rotate: "-3deg" }}
         />
         <div className="text-[13px] text-[var(--ink2)]">{dayLabel(today)} 사건 파일</div>
-        <h2 className="sp-hand m-0 text-[34px] leading-tight">오늘의 사건 #{caseNo(today)}</h2>
+        <h2 className="sp-hand m-0 text-[29px] leading-tight">오늘의 사건 #{caseNo(today)}</h2>
         <p className="m-0 text-[13.5px] break-keep text-[var(--ink2)]">
           누가 범인이고 누가 무고할까? 밝혀진 사람의 단서만 믿고 한 명씩 가려내세요.
         </p>
@@ -591,7 +593,7 @@ function Home({
           onClick={onTutorial}
         >
           <span className="sp-tape yellow" style={{ right: 18, top: -9, rotate: "6deg" }} />
-          <b className="sp-hand block text-[24px]">처음이세요? 입문 사건부터 (2분)</b>
+          <b className="sp-hand block text-[20px]">처음이세요? 입문 사건부터 (2분)</b>
           <span className="block text-[13.5px] break-keep text-[var(--ink2)]">
             12명짜리 작은 사건에서 단서 읽는 법을 하나씩 짚어 드려요. 벌점도 랭킹도 없어요.
           </span>
@@ -601,7 +603,7 @@ function Home({
 
       {/* 규칙 세 줄 */}
       <div className="sp-soft px-4 py-3 text-[13.5px] leading-relaxed break-keep">
-        <b className="sp-hand text-[19px]">규칙은 세 가지뿐</b>
+        <b className="sp-hand text-[16px]">규칙은 세 가지뿐</b>
         <ol className="m-0 mt-1 list-decimal pl-5">
           <li>
             모든 사람은 <b className="text-[var(--crim)]">범인</b> 아니면{" "}
@@ -619,7 +621,7 @@ function Home({
       {/* 오늘의 사건 4단계 */}
       <div>
         <div className="mb-2 flex items-end justify-between">
-          <b className="sp-hand text-[22px]">오늘의 사건 · 난이도</b>
+          <b className="sp-hand text-[19px]">오늘의 사건 · 난이도</b>
           <button
             type="button"
             className="sp-btn sp-btn-sm sp-btn-ghost"
@@ -638,7 +640,7 @@ function Home({
                 key={t}
                 type="button"
                 className="sp-card sp-tier cursor-pointer"
-                style={{ borderColor: TIER_COLOR[t] }}
+                style={{ borderTopColor: TIER_COLOR[t] }}
                 onClick={() => onDaily(t)}
               >
                 <span className="sp-dots">{"●".repeat(DOTS[t]) + "○".repeat(4 - DOTS[t])}</span>
@@ -662,14 +664,14 @@ function Home({
             );
           })}
         </div>
-        <p className="mt-2 mb-0 text-center text-[12px] break-keep text-[var(--ink3)]">
+        <p className="mt-2 mb-0 text-center text-[12px] break-keep text-[var(--ink2)]">
           같은 날 같은 난이도는 모두에게 같은 사건 · 자정(한국 시간)에 새 사건 · 랭킹엔 첫 풀이만
         </p>
       </div>
 
       {/* 연습 · 입문 */}
       <div className="sp-soft flex flex-col gap-2 px-4 py-3">
-        <b className="sp-hand text-[20px]">연습 사건 (랭킹 없음 · 무제한)</b>
+        <b className="sp-hand text-[17px]">연습 사건 (랭킹 없음 · 무제한)</b>
         <span className="text-[12.5px] text-[var(--ink2)]">
           근거 없이 지목해도 벌점 없이 알려 줘요. 감 잡기에 좋아요.
         </span>
