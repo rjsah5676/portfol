@@ -102,10 +102,16 @@ export function joinJamo(a: string, b: string): { jamo: string } | { syllable: s
   return null;
 }
 
-/** 글자에 자모 붙이기 (받침 · 겹모음), 안 되면 null */
+/** 겹받침: 받침 있는 글자에 자음 하나 더 (어+ㅂ=업 → 업+ㅅ=없) */
+const JONG2: Record<string, string> = {
+  "ㄱㅅ": "ㄳ", "ㄴㅈ": "ㄵ", "ㄴㅎ": "ㄶ", "ㄹㄱ": "ㄺ", "ㄹㅁ": "ㄻ", "ㄹㅂ": "ㄼ",
+  "ㄹㅅ": "ㄽ", "ㄹㅌ": "ㄾ", "ㄹㅍ": "ㄿ", "ㄹㅎ": "ㅀ", "ㅂㅅ": "ㅄ",
+};
+
+/** 글자에 자모 붙이기 (받침 · 겹받침 · 모음 바꾸기), 안 되면 null */
 export function addToSyllable(s: string, j: string): string | null {
   const [c, v, f] = decompose(s);
-  if (f) return null;
+  if (f) return isCons(j) && JONG2[f + j] ? compose(c, v, JONG2[f + j]) : null;
   if (isCons(j)) return OK_JONG.has(j) ? compose(c, v, j) : null;
   const nv = vcomp(v, j);
   return nv && JUNG.includes(nv) ? compose(c, nv) : null;

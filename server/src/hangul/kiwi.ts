@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
-import { gradeOf, hangulLen, isContent, LINE_RE, sentencePoints, type Judge, type Morph } from "../../../web/src/lib/hangul/judge";
+import { GRADES, gradeOf, hangulLen, isContent, LINE_RE, sentencePoints, type Judge, type Morph } from "../../../web/src/lib/hangul/judge";
 
 /*
  * 니들이 한글을 알아? 판정기 — 한국어 형태소 분석기 Kiwi (npm kiwi-nlp, wasm) 를 서버에서 돌림.
@@ -21,6 +21,7 @@ const SLANG: { word: string; tag: string }[] = [
   ["현타", "NNG"], ["멘붕", "NNG"], ["뇌절", "NNG"], ["개쩔", "VA"], ["쩔", "VA"],
   ["존잘", "NNG"], ["존예", "NNG"], ["썸", "NNG"], ["눈팅", "NNG"], ["버카충", "NNG"], ["갑분싸", "NNG"],
   ["졸귀", "NNG"], ["개이득", "NNG"], ["이불킥", "NNG"], ["월급루팡", "NNG"],
+  ["건모", "NNP"], // 사이트 주인 이름 (건모님 · 건모야)
 ].map(([word, tag]) => ({ word, tag }));
 
 type Kiwi = { analyze(s: string): { score: number; tokens: { str: string; tag: string; senseId: number }[] } };
@@ -63,19 +64,32 @@ const toMorph = (t: { str: string; tag: string; senseId: number }): Morph => ({
 });
 
 /**
+ * 문장의 끝: 종결어미(~다 · ~요 · ~네) 말고도
+ *   부르는 말 — 호격조사(철수야 · 민수야)나 "~님"(선생님 · 부장님) 으로 끝남
+ *   감탄사만으로 된 말 (여보세요 · 아이고)
+ */
+function endsSentence(m: Morph[]) {
+  const last = m[m.length - 1];
+  if (!last) return false;
+  if (last.t === "EF" || last.t === "JKV") return m.length >= 2;
+  if (last.t === "XSN" && last.f === "님") return m.length >= 2 && /^(NN|NP)/.test(m[m.length - 2].t);
+  // 감탄사만: 세 글자 이상 (아아 · 으아 같은 두 글자 감탄사가 추천을 다 채우지 않게)
+  return m.every((x) => x.t === "IC") && m.map((x) => x.f).join("").length >= 3;
+}
+
+/**
  * 문장으로 읽기: 끝에 마침표를 붙이면 문장 끝 "다"를 연결어미 대신 종결어미로 읽음.
- * 문장 = 두 글자 이상 · 모르는 말 없음 · 종결어미로 끝남 · 말맛이 외계어 아님
+ * 문장 = 두 글자 이상 · 모르는 말 없음 · 문장의 끝(endsSentence) · 말맛이 외계어 아님
  */
 function readSentence(k: Kiwi, text: string) {
   const r = k.analyze(`${text}.`);
   const morphs = r.tokens.filter((t) => t.tag !== "SF").map(toMorph);
-  const nat = Math.round((r.score / Math.max(1, hangulLen(text))) * 100) / 100;
-  const sentence =
-    hangulLen(text) >= 2 &&
-    morphs.length >= 2 &&
-    morphs.every((m) => m.k) &&
-    morphs[morphs.length - 1].t === "EF" &&
-    !!gradeOf(nat);
+  let nat = Math.round((r.score / Math.max(1, hangulLen(text))) * 100) / 100;
+  // 부르는 말(~님 · ~야)은 사전에 없는 이름을 이상하게 쪼개서(건모님 → 건/모/님) 말맛이 낮게 나옴 → 최소 "억지"로 쳐 줌
+  // (모르는 말이 섞이면 어차피 아래에서 걸러짐)
+  const last = morphs[morphs.length - 1];
+  if (last && (last.t === "JKV" || (last.t === "XSN" && last.f === "님"))) nat = Math.max(nat, GRADES[GRADES.length - 1].min);
+  const sentence = hangulLen(text) >= 2 && morphs.every((m) => m.k) && endsSentence(morphs) && !!gradeOf(nat);
   return { morphs, nat, sentence, points: sentence ? sentencePoints(text, morphs, nat) : 0 };
 }
 
