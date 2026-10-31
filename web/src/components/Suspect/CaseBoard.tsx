@@ -54,6 +54,45 @@ interface Info {
 
 const GUIDED_STEPS = 3;
 
+/** 글 폭을 글자 크기(em) 단위로 어림 — 한글은 거의 정사각, 공백 · 영숫자 · 문장부호는 좁음 */
+const textEm = (t: string) =>
+  [...t].reduce(
+    (s, ch) =>
+      s + (/\s/.test(ch) ? 0.3 : /[가-힣]/.test(ch) ? 0.96 : /[\w]/.test(ch) ? 0.58 : 0.45),
+    0
+  );
+
+/** 한 줄로 고정되는 글 — 칸 너비에 맞춰 글씨가 작아짐 (줄바꿈으로 쪽지 높이가 들쑥날쑥하지 않게) */
+function Fit({ text, className = "" }: { text: string; className?: string }) {
+  return (
+    <span className={`fit ${className}`} style={{ "--n": textEm(text) } as CSSProperties}>
+      {text}
+    </span>
+  );
+}
+const Quote = ({ text }: { text: string }) => <Fit className="q" text={`“${text}”`} />;
+
+/** 안내판 기본 꼴: 머리말 · 본문 한 줄 · 보조 한 줄 (늘 같은 높이) */
+function Lines({
+  head,
+  main,
+  sub,
+  quote,
+}: {
+  head: ReactNode;
+  main: string;
+  sub?: string;
+  quote?: boolean;
+}) {
+  return (
+    <>
+      <span className="who">{head}</span>
+      {quote ? <Quote text={main} /> : <Fit className="q" text={main} />}
+      <Fit className="sub" text={sub || " "} />
+    </>
+  );
+}
+
 /** 직업 색 — 초상 배경색과 맞춤 (카드 윗선 · 직업 딱지) */
 const JOB_COLOR: Record<Person["job"], string> = {
   경찰: "#3d5878",
@@ -171,7 +210,6 @@ export default function CaseBoard({
 
   useEffect(() => {
     if (!guideStep) return;
-    const sp = P[guideStep.speaker].name;
     const who = P[guideStep.i].name;
     /* eslint-disable react-hooks/set-state-in-effect -- 튜토리얼 단계가 바뀔 때마다 안내를 새로 띄움 */
     setFocus(guideStep.speaker);
@@ -181,23 +219,16 @@ export default function CaseBoard({
       pic: faceOf(P[guideStep.speaker]),
       body: (
         <>
-          <b className="sp-hand text-[16px]">
-            {guided === 0 ? "카드 읽는 법 · " : `추리 ${guided + 1} · `}
-          </b>
-          {guided === 0 && (
-            <>
-              청록 도장 '무고'가 찍힌 <b>{sp}</b>
-              {josa(sp, "은", "는")} 무고로 밝혀진 사람이에요. 밝혀진 사람 카드에는 단서가 적혀
-              있고, 호박색으로 빛나는 카드가 그 단서가 가리키는 사람들이에요.{" "}
-            </>
-          )}
-          <span className="who">“{puzzle.clues[guideStep.speaker].text}”</span>
-          {explain(P, x, puzzle.clues[guideStep.speaker], guideStep.i, guideStep.v)}
-          <small>
-            → 반짝이는 <b>{who}</b>
-            {josa(who, "을", "를")} 눌러서 <b>{guideStep.v ? "범인이다" : "무고하다"}</b>를 골라
-            보세요.
-          </small>
+          <span className="who">
+            추리 {guided + 1}/{GUIDED_STEPS} · 반짝이는 {who}
+            {josa(who, "을", "를")} {guideStep.v ? "범인" : "무고"}
+            {guideStep.v ? "으로" : "로"} 지목해 보세요
+          </span>
+          <Quote text={puzzle.clues[guideStep.speaker].text} />
+          <span className="why">
+            {guided === 0 && "빛나는 카드들이 이 단서가 가리키는 사람이에요. "}
+            {explain(P, x, puzzle.clues[guideStep.speaker], guideStep.i, guideStep.v)}
+          </span>
         </>
       ),
     });
@@ -235,22 +266,25 @@ export default function CaseBoard({
     ? {
         tone: "normal",
         body: (
-          <>
-            모든 정체가 밝혀진 판이에요. 카드를 누르면 그 사람의 단서를 다시 볼 수 있어요.
-            <small>남색 테두리는 내가 실수했던 사람이에요.</small>
-          </>
+          <Lines
+            head="다 푼 사건 파일"
+            main="카드를 누르면 그 사람의 단서를 다시 볼 수 있어요"
+            sub="남색 테두리 = 내가 실수했던 사람"
+          />
         ),
       }
     : {
         tone: "normal",
         body: (
-          <>
-            밝혀진 사람 카드를 누르면 <b>단서</b>가 여기 뜨고, 가리키는 사람이 빛나요.
-            <small>
-              모르는 사람을 눌러 지목 · 확실한 사람만!
-              {strict && ` 근거 없이 지목해도 실수(+${PENALTY.miss}초)`}
-            </small>
-          </>
+          <Lines
+            head="사건 파일"
+            main="밝혀진 사람 카드를 누르면 단서가 여기 떠요"
+            sub={
+              strict
+                ? `확실한 사람만 지목 · 근거 없이 찍으면 실수 +${PENALTY.miss}초`
+                : "모르는 사람을 눌러 지목 · 확실한 사람만"
+            }
+          />
         ),
       };
 
@@ -264,7 +298,8 @@ export default function CaseBoard({
           <span className="who">
             {b.code(s)} {p.name} · {p.job}
           </span>
-          “{puzzle.clues[s].text}”<small>{extra}</small>
+          <Quote text={puzzle.clues[s].text} />
+          <Fit className="sub" text={extra} />
         </>
       ),
     };
@@ -318,12 +353,13 @@ export default function CaseBoard({
       if (f === -1 && !strict) {
         setInfo({
           tone: "bad",
+          pic: faceOf(P[i]),
           body: (
-            <>
-              아직 {name}
-              {josa(name, "을", "를")} 확정할 근거가 없어요.
-              <small>다른 단서부터 살펴보세요. (연습이라 벌점은 없어요)</small>
-            </>
+            <Lines
+              head="근거 부족"
+              main={`아직 ${name}${josa(name, "을", "를")} 확정할 근거가 없어요`}
+              sub="다른 단서부터 살펴보세요 · 연습이라 벌점 없음"
+            />
           ),
         });
         setSel(-1);
@@ -334,21 +370,20 @@ export default function CaseBoard({
       setSel(-1);
       setInfo({
         tone: "bad",
+        pic: faceOf(P[i]),
         body:
           f === -1 ? (
-            <>
-              {name}
-              {josa(name, "은", "는")} 아직 확정할 근거가 없어요. 실수 +1
-              <small>
-                찍기는 실수로 쳐요 (+{PENALTY.miss}초). 정답 여부는 알려 주지 않아요 — 단서로
-                확실해질 때 지목하세요.
-              </small>
-            </>
+            <Lines
+              head="실수 +1 · 근거 부족"
+              main={`${name}${josa(name, "은", "는")} 아직 확정할 근거가 없어요`}
+              sub={`찍기는 실수(+${PENALTY.miss}초) · 정답 여부는 알려 주지 않아요`}
+            />
           ) : (
-            <>
-              틀렸어요. 실수 +1
-              <small>{strict ? `+${PENALTY.miss}초. ` : ""}단서를 다시 맞춰 보세요.</small>
-            </>
+            <Lines
+              head="실수 +1"
+              main="틀렸어요. 단서를 다시 맞춰 보세요"
+              sub={strict ? `기록에 +${PENALTY.miss}초` : "연습이라 기록엔 영향 없어요"}
+            />
           ),
       });
       return;
@@ -370,15 +405,13 @@ export default function CaseBoard({
         setFocus(i);
         setInfo({
           tone: "mark",
+          pic: faceOf(P[i]),
           body: (
-            <>
-              <b className="sp-hand text-[16px]">잘했어요! 이제 혼자 풀어 보세요.</b> 방금 밝혀진{" "}
-              {name}의 카드에도 새 단서가 생겼어요.
-              <small>
-                막히면 위의 힌트 버튼. 헷갈리는 사람은 “연필 메모”로 범인? · 무고? 표시를 해 둘 수
-                있어요.
-              </small>
-            </>
+            <Lines
+              head="잘했어요! 이제 혼자 풀어 보세요"
+              main={`방금 밝혀진 ${name}의 카드에도 새 단서가 생겼어요`}
+              sub="막히면 힌트 · 헷갈리면 연필 메모로 범인? 무고? 표시"
+            />
           ),
         });
       }
@@ -388,7 +421,13 @@ export default function CaseBoard({
       setFocus(-1);
       setInfo({
         tone: "mark",
-        body: <b className="sp-hand text-[19px]">모든 용의자의 정체가 밝혀졌어요!</b>,
+        body: (
+          <Lines
+            head="사건 종결"
+            main="모든 용의자의 정체가 밝혀졌어요!"
+            sub="보고서를 정리하는 중…"
+          />
+        ),
       });
       return;
     }
@@ -411,9 +450,10 @@ export default function CaseBoard({
         pic: faceOf(P[hintState.speaker]),
         body: (
           <>
-            <span className="who">“{puzzle.clues[hintState.speaker].text}”</span>
-            {explain(P, x, puzzle.clues[hintState.speaker], hintState.i, hintState.v)}
-            <small>반짝이는 사람을 지목해 보세요.</small>
+            <Quote text={puzzle.clues[hintState.speaker].text} />
+            <span className="why">
+              {explain(P, x, puzzle.clues[hintState.speaker], hintState.i, hintState.v)}
+            </span>
           </>
         ),
       });
@@ -433,11 +473,12 @@ export default function CaseBoard({
         tone: "mark",
         pic: faceOf(P[st.speaker]),
         body: (
-          <>
-            <b>{sp}</b>의 단서를 다시 보세요. 이 단서 하나만으로 정체가 확정되는 사람이 있어요.
-            <span className="who">“{puzzle.clues[st.speaker].text}”</span>
-            <small>힌트를 한 번 더 누르면 누구인지와 이유까지 알려 줘요.</small>
-          </>
+          <Lines
+            head={`힌트 · ${sp}의 단서를 다시 보세요`}
+            main={puzzle.clues[st.speaker].text}
+            quote
+            sub="이 단서 하나로 확정되는 사람이 있어요 · 한 번 더 누르면 이유까지"
+          />
         ),
       });
       return;
@@ -452,16 +493,13 @@ export default function CaseBoard({
     const who = P[t.i].name;
     setInfo({
       tone: "mark",
+      pic: faceOf(P[t.i]),
       body: (
-        <>
-          지금은 단서 여러 개를 함께 봐야 해요. 반짝이는 <b>{who}</b>
-          {josa(who, "은", "는")} 확정할 수 있어요.
-          <small>
-            {who}
-            {josa(who, "을", "를")} 가리키는 단서들을 눌러 보면서, {who}
-            {josa(who, "이", "가")} 범인일 때와 무고일 때 중 말이 안 되는 쪽을 찾아보세요.
-          </small>
-        </>
+        <Lines
+          head="힌트 · 단서 여러 개를 엮어야 해요"
+          main={`반짝이는 ${who}${josa(who, "은", "는")} 지금 확정할 수 있어요`}
+          sub={`${who}${josa(who, "을", "를")} 가리키는 단서들을 겹쳐서 모순을 찾아보세요`}
+        />
       ),
     });
   }
@@ -535,8 +573,14 @@ export default function CaseBoard({
         className={`sp-soft sp-info ${shown.tone === "mark" ? "mark" : shown.tone === "bad" ? "bad" : ""}`}
         aria-live="polite"
       >
-        {shown.pic && <img className="sp-info-pic" src={shown.pic} alt="" draggable={false} />}
-        {shown.body}
+        {shown.pic ? (
+          <img className="sp-info-pic" src={shown.pic} alt="" draggable={false} />
+        ) : (
+          <span className="sp-info-pic empty" aria-hidden>
+            ?
+          </span>
+        )}
+        <div className="sp-info-body">{shown.body}</div>
       </div>
 
       {/* 보드 */}

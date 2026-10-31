@@ -534,7 +534,7 @@ function makeClue(
     return {
       S,
       A: exact(S.length, k),
-      text: `${scope} ${whoW}${josa(whoW, "은", "는")} ${kk === 0 ? "한 명도 없어" : `정확히 ${kk}명이야`}`,
+      text: `${scope} ${whoW}${josa(whoW, "은", "는")} ${kk === 0 ? "한 명도 없어" : `${kk}명이야`}`,
       short: [sscope, `${inn ? "무고" : "범인"} ${kk}`],
       type: t,
     };
@@ -576,13 +576,9 @@ function makeClue(
               : range(b.cols - 1 - tc).map((q) => b.idx(tr, tc + 1 + q));
       if (S.length < 2) return retry();
       const word = ["위쪽", "아래쪽", "왼쪽", "오른쪽"][d];
-      const subj = t === me ? "내" : `${name(t)}의`;
-      return count(
-        S,
-        `${subj} ${word}에 있는 사람 중`,
-        `${t === me ? "내" : name(t)} ${word}`,
-        "dir"
-      );
+      // 문장은 짧게 (폰에서도 안내판 한 줄에 들어가게)
+      const subj = t === me ? "내" : name(t);
+      return count(S, `${subj} ${word}에서`, `${t === me ? "내" : name(t)} ${word}`, "dir");
     }
     case "job": {
       const jobs = [...new Set(P.map((p) => p.job))];
@@ -595,9 +591,9 @@ function makeClue(
       );
     }
     case "edge":
-      return count([...b.edge], "테두리에 있는 사람 중", "테두리", "edge");
+      return count([...b.edge], "테두리에서", "테두리", "edge");
     case "corner":
-      return count([...b.corners], "네 귀퉁이에 있는 사람 중", "네 귀퉁이", "corner");
+      return count([...b.corners], "네 귀퉁이에서", "네 귀퉁이", "corner");
     case "xor":
     case "same":
     case "diff": {
