@@ -44,9 +44,12 @@
 .hg-grid { display: grid; gap: 5px; }
 .hg-grid-w { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .hg-grid-s { grid-template-columns: repeat(8, minmax(0, 1fr)); }
-.hg-grid-c { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.hg-grid-v { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.hg-jamo { display: grid; grid-template-columns: 5fr 3fr; gap: 10px; }
+/* 자음칸 19자리(기본 14 + 된소리 5) · 모음칸 10자리(천지인 4 + 만든 모음 6), 자판처럼 늘 같은 자리 */
+.hg-grid-c { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.hg-grid-v { grid-template-columns: repeat(10, minmax(0, 1fr)); }
+.hg-jamo { display: flex; flex-direction: column; gap: 8px; }
+.hg-jamo .hg-slot { height: 40px; }
+.hg-glyph.is-ph { opacity: 0.22; }
 .hg-n {
   position: absolute;
   right: 3px;
@@ -108,13 +111,32 @@
 .hg-morphs .is-unk, .hg-morphs .is-unk small { color: var(--red); }
 .hg-msg { margin: 4px 0 6px; min-height: 2.6em; font-size: 12.5px; line-height: 1.3; color: var(--ink2); }
 .hg-msg.is-ok { color: var(--red); font-weight: 700; }
-/* 문장칸: 완성한 문장이 남는 자리 (원고지 아래) */
-.hg-shelf { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+/* 문장칸 = 글 (원고지 아래): 끝없이 쌓이고 안에서 스크롤 · ▲▼ 로 순서 바꾸기 */
+.hg-shelf { position: relative; margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
 .hg-shelf h3 small { font-family: var(--body); color: var(--ink2); opacity: 0.8; }
+.hg-shelf > .hg-sbar { position: static; display: block; height: 2px; }
+.hg-shelf-list {
+  max-height: 168px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+.hg-link { margin: 0; padding-left: 14px; font-size: 11px; line-height: 1.5; color: var(--ink2); }
+.hg-link span { margin-right: 6px; letter-spacing: -1px; }
+.hg-link.l1 { color: #a3611e; }
+.hg-link.l2 { color: var(--red); font-weight: 700; }
+.hg-link.l0 { opacity: 0.6; }
+.hg-sact { display: inline-flex; gap: 2px; }
+.hg-sact button { width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 5px; background: #fffdf6; font-size: 10px; line-height: 1; padding: 0; }
+.hg-sact button:disabled { opacity: 0.25; }
 .hg-sent {
   position: relative;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   min-height: 30px;

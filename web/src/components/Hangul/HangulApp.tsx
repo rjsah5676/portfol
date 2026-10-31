@@ -11,6 +11,8 @@ import {
   bindWord,
   CAP,
   combine,
+  CONS_SLOTS,
+  VOWEL_SLOTS,
   draw,
   DRAW_COST,
   finishSentence,
@@ -20,10 +22,15 @@ import {
   load,
   LOAD_MAX,
   newGame,
+  dropSentence,
+  linkBonus,
+  links,
+  moveSentence,
   POS_STYLE,
   READ_SEC,
   score,
-  SHELF_MAX,
+  SHELF_ID,
+  writingPower,
   sell,
   setPath,
   statsOf,
@@ -88,6 +95,13 @@ export default function HangulApp() {
   const fieldRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const posRef = useRef(new Map<number, { x: number; y: number }>());
+  const shelfRef = useRef<HTMLDivElement>(null);
+  // 새 문장이 글 끝에 붙으면 목록을 맨 아래로
+  const shelfLen = g.shelf.length;
+  useEffect(() => {
+    const el = shelfRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [shelfLen]);
   const speedRef = useRef(1);
   const phaseRef = useRef(phase);
   useEffect(() => {
@@ -283,6 +297,7 @@ export default function HangulApp() {
 
   const ld = load(g);
   const cells = lineCells(g);
+  const lk = links(g);
   const selU = sel ? g.zones[sel.z][sel.i] : null;
   const note =
     g.note && g.t - g.note.at < 2.5
@@ -314,6 +329,8 @@ export default function HangulApp() {
     const on = sel?.z === z && sel.i === i;
     const st = u ? statsOf(g, u) : null;
     const len = u ? [...u.text].length : 0;
+    // 자음칸 · 모음칸의 고정 자리는 비어 있어도 그 자리 글자를 흐리게 보여 줌 (자판처럼)
+    const ph = z === "c" ? CONS_SLOTS[i] : z === "v" ? VOWEL_SLOTS[i] : undefined;
     return (
       <button
         key={i}
@@ -324,6 +341,7 @@ export default function HangulApp() {
         aria-label={u ? u.text : "빈 칸"}
         style={st && "color" in st && u?.kind === "w" ? { color: st.color } : undefined}
       >
+        {!u && ph && <span className={`hg-glyph is-ph${shown(ph) !== ph ? " is-dot" : ""}`}>{shown(ph)}</span>}
         {u && (
           <>
             <span
@@ -418,24 +436,48 @@ export default function HangulApp() {
                 문장 완성!
               </button>
             </div>
-            {/* 문장칸: 완성한 문장이 남아 {READ_SEC}초마다 판 전체에 다시 낭독 */}
-            <div className="hg-shelf">
+            {/* 문장칸 = 글: 완성한 문장이 끝없이 쌓이고(스크롤) 순서를 바꿀 수 있음. 글 전체가 READ_SEC 초마다 낭독 */}
+            <div className="hg-shelf" data-uid={SHELF_ID}>
               <h3>
-                문장칸 <small>{g.shelf.length}/{SHELF_MAX} · {READ_SEC}초마다 전체 낭독 · 꽉 차면 점수 낮은 문장이 밀려나요</small>
+                문장칸 · 글 <small>
+                  {g.shelf.length}문장 · 낭독 {fmt(writingPower(g) * g.power)} · 이음 +{fmt(linkBonus(g))}점
+                </small>
               </h3>
-              {Array.from({ length: SHELF_MAX }, (_, k) => {
-                const u = g.shelf[k];
-                return u ? (
-                  <div key={u.id} className="hg-sent" data-uid={u.id}>
-                    <span className={`hg-sgrade g-${(u.grade ?? "").replace(" ", "")}`}>{u.grade}</span>
-                    <span className="hg-stext">{u.text}.</span>
-                    <b>{fmt(u.points ?? 0)}</b>
-                    <i className="hg-sbar" style={{ transform: `scaleX(${1 - Math.max(0, Math.min(1, u.cd))})` }} />
+              <i className="hg-sbar" style={{ transform: `scaleX(${g.shelf.length ? 1 - Math.max(0, Math.min(1, g.readCd)) : 0})` }} />
+              <div className="hg-shelf-list" ref={shelfRef}>
+                {!g.shelf.length && <p className="hg-dim">완성한 문장이 여기 차례로 쌓여 한 편의 글이 돼요. 앞뒤가 이어지면 이음 점수!</p>}
+                {g.shelf.map((u, k) => (
+                  <div key={u.id}>
+                    {k > 0 && (
+                      <p className={`hg-link l${lk[k - 1].level}`}>
+                        <span>{lk[k - 1].level === 2 ? "●●" : lk[k - 1].level === 1 ? "●○" : "○○"}</span>
+                        {lk[k - 1].why.length ? lk[k - 1].why.join(" · ") : "안 이어짐"}
+                      </p>
+                    )}
+                    <div className="hg-sent">
+                      <span className={`hg-sgrade g-${(u.grade ?? "").replace(" ", "")}`}>{u.grade}</span>
+                      <span className="hg-stext">{u.text}.</span>
+                      <b>{fmt(u.points ?? 0)}</b>
+                      <span className="hg-sact">
+                        <button type="button" onClick={() => (moveSentence(g, k, -1), refresh())} disabled={k === 0} aria-label="위로">
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => (moveSentence(g, k, 1), refresh())}
+                          disabled={k === g.shelf.length - 1}
+                          aria-label="아래로"
+                        >
+                          ▼
+                        </button>
+                        <button type="button" onClick={() => (dropSentence(g, k), refresh())} aria-label="글에서 빼기">
+                          ✕
+                        </button>
+                      </span>
+                    </div>
                   </div>
-                ) : (
-                  <div key={`e${k}`} className="hg-sent is-empty" />
-                );
-              })}
+                ))}
+              </div>
             </div>
           </section>
           <div className="hg-right">
@@ -478,7 +520,7 @@ export default function HangulApp() {
               <p>
                 {g.wave}웨이브 · 문장 {g.sentences.length}개 · 점수 <b>{fmt(score(g))}</b>
                 <br />
-                <small>(문장 점수 {fmt(g.points)} + 웨이브 {g.wave} × {HANGUL_WAVE_PTS})</small>
+                <small>(문장 점수 {fmt(g.points)} + 이음 {fmt(linkBonus(g))} + 웨이브 {g.wave} × {HANGUL_WAVE_PTS})</small>
               </p>
               {bestNow ? (
                 <blockquote className="hg-best">
@@ -534,8 +576,12 @@ export default function HangulApp() {
           <li>글자 · 낱말을 누르면 원고지에 이어 붙어요. 원고지 칸을 누르면 다시 빠져요</li>
           <li>원고지가 낱말 하나면 [낱말로 묶기] → 단어칸에서 품사대로 싸워요 (명사 강타 · 동사 범위 · 형용사 감속 · 부사 연사 · 감탄사 기절)</li>
           <li>
-            종결어미로 끝나면 [문장 완성!] → 화면 전체 공격 + 점수 + 기세(모든 피해) 영구 상승. 문장은 문장칸에 남아 {READ_SEC}초마다
-            다시 낭독해요 (최대 {SHELF_MAX}개, 꽉 차면 점수 낮은 문장이 밀려남)
+            종결어미로 끝나면 [문장 완성!] → 화면 전체 공격 + 점수 + 기세(모든 피해) 영구 상승. 문장은 문장칸에 차례로 쌓여 한 편의
+            글이 되고, 글 전체가 {READ_SEC}초마다 낭독해요
+          </li>
+          <li>
+            문장칸에서 ▲▼ 로 순서를 바꿀 수 있어요. 앞뒤 문장이 이어지면 이음 점수: 이음말로 시작(그래서 · 근데 · 그리고) ·
+            가리키는 말(그거 · 거기 · 그때) · 앞 문장의 말을 다시 씀(술 → 술은) — 한 쌍에 최대 ●● 두 개
           </li>
           <li>띄어쓰기는 필요 없어요. 욕도 문장이에요</li>
         </ul>

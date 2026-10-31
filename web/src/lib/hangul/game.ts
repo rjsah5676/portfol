@@ -1,5 +1,5 @@
-import { addToSyllable, CONS_W, decompose, isCons, joinJamo, JUNG, pick, syllableStroke, VOWEL_RECIPES, VOWS_W } from "./jamo";
-import { gradeOf, hangulLen, LINE_MAX, type Judge } from "./judge";
+import { addToSyllable, CONS_W, decompose, DOT, DOTS, isCons, joinJamo, JUNG, pick, syllableStroke, VOWEL_RECIPES, VOWS_W } from "./jamo";
+import { gradeOf, hangulLen, LINE_MAX, type Judge, type Morph } from "./judge";
 
 /*
  * 니들이 한글을 알아? — 게임 진행 (화면과 따로, 숫자만)
@@ -9,25 +9,29 @@ import { gradeOf, hangulLen, LINE_MAX, type Judge } from "./judge";
  *   글자 · 낱말을 누르면 원고지에 이어 붙음 → 서버가 읽어 줌(형태소 분석)
  *     · 낱말 하나면 [낱말로 묶기] → 단어칸에 낱말 (품사마다 싸우는 방식이 다름)
  *     · 종결어미로 끝나면 [문장 완성] → 화면 전체 낭독 공격 + 점수 + 기세(모든 피해) 영구 상승,
- *       문장은 문장칸에 남아 몇 초마다 다시 낭독 (가장 센 유닛)
+ *       문장은 문장칸(글)에 끝없이 쌓이고 순서를 바꿀 수 있음. 앞뒤 문장이 이어지면(이음말 · 같은 말 · 가리키는 말)
+ *       이음 점수가 붙고, 글 전체가 몇 초마다 한 덩어리로 낭독 (글 길이 × 이어짐)
  *   먹물 얼룩은 판 둘레를 끝없이 돌고, 쌓인 양이 LOAD_MAX 를 넘으면 끝. 웨이브는 끝없이.
  */
 
 export type Zone = "c" | "v" | "s" | "w";
+/** 자음칸 고정 자리 (자판처럼): 기본 14자 + 된소리 5자 */
+export const CONS_SLOTS = ["ㄱ","ㄴ","ㄷ","ㄹ","ㅁ","ㅂ","ㅅ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ","ㄲ","ㄸ","ㅃ","ㅆ","ㅉ"];
+/** 모음칸 고정 자리: 천지인 재료. 그 뒤 칸은 만든 모음이 쌓이는 자리 */
+export const VOWEL_SLOTS = [DOT, DOTS, "ㅡ", "ㅣ"];
 /** 칸 수. 자음 · 모음칸은 같은 자모가 한 칸에 STACK_MAX 개까지 쌓임 */
-export const CAP: Record<Zone, number> = { c: 10, v: 6, s: 16, w: 12 };
+export const CAP: Record<Zone, number> = { c: CONS_SLOTS.length, v: VOWEL_SLOTS.length + 6, s: 16, w: 12 };
 export const STACK_MAX = 99;
-/** 문장칸에 남는 문장 수 */
-export const SHELF_MAX = 4;
 export const ZONE_NAME: Record<Zone, string> = { c: "자음칸", v: "모음칸", s: "글자칸", w: "단어칸" };
 
 export interface Unit {
   id: number;
   /** j = 자모 · s = 글자 · w = 낱말 · t = 완성한 문장 */
   kind: "j" | "s" | "w" | "t";
-  /** 문장: 점수 · 말맛 등급 */
+  /** 문장: 점수 · 말맛 등급 · 형태소 (앞뒤 문장이 이어지는지 볼 때 씀) */
   points?: number;
   grade?: string;
+  morphs?: Morph[];
   text: string;
   /** 낱말의 품사 (명사 · 동사 · 형용사 · 부사 · 감탄사 …) */
   pos?: string;
@@ -111,8 +115,10 @@ export interface Game {
   zones: Record<Zone, (Unit | null)[]>;
   /** 원고지(쓰는 중인 줄) */
   line: Unit[];
-  /** 문장칸: 완성한 문장이 남아서 싸움 (가장 센 유닛). 꽉 차면 점수 낮은 문장부터 밀려남 */
+  /** 문장칸(글): 완성한 문장이 끝없이 쌓임 · 순서 바꿀 수 있음 */
   shelf: Unit[];
+  /** 글 낭독까지 남은 비율 (1 → 0) */
+  readCd: number;
   enemies: Enemy[];
   shots: Shot[];
   fx: Fx[];
@@ -142,6 +148,7 @@ export function newGame(): Game {
     zones: { c: Array(CAP.c).fill(null), v: Array(CAP.v).fill(null), s: Array(CAP.s).fill(null), w: Array(CAP.w).fill(null) },
     line: [],
     shelf: [],
+    readCd: 1,
     enemies: [],
     shots: [],
     fx: [],
@@ -158,7 +165,10 @@ export function newGame(): Game {
 
 export const say = (g: Game, text: string) => (g.note = { text, at: g.t });
 export const load = (g: Game) => g.enemies.reduce((s, e) => s + (e.boss ? 10 : 1), 0);
-export const score = (g: Game) => g.points + g.wave * 100;
+/** 점수 = 완성한 문장 점수 합 + 글의 이음 점수(지금 순서 기준) + 버틴 웨이브 × 100 */
+export const score = (g: Game) => g.points + linkBonus(g) + g.wave * 100;
+/** 글 낭독이 쏘는 선의 출발점 (화면의 문장칸 상자) */
+export const SHELF_ID = 0;
 export const lineText = (g: Game) => g.line.map((u) => u.text).join("");
 export const best = (g: Game): Sentence | null =>
   g.sentences.reduce<Sentence | null>((b, s) => (!b || s.points > b.points ? s : b), null);
@@ -175,14 +185,34 @@ function put(g: Game, z: Zone, u: Unit, at = free(g, z)): boolean {
 export const zoneOfJamo = (j: string): Zone => (isCons(j) ? "c" : "v");
 const countOf = (u: Unit | null) => (u ? (u.n ?? 1) : 0);
 
-/** 자모 하나 넣기: 같은 자모가 있으면 그 칸에 쌓고(×n), 없으면 빈 칸에 */
+/**
+ * 자모 칸 자리: 자음은 19자(기본 14 + 된소리 5)가 자기 자리를 하나씩 가짐(자판처럼 늘 그 자리).
+ * 모음칸은 ㆍ ㆍㆍ ㅡ ㅣ 네 자리가 고정이고, 나머지 칸에 만든 모음(ㅏ ㅕ …)이 쌓임
+ */
+function slotFor(g: Game, j: string): number {
+  const z = zoneOfJamo(j);
+  const fixed = (z === "c" ? CONS_SLOTS : VOWEL_SLOTS).indexOf(j);
+  if (fixed >= 0) return fixed;
+  const arr = g.zones[z];
+  const same = arr.findIndex((u, i) => i >= VOWEL_SLOTS.length && u?.text === j);
+  if (same >= 0) return same;
+  return arr.findIndex((u, i) => i >= VOWEL_SLOTS.length && !u);
+}
+/** 자모 하나 넣기: 같은 자모는 한 칸에 쌓임(×n) */
 function addJamo(g: Game, j: string): boolean {
   const z = zoneOfJamo(j);
-  const same = g.zones[z].find((u) => u?.text === j && countOf(u) < STACK_MAX);
-  if (same) return (same.n = countOf(same) + 1), true;
+  const at = slotFor(g, j);
+  if (at < 0) return false;
+  const cur = g.zones[z][at];
+  if (cur) {
+    if (countOf(cur) >= STACK_MAX) return false;
+    cur.n = countOf(cur) + 1;
+    return true;
+  }
   const u = unit(g, "j", j);
   u.n = 1;
-  return put(g, z, u);
+  g.zones[z][at] = u;
+  return true;
 }
 /** 자모 칸에서 하나 덜어냄 (다 쓰면 칸이 빔) */
 function takeJamo(g: Game, z: Zone, i: number) {
@@ -192,8 +222,8 @@ function takeJamo(g: Game, z: Zone, i: number) {
   else g.zones[z][i] = null;
 }
 const hasRoomFor = (g: Game, j: string) => {
-  const z = zoneOfJamo(j);
-  return g.zones[z].some((u) => !u || (u.text === j && countOf(u) < STACK_MAX));
+  const at = slotFor(g, j);
+  return at >= 0 && countOf(g.zones[zoneOfJamo(j)][at]) < STACK_MAX;
 };
 
 /** 뽑기 한 번: 자음 42% · 모음 재료(천지인) 58% — 모음은 보통 재료 두 개가 듦. 쌓을 데가 없는 자모가 나오면 쌓을 수 있는 걸로 다시 뽑음 */
@@ -357,20 +387,60 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
   g.sentences.push(s);
   g.points += j.points;
   g.line = [];
-  // 문장칸에 남음 — 꽉 차 있으면 점수가 가장 낮은 문장이 밀려남 (새 문장이 더 낮으면 새 문장은 낭독만 하고 안 남음)
+  // 글(문장칸) 끝에 붙음 — 개수 제한 없음, 순서는 나중에 바꿀 수 있음
   const u = unit(g, "t", j.text);
   u.points = j.points;
   u.grade = s.grade;
-  if (g.shelf.length >= SHELF_MAX) {
-    const low = g.shelf.reduce((a, b) => ((b.points ?? 0) < (a.points ?? 0) ? b : a));
-    if ((low.points ?? 0) < j.points) g.shelf.splice(g.shelf.indexOf(low), 1, u);
-  } else g.shelf.push(u);
+  u.morphs = j.morphs;
+  g.shelf.push(u);
   const dmg = j.points * 0.6 * g.power;
   for (const e of g.enemies) e.hp -= dmg;
   g.power += 0.02 * n;
   g.gold += n * 2;
   g.fx.push({ x: g.path.x + g.path.w / 2, y: g.path.y + g.path.h / 2, t: 0, kind: "read", r: Math.max(g.path.w, g.path.h) });
   return s;
+}
+
+// ── 글(문장칸): 앞뒤 문장이 이어지는지 ──
+// 형태소 분석기는 문장을 하나씩 따로 읽어서(순서를 섞어도 점수가 같음) 문장끼리는 규칙으로 봄:
+//   이음말로 시작(그래서 · 근데 · 그리고 …) · 가리키는 말(그거 · 거기 · 그때 …) · 앞 문장의 뜻 있는 말을 다시 씀
+// 한 쌍에 최대 2 (이음말만 붙여 대는 것 막기)
+const POINTERS = new Set(["그", "이", "저", "그거", "이거", "저거", "그것", "이것", "저것", "거기", "여기", "저기", "그곳", "이곳", "그때", "그녀", "걔", "얘", "쟤", "그놈", "이놈", "저놈"]);
+export interface Link {
+  level: 0 | 1 | 2;
+  why: string[];
+}
+export function linkOf(a: Unit, b: Unit): Link {
+  const am = a.morphs ?? [], bm = b.morphs ?? [];
+  const why: string[] = [];
+  const first = bm.find((m) => m.t !== "IC");
+  if (first?.t === "MAJ") why.push(`이음말 「${first.f}」`);
+  const ptr = bm.find((m) => /^(NP|MM|NN)/.test(m.t) && POINTERS.has(m.f));
+  if (ptr) why.push(`가리킴 「${ptr.f}」`);
+  const key = (m: Morph) => (/^(NNG|NNP|VV|VA|XR)/.test(m.t) ? m.f : null);
+  const seen = new Set(am.map(key).filter(Boolean));
+  const same = bm.map(key).find((f) => f && seen.has(f));
+  if (same) why.push(`같은 말 「${same}」`);
+  return { level: Math.min(2, why.length) as Link["level"], why };
+}
+export const links = (g: Game): Link[] => g.shelf.slice(1).map((b, k) => linkOf(g.shelf[k], b));
+/** 이음 점수: 이어진 쌍마다 (두 문장 중 낮은 점수) × 0.5 × 단계 */
+export const linkBonus = (g: Game) =>
+  links(g).reduce((s, l, k) => s + Math.round(Math.min(g.shelf[k].points ?? 0, g.shelf[k + 1].points ?? 0) * 0.5 * l.level), 0);
+/** 글 힘(낭독 한 번의 피해, 기세 곱하기 전): 문장 점수 합 × 0.1 × (1 + 0.2 × 이어짐 합) */
+export function writingPower(g: Game) {
+  const glue = links(g).reduce((s, l) => s + l.level, 0);
+  return g.shelf.reduce((s, u) => s + (u.points ?? 0), 0) * 0.1 * (1 + 0.2 * glue);
+}
+/** 글 안에서 문장 옮기기 (k 번째를 d 칸 위/아래로) */
+export function moveSentence(g: Game, k: number, d: -1 | 1) {
+  const to = k + d;
+  if (to < 0 || to >= g.shelf.length) return;
+  [g.shelf[k], g.shelf[to]] = [g.shelf[to], g.shelf[k]];
+}
+/** 글에서 문장 빼기 (점수는 이미 받았으니 그대로, 글 힘 · 이음 점수에서만 빠짐) */
+export function dropSentence(g: Game, k: number) {
+  g.shelf.splice(k, 1);
 }
 
 export function sell(g: Game, z: Zone, i: number): number {
@@ -471,18 +541,15 @@ export function step(g: Game, dt: number) {
       for (const e of hitList) hit(g, e, st.dmg, st as { slow?: number; stun?: number });
       g.shots.push({ from: u.id, to: target, t: 0, color: st.color, glyph: u.text[0], r: splash });
     }
-  // 문장칸의 문장: READ_SEC 마다 판 위 모든 얼룩에게 낭독 (점수 × 0.15 × 기세)
-  for (const u of g.shelf) {
-    u.cd -= dt / READ_SEC;
-    if (u.cd > 0) continue;
-    if (!live.length) {
-      u.cd = 0;
-      continue;
-    }
-    u.cd = 1;
-    const dmg = (u.points ?? 0) * 0.15 * g.power;
-    for (const e of live) e.hp -= dmg;
-    for (const e of live.slice(0, 8)) g.shots.push({ from: u.id, to: e, t: 0, color: "#c0392b", glyph: u.text[0] });
+  // 글 낭독: READ_SEC 마다 글 전체가 판 위 모든 얼룩에게 (글 힘 × 기세)
+  if (g.shelf.length) {
+    g.readCd -= dt / READ_SEC;
+    if (g.readCd <= 0 && live.length) {
+      g.readCd = 1;
+      const dmg = writingPower(g) * g.power;
+      for (const e of live) e.hp -= dmg;
+      for (const e of live.slice(0, 10)) g.shots.push({ from: SHELF_ID, to: e, t: 0, color: "#c0392b", glyph: g.shelf[0].text[0] });
+    } else if (g.readCd < 0) g.readCd = 0;
   }
   for (const s of g.shots) s.t += dt;
   g.shots = g.shots.filter((s) => s.t < 0.25);
