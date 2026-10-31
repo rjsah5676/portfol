@@ -17,6 +17,18 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.20",
+    name: "ABYSS 19곡 · 난이도 이름 · 색",
+    date: "2026.11.01",
+    lines: [
+      "ULTIMA 가 있는 곡 전부에 ABYSS 추가 (19곡, Lv17~22)",
+      "FREEDOM DiVE 22 · Crimson Cadenza · Aragami · Rise of Champions · Tomei na Uso 20 · 하이라이트 · PIKO PIKO OVERKILL · ANiMA · STARLIGHT CODE · OVERLOAD PROTOCOL · Sugar Cloud 19",
+      "Maximum Velocity · 휘모리 · PIXEL FIGHTING · Neon Seaside Drive 18 · Étude of Falling Stars · Lucky Seven 17 — ULTIMA 가 이미 스트림이라 레벨은 덜 오름",
+      "난이도 이름 줄임: NIGHTMARE → NM · ULTIMA → ULT",
+      "난이도 색을 어려울수록 뜨겁게: 초록 → 파랑 → 노랑 → 주황 → 빨강 → 자홍 → 핏빛(ABYSS)",
+    ],
+  },
+  {
     ver: "v2.19",
     name: "새 난이도 ABYSS",
     date: "2026.11.01",

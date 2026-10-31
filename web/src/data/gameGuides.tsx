@@ -248,8 +248,8 @@ export const RHYTHM_GUIDE: GuideDoc = {
         <>
           <K>↑</K>
           <K>↓</K> 곡, <K>←</K>
-          <K>→</K> 난이도, <K>Enter</K> 시작. EASY부터 <B>NIGHTMARE</B>, 일부 보스곡은 <B>ULTIMA</B>
-          (Lv19~21)까지 곡마다 5~6단계. 노트가 아래 하얀 선에 닿을 때 <K>D</K>
+          <K>→</K> 난이도, <K>Enter</K> 시작. EASY부터 <B>NM</B>(NIGHTMARE), 그 위 <B>ULT</B>(ULTIMA) · <B>ABYSS</B>
+          까지 곡마다 5~7단계. 노트가 아래 하얀 선에 닿을 때 <K>D</K>
           <K>F</K>
           <K>J</K>
           <K>K</K>(폰은 터치), 긴 노트는 끝까지 꾹, <K>Esc</K>는 일시정지.

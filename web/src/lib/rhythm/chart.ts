@@ -14,15 +14,16 @@ import type { Kind, MusicEvent, Song } from "./music";
 
 export type Difficulty = "easy" | "normal" | "hard" | "expert" | "nightmare" | "explus" | "abyss";
 export const DIFFICULTIES: { key: Difficulty; label: string; color: string }[] = [
+  // 어려울수록 뜨거운 색 (초록 → 파랑 → 노랑 → 주황 → 빨강 → 자홍 → 핏빛)
   { key: "easy", label: "EASY", color: "#4ADE80" },
   { key: "normal", label: "NORMAL", color: "#60A5FA" },
-  { key: "hard", label: "HARD", color: "#F59E0B" },
-  { key: "expert", label: "EX", color: "#F43F5E" },
-  { key: "nightmare", label: "NIGHTMARE", color: "#A855F7" },
-  // ULTIMA: 나이트메어 위 (Lv19~21) — 일부 보스곡만 (키는 explus 그대로: 랭킹·저장 설정 호환)
-  { key: "explus", label: "ULTIMA", color: "#FACC15" },
-  // ABYSS: ULTIMA 위 (Lv19~) — ULTIMA 채보를 osu · Quaver Lv19~20 방식(빠른 곡 스트림 · 느린 곡 코드잭)으로 (autochart makeAbyssChart)
-  { key: "abyss", label: "ABYSS", color: "#22D3EE" },
+  { key: "hard", label: "HARD", color: "#FACC15" },
+  { key: "expert", label: "EX", color: "#FB923C" },
+  { key: "nightmare", label: "NM", color: "#F43F5E" },
+  // ULTIMA: 나이트메어 위 (키는 explus 그대로: 랭킹·저장 설정 호환)
+  { key: "explus", label: "ULT", color: "#D946EF" },
+  // ABYSS: ULTIMA 위 (Lv17~22) — ULTIMA 채보를 osu · Quaver Lv19~20 방식(빠른 곡 스트림 · 느린 곡 코드잭)으로 (autochart makeAbyssChart)
+  { key: "abyss", label: "ABYSS", color: "#FF1A1A" },
 ];
 /** 내장곡에서 이 난이도가 있는지 (나이트메어는 일부 곡만) */
 export const hasDifficulty = (
