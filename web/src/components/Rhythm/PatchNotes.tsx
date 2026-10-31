@@ -17,6 +17,17 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.18",
+    name: "새 곡 2곡 · 긴 곡 줄이기",
+    date: "2026.11.01",
+    lines: [
+      "BLADE STORM — 183 BPM 멜로딕 스피드 메탈 (EASY 3 ~ ULTIMA 17)",
+      "Venom Bloom — 140 BPM 걸크러시 K-POP 트랩 (EASY 3 ~ ULTIMA 15)",
+      "긴 곡을 2분 반 안팎으로: Rise of Champions 3:34 → 2:43 · Neon Seaside Drive 3:42 → 2:44 · 하이라이트 2:50 → 2:40 · Monarch's Fall 2:52 → 2:33 (박자가 같은 마디끼리 이어 붙임)",
+      "줄인 곡은 채보가 새로 만들어져 레벨이 조금 바뀜 (Neon Seaside Drive NIGHTMARE 13 → 12 · ULTIMA 15 → 14), 소개 페이지 25곡",
+    ],
+  },
+  {
     ver: "v2.17",
     name: "새 곡 2곡",
     date: "2026.10.30",

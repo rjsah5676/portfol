@@ -42,6 +42,8 @@ export const BUILTIN = {
   picopico: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 16] },
   neonseaside: { single: true, boss: {}, explus: {}, levels: [3, 4, 7, 10, 14, 16] },
   riseofchampions: { boss: {}, explus: {}, levels: [3, 5, 8, 12, 14, 17] },
+  bladestorm: { boss: {}, explus: {}, levels: [3, 5, 9, 14, 17, 20] },
+  venombloom: { boss: {}, explus: {}, levels: [3, 5, 8, 12, 15, 17] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

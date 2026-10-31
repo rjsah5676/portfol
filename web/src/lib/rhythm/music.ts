@@ -30,6 +30,8 @@ import tomeinausoData from "@/data/rhythm/tomeinauso.json";
 import picopicoData from "@/data/rhythm/picopico.json";
 import neonseasideData from "@/data/rhythm/neonseaside.json";
 import riseofchampionsData from "@/data/rhythm/riseofchampions.json";
+import bladestormData from "@/data/rhythm/bladestorm.json";
+import venombloomData from "@/data/rhythm/venombloom.json";
 
 export type Kind =
   | "kick"
@@ -374,6 +376,7 @@ const NEWDIM = audioSong("newdim", "New Dimension", "/audio/newdim.mp3", newdimD
   desc: "155 BPM · 사이버펑크 록 (12/8) · AI 자작곡 (tunee.ai)",
 });
 
+// 2분 52초 → 2분 33초: 1:07~1:26(12마디)을 덜어 냄 (유사도 0.92)
 const MONARCH = audioSong("monarch", "Monarch's Fall", "/audio/monarch.mp3", monarchData, {
   color: "#EF4444",
   desc: "150 BPM · AI 자작곡",
@@ -452,6 +455,7 @@ const ETUDE = audioSong("etude", "Étude of Falling Stars", "/audio/etude.mp3", 
   desc: "170 BPM · PIANO HARDCORE · AI 자작곡 (tunee.ai)",
 });
 
+// 2분 50초 → 2분 40초: 2:06~2:16(8마디)을 덜어 냄 (유사도 0.85)
 const HIGHLIGHT = audioSong("highlight", "하이라이트", "/audio/highlight.mp3", highlightData, {
   color: "#EC4899",
   desc: "192 BPM · K-POP 걸밴드 록 · AI 자작곡 (tunee.ai)",
@@ -469,6 +473,18 @@ const TOMEINAUSO = audioSong(
   }
 );
 
+// 3분 26초로 나와서 1:46~2:48(48마디)을 덜어 냄 — 앞뒤 마디 유사도 0.93
+const BLADESTORM = audioSong("bladestorm", "BLADE STORM", "/audio/bladestorm.mp3", bladestormData, {
+  color: "#1E3A8A",
+  desc: "183 BPM · MELODIC SPEED METAL · AI 자작곡 (tunee.ai)",
+});
+
+const VENOMBLOOM = audioSong("venombloom", "Venom Bloom", "/audio/venombloom.mp3", venombloomData, {
+  color: "#A3E635",
+  desc: "140 BPM · GIRL-CRUSH K-POP TRAP · AI 자작곡 (tunee.ai)",
+});
+
+// 3분 34초 → 2분 43초: 2:27~3:19(32마디)를 덜어 냄 (유사도 0.87)
 const RISEOFCHAMPIONS = audioSong(
   "riseofchampions",
   "Rise of Champions",
@@ -480,6 +496,7 @@ const RISEOFCHAMPIONS = audioSong(
   }
 );
 
+// 3분 42초 → 2분 44초: 2:24~3:21(30마디, 아웃트로 앞까지)를 덜어 냄 (유사도 0.80)
 const NEONSEASIDE = audioSong(
   "neonseaside",
   "Neon Seaside Drive",
@@ -545,8 +562,10 @@ const FREEDOMDIVE = audioSong(
  *   highlight      --bpm-label 192 --boss '{}' --explus '{}' --levels 3,6,8,12,15,18   (ULT 16)
  *   tomeinauso     --bpm-label 149 --boss '{}' --explus '{}' --levels 3,5,7,11,15,17   (NM 14 · ULT 15)
  *   picopico       --bpm-label 188 --boss '{}' --explus '{}' --levels 3,6,9,13,16,16   (NM 14) (나이트메어 14 · ULTIMA 16 이 천장 — 그 위는 타격이 모자람)
- *   neonseaside    --single --bpm-label 125 --boss '{}' --explus '{}' --levels 3,4,7,10,14,16   (NM 13 · ULT 15 — 2배 템포 250으로 잡혀서 --single)
+ *   neonseaside    --single --bpm-label 125 --boss '{}' --explus '{}' --levels 3,4,7,10,14,16   (NM 12 · ULT 14 — 2배 템포 250으로 잡혀서 --single)
  *   riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --levels 3,5,8,12,14,17   (ULT 16 — NM 은 매우 어려움 12 위로 14 가 천장)
+ *   bladestorm     --bpm-label 183 --boss '{}' --explus '{}' --levels 3,5,9,14,17,20   (NM 16 · ULT 17 — 183 BPM 천장)
+ *   venombloom     --bpm-label 140 --boss '{}' --explus '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -595,6 +614,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  BLADESTORM,
+  VENOMBLOOM,
   RISEOFCHAMPIONS,
   NEONSEASIDE,
   PICOPICO,
