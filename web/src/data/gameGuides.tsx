@@ -262,7 +262,7 @@ export const RHYTHM_GUIDE: GuideDoc = {
       body: (
         <>
           곡 선택 오른쪽 맨 위 <B>MY MUSIC</B> 카드(<K>M</K>)에 노래 파일을 끌어다 놓으면 이
-          사이트만의 <B>채보 생성 알고리즘</B>이 드럼과 박자를 분석해 EASY~NIGHTMARE 5단계 채보를
+          사이트만의 <B>채보 생성 알고리즘</B>이 드럼과 박자를 분석해 EASY~ABYSS 7단계 채보를
           바로 만들어 줘요.
           <br />
           <B>본인 취향의 노래를 리듬게임으로 즐겨보세요!</B>

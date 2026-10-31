@@ -481,7 +481,7 @@ export default function SongSelect({
                     "지금 구간 이름은 진행 바 아래에",
                   ]
                 : [
-                    "드럼·박자를 분석해서 EASY~NIGHTMARE 5단계 채보를 바로 만들어요",
+                    "드럼·박자를 분석해서 EASY~ABYSS 7단계 채보를 바로 만들어요",
                     "파일은 서버로 올라가지 않고 이 브라우저 안에서만 쓰여요",
                     "파일에 앨범 사진이 있으면 재킷으로 보여 줘요",
                   ]
@@ -541,7 +541,7 @@ export default function SongSelect({
           <span className={`${KR} truncate text-[1cqw] text-white/80`}>
             {track
               ? `${track.name} · ${custom ? "Enter로 시작" : "다시 고르면 이어서"}`
-              : "mp3나 뮤비(mp4)를 넣으면 EASY~NIGHTMARE 채보를 바로 만들어 줘요"}
+              : "mp3나 뮤비(mp4)를 넣으면 EASY~ABYSS 채보를 바로 만들어 줘요"}
           </span>
         </span>
         <span className="relative shrink-0">
