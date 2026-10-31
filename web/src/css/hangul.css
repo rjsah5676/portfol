@@ -87,6 +87,39 @@
 
 /* 문장칸 = 원고지 */
 .hg-line { background: #fffdf6; border-radius: 10px; padding: 8px 10px 10px; }
+/* 원고지 머리줄: 왼쪽 제목, 오른쪽 훈장님(말풍선 + 얼굴) */
+.hg-linehead { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; min-height: 64px; margin-bottom: 4px; }
+.hg-linehead h3 { margin: 0; }
+.hg-teacher { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.hg-teacher img { width: 72px; height: 72px; object-fit: contain; margin: -10px -4px -6px 0; flex: none; filter: drop-shadow(0 2px 2px rgba(26,23,20,0.15)); animation: hg-pop 0.35s cubic-bezier(.2,1.6,.4,1); transform-origin: 50% 90%; }
+.hg-teacher p {
+  position: relative;
+  margin: 0;
+  padding: 5px 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: 14px;
+  background: #fff;
+  font-family: var(--brush);
+  font-size: 15px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+.hg-teacher p::after { content: ""; position: absolute; right: -7px; top: 50%; width: 10px; height: 10px; margin-top: -5px; background: #fff; border-right: 1.5px solid var(--ink); border-top: 1.5px solid var(--ink); transform: rotate(45deg); }
+.hg-teacher.is-hunjangWow p { border-color: var(--red); color: var(--red); font-weight: 700; }
+.hg-teacher.is-hunjangWow p::after { border-color: var(--red); }
+.hg-teacher.is-hunjangAngry p { color: var(--red); }
+.hg-teacher.is-hunjangAngry img { animation: hg-shake 0.4s ease-in-out; }
+@keyframes hg-pop { from { transform: scale(0.6) rotate(-6deg); } to { transform: none; } }
+@keyframes hg-shake { 0%, 100% { transform: none; } 20% { transform: translateX(-4px) rotate(-4deg); } 40% { transform: translateX(4px) rotate(4deg); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+/* 시작 · 끝 화면 훈장님 */
+.hg-cardteacher { width: 132px; height: 132px; object-fit: contain; margin: -70px auto -6px; filter: drop-shadow(0 4px 6px rgba(26,23,20,0.25)); }
+/* 에셋 받는 중 */
+.hg-loading { position: relative; height: 42px; border-radius: 999px; background: var(--paper2); overflow: hidden; display: grid; place-items: center; }
+.hg-loading i { position: absolute; inset: 0; background: var(--ink); transform-origin: left; transition: transform 0.2s; }
+.hg-loading span { position: relative; color: #fff; mix-blend-mode: difference; font-size: 13.5px; }
 .hg-paper {
   display: grid;
   grid-template-columns: repeat(15, minmax(0, 1fr));
@@ -259,16 +292,22 @@
 .hg-submit button { border: 1px solid var(--ink); border-radius: 8px; padding: 8px 12px; background: var(--ink); color: var(--paper); }
 .hg-dim { color: var(--ink2); font-size: 12.5px; }
 
+.hg-review { background: var(--paper); border-radius: 12px; padding: 12px 16px; }
+.hg-review h2 { margin: 0 0 4px; font-family: "Black Han Sans", sans-serif; font-weight: 400; font-size: 20px; }
+.hg-review table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.hg-review th { text-align: left; font-weight: 700; padding: 6px 8px 6px 0; white-space: nowrap; border-top: 1px dashed var(--line); }
+.hg-review th small { display: block; font-weight: 400; color: var(--ink2); font-family: "Nanum Gothic Coding", monospace; }
+.hg-review td { padding: 6px 0; border-top: 1px dashed var(--line); }
+.hg-root .hg-review td button { margin: 2px 4px 2px 0; border: 1px solid var(--line); border-radius: 999px; background: #fffdf6; padding: 4px 10px; font-size: 12.5px; }
+.hg-root .hg-review td button.is-on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 .hg-help { background: var(--paper); border-radius: 10px; padding: 8px 12px; font-size: 13px; }
 .hg-help summary { cursor: pointer; color: var(--ink2); }
 .hg-help ul { margin: 6px 0 0; padding-left: 18px; line-height: 1.6; }
 
 /* 위쪽 랭킹 버튼 */
 .hg-head { position: relative; }
+.hg-headbtns { position: absolute; right: 0; bottom: 0; display: flex; gap: 6px; }
 .hg-root .hg-rankbtn {
-  position: absolute;
-  right: 0;
-  bottom: 0;
   border: 1px solid rgba(244,237,220,0.4);
   border-radius: 999px;
   background: rgba(244,237,220,0.1);
@@ -387,7 +426,7 @@
   .hg-w { height: 46px; }
   .hg-glyph { font-size: 22px; }
   .hg-ctrl button, .hg-line-btns button { font-size: 12px; padding: 7px 2px; }
-  .hg-root .hg-rankbtn { position: static; margin-top: 8px; }
+  .hg-headbtns { position: static; justify-content: center; margin-top: 8px; }
   .hg-ranks > header { flex-wrap: wrap; padding: 12px 14px 8px; }
   .hg-ranks ol { padding: 0 14px; }
   .hg-rq { font-size: 18px; }

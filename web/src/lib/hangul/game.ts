@@ -1,4 +1,17 @@
-import { addToSyllable, CONS_W, decompose, DOT, DOTS, isCons, joinJamo, JUNG, pick, syllableStroke, VOWEL_RECIPES, VOWS_W } from "./jamo";
+import {
+  addToSyllable,
+  CONS_W,
+  decompose,
+  DOT,
+  DOTS,
+  isCons,
+  joinJamo,
+  JUNG,
+  pick,
+  syllableStroke,
+  VOWEL_RECIPES,
+  VOWS_W,
+} from "./jamo";
 import { gradeOf, hangulLen, LINE_MAX, withEnd, type Judge, type Morph } from "./judge";
 
 /*
@@ -16,13 +29,43 @@ import { gradeOf, hangulLen, LINE_MAX, withEnd, type Judge, type Morph } from ".
 
 export type Zone = "c" | "v" | "s" | "w";
 /** 자음칸 고정 자리 (자판처럼): 기본 14자 + 된소리 5자 */
-export const CONS_SLOTS = ["ㄱ","ㄴ","ㄷ","ㄹ","ㅁ","ㅂ","ㅅ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ","ㄲ","ㄸ","ㅃ","ㅆ","ㅉ"];
+export const CONS_SLOTS = [
+  "ㄱ",
+  "ㄴ",
+  "ㄷ",
+  "ㄹ",
+  "ㅁ",
+  "ㅂ",
+  "ㅅ",
+  "ㅇ",
+  "ㅈ",
+  "ㅊ",
+  "ㅋ",
+  "ㅌ",
+  "ㅍ",
+  "ㅎ",
+  "ㄲ",
+  "ㄸ",
+  "ㅃ",
+  "ㅆ",
+  "ㅉ",
+];
 /** 모음칸 고정 자리: 천지인 재료. 그 뒤 칸은 만든 모음이 쌓이는 자리 */
 export const VOWEL_SLOTS = [DOT, DOTS, "ㅡ", "ㅣ"];
 /** 칸 수. 자음 · 모음칸은 같은 자모가 한 칸에 STACK_MAX 개까지 쌓임 */
-export const CAP: Record<Zone, number> = { c: CONS_SLOTS.length, v: VOWEL_SLOTS.length + 6, s: 16, w: 12 };
+export const CAP: Record<Zone, number> = {
+  c: CONS_SLOTS.length,
+  v: VOWEL_SLOTS.length + 6,
+  s: 16,
+  w: 12,
+};
 export const STACK_MAX = 99;
-export const ZONE_NAME: Record<Zone, string> = { c: "자음칸", v: "모음칸", s: "글자칸", w: "단어칸" };
+export const ZONE_NAME: Record<Zone, string> = {
+  c: "자음칸",
+  v: "모음칸",
+  s: "글자칸",
+  w: "단어칸",
+};
 
 export interface Unit {
   id: number;
@@ -98,7 +141,18 @@ const LAP_SEC = 15;
 export const waveHp = (w: number) => Math.round(14 * 1.1 ** (w - 1));
 
 /** 낱말 품사마다 싸우는 방식 (dmg = 기본 × 글자 수^1.5) */
-export const POS_STYLE: Record<string, { dmg: number; rate: number; splash?: number; slow?: number; stun?: number; color: string; desc: string }> = {
+export const POS_STYLE: Record<
+  string,
+  {
+    dmg: number;
+    rate: number;
+    splash?: number;
+    slow?: number;
+    stun?: number;
+    color: string;
+    desc: string;
+  }
+> = {
   명사: { dmg: 8, rate: 0.9, color: "#1e1b18", desc: "한 놈을 세게" },
   대명사: { dmg: 8, rate: 0.9, color: "#1e1b18", desc: "한 놈을 세게" },
   수사: { dmg: 8, rate: 0.9, color: "#1e1b18", desc: "한 놈을 세게" },
@@ -141,6 +195,10 @@ export interface Game {
   seq: number;
   /** 화면에 띄울 한 줄 알림 */
   note: { text: string; at: number } | null;
+  /** 이번 프레임에 난 소리 (화면이 꺼내서 틀고 비움 — lib/hangul/sound.ts) */
+  sfx: string[];
+  /** 먹물 70% 경고를 이미 울렸는지 */
+  warned?: boolean;
 }
 
 export function newGame(): Game {
@@ -152,7 +210,12 @@ export function newGame(): Game {
     spawnLeft: 0,
     spawnT: 0,
     spawnBoss: false,
-    zones: { c: Array(CAP.c).fill(null), v: Array(CAP.v).fill(null), s: Array(CAP.s).fill(null), w: Array(CAP.w).fill(null) },
+    zones: {
+      c: Array(CAP.c).fill(null),
+      v: Array(CAP.v).fill(null),
+      s: Array(CAP.s).fill(null),
+      w: Array(CAP.w).fill(null),
+    },
     line: [],
     shelf: [],
     readCd: 1,
@@ -167,11 +230,14 @@ export function newGame(): Game {
     path: { x: 0, y: 0, w: 100, h: 100 },
     seq: 1,
     note: null,
+    sfx: [],
   };
   return g;
 }
 
 export const say = (g: Game, text: string) => (g.note = { text, at: g.t });
+/** 소리 내기 (이름 = public/hangul/sfx/<이름>.mp3) */
+const emit = (g: Game, name: string) => void g.sfx.push(name);
 export const load = (g: Game) => g.enemies.reduce((s, e) => s + (e.boss ? 10 : 1), 0);
 /** 점수 = 완성한 문장 점수 합 + 글의 이음 점수(지금 순서 기준) + 버틴 웨이브 × 100 */
 export const score = (g: Game) => g.points + linkBonus(g) + g.wave * 100;
@@ -182,7 +248,13 @@ export const best = (g: Game): Sentence | null =>
   g.sentences.reduce<Sentence | null>((b, s) => (!b || s.points > b.points ? s : b), null);
 
 const free = (g: Game, z: Zone) => g.zones[z].indexOf(null);
-const unit = (g: Game, kind: Unit["kind"], text: string, pos?: string): Unit => ({ id: g.seq++, kind, text, pos, cd: Math.random() });
+const unit = (g: Game, kind: Unit["kind"], text: string, pos?: string): Unit => ({
+  id: g.seq++,
+  kind,
+  text,
+  pos,
+  cd: Math.random(),
+});
 
 function put(g: Game, z: Zone, u: Unit, at = free(g, z)): boolean {
   if (at < 0) return false;
@@ -241,7 +313,11 @@ const hasRoomFor = (g: Game, j: string) => {
  *   천지인끼리: ㆍ 는 거의 모든 모음에 들어가서, ㅣ · ㅡ 에 비해 모자라면 ㆍ 를 더 (최대 3배). ㅣ 가 하나도 없으면 ㅣ 도 더
  */
 export function drawOdds(g: Game): { cons: number; vows: Record<string, number> } {
-  let C = 0, dots = 0, I = 0, E = 0, made = 0;
+  let C = 0,
+    dots = 0,
+    I = 0,
+    E = 0,
+    made = 0;
   for (const u of g.zones.c) if (u?.kind === "j") C += countOf(u);
   for (const u of g.zones.v) {
     if (u?.kind !== "j") continue;
@@ -283,7 +359,8 @@ export function draw(g: Game, n = 1): number {
  * 같은 칸을 두 번 누르면 그 칸끼리 (ㄱ×2 → ㄲ, ㆍ×2 → ㆍㆍ)
  */
 export function combine(g: Game, za: Zone, ia: number, zb: Zone, ib: number): boolean {
-  const A = g.zones[za][ia], B = g.zones[zb][ib];
+  const A = g.zones[za][ia],
+    B = g.zones[zb][ib];
   if (!A || !B || A.kind !== "j") return false;
   const self = za === zb && ia === ib;
   if (B.kind === "j") {
@@ -292,18 +369,20 @@ export function combine(g: Game, za: Zone, ia: number, zb: Zone, ib: number): bo
     if (!r) return false;
     if ("syllable" in r) {
       const at = free(g, "s");
-      if (at < 0) return say(g, "글자칸이 꽉 찼어요"), false;
+      if (at < 0) return (say(g, "글자칸이 꽉 찼어요"), false);
       takeJamo(g, za, ia);
       takeJamo(g, zb, ib);
       put(g, "s", unit(g, "s", r.syllable), at);
+      emit(g, "syllable");
     } else {
       takeJamo(g, za, ia);
       takeJamo(g, zb, ib);
       if (!addJamo(g, r.jamo)) {
         addJamo(g, A.text);
         addJamo(g, B.text);
-        return say(g, "칸이 꽉 차서 못 합쳐요"), false;
+        return (say(g, "칸이 꽉 차서 못 합쳐요"), false);
       }
+      emit(g, "merge");
     }
     return true;
   }
@@ -312,6 +391,7 @@ export function combine(g: Game, za: Zone, ia: number, zb: Zone, ib: number): bo
     if (!s) return false;
     takeJamo(g, za, ia);
     B.text = s;
+    emit(g, "syllable");
     return true;
   }
   return false;
@@ -365,10 +445,12 @@ export function autoPair(g: Game): number {
 export function toLine(g: Game, z: Zone, i: number): boolean {
   const u = g.zones[z][i];
   if (!u || u.kind === "j") return false;
-  if (hangulLen(lineText(g)) + hangulLen(u.text) > LINE_MAX) return say(g, `원고지는 ${LINE_MAX}글자까지예요`), false;
+  if (hangulLen(lineText(g)) + hangulLen(u.text) > LINE_MAX)
+    return (say(g, `원고지는 ${LINE_MAX}글자까지예요`), false);
   g.zones[z][i] = null;
   u.from = z;
   g.line.push(u);
+  emit(g, "place");
   return true;
 }
 
@@ -385,16 +467,18 @@ export function addByIds(g: Game, ids: number[]): boolean {
     }
     return null;
   });
-  if (at.some((x) => !x)) return say(g, "그 사이 글자가 바뀌었어요"), false;
+  if (at.some((x) => !x)) return (say(g, "그 사이 글자가 바뀌었어요"), false);
   for (const x of at) toLine(g, x!.z, x!.i);
   return true;
 }
 
 /** 원고지 끝에 문장부호 (, ? ! .) — 재료 없이 마음대로. 판정은 한글만 읽고 부호는 띄어쓰기 · 보여 줄 때 씀 */
 export function addPunct(g: Game, ch: string): boolean {
-  if (!g.line.length) return say(g, "글자부터 넣어 주세요"), false;
-  if (g.line.filter((u) => u.kind === "p").length >= 15) return say(g, "문장부호는 15개까지예요"), false;
+  if (!g.line.length) return (say(g, "글자부터 넣어 주세요"), false);
+  if (g.line.filter((u) => u.kind === "p").length >= 15)
+    return (say(g, "문장부호는 15개까지예요"), false);
   g.line.push(unit(g, "p", ch));
+  emit(g, "punct");
   return true;
 }
 
@@ -402,10 +486,11 @@ export function addPunct(g: Game, ch: string): boolean {
 export function fromLine(g: Game, k: number): boolean {
   const u = g.line[k];
   if (!u) return false;
-  if (u.kind === "p") return g.line.splice(k, 1), true;
+  emit(g, "erase");
+  if (u.kind === "p") return (g.line.splice(k, 1), true);
   const z = u.from ?? (u.kind === "w" ? "w" : "s");
   const at = free(g, z);
-  if (at < 0) return say(g, `${ZONE_NAME[z]}이 꽉 차서 못 빼요`), false;
+  if (at < 0) return (say(g, `${ZONE_NAME[z]}이 꽉 차서 못 빼요`), false);
   g.line.splice(k, 1);
   put(g, z, u, at);
   return true;
@@ -417,11 +502,12 @@ export function fromLine(g: Game, k: number): boolean {
  */
 export function makeWord(g: Game, ids: number[], text: string, pos: string): boolean {
   const at = free(g, "w");
-  if (at < 0) return say(g, "단어칸이 꽉 찼어요"), false;
+  if (at < 0) return (say(g, "단어칸이 꽉 찼어요"), false);
   const idx = ids.map((id) => g.zones.s.findIndex((u) => u?.id === id));
   if (idx.some((i) => i < 0) || idx.map((i) => g.zones.s[i]!.text).join("") !== text) return false;
   for (const i of idx) g.zones.s[i] = null;
   put(g, "w", unit(g, "w", text, pos), at);
+  emit(g, "word");
   return true;
 }
 
@@ -429,9 +515,10 @@ export function makeWord(g: Game, ids: number[], text: string, pos: string): boo
 export function bindWord(g: Game, j: Judge): boolean {
   if (!j.word || j.text !== lineText(g)) return false;
   const at = free(g, "w");
-  if (at < 0) return say(g, "단어칸이 꽉 찼어요 (낱말을 문장에 쓰세요)"), false;
+  if (at < 0) return (say(g, "단어칸이 꽉 찼어요 (낱말을 문장에 쓰세요)"), false);
   g.line = [];
   put(g, "w", unit(g, "w", j.text, j.word), at);
+  emit(g, "word");
   return true;
 }
 
@@ -439,7 +526,13 @@ export function bindWord(g: Game, j: Judge): boolean {
 export function finishSentence(g: Game, j: Judge): Sentence | null {
   if (!j.sentence || j.text !== lineText(g)) return null;
   const n = hangulLen(j.text);
-  const s = { text: j.text, spaced: withEnd(j.spaced || j.text), points: j.points, wave: g.wave, grade: gradeOf(j.nat)?.name ?? "" };
+  const s = {
+    text: j.text,
+    spaced: withEnd(j.spaced || j.text),
+    points: j.points,
+    wave: g.wave,
+    grade: gradeOf(j.nat)?.name ?? "",
+  };
   g.sentences.push(s);
   g.points += j.points;
   g.line = [];
@@ -453,7 +546,16 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
   const dmg = j.points * 0.6 * g.power;
   for (const e of g.enemies) e.hp -= dmg;
   g.power += 0.02 * n;
-  g.fx.push({ x: g.path.x + g.path.w / 2, y: g.path.y + g.path.h / 2, t: 0, kind: "read", r: Math.max(g.path.w, g.path.h) });
+  g.fx.push({
+    x: g.path.x + g.path.w / 2,
+    y: g.path.y + g.path.h / 2,
+    t: 0,
+    kind: "read",
+    r: Math.max(g.path.w, g.path.h),
+  });
+  emit(g, s.grade === "명문" ? "sent-best" : s.grade === "억지" ? "sent-meh" : "sent-good");
+  // 바로 앞 문장과 이어지면 풍경 소리
+  if (g.shelf.length >= 2 && linkOf(g.shelf[g.shelf.length - 2], u).level > 0) emit(g, "link");
   return s;
 }
 
@@ -461,13 +563,37 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
 // 형태소 분석기는 문장을 하나씩 따로 읽어서(순서를 섞어도 점수가 같음) 문장끼리는 규칙으로 봄:
 //   이음말로 시작(그래서 · 근데 · 그리고 …) · 가리키는 말(그거 · 거기 · 그때 …) · 앞 문장의 뜻 있는 말을 다시 씀
 // 한 쌍에 최대 2 (이음말만 붙여 대는 것 막기)
-const POINTERS = new Set(["그", "이", "저", "그거", "이거", "저거", "그것", "이것", "저것", "거기", "여기", "저기", "그곳", "이곳", "그때", "그녀", "걔", "얘", "쟤", "그놈", "이놈", "저놈"]);
+const POINTERS = new Set([
+  "그",
+  "이",
+  "저",
+  "그거",
+  "이거",
+  "저거",
+  "그것",
+  "이것",
+  "저것",
+  "거기",
+  "여기",
+  "저기",
+  "그곳",
+  "이곳",
+  "그때",
+  "그녀",
+  "걔",
+  "얘",
+  "쟤",
+  "그놈",
+  "이놈",
+  "저놈",
+]);
 export interface Link {
   level: 0 | 1 | 2;
   why: string[];
 }
 export function linkOf(a: Unit, b: Unit): Link {
-  const am = a.morphs ?? [], bm = b.morphs ?? [];
+  const am = a.morphs ?? [],
+    bm = b.morphs ?? [];
   const why: string[] = [];
   const first = bm.find((m) => m.t !== "IC");
   if (first?.t === "MAJ") why.push(`이음말 「${first.f}」`);
@@ -482,7 +608,11 @@ export function linkOf(a: Unit, b: Unit): Link {
 export const links = (g: Game): Link[] => g.shelf.slice(1).map((b, k) => linkOf(g.shelf[k], b));
 /** 이음 점수: 이어진 쌍마다 (두 문장 중 낮은 점수) × 0.5 × 단계 */
 export const linkBonus = (g: Game) =>
-  links(g).reduce((s, l, k) => s + Math.round(Math.min(g.shelf[k].points ?? 0, g.shelf[k + 1].points ?? 0) * 0.5 * l.level), 0);
+  links(g).reduce(
+    (s, l, k) =>
+      s + Math.round(Math.min(g.shelf[k].points ?? 0, g.shelf[k + 1].points ?? 0) * 0.5 * l.level),
+    0
+  );
 /** 글 힘(낭독 한 번의 피해, 기세 곱하기 전): 문장 점수 합 × 0.1 × (1 + 0.2 × 이어짐 합) */
 export function writingPower(g: Game) {
   const glue = links(g).reduce((s, l) => s + l.level, 0);
@@ -505,6 +635,7 @@ export function discard(g: Game, z: Zone, i: number): boolean {
   if (!u) return false;
   if (u.kind === "j") takeJamo(g, z, i);
   else g.zones[z][i] = null;
+  emit(g, "discard");
   return true;
 }
 
@@ -539,12 +670,24 @@ function pathPos(g: Game, d: number): [number, number] {
 
 function spawn(g: Game, boss: boolean) {
   const hp = waveHp(g.wave) * (boss ? 20 : 1);
-  g.enemies.push({ id: g.seq++, d: 0, hp, max: hp, boss, slow: 0, slowT: 0, stun: 0, x: g.path.x, y: g.path.y, seed: Math.random() * 1000 });
+  g.enemies.push({
+    id: g.seq++,
+    d: 0,
+    hp,
+    max: hp,
+    boss,
+    slow: 0,
+    slowT: 0,
+    stun: 0,
+    x: g.path.x,
+    y: g.path.y,
+    seed: Math.random() * 1000,
+  });
 }
 
 function hit(g: Game, e: Enemy, dmg: number, st: { slow?: number; stun?: number }) {
   e.hp -= dmg;
-  if (st.slow) (e.slow = st.slow), (e.slowT = 2);
+  if (st.slow) ((e.slow = st.slow), (e.slowT = 2));
   if (st.stun && !e.boss) e.stun = Math.max(e.stun, st.stun);
 }
 
@@ -559,6 +702,7 @@ export function step(g: Game, dt: number) {
     g.spawnBoss = boss;
     g.spawnT = 0;
     g.nextWave = WAVE_SEC;
+    emit(g, boss ? "boss" : "wave");
     if (boss) say(g, `${g.wave}웨이브 · 왕먹물 (얼룩 10마리 몫)`);
   }
   // 자모는 저절로 계속 들어옴 (자음칸 · 모음칸 자리가 있는 동안)
@@ -594,9 +738,12 @@ export function step(g: Game, dt: number) {
       u.cd = 1;
       const target = live[Math.min(live.length - 1, Math.floor(Math.random() * 3))];
       const splash = "splash" in st ? st.splash : undefined;
-      const hitList = splash ? live.filter((e) => Math.hypot(e.x - target.x, e.y - target.y) <= splash) : [target];
+      const hitList = splash
+        ? live.filter((e) => Math.hypot(e.x - target.x, e.y - target.y) <= splash)
+        : [target];
       for (const e of hitList) hit(g, e, st.dmg, st as { slow?: number; stun?: number });
       g.shots.push({ from: u.id, to: target, t: 0, color: st.color, glyph: u.text[0], r: splash });
+      emit(g, "shot");
     }
   // 글 낭독: READ_SEC 마다 글 전체가 판 위 모든 얼룩에게 (글 힘 × 기세)
   if (g.shelf.length) {
@@ -605,7 +752,9 @@ export function step(g: Game, dt: number) {
       g.readCd = 1;
       const dmg = writingPower(g) * g.power;
       for (const e of live) e.hp -= dmg;
-      for (const e of live.slice(0, 10)) g.shots.push({ from: SHELF_ID, to: e, t: 0, color: "#c0392b", glyph: g.shelf[0].text[0] });
+      for (const e of live.slice(0, 10))
+        g.shots.push({ from: SHELF_ID, to: e, t: 0, color: "#c0392b", glyph: g.shelf[0].text[0] });
+      emit(g, "read");
     } else if (g.readCd < 0) g.readCd = 0;
   }
   for (const s of g.shots) s.t += dt;
@@ -614,11 +763,19 @@ export function step(g: Game, dt: number) {
     if (e.hp <= 0) {
       g.kills++;
       g.fx.push({ x: e.x, y: e.y, t: 0, kind: "die" });
+      emit(g, "kill");
     }
   g.enemies = g.enemies.filter((e) => e.hp > 0);
   for (const f of g.fx) f.t += dt;
   g.fx = g.fx.filter((f) => f.t < (f.kind === "read" ? 1.2 : 0.6));
-  if (load(g) >= LOAD_MAX) g.over = true;
+  // 먹물이 70% 를 넘는 순간 경고 (내려갔다 다시 넘으면 또)
+  const ld = load(g);
+  if (ld >= LOAD_MAX * 0.7 && !g.warned) emit(g, "warn");
+  g.warned = ld >= LOAD_MAX * 0.7;
+  if (ld >= LOAD_MAX) {
+    g.over = true;
+    emit(g, "over");
+  }
 }
 
 /** 판 둘레 바꾸기 (화면 크기가 바뀔 때) — 얼룩은 같은 비율 자리로 */

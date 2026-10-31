@@ -44,3 +44,4 @@ web/assets/town-src/
 
 # 니들이 한글을 알아? 판정기(파이썬)
 kiwi/__pycache__/
+web/.hangul-src/

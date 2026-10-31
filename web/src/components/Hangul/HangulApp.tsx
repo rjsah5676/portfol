@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createPortal } from "react-dom";
 import { prepareRuns } from "@/lib/api/rankRun";
 import { ApiError } from "@/lib/api/errors";
@@ -70,6 +77,52 @@ import {
 } from "@/firestore/hangulRankings";
 import { drawField } from "./draw";
 import { shareCard } from "./shareCard";
+import {
+  getSound,
+  onSoundChange,
+  playAll,
+  playSfx,
+  preloadSounds,
+  setSound,
+} from "@/lib/hangul/sound";
+import { IMG, preloadImages, type ImgName } from "./assets";
+import SfxReview from "./SfxReview";
+
+/** 훈장님 한마디 (표정마다 몇 개 — 같은 줄이면 같은 말) */
+const TEACHER: Record<ImgName, string[]> = {
+  hunjang: [
+    "어디 한번 써 보거라.",
+    "니들이 한글을 알아?",
+    "글자를 모아 문장을 지어 보아라.",
+    "먹물이 몰려온다, 서둘러라!",
+  ],
+  hunjangWow: [
+    "명문이로다!",
+    "오호, 이런 문장이!",
+    "무릎을 탁 치게 하는구나!",
+    "장원 급제감이로다!",
+  ],
+  hunjangNod: ["옳거니.", "그럭저럭 말이 되는구나.", "흠, 쓸 만하다.", "그래, 그거다."],
+  hunjangHmm: [
+    "억지로구나…",
+    "말이 되긴… 하는 게냐?",
+    "흠… 이게 문장이라고?",
+    "애매하구나, 애매해.",
+  ],
+  hunjangAngry: [
+    "이게 무슨 해괴한 소리냐!",
+    "외계어를 쓰는 게냐!",
+    "어허, 사전에 없는 말이다!",
+    "다시 써 오너라!",
+  ],
+};
+const GRADE_FACE: Record<string, ImgName> = {
+  명문: "hunjangWow",
+  "말 됨": "hunjangNod",
+  억지: "hunjangHmm",
+};
+const lineOf = (arr: string[], seed: string) =>
+  arr[[...seed].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % arr.length];
 
 /*
  * 니들이 한글을 알아? — 아무 말이나 이어 붙여 먹물을 막는 무한 디펜스 (프로토)
@@ -193,12 +246,39 @@ export default function HangulApp() {
   useEffect(() => {
     prepareRuns();
   }, []);
+  // 에셋(효과음 · 그림)을 다 받은 뒤 시작 — 시작 화면에 진행률
+  const [assets, setAssets] = useState({ done: 0, total: 1 });
+  const ready = assets.done >= assets.total;
+  useEffect(() => {
+    let alive = true;
+    let snd = { done: 0, total: 1 },
+      img = { done: 0, total: 1 };
+    const sync = () =>
+      alive && setAssets({ done: snd.done + img.done, total: snd.total + img.total });
+    void preloadSounds((done, total) => ((snd = { done, total }), sync()));
+    void preloadImages((done, total) => ((img = { done, total }), sync()));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const muted = useSyncExternalStore(
+    onSoundChange,
+    () => getSound().mute,
+    () => false
+  );
+  // ?review=sfx — 효과음 후보 고르기 화면을 아래에 붙임
+  const review = useSyncExternalStore(
+    () => () => {},
+    () => new URLSearchParams(location.search).get("review") === "sfx",
+    () => false
+  );
   const toggleLike = async (r: HangulRanking) => {
     if (liking) return;
     const on = !liked.has(r.id);
     setLiking(r.id);
     try {
       const n = await likeHangul(r.id, on);
+      if (on) playSfx("like");
       setLiked((s) => {
         const t = new Set(s);
         if (on) t.add(r.id);
@@ -221,6 +301,7 @@ export default function HangulApp() {
     if (sharing) return;
     setSharing(true);
     try {
+      playSfx("card");
       await shareCard(c);
     } catch {
       /* 공유 취소 · 실패는 조용히 */
@@ -229,6 +310,7 @@ export default function HangulApp() {
     }
   };
   const openRanks = (sort: HangulSort = rankSort) => {
+    playSfx(rankOpen ? "click" : "open");
     setRankSort(sort);
     setRanks(null);
     setRankOpen(true);
@@ -290,6 +372,11 @@ export default function HangulApp() {
         for (let k = 0; k < speedRef.current; k++) step(g, dt);
         if (g.over) setPhase("over");
       }
+      // 게임이 낸 소리 (판 진행 · 버튼으로 바꾼 것 모두 여기서 한 번에)
+      if (g.sfx.length) {
+        playAll(g.sfx);
+        g.sfx.length = 0;
+      }
       const cv = canvasRef.current;
       const cx = cv?.getContext("2d");
       if (cv && cx) {
@@ -340,6 +427,9 @@ export default function HangulApp() {
     setSent("idle");
     setPhase("play");
     beginHangul();
+    // 훈장님 회초리 "딱!" + 꽹과리 — 시작
+    playSfx("switch");
+    window.setTimeout(() => playSfx("start"), 120);
   };
 
   const onSlot = (z: Zone, i: number) => {
@@ -359,11 +449,12 @@ export default function HangulApp() {
         setSel(null);
         return refresh();
       }
+      if (u?.kind === "j") playSfx("select");
       setSel(u?.kind === "j" ? { z, i } : null);
       return refresh();
     }
     if (!u) return;
-    if (u.kind === "j") return setSel({ z, i });
+    if (u.kind === "j") return (playSfx("select"), setSel({ z, i }));
     toLine(g, z, i);
     refresh();
   };
@@ -512,6 +603,17 @@ export default function HangulApp() {
                 ? `낱말 「${j.text}」(${j.word}) — 묶으면 단어칸에서 ${POS_STYLE[j.word]?.desc ?? "싸워요"}`
                 : "아직 문장이 아니에요 — ~다 · ~요 · ~네 로 끝을 맺거나, ~님 · ~야 로 불러 보세요";
   const bestNow = best(g);
+  // 훈장님 표정 · 한마디: 방금 완성한 문장(번쩍임) > 지금 줄 판정 > 기본
+  const face: ImgName = flash
+    ? (GRADE_FACE[flash.grade] ?? "hunjangNod")
+    : !text || !j
+      ? "hunjang"
+      : j.sentence
+        ? (GRADE_FACE[gradeOf(j.nat)?.name ?? ""] ?? "hunjangNod")
+        : unknown.length || (endsLikeSentence && !j.word)
+          ? "hunjangAngry"
+          : "hunjang";
+  const teacher = { face, say: lineOf(TEACHER[face], flash?.text ?? text) };
 
   const slot = (z: Zone, i: number) => {
     const u = g.zones[z][i];
@@ -562,9 +664,19 @@ export default function HangulApp() {
       <header className="hg-head">
         <h1>니들이 한글을 알아?</h1>
         <p>아무 말이나 지껄여서 먹물을 막아라 · 프로토</p>
-        <button type="button" className="hg-rankbtn" onClick={() => openRanks()}>
-          🏆 랭킹
-        </button>
+        <div className="hg-headbtns">
+          <button
+            type="button"
+            className="hg-rankbtn"
+            onClick={() => setSound({ mute: !muted })}
+            aria-label={muted ? "소리 켜기" : "소리 끄기"}
+          >
+            {muted ? "🔇" : "🔊"}
+          </button>
+          <button type="button" className="hg-rankbtn" onClick={() => openRanks()}>
+            🏆 랭킹
+          </button>
+        </div>
       </header>
 
       <div className="hg-hud">
@@ -592,12 +704,19 @@ export default function HangulApp() {
         <canvas ref={canvasRef} className="hg-canvas" aria-hidden />
         <div className="hg-panel">
           <section className="hg-line">
-            <h3>
-              원고지{" "}
-              <small>
-                {hangulLen(text)}/{LINE_MAX}
-              </small>
-            </h3>
+            <div className="hg-linehead">
+              <h3>
+                원고지{" "}
+                <small>
+                  {hangulLen(text)}/{LINE_MAX}
+                </small>
+              </h3>
+              {/* 훈장님: 지금 쓰는 줄을 보고 반응 */}
+              <div className={`hg-teacher is-${teacher.face}`} key={teacher.face}>
+                <p>{teacher.say}</p>
+                <img src={IMG[teacher.face]} alt="" draggable={false} />
+              </div>
+            </div>
             <div className="hg-paper" role="list">
               {Array.from(
                 { length: Math.max(LINE_MAX, Math.ceil(cells.length / 15) * 15) },
@@ -790,6 +909,12 @@ export default function HangulApp() {
         {phase === "ready" && (
           <div className="hg-over">
             <div className="hg-card">
+              <img
+                className="hg-cardteacher"
+                src={IMG.hunjang}
+                alt="회초리를 든 훈장님"
+                draggable={false}
+              />
               <h2>니들이 한글을 알아?</h2>
               <p>
                 자모를 뽑아 글자를 만들고, 글자를 이어 붙여 <b>아무 문장</b>이나 만드세요.
@@ -798,15 +923,32 @@ export default function HangulApp() {
                 <br />
                 먹물 얼룩이 {LOAD_MAX}마리 쌓이면 끝. 웨이브는 끝없이.
               </p>
-              <button type="button" className="hg-go" onClick={start}>
-                시작
-              </button>
+              {ready ? (
+                <button type="button" className="hg-go" onClick={start}>
+                  시작
+                </button>
+              ) : (
+                <div
+                  className="hg-loading"
+                  role="progressbar"
+                  aria-valuenow={Math.round((assets.done / assets.total) * 100)}
+                >
+                  <i style={{ transform: `scaleX(${assets.done / assets.total})` }} />
+                  <span>먹을 가는 중… {Math.round((assets.done / assets.total) * 100)}%</span>
+                </div>
+              )}
             </div>
           </div>
         )}
         {phase === "over" && (
           <div className="hg-over">
             <div className="hg-card">
+              <img
+                className="hg-cardteacher"
+                src={IMG.hunjangAngry}
+                alt="화난 훈장님"
+                draggable={false}
+              />
               <h2>먹물에 덮였어요</h2>
               <p>
                 {g.wave}웨이브 · 문장 {g.sentences.length}개 · 점수 <b>{fmt(score(g))}</b>
@@ -888,14 +1030,17 @@ export default function HangulApp() {
           {wordBusy ? "찾는 중…" : "낱말 짝짓기"}
           <small>글자+글자 → 낱말</small>
         </button>
-        <button type="button" onClick={() => setSpeed((s) => (s === 1 ? 2 : s === 2 ? 3 : 1))}>
+        <button
+          type="button"
+          onClick={() => (playSfx("click"), setSpeed((s) => (s === 1 ? 2 : s === 2 ? 3 : 1)))}
+        >
           배속<small>×{speed}</small>
         </button>
         {/* 버리기 모드: 켜면 누르는 칸을 버려요 (말 안 되는 낱말 정리용) */}
         <button
           type="button"
           className={selling ? "is-on" : undefined}
-          onClick={() => (setSelling((s) => !s), setSel(null))}
+          onClick={() => (playSfx("click"), setSelling((s) => !s), setSel(null))}
           disabled={phase !== "play"}
         >
           🗑 버리기<small>{selling ? "누르는 칸 버림 · 끄기" : "꺼짐"}</small>
@@ -941,6 +1086,8 @@ export default function HangulApp() {
           </li>
         </ul>
       </details>
+
+      {review && <SfxReview />}
 
       {/* 랭킹: 문장이 주인공 — 대표글을 크게, 누가 · 몇 점은 작게. 사이트 메뉴 버튼보다 위에 뜨게 body 로 (색 · 글꼴은 hg-root 그대로) */}
       {rankOpen &&
