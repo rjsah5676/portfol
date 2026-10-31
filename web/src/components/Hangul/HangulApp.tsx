@@ -5,6 +5,7 @@ import { prepareRuns } from "@/lib/api/rankRun";
 import { ApiError } from "@/lib/api/errors";
 import {
   addByIds,
+  addPunct,
   autoPair,
   best,
   pieces,
@@ -40,7 +41,7 @@ import {
   type Sentence,
   type Zone,
 } from "@/lib/hangul/game";
-import { gradeOf, HANGUL_WAVE_PTS, LINE_MAX, type Judge, type Morph } from "@/lib/hangul/judge";
+import { gradeOf, HANGUL_WAVE_PTS, hangulLen, LINE_MAX, PUNCTS, withEnd, type Judge, type Morph } from "@/lib/hangul/judge";
 import { shown } from "@/lib/hangul/jamo";
 import {
   beginHangul,
@@ -314,7 +315,7 @@ export default function HangulApp() {
       : !j
         ? "읽는 중…"
         : j.sentence
-          ? `문장이 됐어요! [${gradeOf(j.nat)?.name}] 완성하면 +${fmt(j.points)}점 · 화면 전체 낭독 공격`
+          ? `문장이 됐어요! [${gradeOf(j.nat)?.name}] 「${withEnd(j.spaced || j.text)}」 완성하면 +${fmt(j.points)}점`
           : unknown.length
             ? `「${unknown.map((m) => m.f).join(", ")}」 — 사전에 없는 말이에요`
             : endsLikeSentence && !j.word
@@ -384,10 +385,10 @@ export default function HangulApp() {
         <div className="hg-panel">
           <section className="hg-line">
             <h3>
-              원고지 <small>{cells.length}/{LINE_MAX}</small>
+              원고지 <small>{hangulLen(text)}/{LINE_MAX}</small>
             </h3>
             <div className="hg-paper" role="list">
-              {Array.from({ length: LINE_MAX }, (_, k) => {
+              {Array.from({ length: Math.max(LINE_MAX, Math.ceil(cells.length / 15) * 15) }, (_, k) => {
                 const c = cells[k];
                 return (
                   <button
@@ -428,6 +429,15 @@ export default function HangulApp() {
                   <span className="hg-dim">가진 글자로는 안 보여요 — 더 뽑아 보세요</span>
                 ))}
             </div>
+            <div className="hg-punct">
+              <span>부호</span>
+              {PUNCTS.map((p) => (
+                <button key={p} type="button" onClick={() => (addPunct(g, p), refresh())} disabled={!g.line.length || phase !== "play"}>
+                  {p}
+                </button>
+              ))}
+              <small>띄어쓰기는 완성할 때 알아서</small>
+            </div>
             <div className="hg-line-btns">
               <button type="button" onClick={() => popLine()} disabled={!g.line.length}>하나 빼기</button>
               <button type="button" onClick={clearLine} disabled={!g.line.length}>비우기</button>
@@ -456,7 +466,7 @@ export default function HangulApp() {
                     )}
                     <div className="hg-sent">
                       <span className={`hg-sgrade g-${(u.grade ?? "").replace(" ", "")}`}>{u.grade}</span>
-                      <span className="hg-stext">{u.text}.</span>
+                      <span className="hg-stext">{u.spaced ?? withEnd(u.text)}</span>
                       <b>{fmt(u.points ?? 0)}</b>
                       <span className="hg-sact">
                         <button type="button" onClick={() => (moveSentence(g, k, -1), refresh())} disabled={k === 0} aria-label="위로">
@@ -493,7 +503,7 @@ export default function HangulApp() {
         {flash && (
           <div className="hg-flash" aria-live="polite">
             <span className={`hg-grade g-${flash.grade.replace(" ", "")}`}>{flash.grade}</span>
-            <p>{flash.text}.</p>
+            <p>{flash.spaced}</p>
             <b>+{fmt(flash.points)}</b>
           </div>
         )}
@@ -524,7 +534,8 @@ export default function HangulApp() {
               </p>
               {bestNow ? (
                 <blockquote className="hg-best">
-                  {bestNow.text}.<small>대표글 · {fmt(bestNow.points)}점</small>
+                  {bestNow.spaced}
+                  <small>대표글 · {fmt(bestNow.points)}점</small>
                 </blockquote>
               ) : (
                 <p className="hg-dim">완성한 문장이 없어요</p>
@@ -599,7 +610,7 @@ export default function HangulApp() {
               <li key={r.id}>
                 <span className="hg-rk">{k + 1}</span>
                 <div>
-                  <p className="hg-rq">{r.best ? `“${r.best}.”` : "—"}</p>
+                  <p className="hg-rq">{r.best ? `“${withEnd(r.bestSpaced || r.best)}”` : "—"}</p>
                   <p className="hg-rn">
                     {r.member ? r.name : `${r.name} (손님)`} · {r.wave}웨이브
                   </p>

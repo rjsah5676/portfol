@@ -17,7 +17,7 @@ import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
 import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
 import { CASE_RE as SUSPECT_CASE_RE, kstDay, scoreOf as suspectScore } from "../../../web/src/lib/suspect/engine";
-import { HANGUL_WAVE_PTS, LINE_MAX, LINE_RE } from "../../../web/src/lib/hangul/judge";
+import { HANGUL_WAVE_PTS, isLine, LINE_MAX } from "../../../web/src/lib/hangul/judge";
 import { judge as judgeHangul } from "../hangul/kiwi";
 import { h, ms, userOf } from "./util";
 
@@ -180,15 +180,17 @@ export const BOARDS: Record<string, Board> = {
       name,
       score: int.min(0).max(1_000_000_000),
       wave: int.min(0).max(100_000),
-      best: z.string().max(LINE_MAX),
+      best: z.string().max(LINE_MAX + 15),
       bestPts: int.min(0).max(1_000_000),
     }),
     // 웨이브 하나는 20초
     minSec: (d) => Math.max(0, d.wave - 1) * 20,
-    check: (d) => d.score >= d.wave * HANGUL_WAVE_PTS + d.bestPts && (d.best === "" ? d.bestPts === 0 : LINE_RE.test(d.best)),
+    check: (d) => d.score >= d.wave * HANGUL_WAVE_PTS + d.bestPts && (d.best === "" ? d.bestPts === 0 : isLine(d.best)),
+    // 대표글을 다시 판정해서 점수 대조 + 띄어쓴 모양(bestSpaced)을 같이 저장 (랭킹에 그대로 보여 줌)
     verify: async (d) => {
       if (d.best === "") return true;
       const j = await judgeHangul(d.best);
+      d.bestSpaced = j.spaced;
       return j.sentence && j.points === d.bestPts;
     },
   },

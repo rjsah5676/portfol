@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
-import { GRADES, gradeOf, hangulLen, isContent, LINE_RE, sentencePoints, type Judge, type Morph } from "../../../web/src/lib/hangul/judge";
+import { coreOf, GRADES, gradeOf, hangulLen, isContent, isLine, sentencePoints, type Judge, type Morph } from "../../../web/src/lib/hangul/judge";
 
 /*
  * 니들이 한글을 알아? 판정기 — 한국어 형태소 분석기 Kiwi (npm kiwi-nlp, wasm) 를 서버에서 돌림.
@@ -24,7 +24,11 @@ const SLANG: { word: string; tag: string }[] = [
   ["건모", "NNP"], // 사이트 주인 이름 (건모님 · 건모야)
 ].map(([word, tag]) => ({ word, tag }));
 
-type Kiwi = { analyze(s: string): { score: number; tokens: { str: string; tag: string; senseId: number }[] } };
+type Kiwi = {
+  analyze(s: string): { score: number; tokens: { str: string; tag: string; senseId: number }[] };
+  /** 띄어쓰기 고치기 (붙여 쓴 글자를 어절로 나눔) */
+  space(s: string, resetWhitespace?: boolean): string;
+};
 let kiwi: Promise<Kiwi> | null = null;
 
 export const judgeReady = () => existsSync(join(KIWI_MODEL_DIR, "cong.mdl"));
@@ -131,10 +135,10 @@ export async function suggest(line: string, units: string[]): Promise<Suggestion
   let budget = 2000;
   const check = (seq: number[], tail: string) => {
     const text = line + tail;
-    if (seen.has(text) || !LINE_RE.test(text)) return;
+    if (seen.has(text) || !isLine(text)) return;
     seen.add(text);
     budget--;
-    const s = readSentence(k, text);
+    const s = readSentence(k, coreOf(text));
     if (s.sentence) found.push({ add: seq, text, sentence: true, word: null, points: s.points });
     else if (!line && seq.length >= 2) {
       const w = k.analyze(text).tokens.map(toMorph);
@@ -172,17 +176,21 @@ export async function suggest(line: string, units: string[]): Promise<Suggestion
   return out;
 }
 
-/** 글자 줄 판정. text 는 LINE_RE 를 통과한 것만 */
+/**
+ * 원고지 한 줄 판정. text 는 isLine 을 통과한 것만 (한글 + 사용자가 넣은 , ? ! .)
+ * 문장 · 점수는 한글만 읽고(부호는 빼고), 띄어쓰기는 부호까지 넣어서 고침
+ */
 export async function judge(text: string): Promise<Judge> {
-  if (!LINE_RE.test(text)) throw new Error("bad line");
+  if (!isLine(text)) throw new Error("bad line");
   const k = await load();
-  const { morphs, nat, sentence, points } = readSentence(k, text);
-  // 낱말: 마침표 없이 읽어서 뜻 있는 말이 딱 하나 (뒤에 조사 · 어미는 붙어도 됨)
-  const w = k.analyze(text).tokens.map(toMorph);
-  const content = w.filter((m) => isContent(m.t));
-  const word =
-    w.every((m) => m.k) && content.length === 1
-      ? (WORD_KIND.find(([re]) => re.test(content[0].t))?.[1] ?? null)
-      : null;
-  return { text, morphs, sentence, word, points, nat };
+  const core = coreOf(text);
+  const { morphs, nat, sentence, points } = readSentence(k, core);
+  // 낱말: 부호 없이, 마침표도 없이 읽어서 뜻 있는 말이 딱 하나 (뒤에 조사 · 어미는 붙어도 됨)
+  let word: string | null = null;
+  if (core === text) {
+    const w = k.analyze(core).tokens.map(toMorph);
+    const content = w.filter((m) => isContent(m.t));
+    if (w.every((m) => m.k) && content.length === 1) word = WORD_KIND.find(([re]) => re.test(content[0].t))?.[1] ?? null;
+  }
+  return { text, morphs, sentence, word, points, nat, spaced: k.space(text) };
 }

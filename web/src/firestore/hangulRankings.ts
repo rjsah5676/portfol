@@ -47,7 +47,9 @@ export interface HangulRanking {
   avatar: string | null;
   score: number;
   wave: number;
+  /** 대표글: 원고지에 쓴 그대로 · 서버가 띄어쓰기를 고친 모양 */
   best: string;
+  bestSpaced?: string;
   bestPts: number;
   createdAt: Date | null;
 }

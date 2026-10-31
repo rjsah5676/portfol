@@ -24,6 +24,8 @@ export interface Judge {
   points: number;
   /** 말맛 (분석기 점수 ÷ 글자 수, 소수 둘째 자리) — gradeOf 로 등급 */
   nat: number;
+  /** 띄어쓰기를 고친 문장 (사용자가 넣은 문장부호 포함) — 보여 줄 때 씀 */
+  spaced: string;
 }
 
 /** 뜻을 가진 형태소(체언 · 용언 · 수식언 · 독립언 · 어근) — 조사 · 어미 · 접사 · 부호 빼고 */
@@ -59,7 +61,16 @@ export function sentencePoints(text: string, morphs: Morph[], nat: number): numb
 /** 랭킹 점수 = 완성한 문장 점수 합 + 버틴 웨이브 × 이 값 */
 export const HANGUL_WAVE_PTS = 100;
 
-/** 글자 줄로 받을 수 있는 최대 글자 수 */
+/** 글자 줄로 받을 수 있는 최대 글자 수 (한글만 셈) */
 export const LINE_MAX = 30;
-/** 판정 요청 글자 줄 형식 (완성된 한글 음절만) */
+/** 글자 · 낱말 조각 형식 (완성된 한글 음절만) */
 export const LINE_RE = new RegExp(`^[가-힣]{1,${LINE_MAX}}$`);
+/** 원고지에 넣을 수 있는 문장부호 (판정 땐 빼고 읽고, 띄어쓰기 · 보여 줄 때만 씀) */
+export const PUNCTS = [",", "?", "!", "."] as const;
+/** 원고지 한 줄 형식: 한글 + 문장부호, 한글은 1~LINE_MAX 자 */
+export const isLine = (t: string) =>
+  /^[가-힣,.?!]+$/.test(t) && t.length <= LINE_MAX + 15 && hangulLen(t) >= 1 && hangulLen(t) <= LINE_MAX;
+/** 판정할 알맹이 (한글만) */
+export const coreOf = (t: string) => t.replace(/[^가-힣]/g, "");
+/** 보여 줄 문장: 띄어쓴 문장 끝에 부호가 없으면 마침표 */
+export const withEnd = (s: string) => (/[.?!]$/.test(s) ? s : `${s}.`);

@@ -1,5 +1,5 @@
 import { addToSyllable, CONS_W, decompose, DOT, DOTS, isCons, joinJamo, JUNG, pick, syllableStroke, VOWEL_RECIPES, VOWS_W } from "./jamo";
-import { gradeOf, hangulLen, LINE_MAX, type Judge, type Morph } from "./judge";
+import { gradeOf, hangulLen, LINE_MAX, withEnd, type Judge, type Morph } from "./judge";
 
 /*
  * 니들이 한글을 알아? — 게임 진행 (화면과 따로, 숫자만)
@@ -26,8 +26,10 @@ export const ZONE_NAME: Record<Zone, string> = { c: "자음칸", v: "모음칸",
 
 export interface Unit {
   id: number;
-  /** j = 자모 · s = 글자 · w = 낱말 · t = 완성한 문장 */
-  kind: "j" | "s" | "w" | "t";
+  /** j = 자모 · s = 글자 · w = 낱말 · t = 완성한 문장 · p = 문장부호(원고지에만, 마음대로 넣고 뺌) */
+  kind: "j" | "s" | "w" | "t" | "p";
+  /** 문장: 띄어쓰기를 고친 모양 */
+  spaced?: string;
   /** 문장: 점수 · 말맛 등급 · 형태소 (앞뒤 문장이 이어지는지 볼 때 씀) */
   points?: number;
   grade?: string;
@@ -74,7 +76,10 @@ export interface Fx {
 }
 
 export interface Sentence {
+  /** 원고지에 쓴 그대로 (한글 + 부호) — 랭킹 대표글로 보내면 서버가 이걸 다시 판정 */
   text: string;
+  /** 띄어쓰기 고치고 끝 부호까지 붙인, 보여 줄 문장 */
+  spaced: string;
   points: number;
   wave: number;
   /** 말맛 등급 (명문 · 말 됨 · 억지) */
@@ -357,10 +362,19 @@ export function addByIds(g: Game, ids: number[]): boolean {
   return true;
 }
 
-/** 문장칸에서 하나 빼서 원래 칸으로 (자리가 없으면 다른 칸 아무 데나) */
+/** 원고지 끝에 문장부호 (, ? ! .) — 재료 없이 마음대로. 판정은 한글만 읽고 부호는 띄어쓰기 · 보여 줄 때 씀 */
+export function addPunct(g: Game, ch: string): boolean {
+  if (!g.line.length) return say(g, "글자부터 넣어 주세요"), false;
+  if (g.line.filter((u) => u.kind === "p").length >= 15) return say(g, "문장부호는 15개까지예요"), false;
+  g.line.push(unit(g, "p", ch));
+  return true;
+}
+
+/** 원고지에서 하나 빼서 원래 칸으로 (문장부호는 그냥 지움) */
 export function fromLine(g: Game, k: number): boolean {
   const u = g.line[k];
   if (!u) return false;
+  if (u.kind === "p") return g.line.splice(k, 1), true;
   const z = u.from ?? (u.kind === "w" ? "w" : "s");
   const at = free(g, z);
   if (at < 0) return say(g, `${ZONE_NAME[z]}이 꽉 차서 못 빼요`), false;
@@ -383,7 +397,7 @@ export function bindWord(g: Game, j: Judge): boolean {
 export function finishSentence(g: Game, j: Judge): Sentence | null {
   if (!j.sentence || j.text !== lineText(g)) return null;
   const n = hangulLen(j.text);
-  const s = { text: j.text, points: j.points, wave: g.wave, grade: gradeOf(j.nat)?.name ?? "" };
+  const s = { text: j.text, spaced: withEnd(j.spaced || j.text), points: j.points, wave: g.wave, grade: gradeOf(j.nat)?.name ?? "" };
   g.sentences.push(s);
   g.points += j.points;
   g.line = [];
@@ -392,6 +406,7 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
   u.points = j.points;
   u.grade = s.grade;
   u.morphs = j.morphs;
+  u.spaced = s.spaced;
   g.shelf.push(u);
   const dmg = j.points * 0.6 * g.power;
   for (const e of g.enemies) e.hp -= dmg;

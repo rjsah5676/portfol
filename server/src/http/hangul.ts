@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
-import { LINE_RE } from "../../../web/src/lib/hangul/judge";
+import { isLine, LINE_RE } from "../../../web/src/lib/hangul/judge";
 import { AppError, bad } from "../errors";
 import { judge, judgeReady, suggest } from "../hangul/kiwi";
 import { h } from "./util";
@@ -26,7 +26,7 @@ export function hangulRouter(): Router {
     "/judge",
     h(async (req, res) => {
       const t = String(req.query.t ?? "");
-      if (!LINE_RE.test(t)) throw bad();
+      if (!isLine(t)) throw bad();
       if (!judgeReady()) throw new AppError("JUDGE_OFF", "판정 서버가 아직 준비되지 않았어요.", 503);
       res.set("Cache-Control", "public, max-age=600");
       return judge(t);
@@ -38,7 +38,7 @@ export function hangulRouter(): Router {
     h(async (req) => {
       const line = String(req.query.line ?? "");
       const units = String(req.query.u ?? "").split(",").filter(Boolean);
-      if ((line && !LINE_RE.test(line)) || !units.length || units.length > 18 || !units.every((u) => LINE_RE.test(u))) throw bad();
+      if ((line && !isLine(line)) || !units.length || units.length > 18 || !units.every((u) => LINE_RE.test(u))) throw bad();
       if (!judgeReady()) throw new AppError("JUDGE_OFF", "판정 서버가 아직 준비되지 않았어요.", 503);
       return suggest(line, units);
     }),
