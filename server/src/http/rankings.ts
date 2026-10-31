@@ -206,7 +206,7 @@ export const BOARDS: Record<string, Board> = {
   },
 };
 
-const CHART_RE = /^[a-z0-9-]+_(easy|normal|hard|expert|nightmare|explus)$/;
+const CHART_RE = /^[a-z0-9-]+_(easy|normal|hard|expert|nightmare|explus|abyss)$/;
 const rhythmSchema = z.strictObject({
   name,
   score: int.min(0).max(1_000_000),

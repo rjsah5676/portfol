@@ -40,7 +40,7 @@ import type { Ctx } from "../realtime/gateway";
 
 export type Phase = "lobby" | "loading" | "playing" | "result";
 
-const DIFFS = ["easy", "normal", "hard", "expert", "nightmare", "explus"] as const;
+const DIFFS = ["easy", "normal", "hard", "expert", "nightmare", "explus", "abyss"] as const;
 type Diff = (typeof DIFFS)[number];
 
 interface Player {

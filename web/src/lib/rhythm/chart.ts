@@ -12,7 +12,7 @@
 import { starRating } from "./stars";
 import type { Kind, MusicEvent, Song } from "./music";
 
-export type Difficulty = "easy" | "normal" | "hard" | "expert" | "nightmare" | "explus";
+export type Difficulty = "easy" | "normal" | "hard" | "expert" | "nightmare" | "explus" | "abyss";
 export const DIFFICULTIES: { key: Difficulty; label: string; color: string }[] = [
   { key: "easy", label: "EASY", color: "#4ADE80" },
   { key: "normal", label: "NORMAL", color: "#60A5FA" },
@@ -21,6 +21,8 @@ export const DIFFICULTIES: { key: Difficulty; label: string; color: string }[] =
   { key: "nightmare", label: "NIGHTMARE", color: "#A855F7" },
   // ULTIMA: 나이트메어 위 (Lv19~21) — 일부 보스곡만 (키는 explus 그대로: 랭킹·저장 설정 호환)
   { key: "explus", label: "ULTIMA", color: "#FACC15" },
+  // ABYSS: ULTIMA 위 (Lv19~) — ULTIMA 채보를 osu · Quaver Lv19~20 방식(빠른 곡 스트림 · 느린 곡 코드잭)으로 (autochart makeAbyssChart)
+  { key: "abyss", label: "ABYSS", color: "#22D3EE" },
 ];
 /** 내장곡에서 이 난이도가 있는지 (나이트메어는 일부 곡만) */
 export const hasDifficulty = (
@@ -115,6 +117,17 @@ const RULES: Record<Difficulty, Rule> = {
   },
   // (이벤트 채보엔 EX+가 없음 — 자동 채보 전용. 타입만 맞춤)
   explus: {
+    grid: 1,
+    minGap: 0.05,
+    jackGap: 0.1,
+    holdMin: 4,
+    maxPress: 3,
+    fill: ["arp", "tom", "snare", "clap", "kick", "gtr"],
+    chord: { kinds: ["crash", "kick", "snare", "clap"], prob: 0.95, onlyDownbeat: false },
+    notesDuringHold: true,
+  },
+  // (ABYSS 도 자동 채보 전용 — ULTIMA 와 같게)
+  abyss: {
     grid: 1,
     minGap: 0.05,
     jackGap: 0.1,
@@ -331,6 +344,7 @@ export const LEVEL_BANDS: Record<Difficulty, [number, number]> = {
   expert: [12, 14],
   nightmare: [15, 18],
   explus: [19, 21],
+  abyss: [19, 24],
 };
 
 /** 정렬 + 판정 단위 수 + 레벨 계산 (자동 채보에서도 같이 씀) */

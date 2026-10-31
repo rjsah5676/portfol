@@ -42,14 +42,15 @@ export const BUILTIN = {
   picopico: { boss: {}, explus: {}, levels: [3, 6, 9, 13, 16, 16] },
   neonseaside: { single: true, boss: {}, explus: {}, levels: [3, 4, 7, 10, 14, 16] },
   riseofchampions: { boss: {}, explus: {}, levels: [3, 5, 8, 12, 14, 17] },
-  bladestorm: { boss: {}, explus: {}, levels: [3, 5, 9, 14, 17, 20] },
-  venombloom: { boss: {}, explus: {}, levels: [3, 5, 8, 12, 15, 17] },
+  bladestorm: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 9, 14, 17, 20] },
+  venombloom: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 8, 12, 15, 17] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];
   const tweaks = {};
   if (c.boss) { diffs.push("nightmare"); tweaks.nightmare = { nightmare: c.boss }; }
   if (c.explus) { diffs.push("explus"); tweaks.explus = { nightmare: c.explus }; }
+  if (c.abyss) { diffs.push("abyss"); tweaks.abyss = { abyss: c.abyss }; }
   for (const [d, t] of Object.entries(c.tweak ?? {})) tweaks[d] = { ...(tweaks[d] ?? {}), ...t };
   (c.levels ?? []).forEach((v, i) => { const d = ["easy", "normal", "hard", "expert", "nightmare", "explus"][i]; tweaks[d] = { ...(tweaks[d] ?? {}), level: v }; });
   return { diffs, tweaks };

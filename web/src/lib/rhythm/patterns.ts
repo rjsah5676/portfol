@@ -55,6 +55,7 @@ const TIER: Record<Difficulty, number> = {
   expert: 3,
   nightmare: 4,
   explus: 4,
+  abyss: 4,
 };
 /** 두 레인 트릴 가중치 배율: osu 랭크 채보 트릴 비율 보통 1% · 어려움 3% · 매우 어려움 5% (우리는 11·9·6%였음).
  *  나이트메어·ULTIMA도 낮게(osu 0.1%) — 한 손 성분은 앵커와 긴 한 손 조각 허용으로 채움 */

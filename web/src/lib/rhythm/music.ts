@@ -564,8 +564,8 @@ const FREEDOMDIVE = audioSong(
  *   picopico       --bpm-label 188 --boss '{}' --explus '{}' --levels 3,6,9,13,16,16   (NM 14) (나이트메어 14 · ULTIMA 16 이 천장 — 그 위는 타격이 모자람)
  *   neonseaside    --single --bpm-label 125 --boss '{}' --explus '{}' --levels 3,4,7,10,14,16   (NM 12 · ULT 14 — 2배 템포 250으로 잡혀서 --single)
  *   riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --levels 3,5,8,12,14,17   (ULT 16 — NM 은 매우 어려움 12 위로 14 가 천장)
- *   bladestorm     --bpm-label 183 --boss '{}' --explus '{}' --levels 3,5,9,14,17,20   (NM 16 · ULT 17 — 183 BPM 천장)
- *   venombloom     --bpm-label 140 --boss '{}' --explus '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15)
+ *   bladestorm     --bpm-label 183 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,14,17,20   (NM 16 · ULT 17 — 183 BPM 천장 · ABYSS 19 스트림형)
+ *   venombloom     --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 19 코드잭형)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로

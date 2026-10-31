@@ -256,6 +256,23 @@ const AUTO_RULES: Record<Difficulty, AutoRule> = {
     jackRun: 6,
     ln: { ratio: 0.06, lens: [1, 1, 1, 1.5, 2], maxSec: 1, onBeat: 0.63 },
   },
+  // ABYSS 는 ULTIMA 를 다듬어 만듦(makeAbyssChart) — 규칙은 타입만 맞춤
+  abyss: {
+    nps: 15,
+    minGap: 0.058,
+    // 16분 잭(코드잭)까지: osu·Quaver 5성급은 잭 19~26% — 16분 간격(180 BPM 83ms)을 막으면 레벨을 16분 스트림으로만 올리게 됨
+    jackGap: 0.07,
+    pos: [1, 1, 1, 0.95, 0.6],
+    fineNeed: 0.4,
+    floor: 0.03,
+    chord: { every: 2, need: 0.3 },
+    holdBeats: 1.25,
+    thick: [1.9, 1.45, 1.15],
+    tri: 0.45,
+    jackAllow: 0.9,
+    jackRun: 6,
+    ln: { ratio: 0.06, lens: [1, 1, 1, 1.5, 2], maxSec: 1, onBeat: 0.63 },
+  },
 };
 /** 나이트메어 경로(패턴으로만 레인을 깖)를 쓰는 난이도 */
 const isNm = (d: Difficulty) => d === "nightmare" || d === "explus";
@@ -460,6 +477,8 @@ export interface AutoTweak {
   level?: number;
   /** 진단용: 패턴을 고를 때마다 (이름, 마디, 길이) */
   onPick?: PatternCtx["onPick"];
+  /** ABYSS 손잡이 */
+  abyss?: AbyssTweak;
 }
 
 /**
@@ -2174,6 +2193,7 @@ export const TARGET_LEVEL: Record<Difficulty, number> = {
   expert: 13,
   nightmare: 16,
   explus: 20,
+  abyss: 20,
 };
 /** 목표에서 이만큼 벗어나도 됨 */
 const LEVEL_TOL = 1;
@@ -2185,6 +2205,7 @@ const NPB_CAP: Record<Difficulty, number> = {
   expert: 3.4,
   nightmare: 4.6,
   explus: 6,
+  abyss: 8,
 };
 
 /** 나이트메어 목표 레벨 — 빠른 곡은 더 높게 (체감 템포 170↑ 17, 200↑ 18) */
@@ -2214,6 +2235,11 @@ export function makeAutoCharts(
   while (foldBpm >= 240) foldBpm /= 2;
   const fastSong = foldBpm >= 185;
   for (const d of diffs) {
+    // ABYSS 는 ULTIMA 채보를 다듬어 만듦 (ULTIMA 를 같이 만들 때만)
+    if (d === "abyss") {
+      if (out.explus) out.abyss = makeAbyssChart(an, out.explus, tweaks.abyss?.abyss);
+      continue;
+    }
     const base = tweaks[d] ?? {};
     // 직접 정한 레벨은 그대로, 아니면 구간 가운데 (아래 난이도보다는 최소 1 높게)
     const goal = d === "nightmare" ? nightmareGoal(an) : TARGET_LEVEL[d];
@@ -2539,4 +2565,273 @@ function spreadFastJacks(src: Note[], floor: number): Note[] {
     i = j;
   }
   return out;
+}
+
+/** ABYSS 손잡이 (기본값은 osu · Quaver 같은 BPM대 Lv19~20 에 맞춘 값 — 2026-11-01 BLADE STORM · Venom Bloom) */
+export interface AbyssTweak {
+  /** 스트림형(빠른 곡) / 코드잭형(느린 곡). 없으면 접은 BPM 165 기준 */
+  mode?: "stream" | "chord";
+  /** 스트림형: 박당 줄 수 목표 (ref 183 BPM Lv19~20 3.2) */
+  rpb?: number;
+  /** 스트림형: 이 순위 위 마디는 4분 간격(한 박 빈칸)도 메움 */
+  q4?: number;
+  /** 스트림형 강세: 이 순위 위 마디의 정박·8분·16분 줄을 한 개 더 두껍게 */
+  q3?: number;
+  acc?: number;
+  e8acc?: number;
+  e16acc?: number;
+  /** 코드잭형: 이 순위 위 마디만 / 3개 · 2개 동시 몫 / 더하는 노트가 앞 줄 레인을 쓸 확률(잭) */
+  q?: number;
+  p3?: number;
+  p2?: number;
+  share?: number;
+}
+
+/**
+ * ABYSS: ULTIMA 채보를 osu · Quaver Lv19~20 방식으로 한 단계 더 (2026-11-01 osu · Quaver 13,524채보 분석).
+ *  ULTIMA 는 레벨을 동시치기로 올려서(2개 동시 0.38~0.50, 16분 16연타 안 줄 0~12%) 소리가 모자라면 그 위로 못 감.
+ *  osu · Quaver 는 같은 BPM 에서 Lv17~18 → 19~20 이 이렇게 오름:
+ *  - 빠른 곡(165 BPM↑, 스트림형): 동시치기는 그대로, 16분 단노트 스트림을 길게 이음 (박당 줄 2.8→3.2,
+ *    16연타 안 줄 37→58~64%, 연타 길이 p90 17→57). 줄의 약 1/4 은 분석기가 온셋을 못 잡은 자리 — 스트림 사이를 메우는 단노트
+ *  - 느린 곡(코드잭형): 줄 밀도는 그대로, 2개 동시 0.40 · 3개 0.26 · 115ms 안 잭 0.25 · 앞 줄과 레인 겹치는 줄 0.57
+ *  ULTIMA 채보에 이걸 덧입힘 (원래 노트는 시각 그대로, 더한 노트만 16분 칸에)
+ */
+export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): Chart {
+  let seed = 7;
+  const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32;
+  // 16분 칸: 분석 박을 4등분 (박 사이 흔들림을 따라감)
+  const ab = an.beats;
+  const anaLen = (ab[ab.length - 1] - ab[0]) / Math.max(1, ab.length - 1);
+  const sub = Math.max(1, Math.round((anaLen / (60 / an.bpm)) * 4));
+  const slots: number[] = [];
+  for (let i = 0; i + 1 < ab.length; i++)
+    for (let k = 0; k < sub; k++) slots.push(ab[i] + ((ab[i + 1] - ab[i]) * k) / sub);
+  for (let k = 0; k < 64; k++) slots.push(ab[ab.length - 1] + (anaLen * k) / sub);
+  const slotOf = (t: number) => {
+    let lo = 0;
+    let hi = slots.length - 1;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (slots[m] < t) lo = m + 1;
+      else hi = m;
+    }
+    return lo > 0 && t - slots[lo - 1] < slots[lo] - t ? lo - 1 : lo;
+  };
+  type Row = { s: number; lanes: Map<number, number | undefined>; fill?: boolean };
+  const rows = new Map<number, Row>();
+  for (const n of ult.notes) {
+    const s = slotOf(n.t);
+    const r = rows.get(s) ?? { s, lanes: new Map() };
+    r.lanes.set(n.lane, n.end);
+    rows.set(s, r);
+  }
+  // 칸마다 소리 세기 (곡 안 순위 0~1, ±30ms)
+  const sSorted = an.onsets.map((o) => o.s).sort((x, y) => x - y);
+  const sRank = (s: number) => {
+    let lo = 0;
+    let hi = sSorted.length;
+    while (lo < hi) {
+      const m = (lo + hi) >> 1;
+      if (sSorted[m] < s) lo = m + 1;
+      else hi = m;
+    }
+    return lo / Math.max(1, sSorted.length);
+  };
+  const slotS = new Map<number, number>();
+  for (const o of an.onsets) {
+    const s = slotOf(o.t);
+    if (Math.abs(slots[s] - o.t) <= 0.03) slotS.set(s, Math.max(slotS.get(s) ?? 0, sRank(o.s)));
+  }
+  // 마디(16칸) 세기 = ULTIMA 줄 수 + 소리 세기 절반
+  const barE = new Array(Math.ceil(slots.length / 16)).fill(0);
+  for (const r of rows.values()) barE[Math.floor(r.s / 16)] += 1;
+  for (const [s, v] of slotS) barE[Math.floor(s / 16)] += v * 0.5;
+  const barSorted = barE.filter((x) => x > 0).sort((x, y) => x - y);
+  const rank = (b: number) => {
+    const v = barE[b];
+    if (!v) return 0;
+    let k = 0;
+    while (k < barSorted.length && barSorted[k] < v) k++;
+    return k / barSorted.length;
+  };
+  let fold = displayBpm(an);
+  while (fold < 120) fold *= 2;
+  while (fold >= 240) fold /= 2;
+  const stream = (tw.mode ?? (fold >= 165 ? "stream" : "chord")) === "stream";
+  const order = () => [...rows.values()].sort((a, b) => a.s - b.s);
+  const lanesOf = (r: Row) => [...r.lanes.keys()];
+  // 앞뒤 줄 레인 · 앞앞 레인 피하고(잭 · 트릴 없음) 앞 두 단노트 방향을 이어 계단
+  const pickLane = (prevL: number[], nextL: number[], prev2: number | null) => {
+    const all = [0, 1, 2, 3];
+    let cand = all.filter((l) => !prevL.includes(l) && !nextL.includes(l) && l !== prev2);
+    if (!cand.length) cand = all.filter((l) => !prevL.includes(l) && !nextL.includes(l));
+    if (!cand.length) cand = all.filter((l) => !prevL.includes(l));
+    if (!cand.length) cand = all;
+    const p = prevL.length === 1 ? prevL[0] : null;
+    let want: number | null = null;
+    if (p !== null && prev2 !== null) {
+      const dir = Math.sign(p - prev2) || 1;
+      want = p + dir;
+      if (want < 0 || want > 3) want = p - dir;
+    }
+    return cand
+      .map((l) => [l, (want === null ? 0 : Math.abs(l - want)) + (rnd() - 0.5) * 0.9] as const)
+      .sort((a, b) => a[1] - b[1])[0][0];
+  };
+  if (stream) {
+    // 1) 센 마디부터 줄 간격 2·3칸(위 마디는 4칸까지)을 16분 단노트로 — 박당 줄 수가 목표에 닿을 때까지
+    const keys = [...rows.keys()];
+    const beats = (Math.max(...keys) - Math.min(...keys)) / 4;
+    const bars = [...barE.keys()].sort((a, b) => barE[b] - barE[a]);
+    for (const b of bars) {
+      if (rows.size / beats >= (tw.rpb ?? 3.2)) break;
+      const top = rank(b) >= (tw.q4 ?? 0.7);
+      const rs = order().filter((r) => r.s >= b * 16 - 4 && r.s < b * 16 + 20);
+      for (let i = 0; i + 1 < rs.length; i++) {
+        const a = rs[i];
+        const c = rs[i + 1];
+        const g = c.s - a.s;
+        if (Math.floor(a.s / 16) !== b && Math.floor(c.s / 16) !== b) continue;
+        if (!(g === 2 || g === 3 || (g === 4 && top))) continue;
+        for (const [l, e] of a.lanes) if (e && e > slots[c.s] - 0.02) a.lanes.set(l, undefined);
+        let prev = a;
+        let prev2: number | null = null;
+        for (let s = a.s + 1; s < c.s; s++) {
+          const pl = lanesOf(prev);
+          const r: Row = {
+            s,
+            lanes: new Map([[pickLane(pl, s + 1 === c.s ? lanesOf(c) : [], prev2), undefined]]),
+            fill: true,
+          };
+          rows.set(s, r);
+          prev2 = pl.length === 1 ? pl[0] : null;
+          prev = r;
+        }
+      }
+    }
+    // 2) 바로 앞 줄과 같은 레인인 메운 노트(16분 잭)는 다른 레인으로
+    const rs = order();
+    for (let i = 1; i < rs.length; i++) {
+      const r = rs[i];
+      const p = rs[i - 1];
+      if (r.s - p.s > 1 || !r.fill || !lanesOf(p).includes(lanesOf(r)[0])) continue;
+      const nx = rs[i + 1] && rs[i + 1].s - r.s === 1 ? lanesOf(rs[i + 1]) : [];
+      r.lanes = new Map([[pickLane(lanesOf(p), nx, null), undefined]]);
+    }
+    // 3) 센 마디 강세: 정박(·8분·16분 일부) 줄을 하나 더 두껍게 (점프스트림) — 바로 옆 줄 레인은 피함
+    for (let i = 1; i + 1 < rs.length; i++) {
+      const r = rs[i];
+      if (rank(Math.floor(r.s / 16)) < (tw.q3 ?? 0.7) || r.lanes.size >= 3) continue;
+      const strong = r.s % 4 === 0 ? 1 : r.s % 2 === 0 ? (tw.e8acc ?? 1) : (tw.e16acc ?? 0.3);
+      if (rnd() >= strong * (tw.acc ?? 1)) continue;
+      const near = r.s - rs[i - 1].s <= 1 || rs[i + 1].s - r.s <= 1;
+      const busy = new Set([...lanesOf(rs[i - 1]), ...lanesOf(rs[i + 1])]);
+      const free = [0, 1, 2, 3].filter((l) => !r.lanes.has(l) && !(busy.has(l) && near));
+      if (free.length) r.lanes.set(free[Math.floor(rnd() * free.length)], undefined);
+    }
+  } else {
+    // 센 마디(위 75%) 줄을 소리 세기 · 박 위치 순으로 위 35% 3개 · 다음 45% 2개 동시 —
+    //  더하는 노트는 대부분 바로 앞 줄 레인(코드잭), 같은 레인 3연타는 피함
+    const rs = order();
+    const el = rs.filter((r) => rank(Math.floor(r.s / 16)) >= (tw.q ?? 0.25));
+    for (const r of el) for (const [l, e] of r.lanes) if (e) r.lanes.set(l, undefined);
+    const p3 = tw.p3 ?? 0.35;
+    const p2 = tw.p2 ?? 0.45;
+    const sorted = el
+      .map(
+        (r) =>
+          [
+            r,
+            (slotS.get(r.s) ?? 0) + (r.s % 4 === 0 ? 0.35 : r.s % 2 === 0 ? 0.15 : 0) + rnd() * 0.3,
+          ] as const
+      )
+      .sort((a, b) => b[1] - a[1]);
+    const want = new Map<number, number>();
+    sorted.forEach(([r], k) =>
+      want.set(r.s, k < sorted.length * p3 ? 3 : k < sorted.length * (p3 + p2) ? 2 : 1)
+    );
+    for (let i = 0; i < rs.length; i++) {
+      const r = rs[i];
+      const w = want.get(r.s);
+      if (!w) continue;
+      const p = i ? rs[i - 1] : null;
+      const pp = i > 1 ? rs[i - 2] : null;
+      while (r.lanes.size < w) {
+        const free = [0, 1, 2, 3].filter((l) => !r.lanes.has(l));
+        const pl = p && r.s - p.s <= 2 ? free.filter((l) => p.lanes.has(l)) : [];
+        const pl2 = pl.filter((l) => !(pp && pp.lanes.has(l) && r.s - pp.s <= 4));
+        const l =
+          pl2.length && rnd() < (tw.share ?? 0.8)
+            ? pl2[Math.floor(rnd() * pl2.length)]
+            : (free.filter((x) => !pl.includes(x))[0] ?? free[0]);
+        r.lanes.set(l, undefined);
+      }
+    }
+  }
+  // 원래 노트는 원래 시각, 더한 노트는 그 줄의 원래 시각(없으면 16분 칸)
+  type N = { t: number; l: number; e?: number; fill: boolean };
+  const orig = new Map(ult.notes.map((n) => [`${slotOf(n.t)}:${n.lane}`, n.t]));
+  const rowT = new Map<number, number>();
+  for (const n of ult.notes) if (!rowT.has(slotOf(n.t))) rowT.set(slotOf(n.t), n.t);
+  const out: N[] = [];
+  for (const r of order())
+    for (const [l, e] of r.lanes) {
+      const o = orig.get(`${r.s}:${l}`);
+      out.push({
+        t: o ?? rowT.get(r.s) ?? Math.round(slots[r.s] * 1000) / 1000,
+        l,
+        e,
+        fill: o === undefined,
+      });
+    }
+  out.sort((a, b) => a.t - b.t || a.l - b.l);
+  // 롱노트: 같은 레인 다음 노트 0.1초 앞에서 끊고, 0.3초가 안 되면 단노트로
+  for (let i = 0; i < out.length; i++) {
+    const n = out[i];
+    if (!n.e) continue;
+    const nx = out.find((o, j) => j > i && o.l === n.l);
+    if (nx && nx.t < n.e + 0.1) {
+      const e = nx.t - 0.1;
+      n.e = e - n.t >= 0.3 ? Math.round(e * 1000) / 1000 : undefined;
+    }
+  }
+  // 같은 레인 빠른 연타(스트림형 115ms · 코드잭형은 잭이 목적이라 70ms): 더한 노트를 빈 레인으로.
+  //  앞뒤가 다 동시치기라 빈 레인이 없으면 뒤 동시치기에서 한 레인을 빼서 자리를 만듦(스트림이 안 끊기게), 그래도 안 되면 뺌
+  const lim = stream ? 0.115 : 0.07;
+  for (let pass = 0; pass < 2; pass++)
+    for (let i = 0; i < out.length; i++) {
+      const n = out[i];
+      if (!n.fill) continue;
+      const near = out.filter((o) => o !== n && Math.abs(o.t - n.t) < lim + 0.002);
+      const busy = new Set(near.map((o) => o.l));
+      for (const o of out) if (o.e && o.t < n.t && o.e > n.t - 0.05) busy.add(o.l);
+      if (!busy.has(n.l)) continue;
+      const free = [0, 1, 2, 3].filter((l) => !busy.has(l));
+      if (free.length) {
+        n.l = free[Math.floor(rnd() * free.length)];
+        continue;
+      }
+      const before = new Set(near.filter((o) => o.t < n.t).map((o) => o.l));
+      const after = near.filter((o) => o.t > n.t);
+      const cand = [0, 1, 2, 3]
+        .filter((l) => !before.has(l))
+        .filter((l) =>
+          after
+            .filter((o) => o.l === l)
+            .every((o) => out.filter((x) => Math.abs(x.t - o.t) < 0.004).length >= 2)
+        );
+      if (cand.length) {
+        const l = cand[Math.floor(rnd() * cand.length)];
+        for (const o of after.filter((o) => o.l === l)) out.splice(out.indexOf(o), 1);
+        n.l = l;
+        continue;
+      }
+      out.splice(i--, 1);
+    }
+  const notes: Note[] = [];
+  for (const n of out) {
+    if (notes.some((m) => m.lane === n.l && Math.abs(m.t - n.t) < 0.004)) continue;
+    notes.push(n.e ? { t: n.t, lane: n.l, end: n.e } : { t: n.t, lane: n.l });
+  }
+  return finishChart(notes, "abyss");
 }

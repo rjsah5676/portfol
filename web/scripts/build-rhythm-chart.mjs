@@ -10,6 +10,7 @@
  *   --bpm-label <n>   화면에 보일 BPM (분석기가 셔플로 잘못 보면 직접 지정)
  *   --boss '<json>'   보스곡: 나이트메어 난이도를 추가 (src/lib/rhythm/autochart의 NightmareTweak, {}면 기본값)
  *   --explus '<json>' EX+(Lv19~21) 난이도를 추가 (같은 NightmareTweak, 기본은 더 촘촘) — --levels 6번째로 레벨 지정
+ *   --abyss '<json>'  ABYSS(ULTIMA 위) 추가 — ULTIMA 채보를 다듬어 만듦 (autochart AbyssTweak, {}면 기본값). --explus 와 같이
  *   --hard-slots      쉬움·보통·어려움을 한 단계 위 규칙으로 (보스곡용: 대략 Lv6 / 11 / 14)
  *   --straight        분석기가 셋잇단(12/8)으로 잘못 볼 때 1.5배 템포 4/4로 강제
  *   --double          분석기가 절반 템포로 잘못 볼 때 2배 템포로 강제
@@ -44,7 +45,7 @@ const argv = process.argv.slice(2);
 const id = argv.find(
   (a) =>
     !a.startsWith("--") &&
-    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|boss|tweak|levels|explus|keep)$/)
+    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|boss|tweak|levels|explus|abyss|keep)$/)
 );
 if (!id) {
   console.error(
@@ -124,6 +125,12 @@ const explusArg = opt("--explus");
 if (explusArg !== undefined) {
   diffs.push("explus");
   tweaks.explus = { nightmare: JSON.parse(explusArg) };
+}
+// --abyss '<json>': ABYSS 추가 — ULTIMA 채보를 다듬어 만듦 (AbyssTweak)
+const abyssArg = opt("--abyss");
+if (abyssArg !== undefined) {
+  diffs.push("abyss");
+  tweaks.abyss = { abyss: JSON.parse(abyssArg) };
 }
 const tweakArg = opt("--tweak");
 if (tweakArg)

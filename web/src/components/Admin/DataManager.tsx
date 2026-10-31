@@ -35,7 +35,7 @@ interface Source {
   rooms?: string;
 }
 
-const DIFFS = ["easy", "normal", "hard", "expert", "nightmare", "explus"];
+const DIFFS = ["easy", "normal", "hard", "expert", "nightmare", "explus", "abyss"];
 const RHYTHM_CHARTS = SONGS.filter((s) => !s.practice).flatMap((s) =>
   DIFFS.map((d) => ({ value: `${s.id}_${d}`, label: `${s.title} · ${d}` }))
 );
