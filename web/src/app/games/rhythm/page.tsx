@@ -43,7 +43,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "난이도는 몇 단계인가요?",
-    a: `EASY · NORMAL · HARD · EX · NM(NIGHTMARE) · ULT(ULTIMA) · ABYSS 7단계이고, 레벨은 Lv1부터 Lv${maxLevel}까지입니다. ABYSS는 osu!mania · Quaver 상위 채보처럼 긴 16분 스트림(빠른 곡)이나 코드잭(느린 곡)으로 만든 최상위 난이도입니다.`,
+    a: `EASY · NORMAL · HARD · EX · NM(NIGHTMARE) · ULT(ULTIMA) · ABYSS 7단계이고, 레벨은 Lv1부터 Lv${maxLevel}까지입니다. ABYSS는 긴 16분 스트림(빠른 곡)이나 코드잭(느린 곡)으로 몰아치는 최상위 난이도입니다.`,
   },
   {
     q: "내 노래로도 할 수 있나요?",
@@ -122,9 +122,7 @@ export default function RhythmPage() {
                 </span>
               ))}
             </p>
-            <p className={`${p} mt-2`}>
-              레벨은 osu!mania 별점과 같은 방식으로 매깁니다. ULT · ABYSS는 일부 곡에만 있습니다.
-            </p>
+            <p className={`${p} mt-2`}>ULT · ABYSS는 일부 곡에만 있습니다.</p>
           </section>
 
           <section>

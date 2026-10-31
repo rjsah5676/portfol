@@ -34,7 +34,6 @@ export const PATCHES: Patch[] = [
     date: "2026.11.01",
     lines: [
       "ULTIMA 위 새 난이도 ABYSS — 먼저 BLADE STORM · Venom Bloom 두 곡 (둘 다 Lv19)",
-      "osu!mania · Quaver 랭크 채보 1만 3천여 개에서 Lv19~20 이 어떻게 어려워지는지 보고 맞춤",
       "BLADE STORM: ULTIMA 빈칸을 16분으로 메워 스트림을 길게 잇는 체력형 (같은 레인 빠른 연타 없음)",
       "Venom Bloom: 2~3개 동시치기가 같은 레인으로 이어지는 코드잭형",
       "내 음악도 ULTIMA 와 함께 ABYSS 채보가 만들어짐",
