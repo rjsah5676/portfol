@@ -48,6 +48,9 @@ const TOP_LEVEL = new Set<string>([
   "traffic_daily",
   // 격투 랭크전 · 디펜스 랭킹 · 디펜스 성장 · 우편 · 사이트 설정(공지)
   "fight_rank_ratings",
+  // 니들이 한글을 알아? 랭킹 · 사전에 없는 말 신고 (RANK_COLLECTIONS 에 안 넣음 — 별명을 바꾸면 이름을 맞추는데, 시크릿 기록까지 바뀌면 안 돼서)
+  "hangul_rankings",
+  "hangul_reports",
   // 격투 경기 기록 (보기 전용 — 입력 데이터는 목록에서 뺌)
   "fight_replays",
   "defense_rank",

@@ -105,6 +105,12 @@ async function ensureIndexes({ db }: Database) {
   // 오늘의 용의자: 날짜_난이도별 순위 · 그 사람의 첫 기록 찾기
   idx("suspect_rankings", { case: 1, score: 1 });
   idx("suspect_rankings", { case: 1, uid: 1 });
+  // 니들이 한글을 알아?: 점수순 · 최신순 · 웃긴순(👍), 내가 누른 👍 찾기, 사전에 없는 말 신고(많이 신고된 순)
+  idx("hangul_rankings", { score: -1 });
+  idx("hangul_rankings", { createdAt: -1 });
+  idx("hangul_rankings", { likes: -1, score: -1 });
+  idx("hangul_likes", { uid: 1, rid: 1 });
+  idx("hangul_reports", { count: -1 });
   // 랭킹 티켓: 사람별 최근 발급 수 확인, 8일 지나면 자동 삭제(유효 기간 7일)
   idx("rank_tickets", { uid: 1, createdAt: -1 });
   idx("rank_tickets", { createdAt: 1 }, { expireAfterSeconds: 8 * 24 * 60 * 60 });

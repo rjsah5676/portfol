@@ -22,8 +22,8 @@ const pending = new Map<string, Promise<string | null>>();
 /** 랭킹별로 몇 번째 판인지 (늦게 도착한 옛 판의 티켓을 구분) */
 const runNo = new Map<string, number>();
 
-/** 로그인이 안 돼 있으면 익명으로 로그인 (온라인 대국과 같은 방식) */
-async function signIn(): Promise<void> {
+/** 로그인이 안 돼 있으면 익명으로 로그인 (온라인 대국과 같은 방식). 랭킹 👍 처럼 로그인이 필요한 곳에서도 씀 */
+export async function signIn(): Promise<void> {
   const { auth } = await import("@/firebase");
   await auth.authStateReady();
   if (auth.currentUser) return;

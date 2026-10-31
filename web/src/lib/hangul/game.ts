@@ -234,13 +234,41 @@ const hasRoomFor = (g: Game, j: string) => {
   return at >= 0 && countOf(g.zones[zoneOfJamo(j)][at]) < STACK_MAX;
 };
 
-/** 뽑기 한 번: 자음 42% · 모음 재료(천지인) 58% — 모음은 보통 재료 두 개가 듦. 쌓을 데가 없는 자모가 나오면 쌓을 수 있는 걸로 다시 뽑음 */
+/**
+ * 지금 가진 걸 보고 뽑기 확률을 고침 (글자 운이 망해서 "짝지을 게 없어요"만 뜨는 것 방지 — Wordatro 류가 욕먹은 부분)
+ *   자음 대 모음: 기본 자음 42%. 모음은 보통 천지인 재료 두 개라, 재료(만든 모음은 2개로 셈)가 자음 × 1.4 보다 모자라면 모음 쪽으로,
+ *     남아돌면 자음 쪽으로 (15% ~ 65%)
+ *   천지인끼리: ㆍ 는 거의 모든 모음에 들어가서, ㅣ · ㅡ 에 비해 모자라면 ㆍ 를 더 (최대 3배). ㅣ 가 하나도 없으면 ㅣ 도 더
+ */
+export function drawOdds(g: Game): { cons: number; vows: Record<string, number> } {
+  let C = 0, dots = 0, I = 0, E = 0, made = 0;
+  for (const u of g.zones.c) if (u?.kind === "j") C += countOf(u);
+  for (const u of g.zones.v) {
+    if (u?.kind !== "j") continue;
+    const n = countOf(u);
+    if (u.text === DOT) dots += n;
+    else if (u.text === DOTS) dots += 2 * n;
+    else if (u.text === "ㅣ") I += n;
+    else if (u.text === "ㅡ") E += n;
+    else made += n;
+  }
+  const mats = dots + I + E + made * 2;
+  const short = C * 1.4 - mats; // + 면 모음 재료가 모자람
+  const cons = Math.max(0.15, Math.min(0.65, 0.42 - short * 0.04));
+  const vows = { ...VOWS_W };
+  vows[DOT] *= Math.min(3, 1 + Math.max(0, I + E - dots) * 0.25);
+  if (!I) vows["ㅣ"] *= 1.5;
+  return { cons, vows };
+}
+
+/** 뽑기 한 번 (확률은 drawOdds). 쌓을 데가 없는 자모가 나오면 쌓을 수 있는 걸로 다시 뽑음 */
 export function draw(g: Game, n = 1): number {
   let got = 0;
   for (let k = 0; k < n; k++) {
+    const odds = drawOdds(g);
     let j = "";
     for (let t = 0; t < 12 && !j; t++) {
-      const c = pick(Math.random() < 0.42 ? CONS_W : VOWS_W);
+      const c = pick(Math.random() < odds.cons ? CONS_W : odds.vows);
       if (hasRoomFor(g, c)) j = c;
     }
     if (!j) break;

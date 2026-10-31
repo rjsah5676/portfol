@@ -59,12 +59,17 @@ import {
   beginHangul,
   getHangulRanking,
   judgeLine,
+  likedHangul,
+  likeHangul,
+  reportHangul,
   submitHangul,
   suggestLine,
   type HangulRanking,
+  type HangulSort,
   type Suggestion,
 } from "@/firestore/hangulRankings";
 import { drawField } from "./draw";
+import { shareCard } from "./shareCard";
 
 /*
  * 니들이 한글을 알아? — 아무 말이나 이어 붙여 먹물을 막는 무한 디펜스 (프로토)
@@ -139,7 +144,14 @@ export default function HangulApp() {
   });
   // 랭킹 창 (열려 있는 동안 판은 멈춤)
   const [rankOpen, setRankOpen] = useState(false);
-  const [rankSort, setRankSort] = useState<"top" | "new">("top");
+  const [rankSort, setRankSort] = useState<HangulSort>("top");
+  // 👍 웃겨요: 내가 누른 기록 · 누르는 중인 기록
+  const [liked, setLiked] = useState<Set<string>>(() => new Set());
+  const [liking, setLiking] = useState<string | null>(null);
+  // 사전에 없는 말 신고한 줄 (같은 줄은 한 번만)
+  const [reported, setReported] = useState<Set<string>>(() => new Set());
+  const [sharing, setSharing] = useState(false);
+  const [rankMsg, setRankMsg] = useState<string | null>(null);
   const [sugs, setSugs] = useState<{
     line: string;
     list: (Suggestion & { ids: number[] })[];
@@ -168,15 +180,55 @@ export default function HangulApp() {
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
   // 랭킹 · 이름
-  const loadRanks = useCallback((sort: "top" | "new") => {
+  const loadRanks = useCallback((sort: HangulSort) => {
     getHangulRanking(50, sort)
-      .then(setRanks)
+      .then((rs) => {
+        setRanks(rs);
+        likedHangul(rs.map((r) => r.id))
+          .then(setLiked)
+          .catch(() => {});
+      })
       .catch(() => setRanks([]));
   }, []);
   useEffect(() => {
     prepareRuns();
   }, []);
-  const openRanks = (sort: "top" | "new" = rankSort) => {
+  const toggleLike = async (r: HangulRanking) => {
+    if (liking) return;
+    const on = !liked.has(r.id);
+    setLiking(r.id);
+    try {
+      const n = await likeHangul(r.id, on);
+      setLiked((s) => {
+        const t = new Set(s);
+        if (on) t.add(r.id);
+        else t.delete(r.id);
+        return t;
+      });
+      setRanks((rs) => rs?.map((x) => (x.id === r.id ? { ...x, likes: n } : x)) ?? rs);
+    } catch (e) {
+      setRankMsg(
+        e instanceof ApiError && e.code === "OWN_RECORD"
+          ? "내 문장에는 누를 수 없어요"
+          : "누르지 못했어요"
+      );
+      setTimeout(() => setRankMsg(null), 2000);
+    } finally {
+      setLiking(null);
+    }
+  };
+  const share = async (c: Parameters<typeof shareCard>[0]) => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await shareCard(c);
+    } catch {
+      /* 공유 취소 · 실패는 조용히 */
+    } finally {
+      setSharing(false);
+    }
+  };
+  const openRanks = (sort: HangulSort = rankSort) => {
     setRankSort(sort);
     setRanks(null);
     setRankOpen(true);
@@ -437,6 +489,13 @@ export default function HangulApp() {
         : null;
   const unknown = j?.morphs.filter((m) => !m.k) ?? [];
   const endsLikeSentence = !!j && j.morphs.length >= 2 && j.morphs[j.morphs.length - 1].t === "EF";
+  // "이거 말 되는데?" — 사전에 없는 말이 있거나 외계어로 판정됐을 때만
+  const canReport = !!j && !j.sentence && (unknown.length > 0 || (endsLikeSentence && !j.word));
+  const report = () => {
+    if (!j || reported.has(j.text)) return;
+    setReported((s) => new Set(s).add(j.text));
+    reportHangul(j.text).catch(() => {});
+  };
   const lineMsg = !text
     ? "글자칸 · 단어칸의 글자를 누르면 여기 이어 붙어요"
     : judgeErr
@@ -567,7 +626,19 @@ export default function HangulApp() {
                 </span>
               ))}
             </div>
-            <p className={`hg-msg${j?.sentence ? " is-ok" : ""}`}>{lineMsg}</p>
+            <p className={`hg-msg${j?.sentence ? " is-ok" : ""}`}>
+              {lineMsg}
+              {canReport && (
+                <button
+                  type="button"
+                  className="hg-report"
+                  onClick={report}
+                  disabled={reported.has(j.text)}
+                >
+                  {reported.has(j.text) ? "신고했어요 ✓ 사전에 넣어 볼게요" : "🙋 이거 말 되는데?"}
+                </button>
+              )}
+            </p>
             <div className="hg-sugs">
               <button
                 type="button"
@@ -749,6 +820,21 @@ export default function HangulApp() {
                 <blockquote className="hg-best">
                   {bestNow.spaced}
                   <small>대표글 · {fmt(bestNow.points)}점</small>
+                  <button
+                    type="button"
+                    className="hg-sharebtn"
+                    disabled={sharing}
+                    onClick={() =>
+                      share({
+                        text: withEnd(bestNow.spaced),
+                        grade: bestNow.grade,
+                        line1: `이 문장 ${fmt(bestNow.points)}점`,
+                        line2: `${g.wave}웨이브 · 문장 ${g.sentences.length}개 · 총 ${fmt(score(g))}점`,
+                      })
+                    }
+                  >
+                    {sharing ? "만드는 중…" : "🖼 카드로 자랑하기"}
+                  </button>
                 </blockquote>
               ) : (
                 <p className="hg-dim">완성한 문장이 없어요</p>
@@ -871,7 +957,7 @@ export default function HangulApp() {
                 <header>
                   <h2>명예의 전당</h2>
                   <div className="hg-rtabs" role="tablist">
-                    {(["top", "new"] as const).map((s) => (
+                    {(["top", "fun", "new"] as const).map((s) => (
                       <button
                         key={s}
                         type="button"
@@ -880,7 +966,7 @@ export default function HangulApp() {
                         className={rankSort === s ? "is-on" : ""}
                         onClick={() => openRanks(s)}
                       >
-                        {s === "top" ? "점수순" : "방금 올라온"}
+                        {s === "top" ? "점수순" : s === "fun" ? "😂 웃긴순" : "방금 올라온"}
                       </button>
                     ))}
                   </div>
@@ -894,18 +980,23 @@ export default function HangulApp() {
                   </button>
                 </header>
                 {phase === "play" && <p className="hg-dim hg-rpause">보는 동안 판은 멈춰 있어요</p>}
+                {rankMsg && <p className="hg-rmsg">{rankMsg}</p>}
                 {!ranks ? (
                   <p className="hg-dim">불러오는 중…</p>
                 ) : !ranks.length ? (
-                  <p className="hg-dim">아직 기록이 없어요</p>
+                  <p className="hg-dim">
+                    {rankSort === "fun"
+                      ? "아직 👍 받은 문장이 없어요 — 「방금 올라온」에서 웃긴 문장에 👍 를 눌러 주세요"
+                      : "아직 기록이 없어요"}
+                  </p>
                 ) : (
                   <ol>
                     {ranks.map((r, k) => (
                       <li
                         key={r.id}
-                        className={rankSort === "top" && k < 3 ? `is-top t${k + 1}` : ""}
+                        className={rankSort !== "new" && k < 3 ? `is-top t${k + 1}` : ""}
                       >
-                        {rankSort === "top" && <span className="hg-rk">{k + 1}</span>}
+                        {rankSort !== "new" && <span className="hg-rk">{k + 1}</span>}
                         {r.best ? (
                           <blockquote className="hg-rq">
                             {withEnd(r.bestSpaced || r.best)}
@@ -923,6 +1014,32 @@ export default function HangulApp() {
                           </span>
                           <span>{ago(r.createdAt)}</span>
                         </p>
+                        {r.best && (
+                          <p className="hg-ract">
+                            <button
+                              type="button"
+                              className={liked.has(r.id) ? "is-on" : ""}
+                              aria-pressed={liked.has(r.id)}
+                              disabled={liking === r.id}
+                              onClick={() => toggleLike(r)}
+                            >
+                              👍 웃겨요 <b>{r.likes ?? 0}</b>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={sharing}
+                              onClick={() =>
+                                share({
+                                  text: withEnd(r.bestSpaced || r.best),
+                                  line1: `이 문장 ${fmt(r.bestPts)}점`,
+                                  line2: `${r.secret ? "익명" : r.name} · ${r.wave}웨이브 · 총 ${fmt(r.score)}점`,
+                                })
+                              }
+                            >
+                              🖼 카드
+                            </button>
+                          </p>
+                        )}
                       </li>
                     ))}
                   </ol>

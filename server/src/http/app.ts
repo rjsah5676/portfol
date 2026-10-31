@@ -121,7 +121,7 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   app.use("/api", banGuard(deps.auth, mod));
   app.use("/api", trackRouter(deps));
   app.use("/api/rankings", rankingsRouter(deps, captcha));
-  app.use("/api/hangul", hangulRouter());
+  app.use("/api/hangul", hangulRouter(deps.db));
   app.use("/api/me", meRouter(deps));
   app.use("/api/points", pointsRouter(deps));
   const mail = createMail(deps.db, deps.points);

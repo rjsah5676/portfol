@@ -565,3 +565,43 @@ describe("랭킹: 니들이 한글을 알아?", () => {
     expect(melon?.secret).toBeUndefined();
   });
 });
+
+describe("랭킹: 니들이 한글을 알아? 👍 웃겨요", () => {
+  const B = "hangul_rankings";
+  const row = { name: "웃음", score: 100, wave: 1, best: "", bestPts: 0 };
+  const like = async (uid: string, id: string, on = true) =>
+    s.http(`/api/rankings/${B}/${id}/like`, { method: "POST", token: await s.token(uid), body: { on } });
+
+  it("한 사람 한 번 · 취소 · 내 문장은 못 누름 · 웃긴순은 👍 받은 것만", async () => {
+    expect(await status("k1", B, { ...row, score: 111 })).toBe(200);
+    expect(await status("k2", B, { ...row, score: 222 })).toBe(200);
+    const all = (await s.http(`/api/rankings/${B}?sort=new&limit=100`)).body;
+    const a = all.find((r: { score: number }) => r.score === 111).id;
+    const b = all.find((r: { score: number }) => r.score === 222).id;
+
+    expect((await like("k1", a)).status).toBe(400); // 내 문장
+    expect((await like("k2", a)).body.likes).toBe(1);
+    expect((await like("k2", a)).body.likes).toBe(1); // 두 번 눌러도 1
+    expect((await like("k3", a)).body.likes).toBe(2);
+    expect((await like("k3", b)).body.likes).toBe(1);
+    expect((await like("k3", a, false)).body.likes).toBe(1); // 취소
+    expect((await like("k3", a, false)).body.likes).toBe(1); // 없는 걸 또 취소해도 그대로
+    expect((await like("k2", "nope")).status).toBe(404);
+
+    const fun = (await s.http(`/api/rankings/${B}?sort=fun`)).body;
+    expect(fun.map((r: { id: string }) => r.id)).toEqual([b, a]); // 1개씩이면 점수 높은 순
+    const mine = (await s.http(`/api/rankings/${B}/liked?ids=${a},${b}`, { token: await s.token("k2") })).body;
+    expect(mine).toEqual([a]);
+  });
+});
+
+describe("니들이 한글을 알아? 사전 신고", () => {
+  it("같은 말은 한 줄로, 같은 사람은 한 번만 셈", async () => {
+    // 판정 모델이 없는 테스트 환경에서도 신고는 받음 (형태소 칸만 비어 있음)
+    for (let k = 0; k < 2; k++)
+      expect((await s.http("/api/hangul/report", { method: "POST", body: { text: "애미없다" } })).status).toBe(200);
+    expect((await s.http("/api/hangul/report", { method: "POST", body: { text: "abc" } })).status).toBe(400);
+    const d = await s.db.col("hangul_reports").findOne({ _id: "애미없다" });
+    expect(d).toMatchObject({ text: "애미없다", count: 1 });
+  });
+});

@@ -648,6 +648,57 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
     }),
   );
 
+  // 니들이 한글을 알아? 👍 웃겨요 — 한 사람이 문장 하나에 한 번 (hangul_likes 의 _id = 기록id:uid 라 겹치면 DB 가 막음)
+  //   POST /hangul_rankings/:id/like { on }   누르기 · 취소 → { likes }
+  //   GET  /hangul_rankings/liked?ids=a,b     그중 내가 누른 것
+  const LIKE_ID = /^[A-Za-z0-9_-]{1,40}$/;
+  r.post(
+    "/hangul_rankings/:id/like",
+    h(async (req) => {
+      const user = await userOf(auth, req);
+      if (!user) throw unauthenticated();
+      if (user.anonymous) await captcha?.check(req, { remember: user.uid });
+      const id = String(req.params.id);
+      if (!LIKE_ID.test(id)) throw bad();
+      const on = (req.body as { on?: unknown } | undefined)?.on !== false;
+      const col = db.col("hangul_rankings");
+      const rec = await col.findOne({ _id: id }, { projection: { uid: 1 } });
+      if (!rec) throw notFound();
+      // 내 문장엔 못 누름
+      if (rec.uid === user.uid) throw new AppError("OWN_RECORD", "내 문장에는 누를 수 없어요.", 400);
+      const likes = db.col("hangul_likes");
+      const _id = `${id}:${user.uid}`;
+      if (on) {
+        const added = await likes
+          .insertOne({ _id, rid: id, uid: user.uid, createdAt: new Date() })
+          .then(() => true)
+          .catch((e: { code?: number }) => {
+            if (e?.code === 11000) return false; // 이미 누름
+            throw e;
+          });
+        if (added) await col.updateOne({ _id: id }, { $inc: { likes: 1 } });
+      } else if ((await likes.deleteOne({ _id })).deletedCount) {
+        await col.updateOne({ _id: id }, { $inc: { likes: -1 } });
+      }
+      const d = await col.findOne({ _id: id }, { projection: { likes: 1 } });
+      return { likes: Math.max(0, Number(d?.likes) || 0), on };
+    }),
+  );
+  r.get(
+    "/hangul_rankings/liked",
+    h(async (req) => {
+      const user = await userOf(auth, req).catch(() => null);
+      if (!user) return [];
+      const ids = String(req.query.ids ?? "")
+        .split(",")
+        .filter((x) => LIKE_ID.test(x))
+        .slice(0, 100);
+      if (!ids.length) return [];
+      const docs = await db.col("hangul_likes").find({ uid: user.uid, rid: { $in: ids } }).project({ rid: 1 }).toArray();
+      return docs.map((d) => String(d.rid));
+    }),
+  );
+
   r.get(
     "/:board",
     h(async (req) => {
@@ -677,9 +728,15 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
           .toArray();
         return rows(db, docs);
       }
-      // 여러 개 올리는 랭킹은 최신순도 (?sort=new — 막 올라온 문장 구경)
-      const sort = board.many && req.query.sort === "new" ? { createdAt: -1 as const } : board.sort;
-      const docs = await db.col(key).find({}).sort(sort).limit(limit).toArray();
+      // 여러 개 올리는 랭킹은 최신순(?sort=new — 막 올라온 문장 구경) · 웃긴순(?sort=fun — 👍 받은 것만, 많은 순)도
+      const q = board.many ? req.query.sort : undefined;
+      const [filter, sort] =
+        q === "new"
+          ? [{}, { createdAt: -1 as const }]
+          : q === "fun"
+            ? [{ likes: { $gt: 0 } }, { likes: -1 as const, score: -1 as const }]
+            : [{}, board.sort];
+      const docs = await db.col(key).find(filter).sort(sort).limit(limit).toArray();
       return rows(db, docs);
     }),
   );
