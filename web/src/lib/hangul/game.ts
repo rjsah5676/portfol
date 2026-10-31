@@ -383,11 +383,25 @@ export function fromLine(g: Game, k: number): boolean {
   return true;
 }
 
+/**
+ * 자동 낱말 만들기 한 번: 글자칸의 글자들(ids 순서)로 낱말 하나를 바로 단어칸에 (서버 '뭐 되지?'가 낱말이라고 한 것)
+ * 그 사이 글자가 바뀌었으면 안 함
+ */
+export function makeWord(g: Game, ids: number[], text: string, pos: string): boolean {
+  const at = free(g, "w");
+  if (at < 0) return say(g, "단어칸이 꽉 찼어요"), false;
+  const idx = ids.map((id) => g.zones.s.findIndex((u) => u?.id === id));
+  if (idx.some((i) => i < 0) || idx.map((i) => g.zones.s[i]!.text).join("") !== text) return false;
+  for (const i of idx) g.zones.s[i] = null;
+  put(g, "w", unit(g, "w", text, pos), at);
+  return true;
+}
+
 /** 문장칸 전체를 낱말 하나로 묶어 단어칸에 */
 export function bindWord(g: Game, j: Judge): boolean {
   if (!j.word || j.text !== lineText(g)) return false;
   const at = free(g, "w");
-  if (at < 0) return say(g, "단어칸이 꽉 찼어요 (팔거나 문장에 쓰세요)"), false;
+  if (at < 0) return say(g, "단어칸이 꽉 찼어요 (낱말을 문장에 쓰세요)"), false;
   g.line = [];
   put(g, "w", unit(g, "w", j.text, j.word), at);
   return true;
@@ -456,16 +470,6 @@ export function moveSentence(g: Game, k: number, d: -1 | 1) {
 /** 글에서 문장 빼기 (점수는 이미 받았으니 그대로, 글 힘 · 이음 점수에서만 빠짐) */
 export function dropSentence(g: Game, k: number) {
   g.shelf.splice(k, 1);
-}
-
-export function sell(g: Game, z: Zone, i: number): number {
-  const u = g.zones[z][i];
-  if (!u) return 0;
-  const v = u.kind === "j" ? 1 : u.kind === "s" ? 2 : hangulLen(u.text) * 3;
-  if (u.kind === "j") takeJamo(g, z, i); // 쌓인 자모는 하나씩
-  else g.zones[z][i] = null;
-  g.gold += v;
-  return v;
 }
 
 /** 유닛 하나가 싸우는 값 (설명용으로도 씀) */

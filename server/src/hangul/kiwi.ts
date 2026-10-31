@@ -120,6 +120,8 @@ export interface Suggestion {
   /** 낱말이면 품사 */
   word: string | null;
   points: number;
+  /** 고유명사(인명 · 지명 · 상표 — "루드" "오드" 같은 것). 자동 낱말 만들기는 건너뜀 */
+  rare?: boolean;
 }
 const suggestCache = new Map<string, Suggestion[]>();
 export async function suggest(line: string, units: string[]): Promise<Suggestion[]> {
@@ -146,8 +148,9 @@ export async function suggest(line: string, units: string[]): Promise<Suggestion
       if (w.every((m) => m.k) && c.length === 1) {
         const kind = WORD_KIND.find(([re]) => re.test(c[0].t))?.[1];
         if (kind) {
-          found.push({ add: seq, text, sentence: false, word: kind, points: 0 });
-          if (c[0].t === "NNP") rare.add(text);
+          const isRare = c[0].t === "NNP";
+          found.push({ add: seq, text, sentence: false, word: kind, points: 0, ...(isRare && { rare: true }) });
+          if (isRare) rare.add(text);
         }
       }
     }

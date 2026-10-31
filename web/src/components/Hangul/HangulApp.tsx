@@ -21,6 +21,8 @@ import {
   lineCells,
   lineText,
   load,
+  makeWord,
+  say,
   LOAD_MAX,
   newGame,
   dropSentence,
@@ -32,7 +34,6 @@ import {
   score,
   SHELF_ID,
   writingPower,
-  sell,
   setPath,
   statsOf,
   step,
@@ -75,7 +76,7 @@ export default function HangulApp() {
   const [, setTick] = useState(0);
   const [phase, setPhase] = useState<"ready" | "play" | "over">("ready");
   const [sel, setSel] = useState<{ z: Zone; i: number } | null>(null);
-  const [selling, setSelling] = useState(false);
+  const [wordBusy, setWordBusy] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [judge, setJudge] = useState<Judge | null>(null);
   const [judgeErr, setJudgeErr] = useState<string | null>(null);
@@ -208,7 +209,6 @@ export default function HangulApp() {
     const ng = newGame();
     setG(ng);
     setSel(null);
-    setSelling(false);
     setJudge(null);
     setSent("idle");
     setPhase("play");
@@ -218,10 +218,6 @@ export default function HangulApp() {
   const onSlot = (z: Zone, i: number) => {
     if (phase !== "play") return;
     const u = g.zones[z][i];
-    if (selling) {
-      if (u) sell(g, z, i);
-      return refresh();
-    }
     if (sel) {
       // 같은 칸을 또 누르면: 쌓인 것끼리 합치기(ㄱ×2 → ㄲ, ㆍ×2 → ㆍㆍ), 안 되면 선택 취소
       if (sel.z === z && sel.i === i) {
@@ -265,6 +261,31 @@ export default function HangulApp() {
     } finally {
       setSugBusy(false);
     }
+  };
+  /**
+   * 낱말 짝짓기(무지성): 글자칸 글자들로 서버 '뭐 되지?'를 돌려 낱말이 되는 걸 찾아 바로 단어칸으로 — 더 안 나올 때까지
+   * 고유명사(루드 · 오드 같은 것)는 건너뜀
+   */
+  const autoWord = async () => {
+    setWordBusy(true);
+    let made = 0;
+    try {
+      for (let round = 0; round < 8; round++) {
+        const syl = g.zones.s.filter((u): u is NonNullable<typeof u> => !!u);
+        if (syl.length < 2 || !g.zones.w.includes(null)) break;
+        const list = await suggestLine("", syl.map((u) => u.text));
+        const pick = list.find((s) => !s.sentence && s.word && !s.rare);
+        if (!pick?.word || !makeWord(g, pick.add.map((i) => syl[i].id), pick.text, pick.word)) break;
+        made++;
+        refresh();
+      }
+    } catch {
+      // 판정 서버가 없으면 아래 안내로
+    } finally {
+      setWordBusy(false);
+    }
+    say(g, made ? `낱말 ${made}개를 만들었어요` : !g.zones.w.includes(null) ? "단어칸이 꽉 찼어요" : "글자칸 글자로 만들 낱말이 안 보여요");
+    refresh();
   };
   const applySug = (ids: number[]) => {
     addByIds(g, ids);
@@ -336,7 +357,7 @@ export default function HangulApp() {
       <button
         key={i}
         type="button"
-        className={`hg-slot hg-${z}${u ? "" : " is-empty"}${on ? " is-on" : ""}${selling && u ? " is-sell" : ""}`}
+        className={`hg-slot hg-${z}${u ? "" : " is-empty"}${on ? " is-on" : ""}`}
         data-uid={u?.id}
         onClick={() => onSlot(z, i)}
         aria-label={u ? u.text : "빈 칸"}
@@ -563,10 +584,11 @@ export default function HangulApp() {
           10번 뽑기<small>{DRAW_COST * 10}냥</small>
         </button>
         <button type="button" onClick={() => (autoPair(g), refresh())} disabled={phase !== "play"}>
-          자동 짝짓기<small>자음+모음</small>
+          글자 짝짓기<small>자음+모음 → 글자</small>
         </button>
-        <button type="button" className={selling ? "is-on" : ""} onClick={() => (setSelling((s) => !s), setSel(null))}>
-          팔기<small>{selling ? "누르면 팔아요" : "꺼짐"}</small>
+        <button type="button" onClick={autoWord} disabled={phase !== "play" || wordBusy}>
+          {wordBusy ? "찾는 중…" : "낱말 짝짓기"}
+          <small>글자+글자 → 낱말</small>
         </button>
         <button type="button" onClick={() => setSpeed((s) => (s === 1 ? 2 : s === 2 ? 3 : 1))}>
           배속<small>×{speed}</small>

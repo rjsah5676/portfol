@@ -33,6 +33,8 @@ export interface Suggestion {
   sentence: boolean;
   word: string | null;
   points: number;
+  /** 고유명사 (자동 낱말 만들기는 건너뜀) */
+  rare?: boolean;
 }
 export const suggestLine = (line: string, units: string[]) =>
   api<Suggestion[]>(
