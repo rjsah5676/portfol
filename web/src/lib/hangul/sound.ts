@@ -103,7 +103,12 @@ export function playBgm(name: BgmName | null) {
   bgmWant = name;
   syncBgm();
 }
-if (typeof document !== "undefined") document.addEventListener("visibilitychange", syncBgm);
+if (typeof document !== "undefined") {
+  document.addEventListener("visibilitychange", syncBgm);
+  // 브라우저는 첫 입력 전엔 재생을 막음 → 시작 화면(title)은 첫 클릭 · 키 입력 때 틀어 줌
+  document.addEventListener("pointerdown", syncBgm);
+  document.addEventListener("keydown", syncBgm);
+}
 export function onSoundChange(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);
