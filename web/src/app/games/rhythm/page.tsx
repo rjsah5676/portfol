@@ -1,6 +1,5 @@
 import Faded from "@/components/Faded";
 import RhythmGame from "@/components/Rhythm/RhythmGame";
-import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { SONGS } from "@/lib/rhythm/music";
 import { pageMeta, SITE_NAME, SITE_URL } from "@/lib/seo";
 import "@/css/rhythm.css";
@@ -110,35 +109,6 @@ export default function RhythmPage() {
               떨어지는 노트가 아래 판정선에 닿을 때 D F J K를 누르고, 긴 노트는 끝까지 누르고 있으면
               됩니다. 판정은 PERFECT · GREAT · GOOD · MISS 네 가지입니다.
             </p>
-          </section>
-
-          <section>
-            <h2 className={h2}>난이도 {DIFFICULTIES.length}단계</h2>
-            <p className={p}>
-              {DIFFICULTIES.map((d, i) => (
-                <span key={d.key}>
-                  {i > 0 && " → "}
-                  <b style={{ color: d.color }}>{d.label}</b>
-                </span>
-              ))}
-            </p>
-            <p className={`${p} mt-2`}>ULT · ABYSS는 일부 곡에만 있습니다.</p>
-          </section>
-
-          <section>
-            <h2 className={h2}>수록곡 {BUILTIN.length}곡</h2>
-            <ul className={`${p} space-y-1`}>
-              {BUILTIN.map((s) => {
-                const lv = levels(s);
-                return (
-                  <li key={s.id}>
-                    <b className="text-white/80">{s.title}</b>
-                    {s.artist && !s.desc.includes(s.artist) ? ` — ${s.artist}` : ""} · {s.desc}
-                    {lv.length > 0 && ` · Lv${Math.min(...lv)}~${Math.max(...lv)}`}
-                  </li>
-                );
-              })}
-            </ul>
           </section>
 
           <section>
