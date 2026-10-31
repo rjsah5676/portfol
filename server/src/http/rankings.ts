@@ -16,6 +16,7 @@ import { bpOf, BP_TOP_SONGS } from "./bp";
 import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
 import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
+import { CASE_RE as SUSPECT_CASE_RE, kstDay, scoreOf as suspectScore } from "../../../web/src/lib/suspect/engine";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -107,6 +108,8 @@ interface Board {
    * 이 값으로 걸러 보면 그 안의 순위, 안 거르면(전체) 사람마다 가장 좋은 기록 하나씩.
    */
   split?: { field: string; of: (d: Data) => string; valid: (v: string) => boolean };
+  /** 첫 기록만 남김 (오늘의 용의자: 다시 풀면 답을 알고 푸는 거라) */
+  firstOnly?: boolean;
 }
 
 /** AI 대국: 상대 단계 */
@@ -195,6 +198,30 @@ const rhythmBoard = (chart: string): Board => {
         (!d.ap || d.fc)),
   };
 };
+
+/**
+ * 오늘의 용의자: 날짜 · 난이도(case = "YYYYMMDD_tier")마다 랭킹. 점수 = 시간 + 실수 30초 + 힌트 60초 (작을수록 좋음).
+ * 퍼즐은 날짜 시드로 누구나 같은 판이 나오고, 첫 기록만 남음. 어제 · 오늘 · 내일(시차 여유) 사건만 받음.
+ */
+const suspectSchema = z.strictObject({
+  name,
+  time: z.number().min(5).max(86400),
+  miss: int.min(0).max(500),
+  hint: int.min(0).max(100),
+  score: z.number().min(5).max(200_000),
+});
+const suspectBoard = (c: string): Board => ({
+  sort: { score: 1 },
+  schema: suspectSchema,
+  minSec: (d) => d.time,
+  check: (d) => {
+    const day = c.slice(0, 8);
+    const now = Date.now();
+    const recent = day >= kstDay(now, -1) && day <= kstDay(now, 1);
+    return recent && Math.abs(d.score - suspectScore(d.time, d.miss, d.hint)) < 0.05;
+  },
+  firstOnly: true,
+});
 
 const limitOf = (v: unknown) =>
   Math.min(100, Math.max(1, Math.floor(Number(v)) || 10));
@@ -367,6 +394,8 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
   const boardOf = (key: string): Board | null => {
     if (key.startsWith("rhythm:"))
       return CHART_RE.test(key.slice(7)) ? rhythmBoard(key.slice(7)) : null;
+    if (key.startsWith("suspect:"))
+      return SUSPECT_CASE_RE.test(key.slice(8)) ? suspectBoard(key.slice(8)) : null;
     return Object.hasOwn(BOARDS, key) ? BOARDS[key] : null;
   };
 
@@ -422,6 +451,7 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
     const [field, dir] = Object.entries(board.sort)[0];
     return mutex.run(`${col}:${JSON.stringify(scope)}:${user.uid}`, async () => {
       const mine = await db.col(col).findOne({ ...scope, uid: user.uid });
+      if (mine && board.firstOnly) return { id: mine._id, kept: true };
       if (!mine) {
         const _id = newId();
         await db.col(col).insertOne({
@@ -512,6 +542,30 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
       if (!CHART_RE.test(chart)) throw bad();
       clearBpCache();
       return submit(req, `rhythm:${chart}`, "rhythm_rankings", { chart });
+    }),
+  );
+
+  // 오늘의 용의자 (case = YYYYMMDD_난이도)
+  r.get(
+    "/suspect/:case",
+    h(async (req) => {
+      const c = String(req.params.case);
+      if (!SUSPECT_CASE_RE.test(c)) throw bad();
+      const docs = await db
+        .col("suspect_rankings")
+        .find({ case: c })
+        .sort({ score: 1, createdAt: 1 })
+        .limit(limitOf(req.query.limit))
+        .toArray();
+      return rows(db, docs);
+    }),
+  );
+  r.post(
+    "/suspect/:case",
+    h((req) => {
+      const c = String(req.params.case);
+      if (!SUSPECT_CASE_RE.test(c)) throw bad();
+      return submit(req, `suspect:${c}`, "suspect_rankings", { case: c });
     }),
   );
 

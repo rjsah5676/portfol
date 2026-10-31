@@ -31,6 +31,8 @@ export const LEVEL = {
   master: lv(0),
   poker: { sfx: lv(-6), voice: lv(0), bgm: lv(-1) },
   sketch: { sfx: lv(-11), bgm: lv(0) },
+  /** 오늘의 용의자 — 조용히 머리 쓰는 게임이라 배경음악은 한 단계 더 작게 */
+  suspect: { sfx: lv(-8), bgm: lv(-4) },
   /** 격투 효과음 (배경음악은 master) */
   fight: { sfx: lv(-7) },
   /** 지뢰찾기 합성음 (lib/sfx.ts 의 깃발 · 칸 열기 · 폭발) */

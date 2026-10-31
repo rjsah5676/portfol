@@ -1,0 +1,9 @@
+{
+    "bgm-main":  "bgm-main.mp3",
+    "jingle-clear":  "jingle-clear.mp3",
+    "sfx-flip":  "sfx-flip.mp3",
+    "sfx-hint":  "sfx-hint.mp3",
+    "sfx-stamp":  "sfx-stamp.mp3",
+    "sfx-tap":  "sfx-tap.mp3",
+    "sfx-wrong":  "sfx-wrong.mp3"
+}

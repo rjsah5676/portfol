@@ -20,6 +20,8 @@ const heading = "mb-4 font-mono text-xs text-[#8B84FF]";
 export const BOARD_LABEL: Record<string, string> = {
   score: "멜론 게임",
   minesweeper_rankings: "지뢰찾기",
+  suspect_rankings: "오늘의 용의자",
+  suspect: "오늘의 용의자",
   reaction: "반응속도",
   rhythm_rankings: "PIXEL Rhythm Up",
   chess_ai_rankings: "체스 AI",

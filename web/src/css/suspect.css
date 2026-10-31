@@ -1,0 +1,654 @@
+/* 오늘의 용의자 — DOODLE PARTY와 같은 스케치북 · 크레용 감성 (sp- 접두사). 사건 파일 · 용의자 카드 · 도장 */
+@import url("https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap");
+
+@layer components {
+  .sp {
+    --paper: #fff9ec;
+    --paper2: #fdf0d2;
+    --card: #fffdf7;
+    --ink: #2b2d42;
+    --ink2: #5c5f7a;
+    --ink3: #9a9db3;
+    --line: #eadfc4;
+    --coral: #ff6b6b;
+    --crim: #e5484d;
+    --crim-bg: #ffe3e0;
+    --inno: #1fa37a;
+    --inno-bg: #dcf5e9;
+    --sun: #ffc93c;
+    --sun-bg: #fff3c4;
+    --sky: #4ea8de;
+    --grape: #9b5de5;
+    --wobble: 255px 14px 225px 14px / 14px 225px 14px 255px;
+    --wobble2: 14px 225px 14px 255px / 225px 14px 255px 14px;
+    color: var(--ink);
+    font-family: "Nanum Gothic", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .sp button:not(:disabled) {
+    cursor: pointer;
+  }
+  .sp *:focus-visible {
+    outline: 3px solid var(--sky);
+    outline-offset: 2px;
+  }
+  .sp-hand {
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+  .sp-num {
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 무대: 모눈 스케치북 */
+  .sp-stage {
+    position: relative;
+    /* hidden 이 아니라 clip: 안내판(sp-info)이 화면 위에 붙어 있을 수 있게 (hidden 이면 sticky 가 안 먹음) */
+    overflow: clip;
+    touch-action: manipulation;
+    border-radius: 18px;
+    background-color: var(--paper);
+    background-image:
+      linear-gradient(rgba(78, 168, 222, 0.11) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(78, 168, 222, 0.11) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-position: -1px -1px;
+  }
+  .sp-stage::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 16px;
+    background: radial-gradient(circle at 8px 14px, #d8cfb8 4px, transparent 5px) 0 0 / 16px 28px
+      repeat-y;
+    opacity: 0.8;
+    pointer-events: none;
+  }
+  .sp-inner {
+    position: relative;
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 14px 14px 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* 손으로 그린 상자 */
+  .sp-card {
+    background: var(--card);
+    border: 2.5px solid var(--ink);
+    border-radius: var(--wobble);
+    box-shadow: 4px 4px 0 rgba(43, 45, 66, 0.9);
+  }
+  .sp-soft {
+    background: var(--card);
+    border: 2px solid var(--ink);
+    border-radius: var(--wobble2);
+    box-shadow: 3px 3px 0 rgba(43, 45, 66, 0.18);
+  }
+  .sp-note {
+    position: relative;
+    background: #fff6b8;
+    border: 2px solid var(--ink);
+    border-radius: 4px 4px 18px 4px;
+    box-shadow: 3px 4px 0 rgba(43, 45, 66, 0.25);
+  }
+  .sp-tape {
+    position: absolute;
+    width: 74px;
+    height: 22px;
+    top: -12px;
+    left: calc(50% - 37px);
+    rotate: -3deg;
+    background: rgba(255, 107, 107, 0.45);
+    border-left: 2px dashed rgba(255, 255, 255, 0.6);
+    border-right: 2px dashed rgba(255, 255, 255, 0.6);
+    pointer-events: none;
+    z-index: 3;
+  }
+  .sp-tape.blue {
+    background: rgba(78, 168, 222, 0.5);
+    rotate: 4deg;
+  }
+  .sp-tape.yellow {
+    background: rgba(255, 201, 60, 0.6);
+  }
+
+  /* 버튼 */
+  .sp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 6px 14px;
+    border: 2.5px solid var(--ink);
+    border-radius: var(--wobble2);
+    background: var(--card);
+    color: var(--ink);
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 19px;
+    line-height: 1;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition:
+      transform 0.08s,
+      box-shadow 0.08s;
+  }
+  .sp-btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+  .sp-btn:disabled {
+    opacity: 0.4;
+  }
+  .sp-btn-crim {
+    background: var(--crim);
+    color: #fff;
+  }
+  .sp-btn-inno {
+    background: var(--inno);
+    color: #fff;
+  }
+  .sp-btn-sun {
+    background: var(--sun);
+  }
+  .sp-btn-ghost {
+    box-shadow: none;
+    border-width: 2px;
+    background: transparent;
+  }
+  .sp-btn-sm {
+    min-height: 36px;
+    padding: 4px 10px;
+    font-size: 17px;
+  }
+  .sp-btn.on {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  /* 맨 위 막대 */
+  .sp-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .sp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    background: var(--card);
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    white-space: nowrap;
+  }
+  .sp-stat {
+    display: flex;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--ink2);
+    flex-wrap: wrap;
+  }
+  .sp-stat b {
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-size: 19px;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    margin-left: 3px;
+  }
+
+  /* 안내판 (단서 전체 문장 · 힌트 · 튜토리얼) — 보드 위에 둬서 폰에서도 안 가려짐 */
+  .sp-info {
+    /* 보드를 아래로 내려 봐도 단서 문장이 늘 보이게 사이트 메뉴 바로 아래에 붙음 (폰에서 아래 칸을 눌렀을 때) */
+    position: sticky;
+    top: 104px;
+    z-index: 15;
+    min-height: 68px;
+    padding: 10px 14px;
+    font-size: 15px;
+    line-height: 1.5;
+    word-break: keep-all;
+  }
+  .sp-info small {
+    display: block;
+    color: var(--ink2);
+    font-size: 12.5px;
+    margin-top: 2px;
+  }
+  .sp-info .who {
+    display: block;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    margin-right: 6px;
+  }
+  .sp-info.mark {
+    background: var(--sun-bg);
+  }
+  .sp-info.bad {
+    background: var(--crim-bg);
+  }
+
+  /* 보드 */
+  .sp-boardwrap {
+    display: grid;
+    grid-template-columns: 16px 1fr;
+    grid-template-rows: 18px auto;
+    gap: 4px;
+  }
+  .sp-collab {
+    grid-column: 2;
+    display: grid;
+    gap: 6px;
+    text-align: center;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    color: var(--ink3);
+    font-size: 16px;
+    line-height: 18px;
+  }
+  .sp-rowlab {
+    grid-row: 2;
+    display: grid;
+    gap: 6px;
+    align-items: center;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    color: var(--ink3);
+    font-size: 16px;
+  }
+  .sp-board {
+    grid-column: 2;
+    grid-row: 2;
+    display: grid;
+    gap: 6px;
+  }
+  .sp-cell {
+    position: relative;
+    min-width: 0;
+    min-height: 92px;
+    padding: 6px 3px 5px;
+    display: grid;
+    justify-items: center;
+    align-content: center;
+    gap: 2px;
+    text-align: center;
+    background: var(--card);
+    border: 2px solid var(--ink);
+    border-radius: var(--wobble2);
+    box-shadow: 2px 2px 0 rgba(43, 45, 66, 0.25);
+    transition:
+      background 0.2s,
+      transform 0.1s;
+  }
+  .sp-cell:active {
+    transform: scale(0.97);
+  }
+  .sp-face {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 2px solid var(--ink);
+    background: var(--paper2);
+    object-fit: cover;
+  }
+  .sp-name {
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .sp-job {
+    font-size: 11px;
+    color: var(--ink2);
+    line-height: 1.1;
+  }
+  .sp-cell.crim {
+    background: var(--crim-bg);
+  }
+  .sp-cell.inno {
+    background: var(--inno-bg);
+  }
+  .sp-cell.known {
+    align-content: start;
+    padding-top: 5px;
+  }
+  .sp-cell.known .sp-head {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    justify-self: start;
+    padding-left: 2px;
+    max-width: 100%;
+  }
+  .sp-cell.known .sp-face {
+    width: 22px;
+    height: 22px;
+    border-width: 1.5px;
+  }
+  .sp-cell.known .sp-name {
+    font-size: 15px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sp-stamp {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    padding: 0 4px;
+    border: 2px solid currentColor;
+    border-radius: 6px;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1.15;
+    rotate: 8deg;
+    background: rgba(255, 255, 255, 0.6);
+  }
+  .crim .sp-stamp {
+    color: var(--crim);
+  }
+  .inno .sp-stamp {
+    color: var(--inno);
+  }
+  .sp-cell.new .sp-stamp {
+    animation: sp-stamp 0.35s ease-out;
+  }
+  @keyframes sp-stamp {
+    0% {
+      transform: scale(2.4);
+      opacity: 0;
+    }
+    70% {
+      transform: scale(0.9);
+      opacity: 1;
+    }
+  }
+  .sp-cs {
+    margin-top: 5px;
+    font-size: 12.5px;
+    font-weight: 800;
+    line-height: 1.15;
+    word-break: keep-all;
+  }
+  .sp-cv {
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 19px;
+    line-height: 1.05;
+  }
+  .sp-cell.used .sp-cs,
+  .sp-cell.used .sp-cv {
+    opacity: 0.35;
+  }
+  /* 선택 · 단서 대상 · 말한 사람 · 힌트 */
+  .sp-cell.sel {
+    outline: 3px solid var(--sky);
+    outline-offset: 1px;
+  }
+  .sp-cell.hl {
+    box-shadow:
+      0 0 0 3px var(--sun),
+      2px 2px 0 rgba(43, 45, 66, 0.25);
+  }
+  .sp-cell.spk {
+    box-shadow:
+      0 0 0 3px var(--sun),
+      0 0 0 6px rgba(255, 201, 60, 0.35);
+  }
+  .sp-cell.target {
+    animation: sp-pulse 1s ease-in-out infinite;
+  }
+  @keyframes sp-pulse {
+    50% {
+      box-shadow:
+        0 0 0 5px var(--grape),
+        0 0 14px rgba(155, 93, 229, 0.5);
+    }
+  }
+  .sp-cell.shake {
+    animation: sp-shake 0.35s;
+  }
+  @keyframes sp-shake {
+    25% {
+      transform: translateX(-4px);
+    }
+    75% {
+      transform: translateX(4px);
+    }
+  }
+  /* 메모 (스도쿠 연필 표시) */
+  .sp-memo {
+    position: absolute;
+    top: 3px;
+    right: 4px;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    padding: 1px 4px;
+    border: 1.5px dashed currentColor;
+    border-radius: 8px;
+  }
+  .sp-memo.m1 {
+    color: var(--crim);
+  }
+  .sp-memo.m2 {
+    color: var(--inno);
+  }
+  .sp-cell.memo1 {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgba(229, 72, 77, 0.09) 0 6px,
+      transparent 6px 12px
+    );
+  }
+  .sp-cell.memo2 {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      rgba(31, 163, 122, 0.1) 0 6px,
+      transparent 6px 12px
+    );
+  }
+
+  /* 고르는 창 (보드 아래에 붙음) */
+  .sp-pick {
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+  .sp-pick .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .sp-pick .row3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  /* 쉬는 중 (보드 가림) */
+  .sp-pause {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    background: rgba(255, 249, 236, 0.92);
+    backdrop-filter: blur(6px);
+  }
+
+  /* 홈: 난이도 카드 */
+  .sp-tiers {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .sp-tier {
+    position: relative;
+    text-align: left;
+    padding: 12px 12px 10px;
+    display: grid;
+    gap: 3px;
+    min-height: 116px;
+  }
+  .sp-tier h3 {
+    margin: 0;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-size: 26px;
+    line-height: 1;
+  }
+  .sp-tier p {
+    margin: 0;
+    font-size: 12px;
+    color: var(--ink2);
+    line-height: 1.35;
+    word-break: keep-all;
+  }
+  .sp-tier .st {
+    margin-top: auto;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+  }
+  .sp-dots {
+    letter-spacing: 1px;
+    color: var(--coral);
+    font-size: 13px;
+  }
+  .sp-solved {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    rotate: -10deg;
+    color: var(--inno);
+    border: 2.5px solid currentColor;
+    border-radius: 8px;
+    padding: 0 6px;
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  /* 결과 */
+  .sp-big-stamp {
+    display: inline-block;
+    rotate: -8deg;
+    padding: 2px 16px;
+    border: 4px solid var(--crim);
+    border-radius: 12px;
+    color: var(--crim);
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 40px;
+    line-height: 1.1;
+    animation: sp-stamp 0.45s ease-out;
+    background: rgba(255, 255, 255, 0.6);
+  }
+  .sp-big-stamp.perfect {
+    border-color: var(--inno);
+    color: var(--inno);
+  }
+  .sp-share {
+    font-family: ui-monospace, Menlo, monospace;
+    white-space: pre;
+    text-align: center;
+    font-size: 15px;
+    line-height: 1.3;
+    padding: 10px;
+    background: var(--paper2);
+    border-radius: 12px;
+    overflow-x: auto;
+  }
+  .sp-input {
+    min-height: 44px;
+    width: 100%;
+    padding: 6px 12px;
+    border: 2.5px solid var(--ink);
+    border-radius: var(--wobble2);
+    background: #fff;
+    font-size: 16px;
+  }
+
+  /* 로딩 */
+  .sp-loadbar {
+    height: 14px;
+    border: 2.5px solid var(--ink);
+    border-radius: 999px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .sp-loadbar i {
+    display: block;
+    height: 100%;
+    background: repeating-linear-gradient(-45deg, var(--sun) 0 10px, #ffd96b 10px 20px);
+    transition: width 0.2s;
+  }
+
+  .sp-confetti {
+    position: absolute;
+    top: -12px;
+    width: 9px;
+    height: 14px;
+    border-radius: 2px;
+    animation: sp-fall linear forwards;
+  }
+  @keyframes sp-fall {
+    to {
+      transform: translate(var(--dx), var(--dy)) rotate(var(--rot));
+      opacity: 0;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .sp-inner {
+      padding: 12px 10px 16px 18px;
+    }
+    .sp-cell {
+      min-height: 86px;
+    }
+    .sp-face {
+      width: 34px;
+      height: 34px;
+    }
+    .sp-name {
+      font-size: 16px;
+    }
+    .sp-cs {
+      font-size: 11.5px;
+    }
+    .sp-cv {
+      font-size: 17px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sp-cell,
+    .sp-cell.new .sp-stamp,
+    .sp-cell.target,
+    .sp-cell.shake,
+    .sp-big-stamp {
+      animation: none;
+      transition: none;
+    }
+  }
+}
+
+/* 지목 창이 열려 있는 동안엔 사이트 빠른 메뉴 버튼(오른쪽 아래 동그라미)이 "무고하다" 버튼을 가리지 않게 잠깐 숨김 */
+html.sp-picking .quick-menu-fab {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}

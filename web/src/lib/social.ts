@@ -140,6 +140,7 @@ export function whereOf(path: string): string | null {
     ["/games/town", "TABLE TOWN"],
     ["/games/board", "보드게임"],
     ["/games/melongame", "멜론 게임"],
+    ["/games/suspect", "오늘의 용의자"],
     ["/games/mine", "지뢰찾기"],
     ["/games/rspeed", "반응속도"],
   ];
