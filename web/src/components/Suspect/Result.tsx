@@ -25,7 +25,15 @@ export const fmtTime = (s: number) => {
   return `${m}:${r.toFixed(1).padStart(4, "0")}`;
 };
 
-const SITE = "gunmo.my/games/suspect";
+/** 공유 글에 붙는 주소 (메신저에서 바로 눌리게 https 까지) */
+const SITE = "https://gunmo.my/games/suspect/";
+
+function shareHead(tier: TierId, day: string | null) {
+  return day
+    ? `🕵️ 오늘의 용의자 #${caseNo(day)} · ${TIERS[tier].label}`
+    : `🕵️ 오늘의 용의자 · 연습 ${TIERS[tier].label}`;
+}
+const shareStats = (r: FinishInfo) => `⏱ ${fmtTime(r.time)} · 실수 ${r.miss} · 힌트 ${r.hint}`;
 
 function shareText(p: Puzzle, tier: TierId, day: string | null, r: FinishInfo) {
   // 정답이 드러나지 않게: 실수한 사람만 노란 칸, 나머지는 초록 칸
@@ -35,11 +43,42 @@ function shareText(p: Puzzle, tier: TierId, day: string | null, r: FinishInfo) {
     for (let c = 0; c < p.cols; c++) line += r.missed.includes(y * p.cols + c) ? "🟨" : "🟩";
     rows.push(line);
   }
-  const head = day
-    ? `🕵️ 오늘의 용의자 #${caseNo(day)} · ${TIERS[tier].label}`
-    : `🕵️ 오늘의 용의자 · 연습 ${TIERS[tier].label}`;
   const perfect = r.miss === 0 && r.hint === 0 ? " · 완벽 해결" : "";
-  return `${head}${perfect}\n⏱ ${fmtTime(r.time)} · 실수 ${r.miss} · 힌트 ${r.hint}\n${rows.join("\n")}\n${SITE}`;
+  return `${shareHead(tier, day)}${perfect}\n${shareStats(r)}\n${rows.join("\n")}\n${SITE}`;
+}
+
+/** 공유 미리보기 카드 (복사되는 글과 같은 내용을 보기 좋게) */
+function SharePreview({
+  p,
+  tier,
+  day,
+  r,
+}: {
+  p: Puzzle;
+  tier: TierId;
+  day: string | null;
+  r: FinishInfo;
+}) {
+  const perfect = r.miss === 0 && r.hint === 0;
+  return (
+    <div className="sp-share">
+      <div className="sp-share-head">{shareHead(tier, day)}</div>
+      <div className="sp-share-stats">
+        {shareStats(r)}
+        {perfect && <span className="sp-share-badge">완벽 해결</span>}
+      </div>
+      <div
+        className="sp-share-grid"
+        style={{ gridTemplateColumns: `repeat(${p.cols}, 1fr)` }}
+        aria-hidden
+      >
+        {p.truth.map((_, i) => (
+          <i key={i} className={r.missed.includes(i) ? "miss" : ""} />
+        ))}
+      </div>
+      <div className="sp-share-link">{SITE.replace(/^https:\/\/|\/$/g, "")}</div>
+    </div>
+  );
 }
 
 function Confetti() {
@@ -273,7 +312,7 @@ export default function Result({
 
       {mode !== "tutorial" && (
         <div className="w-full max-w-[400px]">
-          <div className="sp-share">{text}</div>
+          <SharePreview p={puzzle} tier={tier} day={daily ? day : null} r={result} />
           <button type="button" className="sp-btn mt-2 w-full" onClick={copy}>
             {copied ? "복사했어요!" : "결과 공유하기 (정답은 안 보여요)"}
           </button>
@@ -296,7 +335,7 @@ export default function Result({
               className="sp-btn sp-btn-sun flex-1"
               onClick={() => onRank(tier, day)}
             >
-              오늘 랭킹 보기
+              🏆 랭킹
             </button>
           )
         )}

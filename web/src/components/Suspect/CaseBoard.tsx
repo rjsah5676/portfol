@@ -6,7 +6,7 @@ import {
   explain,
   forcedAll,
   forcedOf,
-  JOB_FACE,
+  faceOf,
   josa,
   PENALTY,
   singleClueSteps,
@@ -42,7 +42,6 @@ interface Info {
 }
 
 const GUIDED_STEPS = 3;
-const faceOf = (job: keyof typeof JOB_FACE) => `/suspect/faces/${JOB_FACE[job]}.webp`;
 
 export default function CaseBoard({
   puzzle,
@@ -513,11 +512,6 @@ export default function CaseBoard({
         aria-live="polite"
       >
         {shown.body}
-        {memoMode && !guideStep && (
-          <small>
-            연필 메모 켜짐 · 모르는 사람을 누를 때마다 범인? → 무고? → 지움. 기록엔 영향 없어요.
-          </small>
-        )}
       </div>
 
       {/* 보드 */}
@@ -567,7 +561,7 @@ export default function CaseBoard({
                     <>
                       <span className="sp-stamp">{v ? "범인" : "무고"}</span>
                       <span className="sp-head">
-                        <img className="sp-face" src={faceOf(p.job)} alt="" draggable={false} />
+                        <img className="sp-face" src={faceOf(p)} alt="" draggable={false} />
                         <span className="sp-name">{p.name}</span>
                       </span>
                       <span className="sp-cs">{puzzle.clues[i].short[0]}</span>
@@ -580,7 +574,7 @@ export default function CaseBoard({
                           {memo[i] === 1 ? "범인?" : "무고?"}
                         </span>
                       )}
-                      <img className="sp-face" src={faceOf(p.job)} alt="" draggable={false} />
+                      <img className="sp-face" src={faceOf(p)} alt="" draggable={false} />
                       <span className="sp-name">{p.name}</span>
                       <span className="sp-job">{p.job}</span>
                     </>
@@ -613,7 +607,7 @@ export default function CaseBoard({
       {sel >= 0 && x[sel] < 0 && (
         <div className="sp-card sp-pick sticky bottom-2 z-20">
           <div className="flex items-center gap-2.5">
-            <img className="sp-face" src={faceOf(P[sel].job)} alt="" />
+            <img className="sp-face" src={faceOf(P[sel])} alt="" />
             <div className="min-w-0 flex-1 leading-tight">
               <b className="sp-hand text-[23px]">{P[sel].name}</b>{" "}
               <span className="text-[13px] text-[var(--ink2)]">

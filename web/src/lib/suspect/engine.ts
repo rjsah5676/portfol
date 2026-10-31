@@ -52,10 +52,21 @@ export const JOB_FACE: Record<Job, string> = {
   화가: "painter",
 };
 
+export type Sex = "m" | "f";
+
 export interface Person {
   name: string;
   job: Job;
+  /** 얼굴 그림만 남녀로 나눔 (이름으로 정해짐 → 퍼즐 생성 난수엔 영향 없음) */
+  sex: Sex;
 }
+
+/** 얼굴 그림 주소 (public/suspect/faces/<직업>-<m|f>.webp) */
+export const faceOf = (p: Pick<Person, "job" | "sex">) =>
+  `/suspect/faces/${JOB_FACE[p.job]}-${p.sex}.webp`;
+export const ALL_FACES = JOBS.flatMap((job) =>
+  (["m", "f"] as const).map((sex) => faceOf({ job, sex }))
+);
 
 export type TierId = "intro" | "easy" | "normal" | "hard" | "hell";
 
@@ -236,6 +247,29 @@ const NAMES = [
   "시아",
   "한결",
 ];
+/** 여자 이름 (나머지는 남자) — 얼굴 그림만 고르는 데 씀 */
+const FEMALE = new Set([
+  "민지",
+  "서연",
+  "하은",
+  "수아",
+  "예린",
+  "지아",
+  "유나",
+  "채원",
+  "소율",
+  "재희",
+  "나연",
+  "다은",
+  "하린",
+  "서윤",
+  "가윤",
+  "윤서",
+  "아린",
+  "세아",
+  "라희",
+  "시아",
+]);
 const COLN = "ABCDEFGH";
 
 /** 받침이 있으면 a, 없으면 b */
@@ -542,12 +576,11 @@ function makeClue(
               : range(b.cols - 1 - tc).map((q) => b.idx(tr, tc + 1 + q));
       if (S.length < 2) return retry();
       const word = ["위쪽", "아래쪽", "왼쪽", "오른쪽"][d];
-      const arrow = ["↑", "↓", "←", "→"][d];
       const subj = t === me ? "내" : `${name(t)}의`;
       return count(
         S,
         `${subj} ${word}에 있는 사람 중`,
-        `${t === me ? "나" : name(t)} ${arrow}`,
+        `${t === me ? "내" : name(t)} ${word}`,
         "dir"
       );
     }
@@ -660,7 +693,11 @@ export function generate(seed: number, tierId: TierId): Puzzle {
       range(N).map((i) => JOBS[i % jobCount]),
       r
     );
-    const P: Person[] = range(N).map((i) => ({ name: names[i], job: jobs[i] }));
+    const P: Person[] = range(N).map((i) => ({
+      name: names[i],
+      job: jobs[i],
+      sex: FEMALE.has(names[i]) ? "f" : "m",
+    }));
     const nCrim = T.crim[0] + Math.floor(r() * (T.crim[1] - T.crim[0] + 1));
     const truth = new Int8Array(N);
     shuffle([...b.all], r)

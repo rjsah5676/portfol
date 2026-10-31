@@ -562,16 +562,64 @@
     border-color: var(--inno);
     color: var(--inno);
   }
+  /* 공유 미리보기 — 메모지 카드 */
   .sp-share {
-    font-family: ui-monospace, Menlo, monospace;
-    white-space: pre;
+    position: relative;
+    display: grid;
+    justify-items: center;
+    gap: 6px;
+    padding: 14px 12px 10px;
+    background: var(--card);
+    border: 2px dashed var(--line);
+    border-radius: 14px;
     text-align: center;
-    font-size: 15px;
-    line-height: 1.3;
-    padding: 10px;
-    background: var(--paper2);
-    border-radius: 12px;
-    overflow-x: auto;
+  }
+  .sp-share-head {
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 21px;
+    line-height: 1.1;
+  }
+  .sp-share-stats {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ink2);
+    font-variant-numeric: tabular-nums;
+  }
+  .sp-share-badge {
+    padding: 0 7px;
+    border: 2px solid var(--inno);
+    border-radius: 7px;
+    color: var(--inno);
+    font-family: "Gaegu", "Jua", sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    rotate: -4deg;
+  }
+  .sp-share-grid {
+    display: grid;
+    gap: 4px;
+    width: max-content;
+    margin: 4px 0;
+  }
+  .sp-share-grid i {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: #4cc38a;
+    box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.14);
+  }
+  .sp-share-grid i.miss {
+    background: var(--sun);
+  }
+  .sp-share-link {
+    font-size: 11.5px;
+    color: var(--ink3);
+    letter-spacing: 0.02em;
   }
   .sp-input {
     min-height: 44px;

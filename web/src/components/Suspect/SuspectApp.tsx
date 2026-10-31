@@ -11,7 +11,7 @@ import {
   caseNo,
   dailySeed,
   dayLabel,
-  JOB_FACE,
+  ALL_FACES,
   kstDay,
   RANKED_TIERS,
   scoreOf,
@@ -110,7 +110,7 @@ function SoundBtn() {
 
 // ───────────────────────── 로딩 ─────────────────────────
 
-const FACES = Object.values(JOB_FACE).map((f) => `/suspect/faces/${f}.webp`);
+const FACES = ALL_FACES;
 
 function useAssets() {
   const [pct, setPct] = useState(0);
@@ -162,9 +162,15 @@ function useAssets() {
 function Loading({ pct }: { pct: number }) {
   return (
     <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 text-center">
-      <div className="flex gap-1">
+      <div className="flex">
         {FACES.map((f, i) => (
-          <img key={f} src={f} alt="" className="sp-face" style={{ rotate: `${(i - 2) * 6}deg` }} />
+          <img
+            key={f}
+            src={f}
+            alt=""
+            className="sp-face -ml-2 first:ml-0"
+            style={{ rotate: `${i % 2 ? 6 : -6}deg` }}
+          />
         ))}
       </div>
       <p className="sp-hand m-0 text-[26px]">사건 파일을 펼치는 중…</p>

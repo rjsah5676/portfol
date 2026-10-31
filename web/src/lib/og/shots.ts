@@ -15,6 +15,7 @@ export const SHOT_KEYS = new Set([
   "games/melongame",
   "games/board",
   "games/mine",
+  "games/suspect",
   "games/rspeed",
 ]);
 export const SHOT_VERSION = 8;
