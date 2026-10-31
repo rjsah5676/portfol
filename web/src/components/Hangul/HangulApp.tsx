@@ -520,15 +520,6 @@ export default function HangulApp() {
             </div>
           </section>
           <div className="hg-right">
-            {/* 버리기 모드: 켜면 누르는 칸을 버려요 (말 안 되는 낱말 정리용) */}
-            <button
-              type="button"
-              className={`hg-sellbtn${selling ? " is-on" : ""}`}
-              onClick={() => (setSelling((s) => !s), setSel(null))}
-              disabled={phase !== "play"}
-            >
-              {selling ? "버리기 켜짐 — 누르는 칸을 버려요 (쌓인 자모는 하나씩) · 끄기" : "🗑 버리기"}
-            </button>
             {zone("w", "단어칸")}
             {zone("s", "글자칸")}
             <div className="hg-jamo">
@@ -603,6 +594,15 @@ export default function HangulApp() {
         </button>
         <button type="button" onClick={() => setSpeed((s) => (s === 1 ? 2 : s === 2 ? 3 : 1))}>
           배속<small>×{speed}</small>
+        </button>
+        {/* 버리기 모드: 켜면 누르는 칸을 버려요 (말 안 되는 낱말 정리용) */}
+        <button
+          type="button"
+          className={selling ? "is-on" : undefined}
+          onClick={() => (setSelling((s) => !s), setSel(null))}
+          disabled={phase !== "play"}
+        >
+          🗑 버리기<small>{selling ? "누르는 칸 버림 · 끄기" : "꺼짐"}</small>
         </button>
       </div>
 

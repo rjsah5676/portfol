@@ -38,20 +38,6 @@
 /* 가로로 긴 판: 왼쪽 문장칸(원고지), 오른쪽 단어 · 글자 · 자모칸 — 좁으면 위아래로 */
 .hg-panel { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 14px; align-items: start; }
 .hg-right { position: relative; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-/* 팔기: 단어칸 제목 줄 오른쪽에 작게, 켜면 줄 전체로 */
-.hg-sellbtn {
-  position: absolute;
-  top: -3px;
-  right: 0;
-  z-index: 1;
-  padding: 3px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--paper);
-  font-size: 11.5px;
-  color: var(--ink2);
-}
-.hg-sellbtn.is-on { left: 0; background: var(--red); border-color: var(--red); color: #fff; font-weight: 700; }
 
 .hg-zone h3, .hg-line h3 { margin: 0 0 4px; font-size: 12px; font-weight: 400; color: var(--ink2); }
 .hg-line h3 small { font-family: "Nanum Gothic Coding", monospace; margin-left: 4px; }
@@ -207,7 +193,7 @@
 .hg-line-btns .hg-go:not(:disabled) { animation: hg-pulse 1s ease-in-out infinite; }
 @keyframes hg-pulse { 50% { box-shadow: 0 0 0 5px rgba(192,57,43,0.25); } }
 
-.hg-ctrl { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 6px; }
+.hg-ctrl { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr; gap: 6px; }
 .hg-ctrl button { background: var(--paper); border-color: var(--paper); }
 .hg-ctrl button:first-child, .hg-ctrl button:nth-child(2) { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .hg-ctrl button.is-on { background: var(--red); border-color: var(--red); color: #fff; }
