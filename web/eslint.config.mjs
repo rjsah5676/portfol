@@ -5,8 +5,11 @@ import prettier from "eslint-config-prettier/flat";
 const eslintConfig = defineConfig([
   ...nextConfig,
   prettier,
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", ".love-src/**"]),
   {
+    // next 설정이 react-hooks 등 플러그인을 이 확장자에만 걸어 둠 → .cjs 스크립트 같은 다른 파일엔 이 규칙을 안 걸어야 함
+    // (안 그러면 "could not find plugin react-hooks" 로 lint 전체가 멈춤)
+    files: ["**/*.{js,jsx,mjs,ts,tsx,mts,cts}"],
     rules: {
       // 이 프로젝트는 <img> 태그를 곳곳에서 그대로 씀 (next/image 전환은 별개 작업) - 경고 끔
       "@next/next/no-img-element": "off",
