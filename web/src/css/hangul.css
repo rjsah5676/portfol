@@ -77,7 +77,8 @@
   position: relative;
   background: var(--paper2);
   border-radius: 14px;
-  padding: 26px;
+  /* 먹물 길(캔버스, 16px 안쪽 · 괴물 30px)이 칸에 붙어 보였음 → 칸까지 여백 넉넉히 */
+  padding: 40px;
 }
 .hg-canvas {
   position: absolute;
@@ -219,7 +220,7 @@
 .hg-line {
   background: #fffdf6;
   border-radius: 10px;
-  padding: 8px 10px 10px;
+  padding: 10px 12px 12px;
 }
 /* 원고지 머리줄: 왼쪽 제목, 오른쪽 훈장님(말풍선 + 얼굴) */
 .hg-linehead {
@@ -243,7 +244,8 @@
   width: 72px;
   height: 72px;
   object-fit: contain;
-  margin: -10px -4px -6px 0;
+  /* 위로 삐져나오면 갓이 원고지 카드 위에 걸쳐 보여서 위 여백은 0 */
+  margin: 0 -4px -6px 0;
   flex: none;
   filter: drop-shadow(0 2px 2px rgba(26, 23, 20, 0.15));
   animation: hg-pop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1);
@@ -257,30 +259,42 @@
   border-radius: 14px;
   background: #fff;
   font-family: var(--brush);
-  font-size: 15px;
+  /* 송명체는 작으면 가는 획이 뭉개짐 → 16px, 굵게(가짜 볼드)도 안 씀 */
+  font-size: 16px;
+  text-rendering: geometricPrecision;
   line-height: 1.4;
   white-space: nowrap;
 }
+/*
+ * 말풍선 꼬리: 45° 돌린 네모 + 1.5px 테두리는 1배율 화면에서 계단 · 끊김이 보였음 →
+ * 먹 삼각형(::before) 위에 조금 작은 흰 삼각형(::after)을 얹어 테두리 1.5px 꼬리를 그림 (clip-path 라 매끈)
+ */
+.hg-teacher p::before,
 .hg-teacher p::after {
   content: "";
   position: absolute;
-  right: -7px;
+  left: 100%;
   top: 50%;
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+.hg-teacher p::before {
   width: 10px;
-  height: 10px;
-  margin-top: -5px;
+  height: 14px;
+  margin-top: -7px;
+  background: var(--ink);
+}
+.hg-teacher p::after {
+  width: 7.4px;
+  height: 10.3px;
+  margin-top: -5.15px;
   background: #fff;
-  border-right: 1.5px solid var(--ink);
-  border-top: 1.5px solid var(--ink);
-  transform: rotate(45deg);
 }
 .hg-teacher.is-hunjangWow p {
   border-color: var(--red);
   color: var(--red);
-  font-weight: 700;
 }
-.hg-teacher.is-hunjangWow p::after {
-  border-color: var(--red);
+.hg-teacher.is-hunjangWow p::before {
+  background: var(--red);
 }
 .hg-teacher.is-hunjangAngry p {
   color: var(--red);
@@ -521,6 +535,13 @@
 .hg-sgrade.g-억지 {
   border-color: var(--ink2);
   color: var(--ink2);
+}
+/* 막말: 먹 바탕에 흰 글씨 (명문 빨강과 반대로) */
+.hg-sgrade.g-막말,
+.hg-grade.g-막말 {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
 }
 /* 다음 낭독까지 */
 .hg-sbar {
@@ -1184,7 +1205,7 @@
     grid-template-columns: repeat(10, minmax(0, 1fr));
   }
   .hg-field {
-    padding: 28px 26px;
+    padding: 36px 34px;
   }
   .hg-hud {
     grid-template-columns: repeat(4, minmax(0, 1fr));

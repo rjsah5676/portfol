@@ -24,6 +24,11 @@ export interface Judge {
   points: number;
   /** 말맛 (분석기 점수 ÷ 글자 수, 소수 둘째 자리) — gradeOf 로 등급 */
   nat: number;
+  /**
+   * 막말: 서술어 없이 명사로 끝나는 문장(느금마 병신.) — 등급 「막말」, 점수 ×RUDE.k 고정.
+   *   분석기는 명사 나열(사과 바나나.)도 말맛을 높게 줘서 명문으로 치면 파밍이 됨 → 따로 낮게
+   */
+  rude?: boolean;
   /** 띄어쓰기를 고친 문장 (사용자가 넣은 문장부호 포함) — 보여 줄 때 씀 */
   spaced: string;
 }
@@ -45,17 +50,22 @@ export const GRADES = [
 ] as const;
 /** 말맛 등급 (이보다 낮으면 외계어 — 문장으로 안 침) */
 export const gradeOf = (nat: number) => GRADES.find((g) => nat >= g.min) ?? null;
+/** 막말 등급 (명사로 끝나는 문장) — 말맛과 상관없이 이 배수 */
+export const RUDE = { name: "막말", k: 0.5 } as const;
+/** 판정 → 등급 이름 (막말 우선) */
+export const gradeName = (j: { nat: number; rude?: boolean }) =>
+  j.rude ? RUDE.name : (gradeOf(j.nat)?.name ?? "");
 
 /**
  * 문장 점수: 길수록 확 커짐 (글자 수^1.6) + 뜻 있는 말이 많을수록 조금 더, × 말맛 등급.
  *   "오늘 힘들다"(5글자, 명문) ≈ 220 · "아 시발 섹스 섹스 좆 같은 하루였다"(14글자, 말 됨) ≈ 1,200
  */
-export function sentencePoints(text: string, morphs: Morph[], nat: number): number {
+export function sentencePoints(text: string, morphs: Morph[], nat: number, rude = false): number {
   const n = hangulLen(text);
   const g = gradeOf(nat);
   if (n < 2 || !g) return 0;
   const content = morphs.filter((m) => isContent(m.t)).length;
-  return Math.round(10 * n ** 1.6 * (1 + 0.12 * Math.max(0, content - 1)) * g.k);
+  return Math.round(10 * n ** 1.6 * (1 + 0.12 * Math.max(0, content - 1)) * (rude ? RUDE.k : g.k));
 }
 
 /** 랭킹 점수 = 완성한 문장 점수 합 + 버틴 웨이브 × 이 값 */
@@ -69,7 +79,10 @@ export const LINE_RE = new RegExp(`^[가-힣]{1,${LINE_MAX}}$`);
 export const PUNCTS = [",", "?", "!", "."] as const;
 /** 원고지 한 줄 형식: 한글 + 문장부호, 한글은 1~LINE_MAX 자 */
 export const isLine = (t: string) =>
-  /^[가-힣,.?!]+$/.test(t) && t.length <= LINE_MAX + 15 && hangulLen(t) >= 1 && hangulLen(t) <= LINE_MAX;
+  /^[가-힣,.?!]+$/.test(t) &&
+  t.length <= LINE_MAX + 15 &&
+  hangulLen(t) >= 1 &&
+  hangulLen(t) <= LINE_MAX;
 /** 판정할 알맹이 (한글만) */
 export const coreOf = (t: string) => t.replace(/[^가-힣]/g, "");
 /** 보여 줄 문장: 띄어쓴 문장 끝에 부호가 없으면 마침표 */

@@ -121,12 +121,18 @@ const engine = (): Engine => (KIWI_URL ? remote : local);
  * 문장의 끝: 종결어미(~다 · ~요 · ~네) 말고도
  *   부르는 말 — 호격조사(철수야 · 민수야)나 "~님"(선생님 · 부장님) 으로 끝남
  *   감탄사만으로 된 말 (여보세요 · 아이고)
+ *   음슴체 — 서술어 + 명사형 어미 ㅁ/음 (병신임 · 귀여움 · 가기 싫음 · 개웃김)
+ *   막말 — 명사로 끝나는 말, 뜻 있는 말 둘 이상 (느금마 병신 · 나 바보) → "rude" (점수 낮게 고정)
  */
-function endsSentence(m: Morph[]) {
+function endsSentence(m: Morph[]): boolean | "rude" {
   const last = m[m.length - 1];
   if (!last) return false;
   if (last.t === "EF" || last.t === "JKV") return m.length >= 2;
   if (last.t === "XSN" && last.f === "님") return m.length >= 2 && /^(NN|NP)/.test(m[m.length - 2].t);
+  // Kiwi 는 받침 ㅁ 을 첫가끝 종성(ᆷ, U+11B7)으로 줌 (병신임 → 이/VCP + ᆷ/ETN)
+  if (last.t === "ETN" && (last.f === "ᆷ" || last.f === "ㅁ" || last.f === "음"))
+    return m.length >= 2 && /^(VV|VA|VX|VCP|VCN|XSV|XSA|EP)/.test(m[m.length - 2].t);
+  if (/^(NN|NP|NR)/.test(last.t) && m.filter((x) => isContent(x.t)).length >= 2) return "rude";
   // 감탄사만: 세 글자 이상 (아아 · 으아 같은 두 글자 감탄사가 추천을 다 채우지 않게)
   return m.every((x) => x.t === "IC") && m.map((x) => x.f).join("").length >= 3;
 }
@@ -142,8 +148,10 @@ function readSentence(r: Analysis, text: string) {
   // (모르는 말이 섞이면 어차피 아래에서 걸러짐)
   const last = morphs[morphs.length - 1];
   if (last && (last.t === "JKV" || (last.t === "XSN" && last.f === "님"))) nat = Math.max(nat, GRADES[GRADES.length - 1].min);
-  const sentence = hangulLen(text) >= 2 && morphs.every((m) => m.k) && endsSentence(morphs) && !!gradeOf(nat);
-  return { morphs, nat, sentence, points: sentence ? sentencePoints(text, morphs, nat) : 0 };
+  const end = endsSentence(morphs);
+  const sentence = hangulLen(text) >= 2 && morphs.every((m) => m.k) && !!end && !!gradeOf(nat);
+  const rude = sentence && end === "rude";
+  return { morphs, nat, sentence, rude, points: sentence ? sentencePoints(text, morphs, nat, rude) : 0 };
 }
 
 const WORD_KIND: [RegExp, string][] = [
@@ -211,8 +219,10 @@ export async function suggest(line: string, units: string[]): Promise<Suggestion
     const notSent: typeof cands = [];
     cands.forEach((c, j) => {
       const s = readSentence(rs[j], coreOf(c.text));
-      if (s.sentence) found.push({ add: c.seq, text: c.text, sentence: true, word: null, points: s.points });
-      else if (!line && c.seq.length >= 2) notSent.push(c);
+      // 막말(명사로 끝)은 추천 안 함 — 명사 아무거나 둘이면 다 되니 추천이 명사 쌍으로 도배됨
+      if (s.sentence) {
+        if (!s.rude) found.push({ add: c.seq, text: c.text, sentence: true, word: null, points: s.points });
+      } else if (!line && c.seq.length >= 2) notSent.push(c);
     });
     const ws = await k.analyze(notSent.map((c) => c.text));
     notSent.forEach((c, j) => {
@@ -242,7 +252,7 @@ export async function judge(text: string): Promise<Judge> {
   // 낱말: 부호 없이, 마침표도 없이 읽어서 뜻 있는 말이 딱 하나
   const asWord = core === text;
   const [rs, [spaced]] = await Promise.all([k.analyze(asWord ? [`${core}.`, core] : [`${core}.`]), k.space([text])]);
-  const { morphs, nat, sentence, points } = readSentence(rs[0], core);
+  const { morphs, nat, sentence, rude, points } = readSentence(rs[0], core);
   const word = asWord ? (readWord(rs[1])?.kind ?? null) : null;
-  return { text, morphs, sentence, word, points, nat, spaced };
+  return { text, morphs, sentence, word, points, nat, spaced, ...(rude && { rude }) };
 }

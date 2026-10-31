@@ -54,7 +54,7 @@ import {
   type Zone,
 } from "@/lib/hangul/game";
 import {
-  gradeOf,
+  gradeName,
   HANGUL_WAVE_PTS,
   hangulLen,
   LINE_MAX,
@@ -123,7 +123,15 @@ const GRADE_FACE: Record<string, ImgName> = {
   명문: "hunjangWow",
   "말 됨": "hunjangNod",
   억지: "hunjangHmm",
+  막말: "hunjangAngry",
 };
+/** 막말(명사로 끝나는 문장) 한마디 — 얼굴은 버럭이지만 외계어와 다른 말 */
+const RUDE_SAY = [
+  "어허, 막말이로다!",
+  "서술어는 어디다 두고 왔느냐?",
+  "말끝을 맺거라, 말끝을!",
+  "고얀 놈 같으니…",
+];
 const lineOf = (arr: string[], seed: string) =>
   arr[[...seed].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % arr.length];
 
@@ -602,14 +610,14 @@ export default function HangulApp() {
       : !j
         ? "읽는 중…"
         : j.sentence
-          ? `문장이 됐어요! [${gradeOf(j.nat)?.name}] 「${withEnd(j.spaced || j.text)}」 완성하면 +${fmt(j.points)}점`
+          ? `문장이 됐어요! [${gradeName(j)}] 「${withEnd(j.spaced || j.text)}」 완성하면 +${fmt(j.points)}점${j.rude ? " (말끝을 맺으면 점수 더)" : ""}`
           : unknown.length
             ? `「${unknown.map((m) => m.f).join(", ")}」 — 사전에 없는 말이에요`
             : endsLikeSentence && !j.word
               ? `외계어예요 (말맛 ${j.nat}) — 사람이 쓰는 말처럼 이어 보세요`
               : j.word
                 ? `낱말 「${j.text}」(${j.word}) — 묶으면 단어칸에서 ${POS_STYLE[j.word]?.desc ?? "싸워요"}`
-                : "아직 문장이 아니에요 — ~다 · ~요 · ~네 로 끝을 맺거나, ~님 · ~야 로 불러 보세요";
+                : "아직 문장이 아니에요 — ~다 · ~요 · ~임 으로 끝을 맺거나, ~님 · ~야 로 불러 보세요";
   const bestNow = best(g);
   // 훈장님 표정 · 한마디: 방금 완성한 문장(번쩍임) > 지금 줄 판정 > 기본
   const face: ImgName = flash
@@ -617,11 +625,12 @@ export default function HangulApp() {
     : !text || !j
       ? "hunjang"
       : j.sentence
-        ? (GRADE_FACE[gradeOf(j.nat)?.name ?? ""] ?? "hunjangNod")
+        ? (GRADE_FACE[gradeName(j)] ?? "hunjangNod")
         : unknown.length || (endsLikeSentence && !j.word)
           ? "hunjangAngry"
           : "hunjang";
-  const teacher = { face, say: lineOf(TEACHER[face], flash?.text ?? text) };
+  const rudeNow = flash ? flash.grade === "막말" : !!j?.sentence && !!j.rude;
+  const teacher = { face, say: lineOf(rudeNow ? RUDE_SAY : TEACHER[face], flash?.text ?? text) };
 
   const slot = (z: Zone, i: number) => {
     const u = g.zones[z][i];

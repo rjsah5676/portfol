@@ -12,7 +12,7 @@ import {
   VOWEL_RECIPES,
   VOWS_W,
 } from "./jamo";
-import { gradeOf, hangulLen, LINE_MAX, withEnd, type Judge, type Morph } from "./judge";
+import { gradeName, hangulLen, LINE_MAX, withEnd, type Judge, type Morph } from "./judge";
 
 /*
  * 니들이 한글을 알아? — 게임 진행 (화면과 따로, 숫자만)
@@ -125,7 +125,7 @@ export interface Sentence {
   spaced: string;
   points: number;
   wave: number;
-  /** 말맛 등급 (명문 · 말 됨 · 억지) */
+  /** 말맛 등급 (명문 · 말 됨 · 억지 · 막말) */
   grade: string;
 }
 
@@ -540,7 +540,7 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
     spaced: withEnd(j.spaced || j.text),
     points: j.points,
     wave: g.wave,
-    grade: gradeOf(j.nat)?.name ?? "",
+    grade: gradeName(j),
   };
   g.sentences.push(s);
   g.points += j.points;
@@ -562,7 +562,14 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
     kind: "read",
     r: Math.max(g.path.w, g.path.h),
   });
-  emit(g, s.grade === "명문" ? "sent-best" : s.grade === "억지" ? "sent-meh" : "sent-good");
+  emit(
+    g,
+    s.grade === "명문"
+      ? "sent-best"
+      : s.grade === "억지" || s.grade === "막말"
+        ? "sent-meh"
+        : "sent-good"
+  );
   // 바로 앞 문장과 이어지면 풍경 소리
   if (g.shelf.length >= 2 && linkOf(g.shelf[g.shelf.length - 2], u).level > 0) emit(g, "link");
   return s;
