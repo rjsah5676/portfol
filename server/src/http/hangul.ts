@@ -4,8 +4,19 @@ import { rateLimit } from "express-rate-limit";
 import { isLine, LINE_RE } from "../../../web/src/lib/hangul/judge";
 import type { Deps } from "../deps";
 import { AppError, bad } from "../errors";
-import { judge, judgeReady, suggest } from "../hangul/kiwi";
+import { judge, JudgeOffError, judgeReady, suggest } from "../hangul/kiwi";
 import { h } from "./util";
+
+const OFF_MSG = "판정 서버가 아직 준비되지 않았어요.";
+/** 판정기가 꺼져 있으면(모델 없음 · 판정 서비스 다운) 503 JUDGE_OFF */
+const orOff = <T>(p: Promise<T>) =>
+  p.catch((e) => {
+    if (e instanceof JudgeOffError) {
+      console.warn(`[hangul] ${e.message}`);
+      throw new AppError("JUDGE_OFF", OFF_MSG, 503);
+    }
+    throw e;
+  });
 
 /*
  * 니들이 한글을 알아? 판정
@@ -31,9 +42,10 @@ export function hangulRouter(db?: Deps["db"]): Router {
     h(async (req, res) => {
       const t = String(req.query.t ?? "");
       if (!isLine(t)) throw bad();
-      if (!judgeReady()) throw new AppError("JUDGE_OFF", "판정 서버가 아직 준비되지 않았어요.", 503);
+      if (!judgeReady()) throw new AppError("JUDGE_OFF", OFF_MSG, 503);
+      const j = await orOff(judge(t));
       res.set("Cache-Control", "public, max-age=600");
-      return judge(t);
+      return j;
     }),
   );
   // 뭐 되지? (line = 지금 문장칸, u = 가진 글자 · 낱말들을 쉼표로, 최대 18개)
@@ -43,8 +55,8 @@ export function hangulRouter(db?: Deps["db"]): Router {
       const line = String(req.query.line ?? "");
       const units = String(req.query.u ?? "").split(",").filter(Boolean);
       if ((line && !isLine(line)) || !units.length || units.length > 18 || !units.every((u) => LINE_RE.test(u))) throw bad();
-      if (!judgeReady()) throw new AppError("JUDGE_OFF", "판정 서버가 아직 준비되지 않았어요.", 503);
-      return suggest(line, units);
+      if (!judgeReady()) throw new AppError("JUDGE_OFF", OFF_MSG, 503);
+      return orOff(suggest(line, units));
     }),
   );
   // 사전에 없는 말 신고: 같은 말은 한 줄로 모아 몇 명이 신고했는지 셈 (IP는 해시 앞부분만, 같은 사람이 여러 번 눌러도 1)
@@ -56,8 +68,11 @@ export function hangulRouter(db?: Deps["db"]): Router {
         const text = String((req.body as { text?: unknown } | undefined)?.text ?? "");
         if (!isLine(text)) throw bad();
         const who = createHash("sha256").update(String(req.ip)).digest("hex").slice(0, 12);
+        // 판정기가 꺼져 있어도 신고는 받음 (형태소 칸만 비움)
         const morphs = judgeReady()
-          ? (await judge(text)).morphs.map((m) => `${m.f}/${m.t}${m.k ? "" : "?"}`).join(" ")
+          ? await judge(text)
+              .then((j) => j.morphs.map((m) => `${m.f}/${m.t}${m.k ? "" : "?"}`).join(" "))
+              .catch(() => "")
           : "";
         const col = db.col("hangul_reports");
         await col.updateOne(

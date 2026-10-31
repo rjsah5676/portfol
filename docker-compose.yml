@@ -55,6 +55,18 @@ services:
       # 익명 랭킹 · 방명록 · 문의의 사람 확인 (Cloudflare Turnstile). 둘 다 있어야 켜짐
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+      # 니들이 한글을 알아? 판정기 (아래 kiwi 서비스). 꺼져 있으면 그 게임만 "판정 서버 없음"
+      KIWI_URL: http://kiwi:8000
+
+  # 니들이 한글을 알아? 판정기: 형태소 분석기 Kiwi (파이썬 · 네이티브, 메모리 약 330MB)
+  # 메모리를 넘으면 이 컨테이너만 죽고 다시 뜸 (사이트 서버는 그대로)
+  kiwi:
+    build:
+      context: .
+      dockerfile: kiwi/Dockerfile
+    image: ${KIWI_IMAGE:-portfolio-kiwi}
+    restart: unless-stopped
+    mem_limit: 700m
 
   # 프론트: Next.js 서버 (글·방명록 등을 요청 때 서버에서 그림)
   web:

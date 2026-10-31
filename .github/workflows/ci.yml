@@ -82,6 +82,10 @@ jobs:
           - name: web
             context: web
             file: web/Dockerfile
+          # 니들이 한글을 알아? 판정기 (파이썬). 추가 사전(server/src/hangul/slang.json)을 같이 써서 기준 폴더가 레포 루트
+          - name: kiwi
+            context: .
+            file: kiwi/Dockerfile
     env:
       PUSH: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     steps:
@@ -155,4 +159,4 @@ jobs:
           IMG: ghcr.io/${{ github.repository }}
         run: |
           IMG="${IMG,,}"
-          ssh -i ~/.ssh/deploy_key "$TARGET" "GHCR_USER='$GHCR_USER' SERVER_IMAGE='$IMG-server:latest' WEB_IMAGE='$IMG-web:latest' bash '$APP_DIR/scripts/deploy.sh'" <<< "$GHCR_TOKEN"
+          ssh -i ~/.ssh/deploy_key "$TARGET" "GHCR_USER='$GHCR_USER' SERVER_IMAGE='$IMG-server:latest' WEB_IMAGE='$IMG-web:latest' KIWI_IMAGE='$IMG-kiwi:latest' bash '$APP_DIR/scripts/deploy.sh'" <<< "$GHCR_TOKEN"

@@ -41,3 +41,6 @@ web/assets/town-src/
 
 # Claude 작업 트리 (병렬 작업용 임시 worktree)
 .claude/worktrees/
+
+# 니들이 한글을 알아? 판정기(파이썬)
+kiwi/__pycache__/

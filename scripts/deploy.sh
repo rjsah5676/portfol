@@ -13,7 +13,7 @@ if [ -n "${GHCR_USER:-}" ]; then
   docker login ghcr.io -u "$GHCR_USER" --password-stdin
 fi
 
-docker compose pull server web
+docker compose pull server web kiwi
 # 이미지가 바뀐 컨테이너만 다시 만듦 (mongo·caddy 는 그대로)
 docker compose up -d --no-build --remove-orphans
 # Caddyfile 이 바뀌었으면 반영 (끊김 없이 다시 읽음)
