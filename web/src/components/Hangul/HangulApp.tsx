@@ -21,7 +21,9 @@ import {
   LOAD_MAX,
   newGame,
   POS_STYLE,
+  READ_SEC,
   score,
+  SHELF_MAX,
   sell,
   setPath,
   statsOf,
@@ -364,7 +366,7 @@ export default function HangulApp() {
         <div className="hg-panel">
           <section className="hg-line">
             <h3>
-              문장칸 <small>{cells.length}/{LINE_MAX}</small>
+              원고지 <small>{cells.length}/{LINE_MAX}</small>
             </h3>
             <div className="hg-paper" role="list">
               {Array.from({ length: LINE_MAX }, (_, k) => {
@@ -415,6 +417,25 @@ export default function HangulApp() {
               <button type="button" className="hg-go" onClick={onFinish} disabled={!j?.sentence || phase !== "play"}>
                 문장 완성!
               </button>
+            </div>
+            {/* 문장칸: 완성한 문장이 남아 {READ_SEC}초마다 판 전체에 다시 낭독 */}
+            <div className="hg-shelf">
+              <h3>
+                문장칸 <small>{g.shelf.length}/{SHELF_MAX} · {READ_SEC}초마다 전체 낭독 · 꽉 차면 점수 낮은 문장이 밀려나요</small>
+              </h3>
+              {Array.from({ length: SHELF_MAX }, (_, k) => {
+                const u = g.shelf[k];
+                return u ? (
+                  <div key={u.id} className="hg-sent" data-uid={u.id}>
+                    <span className={`hg-sgrade g-${(u.grade ?? "").replace(" ", "")}`}>{u.grade}</span>
+                    <span className="hg-stext">{u.text}.</span>
+                    <b>{fmt(u.points ?? 0)}</b>
+                    <i className="hg-sbar" style={{ transform: `scaleX(${1 - Math.max(0, Math.min(1, u.cd))})` }} />
+                  </div>
+                ) : (
+                  <div key={`e${k}`} className="hg-sent is-empty" />
+                );
+              })}
             </div>
           </section>
           <div className="hg-right">
@@ -510,9 +531,12 @@ export default function HangulApp() {
           </li>
           <li>자모를 누르고 글자를 누르면: 받침(가+ㄱ → 각) · 모음 바꾸기(기+ㆍ → 가, 그+ㆍ → 구, 가+ㅣ → 개)</li>
           <li>같은 자모는 한 칸에 쌓여요(×n). [자동 짝짓기]는 재료로 모음을 알아서 만들어 글자까지 만들어 줘요</li>
-          <li>글자 · 낱말을 누르면 문장칸에 이어 붙어요. 원고지 칸을 누르면 다시 빠져요</li>
-          <li>문장칸이 낱말 하나면 [낱말로 묶기] → 단어칸에서 품사대로 싸워요 (명사 강타 · 동사 범위 · 형용사 감속 · 부사 연사 · 감탄사 기절)</li>
-          <li>종결어미로 끝나면 [문장 완성!] → 화면 전체 공격 + 점수 + 기세(모든 피해) 영구 상승. 쓴 글자는 사라져요</li>
+          <li>글자 · 낱말을 누르면 원고지에 이어 붙어요. 원고지 칸을 누르면 다시 빠져요</li>
+          <li>원고지가 낱말 하나면 [낱말로 묶기] → 단어칸에서 품사대로 싸워요 (명사 강타 · 동사 범위 · 형용사 감속 · 부사 연사 · 감탄사 기절)</li>
+          <li>
+            종결어미로 끝나면 [문장 완성!] → 화면 전체 공격 + 점수 + 기세(모든 피해) 영구 상승. 문장은 문장칸에 남아 {READ_SEC}초마다
+            다시 낭독해요 (최대 {SHELF_MAX}개, 꽉 차면 점수 낮은 문장이 밀려남)
+          </li>
           <li>띄어쓰기는 필요 없어요. 욕도 문장이에요</li>
         </ul>
       </details>

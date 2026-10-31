@@ -6,9 +6,10 @@ import { gradeOf, hangulLen, LINE_MAX, type Judge } from "./judge";
  *
  *   뽑기 → 자음칸 · 모음칸에 자모가 쌓임
  *   자모를 합치면 글자칸에 글자 (글자는 약하게 싸움)
- *   글자 · 낱말을 누르면 문장칸(원고지)에 이어 붙음 → 서버가 읽어 줌(형태소 분석)
+ *   글자 · 낱말을 누르면 원고지에 이어 붙음 → 서버가 읽어 줌(형태소 분석)
  *     · 낱말 하나면 [낱말로 묶기] → 단어칸에 낱말 (품사마다 싸우는 방식이 다름)
- *     · 종결어미로 끝나면 [문장 완성] → 화면 전체 낭독 공격 + 점수 + 기세(모든 피해) 영구 상승, 쓴 글자는 사라짐
+ *     · 종결어미로 끝나면 [문장 완성] → 화면 전체 낭독 공격 + 점수 + 기세(모든 피해) 영구 상승,
+ *       문장은 문장칸에 남아 몇 초마다 다시 낭독 (가장 센 유닛)
  *   먹물 얼룩은 판 둘레를 끝없이 돌고, 쌓인 양이 LOAD_MAX 를 넘으면 끝. 웨이브는 끝없이.
  */
 
@@ -16,12 +17,17 @@ export type Zone = "c" | "v" | "s" | "w";
 /** 칸 수. 자음 · 모음칸은 같은 자모가 한 칸에 STACK_MAX 개까지 쌓임 */
 export const CAP: Record<Zone, number> = { c: 10, v: 6, s: 16, w: 12 };
 export const STACK_MAX = 99;
+/** 문장칸에 남는 문장 수 */
+export const SHELF_MAX = 4;
 export const ZONE_NAME: Record<Zone, string> = { c: "자음칸", v: "모음칸", s: "글자칸", w: "단어칸" };
 
 export interface Unit {
   id: number;
-  /** j = 자모 · s = 글자 · w = 낱말 */
-  kind: "j" | "s" | "w";
+  /** j = 자모 · s = 글자 · w = 낱말 · t = 완성한 문장 */
+  kind: "j" | "s" | "w" | "t";
+  /** 문장: 점수 · 말맛 등급 */
+  points?: number;
+  grade?: string;
   text: string;
   /** 낱말의 품사 (명사 · 동사 · 형용사 · 부사 · 감탄사 …) */
   pos?: string;
@@ -75,6 +81,8 @@ export interface Sentence {
 export const DRAW_COST = 1;
 export const LOAD_MAX = 100;
 const WAVE_SEC = 20;
+/** 문장칸 문장이 다시 낭독하는 간격(초) */
+export const READ_SEC = 3;
 const LAP_SEC = 15;
 
 export const waveHp = (w: number) => Math.round(14 * 1.1 ** (w - 1));
@@ -101,7 +109,10 @@ export interface Game {
   spawnT: number;
   spawnBoss: boolean;
   zones: Record<Zone, (Unit | null)[]>;
+  /** 원고지(쓰는 중인 줄) */
   line: Unit[];
+  /** 문장칸: 완성한 문장이 남아서 싸움 (가장 센 유닛). 꽉 차면 점수 낮은 문장부터 밀려남 */
+  shelf: Unit[];
   enemies: Enemy[];
   shots: Shot[];
   fx: Fx[];
@@ -130,6 +141,7 @@ export function newGame(): Game {
     spawnBoss: false,
     zones: { c: Array(CAP.c).fill(null), v: Array(CAP.v).fill(null), s: Array(CAP.s).fill(null), w: Array(CAP.w).fill(null) },
     line: [],
+    shelf: [],
     enemies: [],
     shots: [],
     fx: [],
@@ -290,7 +302,7 @@ export function autoPair(g: Game): number {
 export function toLine(g: Game, z: Zone, i: number): boolean {
   const u = g.zones[z][i];
   if (!u || u.kind === "j") return false;
-  if (hangulLen(lineText(g)) + hangulLen(u.text) > LINE_MAX) return say(g, `문장칸은 ${LINE_MAX}글자까지예요`), false;
+  if (hangulLen(lineText(g)) + hangulLen(u.text) > LINE_MAX) return say(g, `원고지는 ${LINE_MAX}글자까지예요`), false;
   g.zones[z][i] = null;
   u.from = z;
   g.line.push(u);
@@ -345,6 +357,14 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
   g.sentences.push(s);
   g.points += j.points;
   g.line = [];
+  // 문장칸에 남음 — 꽉 차 있으면 점수가 가장 낮은 문장이 밀려남 (새 문장이 더 낮으면 새 문장은 낭독만 하고 안 남음)
+  const u = unit(g, "t", j.text);
+  u.points = j.points;
+  u.grade = s.grade;
+  if (g.shelf.length >= SHELF_MAX) {
+    const low = g.shelf.reduce((a, b) => ((b.points ?? 0) < (a.points ?? 0) ? b : a));
+    if ((low.points ?? 0) < j.points) g.shelf.splice(g.shelf.indexOf(low), 1, u);
+  } else g.shelf.push(u);
   const dmg = j.points * 0.6 * g.power;
   for (const e of g.enemies) e.hp -= dmg;
   g.power += 0.02 * n;
@@ -451,6 +471,19 @@ export function step(g: Game, dt: number) {
       for (const e of hitList) hit(g, e, st.dmg, st as { slow?: number; stun?: number });
       g.shots.push({ from: u.id, to: target, t: 0, color: st.color, glyph: u.text[0], r: splash });
     }
+  // 문장칸의 문장: READ_SEC 마다 판 위 모든 얼룩에게 낭독 (점수 × 0.15 × 기세)
+  for (const u of g.shelf) {
+    u.cd -= dt / READ_SEC;
+    if (u.cd > 0) continue;
+    if (!live.length) {
+      u.cd = 0;
+      continue;
+    }
+    u.cd = 1;
+    const dmg = (u.points ?? 0) * 0.15 * g.power;
+    for (const e of live) e.hp -= dmg;
+    for (const e of live.slice(0, 8)) g.shots.push({ from: u.id, to: e, t: 0, color: "#c0392b", glyph: u.text[0] });
+  }
   for (const s of g.shots) s.t += dt;
   g.shots = g.shots.filter((s) => s.t < 0.25);
   for (const e of g.enemies)

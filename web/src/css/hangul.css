@@ -16,7 +16,7 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   font-family: var(--body);
   color: var(--ink);
 }
@@ -33,7 +33,7 @@
 .hg-hud b { display: block; font-family: "Nanum Gothic Coding", monospace; font-size: 16px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .hg-hud .is-warn b { color: var(--red); }
 
-.hg-field { position: relative; background: var(--paper2); border-radius: 14px; padding: 30px; }
+.hg-field { position: relative; background: var(--paper2); border-radius: 14px; padding: 26px; }
 .hg-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
 /* 가로로 긴 판: 왼쪽 문장칸(원고지), 오른쪽 단어 · 글자 · 자모칸 — 좁으면 위아래로 */
 .hg-panel { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.08fr); gap: 14px; align-items: start; }
@@ -108,6 +108,33 @@
 .hg-morphs .is-unk, .hg-morphs .is-unk small { color: var(--red); }
 .hg-msg { margin: 4px 0 6px; min-height: 2.6em; font-size: 12.5px; line-height: 1.3; color: var(--ink2); }
 .hg-msg.is-ok { color: var(--red); font-weight: 700; }
+/* 문장칸: 완성한 문장이 남는 자리 (원고지 아래) */
+.hg-shelf { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+.hg-shelf h3 small { font-family: var(--body); color: var(--ink2); opacity: 0.8; }
+.hg-sent {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 8px 5px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--red);
+  border-radius: 6px;
+  background: var(--paper);
+  overflow: hidden;
+  animation: hg-sent-in 0.5s ease-out;
+}
+.hg-sent.is-empty { border: 1px dashed var(--line); background: transparent; animation: none; }
+.hg-stext { font-family: var(--brush); font-size: 18px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hg-sent b { font-family: "Nanum Gothic Coding", monospace; font-size: 12.5px; color: var(--red); }
+.hg-sgrade { font-family: "Black Han Sans", sans-serif; font-size: 11px; padding: 1px 5px; border: 1.5px solid var(--red); border-radius: 4px; color: var(--red); white-space: nowrap; }
+.hg-sgrade.g-명문 { background: var(--red); color: #fff; }
+.hg-sgrade.g-억지 { border-color: var(--ink2); color: var(--ink2); }
+/* 다음 낭독까지 */
+.hg-sbar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--red); opacity: 0.5; transform-origin: left; }
+@keyframes hg-sent-in { from { transform: translateY(-6px); opacity: 0; background: #fff1d6; } }
 .hg-sugs { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-bottom: 8px; }
 .hg-sugs button {
   display: inline-flex;
