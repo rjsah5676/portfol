@@ -17,10 +17,6 @@ import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
 import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
 import { CASE_RE as SUSPECT_CASE_RE, kstDay, scoreOf as suspectScore } from "../../../web/src/lib/suspect/engine";
-import { dailyScore, HINT_MAX, PZ_RE } from "../../../web/src/lib/hangul/daily";
-import { LINE_MAX } from "../../../web/src/lib/hangul/judge";
-import { answerOf as dailyAnswerOf, checkDaily, dayOpen as dailyOpen } from "../hangul/daily";
-import { dailyMarkOf } from "./hangul";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -114,16 +110,7 @@ interface Board {
   split?: { field: string; of: (d: Data) => string; valid: (v: string) => boolean };
   /** 첫 기록만 남김 (오늘의 용의자: 다시 풀면 답을 알고 푸는 거라) */
   firstOnly?: boolean;
-  /** 서버에서 다시 따져 보는 확인 (오래 걸릴 수 있는 것 — 니들이 한글을 알아?: 대표 문장을 다시 판정) */
-  verify?: (d: Data) => Promise<boolean>;
-  /** 한 사람이 판마다 따로 여러 개 올릴 수 있음 (가장 좋은 것 하나로 바꾸지 않고 쌓음 — 니들이 한글을 알아?) */
-  many?: boolean;
-  /** 시크릿 등록 허용: { secret: true } 로 보내면 별명 · 사진 없이 "익명" 으로 */
-  secret?: boolean;
 }
-
-/** 시크릿 등록 때 랭킹에 보이는 이름 */
-export const SECRET_NAME = "익명";
 
 /** AI 대국: 상대 단계 */
 const tierOf = (d: Data) => Math.floor(d.score / 1_000_000);
@@ -183,36 +170,6 @@ export const BOARDS: Record<string, Board> = {
   },
   // 격투 AI 랭킹(fight_ai_rankings)은 랭크전 도입(10.08)으로 없앰 — 컬렉션은 남겨 둠 (관리자 데이터 화면)
 };
-
-/**
- * 니들이 한글을 알아? 「오늘의 자모」: 날짜 · 난이도(pz = "YYYYMMDD_tier")마다 랭킹 (hangul_daily).
- *   점수 = 걸린 시간 + 힌트 × 30초 (작을수록 좋음), 첫 기록만. 내 문장(text)은 서버가 다시 확인해서
- *   kind(정답 · 별해) · 띄어쓴 모양(spaced)을 같이 저장 — 별해는 👍 를 받아 「별해 자랑」에 올라감. 익명 등록 가능
- */
-const dailySchema = z.strictObject({
-  name,
-  time: z.number().min(3).max(86400),
-  hint: int.min(0).max(HINT_MAX),
-  score: z.number().min(3).max(100_000),
-  text: z.string().min(1).max(LINE_MAX + 15),
-});
-const dailyBoard = (pz: string): Board => ({
-  sort: { score: 1 },
-  schema: dailySchema,
-  minSec: (d) => d.time,
-  check: (d) => dailyOpen(pz.slice(0, 8)) && Math.abs(d.score - dailyScore(d.time, d.hint)) < 0.05,
-  verify: async (d) => {
-    const answer = dailyAnswerOf(pz);
-    if (!answer) return false;
-    const c = await checkDaily(answer, d.text);
-    if (!c.kind) return false;
-    d.kind = c.kind;
-    d.spaced = c.spaced;
-    return true;
-  },
-  firstOnly: true,
-  secret: true,
-});
 
 const CHART_RE = /^[a-z0-9-]+_(easy|normal|hard|expert|nightmare|explus|abyss)$/;
 const rhythmSchema = z.strictObject({
@@ -439,8 +396,6 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
       return CHART_RE.test(key.slice(7)) ? rhythmBoard(key.slice(7)) : null;
     if (key.startsWith("suspect:"))
       return SUSPECT_CASE_RE.test(key.slice(8)) ? suspectBoard(key.slice(8)) : null;
-    if (key.startsWith("hangul:"))
-      return PZ_RE.test(key.slice(7)) && dailyOpen(key.slice(7, 15)) ? dailyBoard(key.slice(7)) : null;
     return Object.hasOwn(BOARDS, key) ? BOARDS[key] : null;
   };
 
@@ -460,15 +415,12 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
     if (!user) throw unauthenticated();
     // 티켓을 쓰기 전에 (확인하고 다시 보내도 같은 티켓으로 등록되게)
     if (user.anonymous) await captcha?.check(req, { remember: user.uid });
-    const { ticket, secret: secretReq, ...body } = (req.body ?? {}) as Record<string, unknown>;
-    // 시크릿: 이름은 "익명", 회원 표시 · 사진 없음 (uid 는 남지만 밖으로는 안 나감)
-    const secret = secretReq === true && !!board.secret;
+    const { ticket, ...body } = (req.body ?? {}) as Record<string, unknown>;
     // 회원은 별명으로 등록 (보낸 이름은 무시). 비회원은 적은 이름 그대로 — member 표시가 없는 기록이 비회원 기록
-    const nick = secret ? null : await users.nickOf(user);
-    if (secret) body.name = SECRET_NAME;
-    else if (nick) body.name = nick;
+    const nick = await users.nickOf(user);
+    if (nick) body.name = nick;
     const data = board.schema.parse(body) as Data;
-    const owner = secret ? { uid: user.uid, secret: true } : nick ? { uid: user.uid, member: true } : { uid: user.uid };
+    const owner = nick ? { uid: user.uid, member: true } : { uid: user.uid };
 
     const now = Date.now();
     const t =
@@ -487,9 +439,7 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
           ? "too-fast"
           : board.check && !board.check(data)
             ? "mismatch"
-            : board.verify && !(await board.verify(data).catch(() => false))
-              ? "verify"
-              : null;
+            : null;
     if (why) {
       console.warn(
         `[rank] 거절(${why}) ${key} uid=${user.uid} ${Math.round(elapsed)}s ${JSON.stringify(data)}`,
@@ -499,12 +449,6 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
 
     if (board.split) scope = { ...scope, [board.split.field]: board.split.of(data) };
     const [field, dir] = Object.entries(board.sort)[0];
-    if (board.many) {
-      // 판마다 하나씩 (티켓이 1회용이라 한 판에 한 번만 올라감)
-      const _id = newId();
-      await db.col(col).insertOne({ _id, ...scope, ...data, ...owner, createdAt: new Date() });
-      return { id: _id };
-    }
     return mutex.run(`${col}:${JSON.stringify(scope)}:${user.uid}`, async () => {
       const mine = await db.col(col).findOne({ ...scope, uid: user.uid });
       if (mine && board.firstOnly) return { id: mine._id, kept: true };
@@ -658,95 +602,6 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
     }),
   );
 
-  // 니들이 한글을 알아? 오늘의 자모 (pz = YYYYMMDD_난이도)
-  //   GET  /hangul/:pz            기록 순위 (점수 작은 순)
-  //   GET  /hangul/:pz?sort=fun   별해 자랑 (별해만, 👍 많은 순) · ?sort=new 별해 최신순
-  r.get(
-    "/hangul/:pz",
-    h(async (req) => {
-      const pz = String(req.params.pz);
-      if (!PZ_RE.test(pz)) throw bad();
-      const q = req.query.sort;
-      const [filter, sort] =
-        q === "fun"
-          ? [{ pz, kind: "별해" }, { likes: -1 as const, createdAt: 1 as const }]
-          : q === "new"
-            ? [{ pz, kind: "별해" }, { createdAt: -1 as const }]
-            : [{ pz }, { score: 1 as const, createdAt: 1 as const }];
-      const docs = await db.col("hangul_daily").find(filter).sort(sort).limit(limitOf(req.query.limit)).toArray();
-      return rows(db, docs);
-    }),
-  );
-  // 등록: 힌트를 본 만큼 적었는지 · 포기하지 않았는지 서버에 남은 것과 대조 (http/hangul.ts 힌트 · 포기)
-  r.post(
-    "/hangul/:pz",
-    h(async (req) => {
-      const pz = String(req.params.pz);
-      if (!PZ_RE.test(pz)) throw bad();
-      const user = await userOf(auth, req);
-      if (user) {
-        const m = await dailyMarkOf(db, pz, user.uid);
-        const hint = Number((req.body as { hint?: unknown } | undefined)?.hint);
-        if (m.gaveUp || !(hint >= m.hint)) {
-          console.warn(`[rank] 거절(mark) hangul:${pz} uid=${user.uid} hint=${hint} ${JSON.stringify(m)}`);
-          throw rejected();
-        }
-      }
-      return submit(req, `hangul:${pz}`, "hangul_daily", { pz });
-    }),
-  );
-
-  // 니들이 한글을 알아? 👍 웃겨요 — 한 사람이 문장 하나에 한 번 (hangul_likes 의 _id = 기록id:uid 라 겹치면 DB 가 막음)
-  //   POST /hangul_daily/:id/like { on }   누르기 · 취소 → { likes }
-  //   GET  /hangul_daily/liked?ids=a,b     그중 내가 누른 것
-  const LIKE_ID = /^[A-Za-z0-9_-]{1,40}$/;
-  r.post(
-    "/hangul_daily/:id/like",
-    h(async (req) => {
-      const user = await userOf(auth, req);
-      if (!user) throw unauthenticated();
-      if (user.anonymous) await captcha?.check(req, { remember: user.uid });
-      const id = String(req.params.id);
-      if (!LIKE_ID.test(id)) throw bad();
-      const on = (req.body as { on?: unknown } | undefined)?.on !== false;
-      const col = db.col("hangul_daily");
-      const rec = await col.findOne({ _id: id }, { projection: { uid: 1 } });
-      if (!rec) throw notFound();
-      // 내 문장엔 못 누름
-      if (rec.uid === user.uid) throw new AppError("OWN_RECORD", "내 문장에는 누를 수 없어요.", 400);
-      const likes = db.col("hangul_likes");
-      const _id = `${id}:${user.uid}`;
-      if (on) {
-        const added = await likes
-          .insertOne({ _id, rid: id, uid: user.uid, createdAt: new Date() })
-          .then(() => true)
-          .catch((e: { code?: number }) => {
-            if (e?.code === 11000) return false; // 이미 누름
-            throw e;
-          });
-        if (added) await col.updateOne({ _id: id }, { $inc: { likes: 1 } });
-      } else if ((await likes.deleteOne({ _id })).deletedCount) {
-        await col.updateOne({ _id: id }, { $inc: { likes: -1 } });
-      }
-      const d = await col.findOne({ _id: id }, { projection: { likes: 1 } });
-      return { likes: Math.max(0, Number(d?.likes) || 0), on };
-    }),
-  );
-  r.get(
-    "/hangul_daily/liked",
-    h(async (req) => {
-      const user = await userOf(auth, req).catch(() => null);
-      if (!user) return [];
-      const ids = String(req.query.ids ?? "")
-        .split(",")
-        .filter((x) => LIKE_ID.test(x))
-        .slice(0, 100);
-      if (!ids.length) return [];
-      const docs = await db.col("hangul_likes").find({ uid: user.uid, rid: { $in: ids } }).project({ rid: 1 }).toArray();
-      return docs.map((d) => String(d.rid));
-    }),
-  );
-
   r.get(
     "/:board",
     h(async (req) => {
@@ -776,15 +631,7 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
           .toArray();
         return rows(db, docs);
       }
-      // 여러 개 올리는 랭킹은 최신순(?sort=new — 막 올라온 문장 구경) · 웃긴순(?sort=fun — 👍 받은 것만, 많은 순)도
-      const q = board.many ? req.query.sort : undefined;
-      const [filter, sort] =
-        q === "new"
-          ? [{}, { createdAt: -1 as const }]
-          : q === "fun"
-            ? [{ likes: { $gt: 0 } }, { likes: -1 as const, score: -1 as const }]
-            : [{}, board.sort];
-      const docs = await db.col(key).find(filter).sort(sort).limit(limit).toArray();
+      const docs = await db.col(key).find({}).sort(board.sort).limit(limit).toArray();
       return rows(db, docs);
     }),
   );

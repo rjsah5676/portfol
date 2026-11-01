@@ -5,7 +5,6 @@ import imgMelongame from "@/img/menu/melongame.jpg";
 import imgRspeed from "@/img/menu/rspeed.jpg";
 import imgMine from "@/img/menu/mine.jpg";
 import imgSuspect from "@/img/menu/suspect.jpg";
-import imgHangul from "@/img/menu/hangul.jpg";
 import imgBoard from "@/img/menu/board.jpg";
 import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
@@ -145,14 +144,6 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "멜론 게임",
         desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
         icon: "🍈",
-      },
-      {
-        href: "/games/hangul",
-        image: imgHangul,
-        label: "니들이 한글을 알아?",
-        desc: "매일 흩어진 자모를 다 써서 숨은 속담을 맞히는 한글 데일리 퍼즐, 별해 자랑",
-        icon: "px:hangul",
-        badge: "NEW",
       },
       {
         href: "/games/board",
