@@ -20,7 +20,6 @@ import { siteRouter } from "./site";
 import { socialAdminRouter, socialRouter } from "./social";
 import { studyPostsRouter } from "./studyPosts";
 import { trackRouter } from "./track";
-import { turingRouter } from "./turing";
 
 export interface AppHooks extends Omit<AdminHooks, "guestChanged"> {
   /** 리듬게임 온라인: 내 음악 파일 올리기·받기 (/api/rhythm-online) */
@@ -136,8 +135,6 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   // 픽셀 프로야구 (2026-10-31 내림): 클라우드 세이브만 · 관리자 · 테스터 전용
   app.use("/api/baseball", baseballRouter(deps));
   app.use("/api/love", love.pub);
-  // AI 사람 찾기 (프로토)
-  app.use("/api/turing", turingRouter(deps));
   app.use("/api/admin/love", love.admin);
   app.use("/api/admin/economy", adminEconomyRouter(deps));
   app.use("/api/admin/members", adminMembersRouter(deps, mod));

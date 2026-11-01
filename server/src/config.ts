@@ -32,10 +32,6 @@ export interface Config {
   trafficCloud: boolean;
   /** 배포로 내려갈 때 진행 중인 판(포커 한 판·격투 한 경기)이 끝나길 기다리는 최대 시간 (ms, 운영 기본 60초 · 개발 2초). docker 의 stop_grace_period 보다 짧게 */
   drainMs: number;
-  /** AI 사람 찾기: Google AI Studio(Gemini API) 키. 비우면 Gemini 좌석 없이 */
-  geminiApiKey: string;
-  /** AI 사람 찾기: Groq 키 (gpt-oss · Qwen). 비우면 Groq 좌석 없이 */
-  groqApiKey: string;
 }
 
 const list = (v: string | undefined) =>
@@ -79,7 +75,5 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     trafficGeo: env.TRAFFIC_GEO?.trim() ? env.TRAFFIC_GEO.trim() !== "0" : mode !== "test",
     trafficCloud: env.TRAFFIC_CLOUD?.trim() ? env.TRAFFIC_CLOUD.trim() !== "0" : mode !== "test",
     drainMs: env.DRAIN_MS?.trim() && Number.isFinite(Number(env.DRAIN_MS)) ? Math.max(0, Number(env.DRAIN_MS)) : mode === "production" ? 60_000 : 2_000,
-    geminiApiKey: mode === "test" ? "" : env.GEMINI_API_KEY?.trim() ?? "",
-    groqApiKey: mode === "test" ? "" : env.GROQ_API_KEY?.trim() ?? "",
   };
 }
