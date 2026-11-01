@@ -44,8 +44,9 @@ export function VsLobby({
         ⚔️ <em>말싸움</em> 대전
       </h2>
       <p className="hg-title-sub">
-        문장을 완성하면 <b>🛡 막기</b>(내 먹물 정리 · 날아오는 공격 상쇄) 또는 <b>⚔️ 보내기</b>
-        (상대 판에 먹물 떼). 날아오는 문장과 <b>이어지는 말</b>로 받아치면 1.5배로 되돌아가요.
+        문장을 완성하면 <b>막기와 공격이 한 번에</b> — 내 판 먹물을 쓸고, 그 문장이 <b>먹물 떼</b>가
+        되어 상대 판으로 날아가요. 날아오는 문장과 <b>이어지는 말</b>(같은 말 다시 쓰기)로 받아치면
+        1.5배로 되돌아가요.
       </p>
       <div className="hg-modes">
         <button type="button" className="hg-mode is-solo" disabled={busy} onClick={onFriend}>

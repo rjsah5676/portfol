@@ -12,7 +12,6 @@ import {
   VS_COUNTDOWN,
   VS_SEC,
   type VsAttack,
-  type VsMode,
   type VsMsg,
   type VsPlayer,
   type VsRoom,
@@ -31,7 +30,7 @@ import { judge, JudgeOffError } from "../hangul/kiwi";
  *       hgvs.join { id, name }          두 번째 자리 (끊겼다 돌아온 사람은 자기 자리)
  *       hgvs.bot { id, level }          방장: 빈 자리에 훈장님 AI (1~3)
  *       hgvs.start { id }               방장: 둘 다 있으면 시작 (3초 카운트다운 뒤 3분)
- *       hgvs.sentence { id, text, mode } 문장 → 막기(guard) / 보내기(send). 받아치기는 서버가 알아서
+ *       hgvs.sentence { id, text }      문장 → 상대에게 공격 (날아오는 문장과 이어지면 받아치기 — 서버가 알아서)
  *       hgvs.load { id, load }          내 판 먹물 양 (1초쯤마다) — 100 이면 KO
  *       hgvs.vote { id, msg }           판 끝: 상대 문장 중 「오늘의 한 마디」
  *       hgvs.emote { id, e }            이모트 (채팅 없음)
@@ -61,13 +60,14 @@ const BOT_NAME = ["", "훈장님 (쉬움)", "훈장님 (보통)", "훈장님 (�
 const BOT_UID = (level: number) => `bot:hunjang:${level}`;
 /**
  * 훈장님이 문장을 내는 간격(ms) · 힘 배수 · 받아치기를 노리는 확률 · 먹물을 줄이는 속도(초당).
- * 사람은 문장 하나에 20~30초쯤 걸리고 훈장님 대사는 길고 매끈해서(명문 500~900점) 힘을 깎아 맞춤
+ * 훈장님 대사는 길고 매끈해서(명문 500~900점) 힘을 깎아 맞춤
  */
 const BOT = [
   null,
-  { every: 18_000, k: 0.25, counter: 0.25, clean: 0.35 },
-  { every: 13_000, k: 0.35, counter: 0.5, clean: 0.5 },
-  { every: 9_000, k: 0.45, counter: 0.8, clean: 0.7 },
+  // 사람은 문장 하나 짓는 데 30초 넘게도 걸림(사용자: "사람도 저 속도가 안 나와") → 쉬움 40초 · 보통 30초 · 어려움 22초쯤
+  { every: 40_000, k: 0.3, counter: 0.25, clean: 0.35 },
+  { every: 30_000, k: 0.4, counter: 0.5, clean: 0.5 },
+  { every: 22_000, k: 0.5, counter: 0.8, clean: 0.7 },
 ] as const;
 /** 훈장님 대사 (판정기로 읽어서 문장인 것만 씀) */
 const BOT_LINES = [
@@ -202,12 +202,15 @@ export function registerHangulVs({ gateway }: Deps) {
     return msg;
   }
 
-  /** 문장 하나 처리 (사람 · 훈장님 공통). 판정은 이미 끝난 것 */
+  /**
+   * 문장 하나 처리 (사람 · 훈장님 공통). 판정은 이미 끝난 것.
+   * 막기 · 보내기를 고르는 건 너무 어렵다(사용자) → 문장은 전부 공격.
+   * 내 판 정리는 1인 모드처럼 문장 완성 공격이 알아서 하고(브라우저), 날아오는 문장과 이어지면 받아치기(반사)
+   */
   function play(
     r: Room,
     uid: string,
-    j: { text: string; spaced: string; grade: string; morphs: VsAttack["morphs"]; points: number },
-    mode: VsMode
+    j: { text: string; spaced: string; grade: string; morphs: VsAttack["morphs"]; points: number }
   ): VsMsg {
     const now = Date.now();
     const me = seatOf(r, uid)!;
@@ -216,70 +219,43 @@ export function registerHangulVs({ gateway }: Deps) {
     const power = Math.round(j.points * (rerun ? RERUN_K : 1));
     me.points += power;
     const target = counterTarget(r, uid, j.morphs, now, linkMorphs);
-
-    if (mode === "send") {
-      let p = power;
-      let rally = 0;
-      if (target) {
-        target.status = "reflected";
-        p = Math.round((target.power + power) * COUNTER_K);
-        rally = target.rally + 1;
-      }
-      const a: VsAttack = {
-        id: orderedId(),
-        from: uid,
-        to: opp.uid,
-        text: j.text,
-        spaced: j.spaced,
-        grade: j.grade,
-        morphs: j.morphs,
-        power: p,
-        blobs: blobsOf(p),
-        heavy: j.grade === "명문" || rally >= 2,
-        at: now,
-        arriveAt: now + flightMs(j.text, j.grade),
-        rally,
-        status: "flying",
-      };
-      r.attacks.push(a);
-      if (r.attacks.length > 120) r.attacks.splice(0, r.attacks.length - 120);
-      scheduleLanding(r, a);
-      return pushLog(r, {
-        uid,
-        text: j.text,
-        spaced: j.spaced,
-        grade: j.grade,
-        points: power,
-        kind: target ? "counter" : "send",
-        re: target?.id,
-        attack: a.id,
-      });
+    let p = power;
+    let rally = 0;
+    if (target) {
+      target.status = "reflected";
+      p = Math.round((target.power + power) * COUNTER_K);
+      rally = target.rally + 1;
     }
-
-    // 막기: 받아칠 수 있으면 완벽 방어, 아니면 문장 힘만큼 먼저 오는 공격부터 상쇄
-    if (target) target.status = "blocked";
-    else {
-      let left = blobsOf(power);
-      const incoming = r.attacks
-        .filter((a) => a.to === uid && a.status === "flying" && a.arriveAt > now)
-        .sort((a, b) => a.arriveAt - b.arriveAt);
-      for (const a of incoming) {
-        if (left <= 0) break;
-        const take = Math.min(left, a.blobs);
-        a.blobs -= take;
-        left -= take;
-        if (a.blobs <= 0) a.status = "offset";
-      }
-    }
-    if (me.bot) me.load = Math.max(0, me.load - blobsOf(power) * 1.5);
+    const a: VsAttack = {
+      id: orderedId(),
+      from: uid,
+      to: opp.uid,
+      text: j.text,
+      spaced: j.spaced,
+      grade: j.grade,
+      morphs: j.morphs,
+      power: p,
+      blobs: blobsOf(p),
+      heavy: j.grade === "명문" || rally >= 2,
+      at: now,
+      arriveAt: now + flightMs(j.text, j.grade),
+      rally,
+      status: "flying",
+    };
+    r.attacks.push(a);
+    if (r.attacks.length > 120) r.attacks.splice(0, r.attacks.length - 120);
+    scheduleLanding(r, a);
+    // 훈장님도 문장을 쓰면 자기 판이 조금 정리됨 (사람 판의 문장 완성 공격 흉내)
+    if (me.bot) me.load = Math.max(0, me.load - blobsOf(power));
     return pushLog(r, {
       uid,
       text: j.text,
       spaced: j.spaced,
       grade: j.grade,
       points: power,
-      kind: target ? "block" : "guard",
+      kind: target ? "counter" : "send",
       re: target?.id,
+      attack: a.id,
     });
   }
 
@@ -341,13 +317,13 @@ export function registerHangulVs({ gateway }: Deps) {
       }
       if (text && r.phase === "play") {
         const j = (await botJudge(text))!;
-        const mode: VsMode = bot.load > 45 && !incoming.length ? "guard" : incoming.length && Math.random() < 0.35 ? "guard" : "send";
-        play(
-          r,
-          bot.uid,
-          { text: j.text, spaced: j.spaced, grade: gradeOfJ(j), morphs: j.morphs, points: Math.round(j.points * cfg.k) },
-          mode
-        );
+        play(r, bot.uid, {
+          text: j.text,
+          spaced: j.spaced,
+          grade: gradeOfJ(j),
+          morphs: j.morphs,
+          points: Math.round(j.points * cfg.k),
+        });
         changed(r);
       }
       if (opp && r.phase === "play") later(r, cfg.every * (0.7 + Math.random() * 0.6), () => void speak().catch(() => {}));
@@ -459,9 +435,10 @@ export function registerHangulVs({ gateway }: Deps) {
     return null;
   });
 
-  const sentenceSchema = idOnly.extend({ text: z.string().min(1).max(60), mode: z.enum(["guard", "send"]) });
+  // mode 는 예전(막기 · 보내기) 클라이언트 호환용 — 이제 문장은 전부 공격
+  const sentenceSchema = idOnly.extend({ text: z.string().min(1).max(60), mode: z.enum(["guard", "send"]).optional() });
   gateway.rpc("hgvs.sentence", async (ctx, raw) => {
-    const { id, text, mode } = sentenceSchema.parse(raw);
+    const { id, text } = sentenceSchema.parse(raw);
     const uid = ctx.uid;
     const r = getRoom(id);
     const me = seatOf(r, uid);
@@ -477,7 +454,7 @@ export function registerHangulVs({ gateway }: Deps) {
     if (Date.now() - (r.lastSentence.get(uid) ?? 0) < SENTENCE_GAP) throw new AppError("RATE_LIMITED", "조금 천천히!", 429);
     r.lastSentence.set(uid, Date.now());
     const grade = j.rude ? "막말" : j.nat >= -5.2 ? "명문" : j.nat >= -6.6 ? "말 됨" : "억지";
-    const msg = play(r, uid, { text, spaced: j.spaced, grade, morphs: j.morphs, points: j.points }, mode);
+    const msg = play(r, uid, { text, spaced: j.spaced, grade, morphs: j.morphs, points: j.points });
     changed(r);
     return msg;
   });

@@ -14,13 +14,7 @@ import { ApiError } from "@/lib/api/errors";
 import { serverNow } from "@/lib/api/socket";
 import { auth } from "@/firebase";
 import { linkMorphs } from "@/lib/hangul/link";
-import {
-  counterTarget,
-  seeded,
-  type VsAttack,
-  type VsMode,
-  type VsRoom,
-} from "@/lib/hangul/versus";
+import { counterTarget, seeded, type VsAttack, type VsRoom } from "@/lib/hangul/versus";
 import {
   againVs,
   botVs,
@@ -648,15 +642,16 @@ export default function HangulApp() {
   const vsWait = !!vsRoom && vsRoom.phase === "play" && vsNow < vsRoom.startAt;
   const ctr =
     vs && vsRoom && j?.sentence ? counterTarget(vsRoom, vs.me, j.morphs, vsNow, linkMorphs) : null;
-  const onVsFinish = (mode: VsMode) => {
+  /** 대전 문장 완성: 1인 모드처럼 내 판 공격 + 서버가 상대에게 보냄 (막기 · 보내기 고르기는 너무 어렵다 해서 뺌) */
+  const onVsFinish = () => {
     if (!j || !vs) return;
     const line = j.text;
-    const s = finishSentence(g, j, mode);
+    const s = finishSentence(g, j);
     if (!s) return;
     setFlash(s);
     window.setTimeout(() => setFlash((f) => (f === s ? null : f)), 2200);
-    if (mode === "send") playSfx(ctr ? "sent-best" : "link");
-    sentenceVs(vs.id, line, mode).catch((e) =>
+    playSfx(ctr ? "sent-best" : "link");
+    sentenceVs(vs.id, line).catch((e) =>
       say(g, e instanceof ApiError ? `서버가 안 받았어요: ${e.message}` : "서버에 못 보냈어요")
     );
     refresh();
@@ -1113,25 +1108,15 @@ export default function HangulApp() {
                   낱말로 묶기
                 </button>
                 {vsOn ? (
-                  // 대전: 완성한 문장으로 막을지 보낼지 (날아오는 문장과 이어지면 받아치기)
-                  <span className="hg-vsgo">
-                    <button
-                      type="button"
-                      className="hg-guard"
-                      onClick={() => onVsFinish("guard")}
-                      disabled={!j?.sentence || phase !== "play" || vsWait}
-                    >
-                      {ctr ? "🛡 완벽 방어" : "🛡 막기"}
-                    </button>
-                    <button
-                      type="button"
-                      className={`hg-go${ctr ? " is-counter" : ""}`}
-                      onClick={() => onVsFinish("send")}
-                      disabled={!j?.sentence || phase !== "play" || vsWait}
-                    >
-                      {ctr ? "↩️ 받아치기!" : "⚔️ 보내기"}
-                    </button>
-                  </span>
+                  // 대전: 문장 완성 = 내 판 공격 + 상대에게 공격 (날아오는 문장과 이어지면 받아치기)
+                  <button
+                    type="button"
+                    className={`hg-go${ctr ? " is-counter" : ""}`}
+                    onClick={onVsFinish}
+                    disabled={!j?.sentence || phase !== "play" || vsWait}
+                  >
+                    {ctr ? "↩️ 받아치기!" : "⚔️ 문장 공격!"}
+                  </button>
                 ) : (
                   <button
                     type="button"

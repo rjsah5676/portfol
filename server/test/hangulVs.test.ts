@@ -128,14 +128,16 @@ describe.skipIf(!judgeReady())("말싸움 (판정 모델 필요)", () => {
     expect(re.power).toBe(Math.round((atk.power + back.points) * 1.5));
   }, 20_000);
 
-  it("막기는 날아오는 공격을 상쇄 · 같은 문장 재탕은 힘 ×0.3", async () => {
+  it("문장은 전부 공격 (이어지지 않으면 그냥 서로 날아감) · 같은 문장 재탕은 힘 ×0.3", async () => {
     const { a, b, id } = await started();
-    const first = await a.rpc("hgvs.sentence", { id, text: "밥먹자.", mode: "send" });
-    await b.rpc("hgvs.sentence", { id, text: "오늘힘들다.", mode: "guard" });
+    const first = await a.rpc("hgvs.sentence", { id, text: "밥먹자." });
+    const other = await b.rpc("hgvs.sentence", { id, text: "오늘힘들다." });
+    expect(other.kind).toBe("send");
     const r = await last(b, id);
-    expect(["offset", "flying"]).toContain(r.attacks.find((x: any) => x.id === first.attack).status);
+    expect(r.attacks.find((x: any) => x.id === first.attack).status).toBe("flying");
+    expect(r.attacks.find((x: any) => x.id === other.attack)).toMatchObject({ from: b.uid, to: a.uid });
     await sleep(1_300);
-    const again = await a.rpc("hgvs.sentence", { id, text: "밥먹자.", mode: "send" });
+    const again = await a.rpc("hgvs.sentence", { id, text: "밥먹자." });
     expect(again.points).toBe(Math.round(first.points * 0.3));
   }, 20_000);
 });
