@@ -108,7 +108,7 @@ export interface LiveRoom {
   players: string[];
   createdAt: number;
 }
-export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense";
+export type LiveGame = "sketch" | "fight" | "poker" | "rhythm" | "defense" | "stock";
 
 export interface AdminHooks {
   /** 방명록이 바뀜 → 구독자에게 다시 보냄 */
@@ -261,7 +261,7 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
         guest: { total: guestTotal },
         rankings: { ...Object.fromEntries(rankCounts), rhythm_rankings: rhythmCount, ...Object.fromEntries(newRanks) },
         rooms: Object.fromEntries(roomCounts),
-        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight), poker: liveOf(live.poker), rhythm: liveOf(live.rhythm), defense: liveOf(live.defense) },
+        live: { sketch: liveOf(live.sketch), fight: liveOf(live.fight), poker: liveOf(live.poker), rhythm: liveOf(live.rhythm), defense: liveOf(live.defense), stock: liveOf(live.stock) },
         server: {
           env: cfg.env,
           startedAt,
@@ -375,7 +375,7 @@ export function adminRouter({ db, auth, web, users, points, gateway, cfg, traffi
   r.post(
     "/live/close",
     h(async (req) => {
-      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm", "defense"]), id: z.string().min(1).max(80) }).parse(req.body);
+      const body = z.strictObject({ game: z.enum(["sketch", "fight", "poker", "rhythm", "defense", "stock"]), id: z.string().min(1).max(80) }).parse(req.body);
       return { closed: hooks.closeLiveRoom(body.game, body.id) };
     })
   );

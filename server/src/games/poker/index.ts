@@ -332,7 +332,7 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
   async function autoRevive(uid: string): Promise<Wallet | null> {
     if (opts.autoRevive === false || seatOf.has(uid)) return null;
     const cur = await wallet.get(uid);
-    if (!cur || cur.money + cur.vault >= REVIVE.under || cur.reviveUsed >= REVIVE.perDay) return null;
+    if (!cur || cur.money + cur.vault + cur.locked >= REVIVE.under || cur.reviveUsed >= REVIVE.perDay) return null;
     try {
       const w = await wallet.revive(uid);
       const out: Wallet = { ...walletWire(uid, w), revived: { amount: REVIVE.amount, left: REVIVE.perDay - w.reviveUsed } };
@@ -1918,6 +1918,10 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
       if (t) closeTable(t);
       return !!t;
     },
+    /** 포커 테이블에 앉아 있나 (앉은 동안은 칩이 테이블에 묶여 있어서 주식 · 집을 사면 안 됨 — 같은 돈을 두 곳에 쓰게 됨) */
+    seated: (uid: string) => seatOf.has(uid),
+    /** 다른 게임(주식 마을)에서 돈이 바뀌었을 때: 자동 회생 확인 (받았으면 그 지갑) */
+    autoRevive: (uid: string) => autoRevive(uid),
     /** 테스트용 */
     _tables: tables,
     _tiers: TIERS,

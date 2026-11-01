@@ -1,0 +1,27 @@
+/* 주식 마을 (components/Stock) 애니메이션 */
+.stk button { font-family: inherit; }
+.stk-enter { animation: stk-enter 0.28s ease-out both; }
+@keyframes stk-enter { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+/* 건물에 들어갈 때 0.4초 줌인 */
+.stk-zoomin { animation: stk-zoomin 0.4s ease-in both; }
+@keyframes stk-zoomin { to { transform: scale(3.2); filter: brightness(1.4); } }
+.stk-fadeout { animation: stk-fade 0.4s ease-in both; }
+@keyframes stk-fade { from { opacity: 0; } 60% { opacity: 0.2; } to { opacity: 1; } }
+.stk-pop { animation: stk-pop 0.22s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes stk-pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+.stk-toast { animation: stk-toast 2.2s ease both; }
+@keyframes stk-toast { 0% { opacity: 0; transform: translateY(-6px); } 10%, 85% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+/* 시세가 바뀐 타일: 0.3초 깜빡 (오르면 빨강 · 내리면 파랑) */
+.stk-flash-up { animation: stk-flash-up 0.5s ease-out; }
+.stk-flash-down { animation: stk-flash-down 0.5s ease-out; }
+@keyframes stk-flash-up { from { box-shadow: inset 0 0 0 999px rgba(217, 48, 59, 0.55); } to { box-shadow: inset 0 0 0 999px rgba(217, 48, 59, 0); } }
+@keyframes stk-flash-down { from { box-shadow: inset 0 0 0 999px rgba(36, 99, 217, 0.55); } to { box-shadow: inset 0 0 0 999px rgba(36, 99, 217, 0); } }
+.stk-blink { animation: stk-blink 0.5s steps(2) infinite; }
+@keyframes stk-blink { 50% { opacity: 0.35; } }
+.stk-cutin { animation: stk-cutin 2.6s ease both; }
+@keyframes stk-cutin { 0% { opacity: 0; transform: translateX(-40px); } 12%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+.stk-rotate { animation: stk-rotate 1.8s ease-in-out infinite; }
+@keyframes stk-rotate { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .stk-enter, .stk-zoomin, .stk-fadeout, .stk-pop, .stk-cutin, .stk-rotate, .stk-blink { animation: none; }
+}

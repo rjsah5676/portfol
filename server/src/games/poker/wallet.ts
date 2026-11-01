@@ -36,6 +36,8 @@ export interface WalletDoc {
   mail: number;
   /** 포인트 (사이트 공용 — 상점 · 환전용으로 같이 보냄) */
   points: number;
+  /** 주식 마을에 묶인 돈: 솔로 판에서 들고 있는 주식(지금 시세) + 집(되팔 때 받을 값) + 경매 입찰금. 회생 판정 · 총자산에 합침 */
+  locked: number;
 }
 
 export interface SettleEntry {
@@ -53,8 +55,12 @@ type MoneyFields = Pick<UserDoc, "nick"> & {
   points?: number;
   revive?: { day: string; n: number };
   poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; chars?: string[]; attend?: string; mail?: MailItem[]; vault?: number };
+  stock?: { held?: number };
+  estate?: { value?: number; escrow?: number };
 };
-const WALLET_PROJ = { nick: 1, money: 1, points: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1, "poker.mail": 1, "poker.vault": 1 } as const;
+const WALLET_PROJ = { nick: 1, money: 1, points: 1, revive: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "poker.chars": 1, "poker.mail": 1, "poker.vault": 1, "stock.held": 1, "estate.value": 1, "estate.escrow": 1 } as const;
+/** 회생 판정에 합치는 돈: 보유 칩 + 금고 + 주식 마을에 묶인 돈 (주식 · 집에 다 넣어 두고 회생 받는 구멍 막기) */
+export const TOTAL_EXPR = { $add: ["$money", { $ifNull: ["$poker.vault", 0] }, { $ifNull: ["$stock.held", 0] }, { $ifNull: ["$estate.value", 0] }, { $ifNull: ["$estate.escrow", 0] }] };
 /** 우편함에 쌓아 두는 최대 수 (넘으면 오래된 것부터 사라짐) */
 const MAIL_KEEP = 30;
 
@@ -91,6 +97,7 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
       chars,
       mail: d.poker?.mail?.length ?? 0,
       points: d.points ?? 0,
+      locked: Math.max(0, d.stock?.held ?? 0) + Math.max(0, d.estate?.value ?? 0) + Math.max(0, d.estate?.escrow ?? 0),
     };
   };
 
@@ -142,8 +149,8 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
     async revive(uid: string): Promise<WalletDoc> {
       await materialize([uid]);
       const day = kstDay(now());
-      // 금고에 넣어 둔 칩까지 합쳐서 기준 미만일 때만 (금고에 다 넣고 회생 받는 것 막음)
-      const under = { _id: uid, $expr: { $lt: [{ $add: ["$money", { $ifNull: ["$poker.vault", 0] }] }, REVIVE.under] } };
+      // 금고 · 주식 · 집까지 합쳐서 기준 미만일 때만 (어딘가에 다 넣어 두고 회생 받는 것 막음)
+      const under = { _id: uid, $expr: { $lt: [TOTAL_EXPR, REVIVE.under] } };
       // 오늘 이미 받은 적이 있는 경우 → 횟수 +1
       let r = await col.updateOne(
         { ...under, "revive.day": day, "revive.n": { $lt: REVIVE.perDay } },
@@ -155,7 +162,7 @@ export function createWallet(db: Database, now: () => number = Date.now, points?
       if (!r.modifiedCount) {
         const w = await get(uid);
         if (!w) throw new AppError("NOT_MEMBER", "회원만 쓸 수 있어요.", 403);
-        if (w.money + w.vault >= REVIVE.under) throw new AppError("NOT_BROKE", "칩이 500만 아래로 내려가면 받을 수 있어요 (금고 포함).", 409);
+        if (w.money + w.vault + w.locked >= REVIVE.under) throw new AppError("NOT_BROKE", "총자산이 500만 아래로 내려가면 받을 수 있어요 (금고 · 주식 · 집 포함).", 409);
         throw new AppError("REVIVE_LIMIT", "오늘 회생은 다 썼어요. 자정에 다시 채워져요.", 409);
       }
       return (await changed(uid))!;

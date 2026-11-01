@@ -8,6 +8,7 @@ import { registerBoardGames } from "./games/board";
 import { registerDefense } from "./games/defense";
 import { registerFight } from "./games/fight";
 import { registerPoker, type PokerOptions } from "./games/poker";
+import { registerStock, type StockOptions } from "./games/stock";
 import { registerRhythmOnline } from "./games/rhythmOnline";
 import { registerSketch } from "./games/sketch";
 import { registerMarble } from "./games/marble";
@@ -40,7 +41,7 @@ export interface AppServer {
 /** HTTP API + 실시간 게이트웨이를 한 포트에 올림. 테스트에서는 auth·db를 바꿔 끼울 수 있음 */
 export async function createAppServer(
   cfg: Config,
-  overrides: { auth?: Auth; db?: Database; web?: WebNotifier; poker?: PokerOptions } = {}
+  overrides: { auth?: Auth; db?: Database; web?: WebNotifier; poker?: PokerOptions; stock?: StockOptions } = {}
 ): Promise<AppServer> {
   const db = overrides.db ?? (await connectDatabase(cfg));
   const auth = overrides.auth ?? createAuth(cfg);
@@ -58,6 +59,8 @@ export async function createAppServer(
   const sketch = registerSketch(deps);
   const fight = registerFight(deps);
   const poker = registerPoker(deps, overrides.poker);
+  // 주식 마을: 지갑 · 회생은 포커와 같은 돈
+  const stock = registerStock(deps, { wallet: poker.wallet, seated: poker.seated, autoRevive: poker.autoRevive }, overrides.stock);
   const rhythm = registerRhythmOnline(deps);
   const defense = registerDefense(deps);
   // 내린 게임 (메뉴에 없음 — 관리자 「내린 게임」 탭에서 들어가 해 보기만): 요청 · 구독을 관리자에게만 열어 둠
@@ -68,8 +71,8 @@ export async function createAppServer(
   registerPatrol(deps);
   registerRogue(deps);
   const town = registerTown(deps);
-  const live = { sketch, fight, poker, rhythm };
-  const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };
+  const live = { sketch, fight, poker, rhythm, stock };
+  const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live, stock: stock.live };
   // 배포 직전에 저장해 둔 방이 있으면 이어받음
   const restored = await restoreLive(db, liveGames).catch((e) => {
     console.error("[live] 이어받기 실패", e);
@@ -85,6 +88,7 @@ export async function createAppServer(
         fight: fight.adminList(),
         poker: poker.adminList(),
         rhythm: rhythm.adminList(),
+        stock: stock.adminList(),
         defense: defense.adminList().map((r) => ({
           id: r.id,
           name: r.name,
@@ -112,6 +116,7 @@ export async function createAppServer(
     sketch.close();
     fight.close();
     poker.close();
+    stock.close();
     rhythm.close();
     defense.close();
     marble.close();
