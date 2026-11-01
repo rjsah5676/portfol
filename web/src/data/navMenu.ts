@@ -136,7 +136,7 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/games/hangul",
         image: imgHangul,
         label: "니들이 한글을 알아?",
-        desc: "자모로 아무 문장이나 지어 먹물 괴물을 막는 한글 문장 디펜스, 대표글 랭킹",
+        desc: "매일 흩어진 자모를 다 써서 숨은 속담을 맞히는 한글 데일리 퍼즐, 별해 자랑",
         icon: "px:hangul",
         featured: true,
         badge: "NEW",

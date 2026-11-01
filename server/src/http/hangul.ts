@@ -3,9 +3,11 @@ import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { isLine, LINE_RE } from "../../../web/src/lib/hangul/judge";
 import type { Deps } from "../deps";
-import { AppError, bad } from "../errors";
+import { HINT_MAX } from "../../../web/src/lib/hangul/daily";
+import { AppError, bad, notFound, unauthenticated } from "../errors";
+import { answerOf, checkDaily, hintOf, puzzleOf } from "../hangul/daily";
 import { judge, JudgeOffError, judgeReady, suggest } from "../hangul/kiwi";
-import { h } from "./util";
+import { h, userOf } from "./util";
 
 const OFF_MSG = "판정 서버가 아직 준비되지 않았어요.";
 /** 판정기가 꺼져 있으면(모델 없음 · 판정 서비스 다운) 503 JUDGE_OFF */
@@ -26,7 +28,8 @@ const orOff = <T>(p: Promise<T>) =>
  * 글자를 문장 줄에 넣고 뺄 때마다 부르므로 GET 으로 (쓰기 요청 제한과 따로, IP당 분당 600회).
  * 같은 글자 줄은 결과가 늘 같아서 브라우저가 잠깐(10분) 캐시해도 됨 (점수 공식을 바꾸면 그만큼 늦게 반영).
  */
-export function hangulRouter(db?: Deps["db"]): Router {
+export function hangulRouter(deps?: Pick<Deps, "db" | "auth">): Router {
+  const db = deps?.db;
   const r = Router();
   r.use(
     rateLimit({
@@ -87,5 +90,74 @@ export function hangulRouter(db?: Deps["db"]): Router {
         return { ok: true };
       }),
     );
+
+  /*
+   * 오늘의 자모 (pz = YYYYMMDD_난이도)
+   *   GET  /daily/:pz              문제 (자모 조각 · 글자 수 — 정답은 안 줌)
+   *   POST /daily/:pz/check {text} 확인 → { kind: 정답|별해|null, spaced, answer(풀렸을 때만) }
+   *   POST /daily/:pz/hint {n}     (로그인) 힌트 n 단계 — 몇 단계까지 봤는지 남김 (랭킹 등록 때 대조)
+   *   POST /daily/:pz/giveup       (로그인) 포기 → 정답 (그날 그 난이도는 랭킹에 못 올림)
+   */
+  const pzOf = (req: { params: Record<string, unknown> }) => {
+    const pz = String(req.params.pz);
+    const answer = answerOf(pz);
+    if (!answer) throw notFound();
+    return { pz, answer };
+  };
+  r.get(
+    "/daily/:pz",
+    h((req, res) => {
+      const p = puzzleOf(String(req.params.pz));
+      if (!p) throw notFound();
+      res.set("Cache-Control", "public, max-age=300");
+      return p;
+    }),
+  );
+  r.post(
+    "/daily/:pz/check",
+    rateLimit({ windowMs: 60_000, limit: 40, standardHeaders: "draft-8", legacyHeaders: false }),
+    h(async (req) => {
+      const { answer } = pzOf(req);
+      const text = String((req.body as { text?: unknown } | undefined)?.text ?? "");
+      if (!isLine(text)) throw bad();
+      return orOff(checkDaily(answer, text));
+    }),
+  );
+  if (deps) {
+    const marks = deps.db.col("hangul_daily_marks");
+    const mark = async (req: Parameters<typeof userOf>[1], pz: string, set: Record<string, unknown>) => {
+      const user = await userOf(deps.auth, req);
+      if (!user) throw unauthenticated();
+      await marks.updateOne(
+        { _id: `${pz}:${user.uid}` },
+        { ...set, $setOnInsert: { pz, uid: user.uid, createdAt: new Date() } },
+        { upsert: true },
+      );
+    };
+    r.post(
+      "/daily/:pz/hint",
+      h(async (req) => {
+        const { pz, answer } = pzOf(req);
+        const n = Number((req.body as { n?: unknown } | undefined)?.n);
+        if (!Number.isInteger(n) || n < 1 || n > HINT_MAX) throw bad();
+        await mark(req, pz, { $max: { hint: n } });
+        return { n, value: hintOf(answer, n) };
+      }),
+    );
+    r.post(
+      "/daily/:pz/giveup",
+      h(async (req) => {
+        const { pz, answer } = pzOf(req);
+        await mark(req, pz, { $set: { gaveUp: true } });
+        return { answer };
+      }),
+    );
+  }
   return r;
+}
+
+/** 랭킹 등록 때 대조: 이 사람이 그 퍼즐에서 본 힌트 단계 · 포기했는지 */
+export async function dailyMarkOf(db: Deps["db"], pz: string, uid: string) {
+  const d = await db.col("hangul_daily_marks").findOne({ _id: `${pz}:${uid}` });
+  return { hint: Number(d?.hint) || 0, gaveUp: !!d?.gaveUp };
 }

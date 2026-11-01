@@ -17,8 +17,10 @@ import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
 import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
 import { CASE_RE as SUSPECT_CASE_RE, kstDay, scoreOf as suspectScore } from "../../../web/src/lib/suspect/engine";
-import { HANGUL_WAVE_PTS, isLine, LINE_MAX } from "../../../web/src/lib/hangul/judge";
-import { judge as judgeHangul } from "../hangul/kiwi";
+import { dailyScore, HINT_MAX, PZ_RE } from "../../../web/src/lib/hangul/daily";
+import { LINE_MAX } from "../../../web/src/lib/hangul/judge";
+import { answerOf as dailyAnswerOf, checkDaily, dayOpen as dailyOpen } from "../hangul/daily";
+import { dailyMarkOf } from "./hangul";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -180,31 +182,37 @@ export const BOARDS: Record<string, Board> = {
       ),
   },
   // 격투 AI 랭킹(fight_ai_rankings)은 랭크전 도입(10.08)으로 없앰 — 컬렉션은 남겨 둠 (관리자 데이터 화면)
-  // 니들이 한글을 알아? (점수 = 완성한 문장 점수 합 + 버틴 웨이브 × 100). 대표글(그 판 최고 점수 문장)은 서버가 다시 판정
-  hangul_rankings: {
-    sort: { score: -1 },
-    schema: z.strictObject({
-      name,
-      score: int.min(0).max(1_000_000_000),
-      wave: int.min(0).max(100_000),
-      best: z.string().max(LINE_MAX + 15),
-      bestPts: int.min(0).max(1_000_000),
-    }),
-    // 웨이브 하나는 20초
-    minSec: (d) => Math.max(0, d.wave - 1) * 20,
-    check: (d) => d.score >= d.wave * HANGUL_WAVE_PTS + d.bestPts && (d.best === "" ? d.bestPts === 0 : isLine(d.best)),
-    // 대표글을 다시 판정해서 점수 대조 + 띄어쓴 모양(bestSpaced)을 같이 저장 (랭킹에 그대로 보여 줌)
-    verify: async (d) => {
-      if (d.best === "") return true;
-      const j = await judgeHangul(d.best);
-      d.bestSpaced = j.spaced;
-      return j.sentence && j.points === d.bestPts;
-    },
-    // 웃긴 문장은 판마다 다르니 판마다 따로 쌓임 · 익명(시크릿)으로도 올릴 수 있음
-    many: true,
-    secret: true,
-  },
 };
+
+/**
+ * 니들이 한글을 알아? 「오늘의 자모」: 날짜 · 난이도(pz = "YYYYMMDD_tier")마다 랭킹 (hangul_daily).
+ *   점수 = 걸린 시간 + 힌트 × 30초 (작을수록 좋음), 첫 기록만. 내 문장(text)은 서버가 다시 확인해서
+ *   kind(정답 · 별해) · 띄어쓴 모양(spaced)을 같이 저장 — 별해는 👍 를 받아 「별해 자랑」에 올라감. 익명 등록 가능
+ */
+const dailySchema = z.strictObject({
+  name,
+  time: z.number().min(3).max(86400),
+  hint: int.min(0).max(HINT_MAX),
+  score: z.number().min(3).max(100_000),
+  text: z.string().min(1).max(LINE_MAX + 15),
+});
+const dailyBoard = (pz: string): Board => ({
+  sort: { score: 1 },
+  schema: dailySchema,
+  minSec: (d) => d.time,
+  check: (d) => dailyOpen(pz.slice(0, 8)) && Math.abs(d.score - dailyScore(d.time, d.hint)) < 0.05,
+  verify: async (d) => {
+    const answer = dailyAnswerOf(pz);
+    if (!answer) return false;
+    const c = await checkDaily(answer, d.text);
+    if (!c.kind) return false;
+    d.kind = c.kind;
+    d.spaced = c.spaced;
+    return true;
+  },
+  firstOnly: true,
+  secret: true,
+});
 
 const CHART_RE = /^[a-z0-9-]+_(easy|normal|hard|expert|nightmare|explus|abyss)$/;
 const rhythmSchema = z.strictObject({
@@ -431,6 +439,8 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
       return CHART_RE.test(key.slice(7)) ? rhythmBoard(key.slice(7)) : null;
     if (key.startsWith("suspect:"))
       return SUSPECT_CASE_RE.test(key.slice(8)) ? suspectBoard(key.slice(8)) : null;
+    if (key.startsWith("hangul:"))
+      return PZ_RE.test(key.slice(7)) && dailyOpen(key.slice(7, 15)) ? dailyBoard(key.slice(7)) : null;
     return Object.hasOwn(BOARDS, key) ? BOARDS[key] : null;
   };
 
@@ -648,12 +658,50 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
     }),
   );
 
+  // 니들이 한글을 알아? 오늘의 자모 (pz = YYYYMMDD_난이도)
+  //   GET  /hangul/:pz            기록 순위 (점수 작은 순)
+  //   GET  /hangul/:pz?sort=fun   별해 자랑 (별해만, 👍 많은 순) · ?sort=new 별해 최신순
+  r.get(
+    "/hangul/:pz",
+    h(async (req) => {
+      const pz = String(req.params.pz);
+      if (!PZ_RE.test(pz)) throw bad();
+      const q = req.query.sort;
+      const [filter, sort] =
+        q === "fun"
+          ? [{ pz, kind: "별해" }, { likes: -1 as const, createdAt: 1 as const }]
+          : q === "new"
+            ? [{ pz, kind: "별해" }, { createdAt: -1 as const }]
+            : [{ pz }, { score: 1 as const, createdAt: 1 as const }];
+      const docs = await db.col("hangul_daily").find(filter).sort(sort).limit(limitOf(req.query.limit)).toArray();
+      return rows(db, docs);
+    }),
+  );
+  // 등록: 힌트를 본 만큼 적었는지 · 포기하지 않았는지 서버에 남은 것과 대조 (http/hangul.ts 힌트 · 포기)
+  r.post(
+    "/hangul/:pz",
+    h(async (req) => {
+      const pz = String(req.params.pz);
+      if (!PZ_RE.test(pz)) throw bad();
+      const user = await userOf(auth, req);
+      if (user) {
+        const m = await dailyMarkOf(db, pz, user.uid);
+        const hint = Number((req.body as { hint?: unknown } | undefined)?.hint);
+        if (m.gaveUp || !(hint >= m.hint)) {
+          console.warn(`[rank] 거절(mark) hangul:${pz} uid=${user.uid} hint=${hint} ${JSON.stringify(m)}`);
+          throw rejected();
+        }
+      }
+      return submit(req, `hangul:${pz}`, "hangul_daily", { pz });
+    }),
+  );
+
   // 니들이 한글을 알아? 👍 웃겨요 — 한 사람이 문장 하나에 한 번 (hangul_likes 의 _id = 기록id:uid 라 겹치면 DB 가 막음)
-  //   POST /hangul_rankings/:id/like { on }   누르기 · 취소 → { likes }
-  //   GET  /hangul_rankings/liked?ids=a,b     그중 내가 누른 것
+  //   POST /hangul_daily/:id/like { on }   누르기 · 취소 → { likes }
+  //   GET  /hangul_daily/liked?ids=a,b     그중 내가 누른 것
   const LIKE_ID = /^[A-Za-z0-9_-]{1,40}$/;
   r.post(
-    "/hangul_rankings/:id/like",
+    "/hangul_daily/:id/like",
     h(async (req) => {
       const user = await userOf(auth, req);
       if (!user) throw unauthenticated();
@@ -661,7 +709,7 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
       const id = String(req.params.id);
       if (!LIKE_ID.test(id)) throw bad();
       const on = (req.body as { on?: unknown } | undefined)?.on !== false;
-      const col = db.col("hangul_rankings");
+      const col = db.col("hangul_daily");
       const rec = await col.findOne({ _id: id }, { projection: { uid: 1 } });
       if (!rec) throw notFound();
       // 내 문장엔 못 누름
@@ -685,7 +733,7 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
     }),
   );
   r.get(
-    "/hangul_rankings/liked",
+    "/hangul_daily/liked",
     h(async (req) => {
       const user = await userOf(auth, req).catch(() => null);
       if (!user) return [];

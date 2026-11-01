@@ -1,7 +1,9 @@
 import { readdirSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chessScore, janggiScore, omokScore } from "../../web/src/lib/aiScore";
+import { coreOf, sortTiles, tilesOf } from "../../web/src/lib/hangul/daily";
 import { kstDay } from "../../web/src/lib/suspect/engine";
+import { answerOf } from "../src/hangul/daily";
 import { RHYTHM_CHARTS, RHYTHM_SONG_IDS } from "../src/http/rhythmCharts";
 import { startTestServer, type TestServer } from "./helpers";
 
@@ -16,7 +18,9 @@ const pathOf = (board: string) =>
     ? `/api/rankings/rhythm/${board.slice(7)}`
     : board.startsWith("suspect:")
       ? `/api/rankings/suspect/${board.slice(8)}`
-      : `/api/rankings/${board}`;
+      : board.startsWith("hangul:")
+        ? `/api/rankings/hangul/${board.slice(7)}`
+        : `/api/rankings/${board}`;
 
 /** 티켓을 받고, 받은 시각을 ago초 전으로 돌려 놓음 (게임을 그만큼 한 것처럼) */
 async function ticket(uid: string, board: string, ago = 0): Promise<string> {
@@ -535,25 +539,64 @@ describe("랭킹: 오늘의 용의자", () => {
   });
 });
 
-describe("랭킹: 니들이 한글을 알아?", () => {
-  const B = "hangul_rankings";
-  // 대표글이 없는 판(best "")은 판정기 없이 확인됨
-  const row = { name: "글쟁이", score: 300, wave: 3, best: "", bestPts: 0 };
+describe("랭킹: 니들이 한글을 알아? 오늘의 자모", () => {
+  const pz = `${kstDay()}_1`;
+  const B = `hangul:${pz}`;
+  const answer = answerOf(pz)!;
+  const row = { name: "글쟁이", time: 40, hint: 0, score: 40, text: coreOf(answer) };
+  const hint = async (uid: string, n: number) =>
+    s.http(`/api/hangul/daily/${pz}/hint`, { method: "POST", token: await s.token(uid), body: { n } });
 
-  it("한 사람이 판마다 여러 개 올릴 수 있음 (더 낮은 점수도 남음) · 최신순", async () => {
-    expect(await status("h1", B, row)).toBe(200);
-    expect(await status("h1", B, { ...row, score: 200, wave: 2 })).toBe(200);
-    expect(await status("h1", B, { ...row, score: 500, wave: 5 })).toBe(200);
-    const top = (await s.http(`/api/rankings/${B}`)).body;
-    expect(top.map((r: { score: number }) => r.score)).toEqual([500, 300, 200]);
-    const recent = (await s.http(`/api/rankings/${B}?sort=new`)).body;
-    expect(recent[0].score).toBe(500);
-    expect(recent.at(-1).score).toBe(300);
+  it("문제: 정답 자모만 주고 정답은 안 줌 · 지난 날짜 · 없는 난이도는 404", async () => {
+    const p = (await s.http(`/api/hangul/daily/${pz}`)).body;
+    expect(p).toMatchObject({ pz, tier: 1, len: coreOf(answer).length, tiles: sortTiles(tilesOf(answer)) });
+    expect(JSON.stringify(p)).not.toContain(coreOf(answer));
+    expect((await s.http("/api/hangul/daily/20200101_1")).status).toBe(404);
+    expect((await s.http(`/api/hangul/daily/${kstDay()}_4`)).status).toBe(404);
+  });
+
+  it("확인: 정답이면 정답을 알려 줌 · 자모가 다르면 tiles", async () => {
+    const ok = (await s.http(`/api/hangul/daily/${pz}/check`, { method: "POST", body: { text: coreOf(answer) + "." } })).body;
+    expect(ok).toMatchObject({ kind: "정답", answer });
+    const no = (await s.http(`/api/hangul/daily/${pz}/check`, { method: "POST", body: { text: "가나다" } })).body;
+    expect(no).toMatchObject({ kind: null, why: "tiles" });
+    expect(no.answer).toBeUndefined();
+  });
+
+  it("첫 기록만 · 시간 순 · 정답 표시와 띄어쓴 모양을 같이 저장", async () => {
+    expect(await status("j1", B, row)).toBe(200);
+    expect(await status("j1", B, { ...row, time: 10, score: 10 })).toBe(200); // kept
+    expect(await status("j2", B, { ...row, time: 20, score: 20 })).toBe(200);
+    const top = (await s.http(`/api/rankings/hangul/${pz}`)).body;
+    expect(top.map((r: { score: number }) => r.score)).toEqual([20, 40]);
+    expect(top[0]).toMatchObject({ kind: "정답", spaced: answer, pz });
+  });
+
+  it("거절: 점수 계산 · 자모가 다른 문장 · 시간이 덜 지남", async () => {
+    expect(await status("j3", B, { ...row, score: 10 })).toBe(400);
+    expect(await status("j3", B, { ...row, text: "가나다" })).toBe(400);
+    expect(await status("j3", B, row, 10)).toBe(400);
+    const old = await s.http("/api/rankings/hangul/20200101_1", { method: "POST", token: await s.token("j3"), body: row });
+    expect(old.status).toBe(404); // 지난 퍼즐 (티켓도 안 나옴)
+  });
+
+  it("힌트를 본 만큼 적어야 함 · 포기하면 못 올림", async () => {
+    const h2 = await hint("j4", 2);
+    expect(h2.body).toEqual({ n: 2, value: coreOf(answer)[0] });
+    expect((await hint("j4", 1)).body.value).toEqual(answer.split(" ").map((w) => coreOf(w).length));
+    expect(await status("j4", B, row)).toBe(400); // 힌트 2단계 봤는데 0
+    expect(await status("j4", B, { ...row, hint: 2, score: 100 })).toBe(200);
+    const g = await s.http(`/api/hangul/daily/${pz}/giveup`, { method: "POST", token: await s.token("j5") });
+    expect(g.body).toEqual({ answer });
+    expect(await status("j5", B, row)).toBe(400);
+    expect((await s.http(`/api/hangul/daily/${pz}/hint`, { method: "POST", body: { n: 1 } })).status).toBe(401);
   });
 
   it("시크릿: 보낸 이름 대신 「익명」, 회원 표시 없음", async () => {
-    expect(await status("h2", B, { ...row, name: "진짜이름", secret: true })).toBe(200);
-    const mine = (await s.http(`/api/rankings/${B}?sort=new`)).body[0];
+    const pz3 = `${kstDay()}_3`;
+    const a3 = answerOf(pz3)!;
+    expect(await status("j6", `hangul:${pz3}`, { ...row, text: coreOf(a3), name: "진짜이름", secret: true })).toBe(200);
+    const mine = (await s.http(`/api/rankings/hangul/${pz3}`)).body[0];
     expect(mine).toMatchObject({ name: "익명", secret: true, avatar: null });
     expect(mine.member).toBeUndefined();
     expect(mine.uid).toBeUndefined();
@@ -566,19 +609,19 @@ describe("랭킹: 니들이 한글을 알아?", () => {
   });
 });
 
-describe("랭킹: 니들이 한글을 알아? 👍 웃겨요", () => {
-  const B = "hangul_rankings";
-  const row = { name: "웃음", score: 100, wave: 1, best: "", bestPts: 0 };
+describe("랭킹: 니들이 한글을 알아? 별해 👍", () => {
+  const pz = `${kstDay()}_2`;
   const like = async (uid: string, id: string, on = true) =>
-    s.http(`/api/rankings/${B}/${id}/like`, { method: "POST", token: await s.token(uid), body: { on } });
+    s.http(`/api/rankings/hangul_daily/${id}/like`, { method: "POST", token: await s.token(uid), body: { on } });
 
-  it("한 사람 한 번 · 취소 · 내 문장은 못 누름 · 웃긴순은 👍 받은 것만", async () => {
-    expect(await status("k1", B, { ...row, score: 111 })).toBe(200);
-    expect(await status("k2", B, { ...row, score: 222 })).toBe(200);
-    const all = (await s.http(`/api/rankings/${B}?sort=new&limit=100`)).body;
-    const a = all.find((r: { score: number }) => r.score === 111).id;
-    const b = all.find((r: { score: number }) => r.score === 222).id;
-
+  it("한 사람 한 번 · 취소 · 내 문장은 못 누름 · 별해 자랑은 별해만 👍 많은 순", async () => {
+    const base = { pz, name: "웃음", time: 30, hint: 0, score: 30, text: "가", createdAt: new Date() };
+    await s.db.col("hangul_daily").insertMany([
+      { _id: "byA", ...base, uid: "k1", kind: "별해", spaced: "가." },
+      { _id: "byB", ...base, uid: "k2", kind: "별해", spaced: "나." },
+      { _id: "byC", ...base, uid: "k4", kind: "정답", spaced: "다." },
+    ]);
+    const [a, b] = ["byA", "byB"];
     expect((await like("k1", a)).status).toBe(400); // 내 문장
     expect((await like("k2", a)).body.likes).toBe(1);
     expect((await like("k2", a)).body.likes).toBe(1); // 두 번 눌러도 1
@@ -587,10 +630,11 @@ describe("랭킹: 니들이 한글을 알아? 👍 웃겨요", () => {
     expect((await like("k3", a, false)).body.likes).toBe(1); // 취소
     expect((await like("k3", a, false)).body.likes).toBe(1); // 없는 걸 또 취소해도 그대로
     expect((await like("k2", "nope")).status).toBe(404);
+    await like("k1", b);
 
-    const fun = (await s.http(`/api/rankings/${B}?sort=fun`)).body;
-    expect(fun.map((r: { id: string }) => r.id)).toEqual([b, a]); // 1개씩이면 점수 높은 순
-    const mine = (await s.http(`/api/rankings/${B}/liked?ids=${a},${b}`, { token: await s.token("k2") })).body;
+    const fun = (await s.http(`/api/rankings/hangul/${pz}?sort=fun`)).body;
+    expect(fun.map((r: { id: string }) => r.id)).toEqual([b, a]);
+    const mine = (await s.http(`/api/rankings/hangul_daily/liked?ids=${a},${b}`, { token: await s.token("k2") })).body;
     expect(mine).toEqual([a]);
   });
 });

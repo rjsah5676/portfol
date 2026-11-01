@@ -4,39 +4,24 @@
  * 니들이 한글을 알아? 소리 — 효과음(일레븐랩스, public/hangul/sfx/<이름>.mp3) · 배경음악(있으면 public/hangul/bgm/*.mp3)
  *  오늘의 용의자(lib/suspect/sound.ts)와 같은 구조: 첫 입력 이후에만 소리, 설정은 localStorage, 로딩 화면에서 미리 받음.
  *  효과음 후보(alt/<이름>-<번호>.mp3)는 ?review=sfx 화면에서 바꿔 들어 볼 수 있음 — 고른 번호는 이 브라우저에만 저장.
- *  같은 소리가 한꺼번에 몰리면(쏘기 · 처치) 간격을 두고, 높낮이를 살짝 흔들어 덜 기계적으로.
+ *  같은 소리가 한꺼번에 몰리면(자모 빠르게 치기) 간격을 두고, 높낮이를 살짝 흔들어 덜 기계적으로.
  */
 
 import { LEVEL, limiter } from "@/lib/soundLevel";
 
 export const SFX_NAMES = [
-  "select",
-  "merge",
-  "syllable",
-  "word",
   "place",
   "erase",
-  "punct",
   "discard",
   "sent-best",
   "sent-good",
   "sent-meh",
-  "link",
-  "read",
-  "shot",
-  "kill",
-  "hit",
-  "wave",
-  "boss",
-  "warn",
   "over",
   "start",
-  "switch",
   "click",
   "open",
   "like",
   "card",
-  "drop",
 ] as const;
 export type SfxName = (typeof SFX_NAMES)[number];
 
@@ -181,28 +166,16 @@ export async function preloadSounds(onEach?: (done: number, total: number) => vo
   );
 }
 
-// 같은 소리 최소 간격(초)과 높낮이 흔들기
+// 같은 소리 최소 간격(초)과 높낮이 흔들기 (자모를 빠르게 칠 때 덜 기계적으로)
 const GAP: Partial<Record<SfxName, number>> = {
-  shot: 0.07,
-  kill: 0.06,
-  hit: 0.06,
   place: 0.03,
   erase: 0.05,
-  syllable: 0.04,
-  merge: 0.04,
-  word: 0.05,
   discard: 0.05,
 };
 const WOBBLE: Partial<Record<SfxName, number>> = {
-  shot: 0.12,
-  kill: 0.1,
-  hit: 0.1,
-  place: 0.06,
-  syllable: 0.05,
-  merge: 0.05,
-  select: 0.04,
+  place: 0.08,
+  erase: 0.05,
   click: 0.04,
-  punct: 0.06,
 };
 const last = new Map<string, number>();
 
@@ -227,9 +200,4 @@ export function playSfx(name: SfxName, vol = 1, alt?: number) {
     g.connect(limiter(c));
     src.start();
   });
-}
-/** 게임이 이번 프레임에 낸 소리들 (game.ts g.sfx) */
-export function playAll(names: string[]) {
-  for (const n of new Set(names))
-    if ((SFX_NAMES as readonly string[]).includes(n)) playSfx(n as SfxName);
 }

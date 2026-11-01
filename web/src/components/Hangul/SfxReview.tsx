@@ -8,33 +8,18 @@ import { getPicks, playSfx, setPick, SFX_NAMES, type SfxName } from "@/lib/hangu
  * 고른 번호는 이 브라우저에만 저장됨 → 마음에 드는 번호를 알려 주면 기본 파일로 바꿔 둠
  */
 const WHERE: Record<SfxName, string> = {
-  select: "자모 고르기",
-  merge: "자모끼리 합치기",
-  syllable: "글자 완성",
-  word: "낱말 묶기",
-  place: "원고지에 놓기",
-  erase: "원고지에서 빼기",
-  punct: "문장부호",
-  discard: "버리기",
-  "sent-best": "문장 완성 · 명문",
-  "sent-good": "문장 완성 · 말 됨",
-  "sent-meh": "문장 완성 · 억지",
-  link: "앞 문장과 이어짐",
-  read: "글 낭독 공격",
-  shot: "글자 · 낱말이 쏨",
-  kill: "먹물 처치",
-  hit: "(예비) 맞음",
-  wave: "웨이브 시작",
-  boss: "왕먹물 등장",
-  warn: "먹물 70% 경고",
-  over: "먹물에 덮임",
-  start: "시작 꽹과리",
-  switch: "시작 회초리",
+  place: "자모 누르기",
+  erase: "하나 지우기",
+  discard: "전부 지우기 · 없는 자모",
+  "sent-best": "정답!",
+  "sent-good": "별해!",
+  "sent-meh": "틀림",
+  over: "포기",
+  start: "퍼즐 열기",
   click: "버튼",
-  open: "랭킹 열기",
-  like: "👍 웃겨요",
-  card: "카드 만들기",
-  drop: "(예비) 자모 들어옴",
+  open: "랭킹 · 힌트 열기",
+  like: "👍 · 랭킹 올림",
+  card: "자랑하기",
 };
 
 export default function SfxReview() {
@@ -67,7 +52,7 @@ export default function SfxReview() {
                 >
                   ▶ 기본
                 </button>
-                {(n === "drop" ? [1, 3, 4] : [1, 2, 3, 4]).map((k) => (
+                {[1, 2, 3, 4].map((k) => (
                   <button
                     key={k}
                     type="button"

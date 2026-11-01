@@ -1,303 +1,224 @@
 "use client";
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import { prepareRuns, signIn } from "@/lib/api/rankRun";
+import { prepareRuns } from "@/lib/api/rankRun";
 import { ApiError } from "@/lib/api/errors";
-import { serverNow } from "@/lib/api/socket";
-import { auth } from "@/firebase";
-import { linkMorphs } from "@/lib/hangul/link";
-import { counterTarget, seeded, type VsAttack, type VsRoom } from "@/lib/hangul/versus";
 import {
-  againVs,
-  botVs,
-  createVs,
-  emoteVs,
-  joinVs,
-  leaveVs,
-  loadVs,
-  sentenceVs,
-  startVs,
-  voteVs,
-  watchVs,
-} from "@/realtime/hangulVs";
-import { VsBar, VsCutin, VsFeed, VsLobby, VsResult, VsWaiting } from "./Versus";
+  allSyllables,
+  composeKeys,
+  countTiles,
+  DAILY_TIERS,
+  dailyNo,
+  dailyScore,
+  HINT_MAX,
+  HINT_SEC,
+  isConsTile,
+  isVowelTile,
+  kstDay,
+  pzKey,
+  type DailyPuzzle,
+  type DailyTier,
+} from "@/lib/hangul/daily";
+import { gradeName, hangulLen, withEnd, type Judge } from "@/lib/hangul/judge";
 import {
-  addByIds,
-  addPunct,
-  autoPair,
-  best,
-  pieces,
-  bindWord,
-  CAP,
-  combine,
-  CONS_SLOTS,
-  VOWEL_SLOTS,
-  draw,
-  incoming,
-  STACK_C,
-  STACK_V,
-  START_DRAW,
-  finishSentence,
-  fromLine,
-  lineCells,
-  lineText,
-  load,
-  makeWord,
-  say,
-  LOAD_MAX,
-  newGame,
-  dropSentence,
-  linkBonus,
-  links,
-  moveSentence,
-  POS_STYLE,
-  score,
-  SHELF_ID,
-  writingPower,
-  discard,
-  setPath,
-  statsOf,
-  step,
-  toLine,
-  type Game,
-  type Sentence,
-  type Zone,
-} from "@/lib/hangul/game";
-import {
-  gradeName,
-  HANGUL_WAVE_PTS,
-  hangulLen,
-  LINE_MAX,
-  PUNCTS,
-  withEnd,
-  type Judge,
-  type Morph,
-} from "@/lib/hangul/judge";
-import { shown } from "@/lib/hangul/jamo";
-import {
-  beginHangul,
-  getHangulRanking,
+  beginDaily,
+  checkDaily,
+  getDaily,
+  getDailyRanking,
+  giveUpDaily,
+  hintDaily,
   judgeLine,
-  likedHangul,
-  likeHangul,
+  likedDaily,
+  likeDaily,
   reportHangul,
-  submitHangul,
-  suggestLine,
-  type HangulRanking,
-  type HangulSort,
-  type Suggestion,
+  submitDaily,
+  type DailyRanking,
+  type DailySort,
 } from "@/firestore/hangulRankings";
-import { drawField } from "./draw";
-import { shareCard } from "./shareCard";
 import {
   getSound,
   onSoundChange,
-  playAll,
   playBgm,
   playSfx,
   preloadSounds,
   setSound,
 } from "@/lib/hangul/sound";
-import { IMG, INK, preloadImages, type ImgName } from "./assets";
+import { IMG, preloadImages, type ImgName } from "./assets";
 import SfxReview from "./SfxReview";
 import GameHeader from "@/components/GameHeader";
 import { HANGUL_GUIDE } from "@/data/gameGuides";
 
-/** 훈장님 한마디 (표정마다 몇 개 — 같은 줄이면 같은 말) */
-const TEACHER: Record<ImgName, string[]> = {
-  hunjang: [
-    "어디 한번 써 보거라.",
-    "니들이 한글을 알아?",
-    "글자를 모아 문장을 지어 보아라.",
-    "먹물이 몰려온다, 서둘러라!",
-  ],
-  hunjangWow: [
-    "명문이로다!",
-    "오호, 이런 문장이!",
-    "무릎을 탁 치게 하는구나!",
-    "장원 급제감이로다!",
-  ],
-  hunjangNod: ["옳거니.", "그럭저럭 말이 되는구나.", "흠, 쓸 만하다.", "그래, 그거다."],
-  hunjangHmm: [
-    "억지로구나…",
-    "말이 되긴… 하는 게냐?",
-    "흠… 이게 문장이라고?",
-    "애매하구나, 애매해.",
-  ],
-  hunjangAngry: [
-    "이게 무슨 해괴한 소리냐!",
-    "외계어를 쓰는 게냐!",
-    "어허, 사전에 없는 말이다!",
-    "다시 써 오너라!",
-  ],
-};
-const GRADE_FACE: Record<string, ImgName> = {
-  명문: "hunjangWow",
-  "말 됨": "hunjangNod",
-  억지: "hunjangHmm",
-  막말: "hunjangAngry",
-};
-/** 막말(명사로 끝나는 문장) 한마디 — 얼굴은 버럭이지만 외계어와 다른 말 */
-const RUDE_SAY = [
-  "어허, 막말이로다!",
-  "서술어는 어디다 두고 왔느냐?",
-  "말끝을 맺거라, 말끝을!",
-  "고얀 놈 같으니…",
-];
-const lineOf = (arr: string[], seed: string) =>
-  arr[[...seed].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % arr.length];
-
 /*
- * 니들이 한글을 알아? — 아무 말이나 이어 붙여 먹물을 막는 무한 디펜스 (프로토)
- * 진행은 lib/hangul/game.ts, 문장 판정은 서버(형태소 분석기 Kiwi)
+ * 니들이 한글을 알아? 「오늘의 자모」 — 매일 난이도마다 속담 하나를 자모로 흩어 줌.
+ *   자모를 자판처럼 눌러(두벌식으로 저절로 글자가 됨) 주어진 자모를 다 써서 문장을 만들고 제출:
+ *   원래 속담이면 정답, 다른 말이라도 판정기(Kiwi)가 문장이라고 하면 별해. 기록 = 시간 + 힌트 × 30초.
+ *   규칙 lib/hangul/daily.ts · 서버 http/hangul.ts(문제 · 확인 · 힌트) · http/rankings.ts(랭킹)
+ *   푸는 중인 상태는 localStorage(hangul-daily:<pz>)에 남아서 새로고침해도 이어 풂.
  */
 
-const TAG: [RegExp, string][] = [
-  [/^NNB/, "의존명사"],
-  [/^NN/, "명사"],
-  [/^NP/, "대명사"],
-  [/^NR/, "수사"],
-  [/^VV/, "동사"],
-  [/^VA/, "형용사"],
-  [/^VX/, "보조용언"],
-  [/^VCP/, "이다"],
-  [/^VCN/, "아니다"],
-  [/^MM/, "관형사"],
-  [/^MA/, "부사"],
-  [/^IC/, "감탄사"],
-  [/^J/, "조사"],
-  [/^EP/, "시제"],
-  [/^EF/, "끝맺음"],
-  [/^EC/, "이음"],
-  [/^ET/, "바꿈"],
-  [/^XS/, "꼬리"],
-  [/^XP/, "머리"],
-  [/^XR/, "어근"],
-];
-const tagName = (m: Morph) => (m.k ? (TAG.find(([re]) => re.test(m.t))?.[1] ?? m.t) : "모르는 말");
+/** 훈장님 한마디 (같은 상황이면 같은 말) */
+const SAY = {
+  idle: ["흩어진 자모를 다 써서 문장을 지어 보거라.", "니들이 한글을 알아?", "어디 한번 써 보거라."],
+  left: ["아직 자모가 남았느니라.", "남김없이 다 써야 하느니라.", "흠, 계속 써 보거라."],
+  loose: ["낱자가 굴러다니는구나.", "글자를 제대로 맞춰 보거라.", "받침 하나가 길을 잃었구나."],
+  ready: ["옳거니, 제출해 보거라!", "그럴싸하구나. 내 보거라!", "다 썼구나. 어디 보자."],
+  hmm: ["이대로는 말이 안 되느니라.", "흠… 이게 문장이라고?", "순서를 바꿔 보거라."],
+  wrong: ["어허, 틀렸느니라!", "다시 써 오너라!", "이게 무슨 해괴한 소리냐!"],
+  order: ["낱말은 옳다! 순서만 맞추거라.", "거의 다 왔느니라, 차례를 보거라.", "흠, 말의 차례가 틀렸구나."],
+  solved: ["장원 급제로다!", "무릎을 탁 치게 하는구나!", "옳거니, 바로 그것이다!"],
+  alt: ["허허, 그렇게도 되는구나!", "별해로다! 기특하구나.", "속담은 아니어도 말은 되는구나."],
+  gave: ["포기도 공부니라. 내일 다시 오너라.", "정답은 이것이었느니라."],
+} as const;
+const pick = (arr: readonly string[], seed: string) =>
+  arr[[...seed].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % arr.length];
+
+/** 실제 키보드(두벌식 자리) → 자모. Shift 면 된소리 · ㅒ ㅖ */
+const KEYMAP: Record<string, [string, string?]> = {
+  KeyQ: ["ㅂ", "ㅃ"],
+  KeyW: ["ㅈ", "ㅉ"],
+  KeyE: ["ㄷ", "ㄸ"],
+  KeyR: ["ㄱ", "ㄲ"],
+  KeyT: ["ㅅ", "ㅆ"],
+  KeyY: ["ㅛ"],
+  KeyU: ["ㅕ"],
+  KeyI: ["ㅑ"],
+  KeyO: ["ㅐ", "ㅒ"],
+  KeyP: ["ㅔ", "ㅖ"],
+  KeyA: ["ㅁ"],
+  KeyS: ["ㄴ"],
+  KeyD: ["ㅇ"],
+  KeyF: ["ㄹ"],
+  KeyG: ["ㅎ"],
+  KeyH: ["ㅗ"],
+  KeyJ: ["ㅓ"],
+  KeyK: ["ㅏ"],
+  KeyL: ["ㅣ"],
+  KeyZ: ["ㅋ"],
+  KeyX: ["ㅌ"],
+  KeyC: ["ㅊ"],
+  KeyV: ["ㅍ"],
+  KeyB: ["ㅠ"],
+  KeyN: ["ㅜ"],
+  KeyM: ["ㅡ"],
+};
+/** 키보드로 겹모음 치기 (ㅗ 다음 ㅏ → ㅘ) */
+const VCOMB: Record<string, string> = {
+  ㅗㅏ: "ㅘ",
+  ㅗㅐ: "ㅙ",
+  ㅗㅣ: "ㅚ",
+  ㅜㅓ: "ㅝ",
+  ㅜㅔ: "ㅞ",
+  ㅜㅣ: "ㅟ",
+  ㅡㅣ: "ㅢ",
+};
+
+interface Done {
+  kind: "정답" | "별해";
+  /** 쓴 그대로(띄어쓰기 없음) · 띄어 쓴 모양 */
+  text: string;
+  spaced: string;
+  answer: string;
+  time: number;
+  hint: number;
+  score: number;
+}
+/** 퍼즐 하나의 진행 (localStorage) */
+interface Saved {
+  keys: string[];
+  /** 푼 시간(초) — 화면이 보일 때만 흐름 */
+  time: number;
+  /** 본 힌트 단계 · 값 */
+  hint: number;
+  hints: Record<number, number[] | string>;
+  tries: number;
+  done?: Done;
+  /** 포기 → 정답 */
+  gaveUp?: string;
+  /** 랭킹에 올린 기록 id */
+  sent?: string;
+}
+const blank = (): Saved => ({ keys: [], time: 0, hint: 0, hints: {}, tries: 0 });
+const saveKey = (pz: string) => `hangul-daily:${pz}`;
+function loadSaved(pz: string): Saved | null {
+  try {
+    const raw = localStorage.getItem(saveKey(pz));
+    return raw ? ({ ...blank(), ...(JSON.parse(raw) as Partial<Saved>) } as Saved) : null;
+  } catch {
+    return null;
+  }
+}
+function storeSaved(pz: string, s: Saved) {
+  try {
+    localStorage.setItem(saveKey(pz), JSON.stringify(s));
+  } catch {}
+}
 
 const NAME_KEY = "hangul-name";
 const SECRET_KEY = "hangul-secret";
-const ago = (d: Date | null) => {
-  if (!d) return "";
-  const s = (Date.now() - d.getTime()) / 1000;
-  if (s < 60) return "방금";
-  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
-  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
-  if (s < 86400 * 30) return `${Math.floor(s / 86400)}일 전`;
-  return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
+const fmtTime = (s: number) => {
+  const t = Math.floor(s);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 };
-const fmt = (n: number) => Math.round(n).toLocaleString("ko-KR");
+/** 다음 문제까지 (한국 시간 자정) */
+const untilNext = (now: number) => {
+  const left = 864e5 - ((now + 9 * 3600e3) % 864e5);
+  const h = Math.floor(left / 3600e3),
+    m = Math.floor((left % 3600e3) / 60e3);
+  return h ? `${h}시간 ${m}분` : `${m}분`;
+};
+const tierLabel = (t: DailyTier) => DAILY_TIERS.find((x) => x.id === t)!.label;
 
 export default function HangulApp() {
-  const [g, setG] = useState<Game>(newGame);
-  const [, setTick] = useState(0);
-  const [phase, setPhase] = useState<"ready" | "play" | "over">("ready");
-  // ── 대전 「말싸움」: 고르는 화면 · 들어간 방 · 방 상태 (규칙 lib/hangul/versus.ts, 서버 games/hangulVs.ts) ──
-  const [vsLobby, setVsLobby] = useState(false);
-  const [vs, setVs] = useState<{ id: string; me: string } | null>(null);
-  const [vsRoom, setVsRoom] = useState<VsRoom | null>(null);
-  const [vsBusy, setVsBusy] = useState(false);
-  const [vsErr, setVsErr] = useState<string | null>(null);
-  const [emotes, setEmotes] = useState<{ uid: string; e: string; at: number }[]>([]);
-  const [cutin, setCutin] = useState<VsAttack | null>(null);
-  const vsRef = useRef<{ id: string; me: string; room: VsRoom | null } | null>(null);
-  /** 지금 판을 시작한 시드 (같은 방 상태가 다시 와도 판을 새로 만들지 않게) · 이미 먹물로 받은 공격 */
-  const vsSeedRef = useRef(0);
-  const landedRef = useRef(new Set<string>());
-  const vsOn = !!vs;
-  // 배경음악: 판 중엔 play, 그 밖엔 title (파일 없으면 조용)
+  const [now, setNow] = useState(() => Date.now());
+  // 날짜 · 남은 시간은 1분마다 (자정이 지나면 새 문제)
   useEffect(() => {
-    playBgm(phase === "play" ? "play" : "title");
-  }, [phase]);
-  useEffect(() => () => playBgm(null), []);
-  const [sel, setSel] = useState<{ z: Zone; i: number } | null>(null);
-  const [wordBusy, setWordBusy] = useState(false);
-  const [selling, setSelling] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const [judge, setJudge] = useState<Judge | null>(null);
-  const [judgeErr, setJudgeErr] = useState<string | null>(null);
-  const [flash, setFlash] = useState<Sentence | null>(null);
-  const [ranks, setRanks] = useState<HangulRanking[] | null>(null);
-  // 이름 칸은 판이 끝나야 그려서 서버 렌더와 어긋날 일 없음
-  const [name, setName] = useState(() => {
-    try {
-      return localStorage.getItem(NAME_KEY) ?? "";
-    } catch {
-      return "";
-    }
-  });
-  const [sent, setSent] = useState<"idle" | "sending" | "done" | "fail">("idle");
-  // 시크릿 등록 (익명) — 고른 걸 기억해 둠
-  const [secret, setSecret] = useState(() => {
-    try {
-      return localStorage.getItem(SECRET_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  // 랭킹 창 (열려 있는 동안 판은 멈춤)
-  const [rankOpen, setRankOpen] = useState(false);
-  const [rankSort, setRankSort] = useState<HangulSort>("top");
-  // 👍 웃겨요: 내가 누른 기록 · 누르는 중인 기록
-  const [liked, setLiked] = useState<Set<string>>(() => new Set());
-  const [liking, setLiking] = useState<string | null>(null);
-  // 사전에 없는 말 신고한 줄 (같은 줄은 한 번만)
-  const [reported, setReported] = useState<Set<string>>(() => new Set());
-  const [sharing, setSharing] = useState(false);
-  const [rankMsg, setRankMsg] = useState<string | null>(null);
-  const [sugs, setSugs] = useState<{
-    line: string;
-    list: (Suggestion & { ids: number[] })[];
-  } | null>(null);
-  const [sugBusy, setSugBusy] = useState(false);
-
-  const fieldRef = useRef<HTMLDivElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const posRef = useRef(new Map<number, { x: number; y: number }>());
-  const shelfRef = useRef<HTMLDivElement>(null);
-  // 새 문장이 글 끝에 붙으면 목록을 맨 아래로
-  const shelfLen = g.shelf.length;
-  useEffect(() => {
-    const el = shelfRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [shelfLen]);
-  const speedRef = useRef(1);
-  const phaseRef = useRef(phase);
-  const pauseRef = useRef(false);
-  useEffect(() => {
-    speedRef.current = speed;
-    phaseRef.current = phase;
-    // 대전은 실시간이라 랭킹 창을 열어도 안 멈춤
-    pauseRef.current = rankOpen && !vs;
-    vsRef.current = vs ? { ...vs, room: vsRoom } : null;
-  }, [speed, phase, rankOpen, vs, vsRoom]);
-
-  const refresh = useCallback(() => setTick((t) => t + 1), []);
-
-  // 랭킹 · 이름
-  const loadRanks = useCallback((sort: HangulSort) => {
-    getHangulRanking(50, sort)
-      .then((rs) => {
-        setRanks(rs);
-        likedHangul(rs.map((r) => r.id))
-          .then(setLiked)
-          .catch(() => {});
-      })
-      .catch(() => setRanks([]));
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
   }, []);
+  const day = kstDay(now);
+
+  const [tier, setTier] = useState<DailyTier | null>(null);
+  const pz = tier ? pzKey(day, tier) : null;
+  const [puzzle, setPuzzle] = useState<DailyPuzzle | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [s, setS] = useState<Saved>(blank);
+  const sRef = useRef(s);
+  useEffect(() => {
+    sRef.current = s;
+  });
+  /** 진행 바꾸기 + 저장 */
+  const update = useCallback(
+    (f: (x: Saved) => Saved) => {
+      setS((cur) => {
+        const next = f(cur);
+        if (pz) storeSaved(pz, next);
+        return next;
+      });
+    },
+    [pz]
+  );
+  // 시작 화면의 난이도별 상태 (localStorage — 서버 렌더와 어긋나지 않게 처음엔 비워 둠)
+  const [stats, setStats] = useState<Partial<Record<DailyTier, Saved | null>>>({});
+  const refreshStats = useCallback(() => {
+    setStats(Object.fromEntries(DAILY_TIERS.map((t) => [t.id, loadSaved(pzKey(day, t.id))])));
+  }, [day]);
+  useEffect(() => {
+    // localStorage 는 그린 뒤에 읽음
+    const id = window.setTimeout(refreshStats, 0);
+    return () => window.clearTimeout(id);
+  }, [refreshStats, tier]);
+
+  const playing = !!tier && !!puzzle && !s.done && !s.gaveUp;
+  useEffect(() => {
+    playBgm(playing ? "play" : "title");
+  }, [playing]);
+  useEffect(() => () => playBgm(null), []);
   useEffect(() => {
     prepareRuns();
   }, []);
-  // 에셋(효과음 · 그림)을 다 받은 뒤 시작 — 시작 화면에 진행률
+
+  // 에셋(효과음 · 그림) 받기 — 시작 화면에 진행률
   const [assets, setAssets] = useState({ done: 0, total: 1 });
   const ready = assets.done >= assets.total;
   useEffect(() => {
@@ -317,55 +238,393 @@ export default function HangulApp() {
     () => getSound().mute,
     () => false
   );
-  // ?review=sfx — 효과음 후보 고르기 화면을 아래에 붙임
   const review = useSyncExternalStore(
     () => () => {},
     () => new URLSearchParams(location.search).get("review") === "sfx",
     () => false
   );
-  const toggleLike = async (r: HangulRanking) => {
-    if (liking) return;
-    const on = !liked.has(r.id);
-    setLiking(r.id);
+
+  // ── 퍼즐 열기 ──
+  const open = (t: DailyTier) => {
+    playSfx("start");
+    const key = pzKey(day, t);
+    const saved = loadSaved(key);
+    setTier(t);
+    setPuzzle(null);
+    setLoadErr(null);
+    setWrong(null);
+    setS(saved ?? blank());
+    // 처음 여는 퍼즐만 랭킹 티켓 (이어 풀면 받아 둔 티켓을 그대로 씀)
+    if (!saved) {
+      storeSaved(key, blank());
+      beginDaily(key);
+    }
+    getDaily(key)
+      .then(setPuzzle)
+      .catch(() => setLoadErr("문제를 받아 오지 못했어요"));
+  };
+  const back = () => {
+    playSfx("click");
+    setTier(null);
+    setPuzzle(null);
+  };
+
+  // ── 시간: 푸는 중 · 화면이 보일 때만 ──
+  useEffect(() => {
+    if (!playing) return;
+    let last = performance.now();
+    const id = window.setInterval(() => {
+      const t = performance.now();
+      const dt = Math.min(1, (t - last) / 1000);
+      last = t;
+      if (document.hidden) return;
+      update((x) => ({ ...x, time: Math.round((x.time + dt) * 10) / 10 }));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [playing, update]);
+
+  // ── 자판 ──
+  const tiles = useMemo(() => puzzle?.tiles ?? [], [puzzle]);
+  const total = useMemo(() => countTiles(tiles), [tiles]);
+  const usedCount = useMemo(() => countTiles(s.keys), [s.keys]);
+  const rem = (j: string) => (total.get(j) ?? 0) - (usedCount.get(j) ?? 0);
+  const left = tiles.length - s.keys.length;
+  const keyOrder = useMemo(() => [...new Set(tiles)], [tiles]);
+  const cons = keyOrder.filter(isConsTile);
+  const vows = keyOrder.filter(isVowelTile);
+  const text = composeKeys(s.keys);
+  const complete = left === 0 && allSyllables(text);
+  /** 키보드 겹모음: ㅗ 를 이미 다 썼어도 ㅘ 를 치려고 ㅗ 를 누른 상태 */
+  const [pend, setPend] = useState<string | null>(null);
+  const [wrong, setWrong] = useState<{ why: "tiles" | "sentence" | "order"; text: string } | null>(
+    null
+  );
+  const [bump, setBump] = useState<string | null>(null);
+
+  const press = (j: string, fromKey = false) => {
+    if (!playing) return;
+    const last = s.keys.at(-1);
+    if (fromKey && isVowelTile(j)) {
+      const base = pend ?? last;
+      const combo = base ? VCOMB[base + j] : undefined;
+      if (combo && rem(combo) > 0) {
+        setPend(null);
+        playSfx("place");
+        setWrong(null);
+        update((x) => ({ ...x, keys: pend ? [...x.keys, combo] : [...x.keys.slice(0, -1), combo] }));
+        return;
+      }
+      if (rem(j) <= 0 && Object.keys(VCOMB).some((k) => k[0] === j && rem(VCOMB[k]) > 0)) {
+        setPend(j);
+        return;
+      }
+    }
+    setPend(null);
+    if (rem(j) <= 0) {
+      playSfx("discard");
+      setBump(j);
+      window.setTimeout(() => setBump((b) => (b === j ? null : b)), 300);
+      return;
+    }
+    playSfx("place");
+    setWrong(null);
+    update((x) => ({ ...x, keys: [...x.keys, j] }));
+  };
+  const erase = () => {
+    if (!playing) return;
+    if (pend) return setPend(null);
+    if (!s.keys.length) return;
+    playSfx("erase");
+    setWrong(null);
+    update((x) => ({ ...x, keys: x.keys.slice(0, -1) }));
+  };
+  const clearAll = () => {
+    if (!playing || !s.keys.length) return;
+    playSfx("discard");
+    setPend(null);
+    setWrong(null);
+    update((x) => ({ ...x, keys: [] }));
+  };
+
+  // ── 제출 ──
+  const [checking, setChecking] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    if (!pz || !complete || checking || !playing) return;
+    setChecking(true);
+    setErr(null);
     try {
-      const n = await likeHangul(r.id, on);
-      if (on) playSfx("like");
-      setLiked((s) => {
-        const t = new Set(s);
-        if (on) t.add(r.id);
-        else t.delete(r.id);
-        return t;
-      });
-      setRanks((rs) => rs?.map((x) => (x.id === r.id ? { ...x, likes: n } : x)) ?? rs);
+      const c = await checkDaily(pz, text);
+      if (c.kind && c.answer) {
+        const cur = sRef.current;
+        const done: Done = {
+          kind: c.kind,
+          text,
+          spaced: c.spaced,
+          answer: c.answer,
+          time: cur.time,
+          hint: cur.hint,
+          score: dailyScore(cur.time, cur.hint),
+        };
+        playSfx(c.kind === "정답" ? "sent-best" : "sent-good");
+        update((x) => ({ ...x, done }));
+      } else {
+        playSfx("sent-meh");
+        setWrong({ why: c.why ?? "sentence", text });
+        update((x) => ({ ...x, tries: x.tries + 1 }));
+      }
     } catch (e) {
-      setRankMsg(
-        e instanceof ApiError && e.code === "OWN_RECORD"
-          ? "내 문장에는 누를 수 없어요"
-          : "누르지 못했어요"
+      setErr(
+        e instanceof ApiError && e.code === "JUDGE_OFF"
+          ? "판정 서버가 아직 준비되지 않았어요"
+          : "서버에 연결할 수 없어요"
       );
-      setTimeout(() => setRankMsg(null), 2000);
     } finally {
-      setLiking(null);
+      setChecking(false);
     }
   };
-  const share = async (c: Parameters<typeof shareCard>[0]) => {
-    if (sharing) return;
-    setSharing(true);
+
+  // ── 힌트 · 포기 ──
+  const [hintBusy, setHintBusy] = useState(false);
+  const askHint = async () => {
+    if (!pz || hintBusy || !playing || s.hint >= HINT_MAX) return;
+    setHintBusy(true);
+    setErr(null);
     try {
-      playSfx("card");
-      await shareCard(c);
+      const n = s.hint + 1;
+      const v = await hintDaily(pz, n);
+      playSfx("open");
+      update((x) => ({ ...x, hint: Math.max(x.hint, n), hints: { ...x.hints, [n]: v } }));
     } catch {
-      /* 공유 취소 · 실패는 조용히 */
+      setErr("힌트를 받아 오지 못했어요");
     } finally {
-      setSharing(false);
+      setHintBusy(false);
     }
   };
-  const openRanks = (sort: HangulSort = rankSort) => {
+  const [giveSure, setGiveSure] = useState(false);
+  const giveUp = async () => {
+    if (!pz || !playing) return;
+    if (!giveSure) {
+      playSfx("click");
+      setGiveSure(true);
+      window.setTimeout(() => setGiveSure(false), 3000);
+      return;
+    }
+    setGiveSure(false);
+    try {
+      const a = await giveUpDaily(pz);
+      playSfx("over");
+      setWrong(null);
+      update((x) => ({ ...x, gaveUp: a }));
+    } catch {
+      setErr("서버에 연결할 수 없어요");
+    }
+  };
+
+  // 실제 키보드: 두벌식 자리 · Backspace · Enter (입력 칸에 있을 땐 안 가로챔)
+  const keyRef = useRef({ press, erase, submit });
+  useEffect(() => {
+    keyRef.current = { press, erase, submit };
+  });
+  useEffect(() => {
+    if (!playing) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.code === "Backspace") {
+        e.preventDefault();
+        keyRef.current.erase();
+      } else if (e.code === "Enter") {
+        e.preventDefault();
+        void keyRef.current.submit();
+      } else if (KEYMAP[e.code]) {
+        e.preventDefault();
+        const [a, b] = KEYMAP[e.code];
+        keyRef.current.press(e.shiftKey && b ? b : a, true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [playing]);
+
+  // ── 지금 줄 판정 (훈장님 반응용) — 자모를 다 써서 글자가 다 됐을 때만 ──
+  const [judge, setJudge] = useState<Judge | null>(null);
+  useEffect(() => {
+    if (!complete) return;
+    let alive = true;
+    const id = window.setTimeout(() => {
+      judgeLine(text)
+        .then((j) => alive && setJudge(j))
+        .catch(() => {});
+    }, 200);
+    return () => {
+      alive = false;
+      window.clearTimeout(id);
+    };
+  }, [complete, text]);
+  const j = complete && judge?.text === text ? judge : null;
+
+  // 훈장님 표정 · 한마디
+  const seed = `${pz}:${text}`;
+  const teacher: { face: ImgName; say: string } = s.done
+    ? s.done.kind === "정답"
+      ? { face: "hunjangWow", say: pick(SAY.solved, seed) }
+      : { face: "hunjangNod", say: pick(SAY.alt, seed) }
+    : s.gaveUp
+      ? { face: "hunjangHmm", say: pick(SAY.gave, seed) }
+      : wrong && wrong.text === text
+        ? wrong.why === "order"
+          ? { face: "hunjangNod", say: pick(SAY.order, seed) }
+          : { face: "hunjangAngry", say: pick(SAY.wrong, seed) }
+        : !s.keys.length
+          ? { face: "hunjang", say: pick(SAY.idle, seed) }
+          : left > 0
+            ? { face: "hunjang", say: pick(SAY.left, seed) }
+            : !complete
+              ? { face: "hunjangHmm", say: pick(SAY.loose, seed) }
+              : j && !j.sentence
+                ? { face: "hunjangHmm", say: pick(SAY.hmm, seed) }
+                : { face: j && gradeName(j) === "명문" ? "hunjangWow" : "hunjangNod", say: pick(SAY.ready, seed) };
+  const msg = !puzzle
+    ? ""
+    : s.done
+      ? `${s.done.kind}! 띄어 쓰면 「${withEnd(s.done.spaced)}」`
+      : s.gaveUp
+        ? "포기한 판이에요"
+    : wrong && wrong.text === text
+      ? wrong.why === "order"
+        ? "낱말은 다 맞았어요! 순서만 바꾼 건 별해로 안 쳐요 — 속담 순서를 찾아 보세요"
+        : wrong.why === "sentence"
+          ? "속담도 아니고, 판정기가 문장으로 안 읽어요. 순서를 바꿔 보세요"
+          : "주어진 자모를 정확히 다 써야 해요"
+      : left > 0
+        ? `자모 ${left}개 남음`
+        : !complete
+          ? "글자가 안 된 낱자가 있어요 — 받침 · 첫소리를 맞춰 보세요"
+          : j
+            ? j.sentence
+              ? `다 썼어요! 판정기: 문장 (${gradeName(j)}) — 제출해 보세요`
+              : "다 썼어요! 판정기는 아직 문장이 아니래요 — 그래도 속담이면 정답"
+            : "다 썼어요! 제출해 보세요";
+  const [reported, setReported] = useState<Set<string>>(() => new Set());
+  const report = () => {
+    if (!wrong || reported.has(wrong.text)) return;
+    const t = wrong.text;
+    setReported((r) => new Set(r).add(t));
+    void reportHangul(t).catch(() => {});
+  };
+
+  // ── 원고지: 힌트 1(띄어쓰기 틀)이 있으면 낱말마다 끊어서 ──
+  const chars = [...text];
+  const len = puzzle?.len ?? 0;
+  const skeleton = (s.hints[1] as number[] | undefined) ?? null;
+  const chos = typeof s.hints[3] === "string" ? (s.hints[3] as string).replace(/ /g, "") : "";
+  const first = typeof s.hints[2] === "string" ? (s.hints[2] as string) : "";
+  const groups: number[] = (() => {
+    const n = Math.max(len, chars.length);
+    if (!skeleton) return [n];
+    const g = [...skeleton];
+    const extra = n - len;
+    if (extra > 0) g[g.length - 1] += extra;
+    return g;
+  })();
+  const cellsOf = () => {
+    let k = 0;
+    return groups.map((n, gi) => (
+      <div className="hg-word" key={gi}>
+        {Array.from({ length: n }, () => {
+          const i = k++;
+          const ch = chars[i];
+          const loose = ch && !/[가-힣]/.test(ch);
+          const ph = chos[i] ?? (i === 0 ? first : "");
+          return (
+            <span
+              key={i}
+              className={`hg-cell${ch ? " is-on" : ""}${loose ? " is-loose" : ""}${
+                i === chars.length && playing ? " is-caret" : ""
+              }`}
+            >
+              {ph && <small className={i === 0 && first ? "is-first" : ""}>{i === 0 && first ? first : ph}</small>}
+              {ch}
+            </span>
+          );
+        })}
+      </div>
+    ));
+  };
+
+  // ── 랭킹 · 등록 ──
+  const [name, setName] = useState(() => {
+    try {
+      return localStorage.getItem(NAME_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const [secret, setSecret] = useState(() => {
+    try {
+      return localStorage.getItem(SECRET_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [sending, setSending] = useState<"idle" | "sending" | "fail">("idle");
+  const send = async () => {
+    if (!pz || !s.done || sending === "sending" || s.sent) return;
+    const nm = name.trim() || "무명";
+    setSending("sending");
+    try {
+      try {
+        localStorage.setItem(NAME_KEY, name.trim());
+        localStorage.setItem(SECRET_KEY, secret ? "1" : "0");
+      } catch {}
+      const d = s.done;
+      const id = await submitDaily(pz, {
+        name: nm,
+        time: d.time,
+        hint: d.hint,
+        score: d.score,
+        text: d.text,
+        ...(secret && { secret: true }),
+      });
+      playSfx("like");
+      update((x) => ({ ...x, sent: id }));
+      setSending("idle");
+    } catch {
+      setSending("fail");
+    }
+  };
+
+  const [rankOpen, setRankOpen] = useState(false);
+  const [rankTier, setRankTier] = useState<DailyTier>(1);
+  const [rankSort, setRankSort] = useState<DailySort>("top");
+  const [ranks, setRanks] = useState<DailyRanking[] | null>(null);
+  const [liked, setLiked] = useState<Set<string>>(() => new Set());
+  const [liking, setLiking] = useState<string | null>(null);
+  const [rankMsg, setRankMsg] = useState<string | null>(null);
+  const loadRanks = useCallback(
+    (t: DailyTier, sort: DailySort) => {
+      setRanks(null);
+      getDailyRanking(pzKey(day, t), sort)
+        .then((rs) => {
+          setRanks(rs);
+          if (sort !== "top")
+            likedDaily(rs.map((r) => r.id))
+              .then(setLiked)
+              .catch(() => {});
+        })
+        .catch(() => setRanks([]));
+    },
+    [day]
+  );
+  const openRanks = (t: DailyTier = tier ?? 1, sort: DailySort = "top") => {
     playSfx(rankOpen ? "click" : "open");
+    refreshStats();
+    setRankTier(t);
     setRankSort(sort);
-    setRanks(null);
     setRankOpen(true);
-    loadRanks(sort);
+    loadRanks(t, sort);
   };
   useEffect(() => {
     if (!rankOpen) return;
@@ -373,558 +632,68 @@ export default function HangulApp() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [rankOpen]);
-
-  // 판 크기 → 캔버스 · 둘레 길
-  useEffect(() => {
-    const field = fieldRef.current,
-      cv = canvasRef.current;
-    if (!field || !cv) return;
-    const fit = () => {
-      const r = field.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      cv.width = Math.round(r.width * dpr);
-      cv.height = Math.round(r.height * dpr);
-      setPath(g, { x: 16, y: 16, w: r.width - 32, h: r.height - 32 });
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(field);
-    return () => ro.disconnect();
-  }, [g]);
-
-  // 칸 위치 (쏘는 선의 출발점) — 화면이 다시 그려질 때마다
-  useLayoutEffect(() => {
-    const field = fieldRef.current;
-    if (!field) return;
-    const base = field.getBoundingClientRect();
-    const m = posRef.current;
-    m.clear();
-    field.querySelectorAll<HTMLElement>("[data-uid]").forEach((el) => {
-      const r = el.getBoundingClientRect();
-      m.set(Number(el.dataset.uid), {
-        x: r.left - base.left + r.width / 2,
-        y: r.top - base.top + r.height / 2,
+  const toggleLike = async (r: DailyRanking) => {
+    if (liking) return;
+    const on = !liked.has(r.id);
+    setLiking(r.id);
+    try {
+      const n = await likeDaily(r.id, on);
+      if (on) playSfx("like");
+      setLiked((x) => {
+        const t = new Set(x);
+        if (on) t.add(r.id);
+        else t.delete(r.id);
+        return t;
       });
-    });
-  });
-
-  // 진행 · 그리기
-  useEffect(() => {
-    // 개발 중 점검용 (콘솔에서 판 상태 보기)
-    if (process.env.NODE_ENV !== "production") {
-      const w = window as unknown as { __hangul?: Game; __hangulLine?: (t: string) => void };
-      w.__hangul = g;
-      // 개발 점검용: 원고지에 아무 줄이나 바로 써 넣기 (대전 받아치기 확인 등)
-      w.__hangulLine = (t: string) => {
-        g.line = [...t].map((ch) => ({
-          id: g.seq++,
-          kind: /[,.?!]/.test(ch) ? ("p" as const) : ("s" as const),
-          text: ch,
-          cd: 0,
-        }));
-        refresh();
-      };
-    }
-    let raf = 0,
-      last = performance.now(),
-      ui = 0;
-    const loop = (now: number) => {
-      const dt = Math.min(0.05, (now - last) / 1000);
-      last = now;
-      const v = vsRef.current;
-      // 대전: 카운트다운 동안은 멈춤
-      const vsHold = !!v?.room && v.room.phase === "play" && serverNow() < v.room.startAt;
-      if (phaseRef.current === "play" && !pauseRef.current && !vsHold) {
-        for (let k = 0; k < speedRef.current; k++) step(g, dt);
-        // 대전: 도착 시각이 지난 상대 공격 → 내 판에 먹물 (막혔으면 서버가 상태를 바꿔 둬서 안 들어옴)
-        if (v?.room && g.vs) {
-          const t = serverNow();
-          for (const a of v.room.attacks)
-            if (
-              a.to === v.me &&
-              a.status === "flying" &&
-              a.arriveAt <= t &&
-              !landedRef.current.has(a.id)
-            ) {
-              landedRef.current.add(a.id);
-              incoming(g, a.blobs, a.heavy ? 1 : 0);
-              setCutin(a);
-              window.setTimeout(() => setCutin((c) => (c === a ? null : c)), 2200);
-            }
-        }
-        if (g.over) {
-          setPhase("over");
-          if (v && g.vs) void loadVs(v.id, load(g)).catch(() => {});
-        }
-      }
-      // 게임이 낸 소리 (판 진행 · 버튼으로 바꾼 것 모두 여기서 한 번에)
-      if (g.sfx.length) {
-        playAll(g.sfx);
-        g.sfx.length = 0;
-      }
-      const cv = canvasRef.current;
-      const cx = cv?.getContext("2d");
-      if (cv && cx) {
-        const dpr = window.devicePixelRatio || 1;
-        cx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        drawField(cx, g, cv.width / dpr, cv.height / dpr, posRef.current);
-      }
-      if ((ui += dt) > 0.1) {
-        ui = 0;
-        refresh();
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [g, refresh]);
-
-  // 문장칸이 바뀌면 서버에 읽어 달라고 함
-  const text = lineText(g);
-  useEffect(() => {
-    if (!text) return;
-    let alive = true;
-    judgeLine(text)
-      .then((j) => alive && (setJudge(j), setJudgeErr(null)))
-      .catch((e) => {
-        if (!alive) return;
-        setJudge(null);
-        setJudgeErr(
-          e instanceof ApiError && e.code === "JUDGE_OFF"
-            ? "판정 서버에 모델이 없어요 (server 에서 npm run kiwi:model)"
-            : "판정 서버에 연결할 수 없어요"
-        );
-      });
-    return () => {
-      alive = false;
-    };
-  }, [text]);
-  const j = judge && judge.text === text ? judge : null;
-
-  // ── 대전 ──
-  const vsName = () => {
-    try {
-      return (localStorage.getItem(NAME_KEY) ?? "").slice(0, 10);
-    } catch {
-      return "";
-    }
-  };
-  const setVsUrl = (id: string | null) => {
-    const u = new URL(location.href);
-    if (id) u.searchParams.set("vs", id);
-    else u.searchParams.delete("vs");
-    history.replaceState(history.state, "", u);
-  };
-  const enterVs = (id: string) => {
-    const me = auth.currentUser?.uid;
-    if (!me) throw new Error("로그인이 안 됐어요");
-    landedRef.current.clear();
-    vsSeedRef.current = 0;
-    setVs({ id, me });
-    setVsUrl(id);
-  };
-  const vsFail = (e: unknown) =>
-    setVsErr(
-      e instanceof ApiError
-        ? e.code === "JUDGE_OFF"
-          ? "판정 서버가 아직 준비되지 않았어요"
-          : e.message
-        : "서버에 연결할 수 없어요"
-    );
-  const vsFriend = async () => {
-    setVsBusy(true);
-    setVsErr(null);
-    try {
-      await signIn();
-      enterVs(await createVs(vsName()));
+      setRanks((rs) => rs?.map((x) => (x.id === r.id ? { ...x, likes: n } : x)) ?? rs);
     } catch (e) {
-      vsFail(e);
-    } finally {
-      setVsBusy(false);
-    }
-  };
-  const vsBot = async (level: number) => {
-    setVsBusy(true);
-    setVsErr(null);
-    try {
-      await signIn();
-      const id = await createVs(vsName());
-      await botVs(id, level);
-      enterVs(id);
-      await startVs(id);
-    } catch (e) {
-      vsFail(e);
-    } finally {
-      setVsBusy(false);
-    }
-  };
-  const vsLeave = () => {
-    if (vs) void leaveVs(vs.id);
-    setVs(null);
-    setVsRoom(null);
-    setVsLobby(false);
-    setVsUrl(null);
-    setCutin(null);
-    setG(newGame());
-    setPhase("ready");
-  };
-  // 초대 링크(?vs=방)로 들어옴 → 바로 그 방에 앉음
-  useEffect(() => {
-    const id = new URLSearchParams(location.search).get("vs");
-    if (!id) return;
-    void (async () => {
-      await Promise.resolve();
-      setVsLobby(true);
-      setVsBusy(true);
-      try {
-        await signIn();
-        await joinVs(id, vsName());
-        enterVs(id);
-      } catch (e) {
-        vsFail(e);
-        setVsUrl(null);
-      } finally {
-        setVsBusy(false);
-      }
-    })();
-    // 처음 한 번만
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // 방 구독 — 방 상태가 바뀌면 판 시작 · 끝 · 대기실로
-  useEffect(() => {
-    if (!vs) return;
-    const onRoom = (r: VsRoom | null) => {
-      setVsRoom(r);
-      if (!r) return setVsErr("방이 사라졌어요");
-      if (r.phase === "play" && r.seed !== vsSeedRef.current) {
-        vsSeedRef.current = r.seed;
-        landedRef.current.clear();
-        const ng = newGame();
-        ng.vs = true;
-        ng.rng = seeded(r.seed);
-        draw(ng, START_DRAW);
-        setG(ng);
-        setSel(null);
-        setSelling(false);
-        setJudge(null);
-        setSpeed(1);
-        setPhase("play");
-        playSfx("switch");
-        window.setTimeout(() => playSfx("start"), 120);
-      } else if (r.phase === "ended") setPhase("over");
-      else if (r.phase === "waiting") {
-        // 끝난 판에서 대기실로 돌아오면 판도 새로 (뒤에 지난 판이 비치지 않게)
-        if (vsSeedRef.current) setG(newGame());
-        vsSeedRef.current = 0;
-        setPhase("ready");
-      }
-    };
-    return watchVs(vs.id, {
-      room: onRoom,
-      emote: (uid, e) => setEmotes((l) => [...l.slice(-6), { uid, e, at: Date.now() }]),
-    });
-  }, [vs]);
-  // 내 먹물 양을 상대에게 (바뀌었을 때만, 0.7초마다)
-  useEffect(() => {
-    if (!vs || phase !== "play") return;
-    let sent = -1;
-    const t = window.setInterval(() => {
-      const ld = load(g);
-      if (ld !== sent) {
-        sent = ld;
-        void loadVs(vs.id, ld).catch(() => {});
-      }
-    }, 700);
-    return () => window.clearInterval(t);
-  }, [vs, phase, g]);
-  const vsNow = serverNow();
-  const vsWait = !!vsRoom && vsRoom.phase === "play" && vsNow < vsRoom.startAt;
-  const ctr =
-    vs && vsRoom && j?.sentence ? counterTarget(vsRoom, vs.me, j.morphs, vsNow, linkMorphs) : null;
-  /** 대전 문장 완성: 1인 모드처럼 내 판 공격 + 서버가 상대에게 보냄 (막기 · 보내기 고르기는 너무 어렵다 해서 뺌) */
-  const onVsFinish = () => {
-    if (!j || !vs) return;
-    const line = j.text;
-    const s = finishSentence(g, j);
-    if (!s) return;
-    setFlash(s);
-    window.setTimeout(() => setFlash((f) => (f === s ? null : f)), 2200);
-    playSfx(ctr ? "sent-best" : "link");
-    sentenceVs(vs.id, line).catch((e) =>
-      say(g, e instanceof ApiError ? `서버가 안 받았어요: ${e.message}` : "서버에 못 보냈어요")
-    );
-    refresh();
-  };
-  const incomingList =
-    vs && vsRoom
-      ? vsRoom.attacks
-          .filter((a) => a.to === vs.me && a.status === "flying" && a.arriveAt > vsNow)
-          .sort((a, b) => a.arriveAt - b.arriveAt)
-      : [];
-  const oppName = (uid: string) => vsRoom?.players.find((p) => p.uid === uid)?.name ?? "상대";
-
-  const start = () => {
-    const ng = newGame();
-    // 처음엔 자모 한 줌을 쥐고 시작 (newGame 안에서 하면 서버 렌더와 무작위가 어긋나서 여기서)
-    draw(ng, START_DRAW);
-    setG(ng);
-    setSel(null);
-    setSelling(false);
-    setJudge(null);
-    setSent("idle");
-    setPhase("play");
-    beginHangul();
-    // 훈장님 회초리 "딱!" + 꽹과리 — 시작
-    playSfx("switch");
-    window.setTimeout(() => playSfx("start"), 120);
-  };
-
-  const onSlot = (z: Zone, i: number) => {
-    if (phase !== "play") return;
-    const u = g.zones[z][i];
-    if (selling) {
-      if (u) discard(g, z, i);
-      return refresh();
-    }
-    if (sel) {
-      // 같은 칸을 또 누르면: 쌓인 것끼리 합치기(ㄱ×2 → ㄲ, ㆍ×2 → ㆍㆍ), 안 되면 선택 취소
-      if (sel.z === z && sel.i === i) {
-        if (combine(g, z, i, z, i)) refresh();
-        return setSel(null);
-      }
-      if (combine(g, sel.z, sel.i, z, i)) {
-        setSel(null);
-        return refresh();
-      }
-      if (u?.kind === "j") playSfx("select");
-      setSel(u?.kind === "j" ? { z, i } : null);
-      return refresh();
-    }
-    if (!u) return;
-    if (u.kind === "j") return (playSfx("select"), setSel({ z, i }));
-    toLine(g, z, i);
-    refresh();
-  };
-
-  const onBind = () => {
-    if (j && bindWord(g, j)) refresh();
-  };
-  const onFinish = () => {
-    if (!j) return;
-    const s = finishSentence(g, j);
-    if (!s) return;
-    setFlash(s);
-    window.setTimeout(() => setFlash((f) => (f === s ? null : f)), 2600);
-    refresh();
-  };
-  const askSuggest = async () => {
-    const ps = pieces(g);
-    if (!ps.length) return;
-    const line = text;
-    setSugBusy(true);
-    try {
-      const list = await suggestLine(
-        line,
-        ps.map((u) => u.text)
+      setRankMsg(
+        e instanceof ApiError && e.code === "OWN_RECORD" ? "내 문장에는 누를 수 없어요" : "누르지 못했어요"
       );
-      setSugs({ line, list: list.map((s) => ({ ...s, ids: s.add.map((i) => ps[i].id) })) });
-    } catch {
-      setSugs({ line, list: [] });
-    } finally {
-      setSugBusy(false);
+      window.setTimeout(() => setRankMsg(null), 2000);
     }
+    setLiking(null);
   };
-  /**
-   * 낱말 짝짓기(무지성): 글자칸 글자들로 서버 '뭐 되지?'를 돌려 낱말이 되는 걸 찾아 바로 단어칸으로 — 더 안 나올 때까지
-   * 고유명사(루드 · 오드 같은 것)는 건너뜀
-   */
-  const autoWord = async () => {
-    setWordBusy(true);
-    let made = 0;
+
+  // ── 공유 (스포일러 없이) ──
+  const [shared, setShared] = useState(false);
+  const share = async () => {
+    if (!tier || !(s.done || s.gaveUp)) return;
+    playSfx("card");
+    const no = dailyNo(day);
+    const line = s.done
+      ? `${s.done.kind === "정답" ? "🏆 정답" : "✨ 별해"} · ${fmtTime(s.done.time)}${s.done.hint ? ` · 힌트 ${s.done.hint}` : ""}`
+      : "🏳️ 포기";
+    const body = `니들이 한글을 알아? 오늘의 자모 #${no} (${tierLabel(tier)})\n${line}\n${location.origin}/games/hangul/`;
     try {
-      for (let round = 0; round < 8; round++) {
-        const syl = g.zones.s.filter((u): u is NonNullable<typeof u> => !!u);
-        if (syl.length < 2 || !g.zones.w.includes(null)) break;
-        const list = await suggestLine(
-          "",
-          syl.map((u) => u.text)
-        );
-        const pick = list.find((s) => !s.sentence && s.word && !s.rare);
-        if (
-          !pick?.word ||
-          !makeWord(
-            g,
-            pick.add.map((i) => syl[i].id),
-            pick.text,
-            pick.word
-          )
-        )
-          break;
-        made++;
-        refresh();
+      if (navigator.share) await navigator.share({ text: body });
+      else {
+        await navigator.clipboard.writeText(body);
+        setShared(true);
+        window.setTimeout(() => setShared(false), 1800);
       }
     } catch {
-      // 판정 서버가 없으면 아래 안내로
-    } finally {
-      setWordBusy(false);
-    }
-    say(
-      g,
-      made
-        ? `낱말 ${made}개를 만들었어요`
-        : !g.zones.w.includes(null)
-          ? "단어칸이 꽉 찼어요"
-          : "글자칸 글자로 만들 낱말이 안 보여요"
-    );
-    refresh();
-  };
-  const applySug = (ids: number[]) => {
-    addByIds(g, ids);
-    setSugs(null);
-    refresh();
-  };
-  const popLine = (k?: number) => {
-    fromLine(g, k ?? g.line.length - 1);
-    refresh();
-  };
-  const clearLine = () => {
-    for (let k = g.line.length - 1; k >= 0; k--) fromLine(g, k);
-    refresh();
-  };
-
-  const submit = async () => {
-    const b = best(g);
-    const nm = name.trim() || "익명";
-    setSent("sending");
-    try {
-      if (!secret) localStorage.setItem(NAME_KEY, nm);
-      localStorage.setItem(SECRET_KEY, secret ? "1" : "0");
-    } catch {}
-    try {
-      await submitHangul({
-        name: secret ? "익명" : nm,
-        score: score(g),
-        wave: g.wave,
-        best: b?.text ?? "",
-        bestPts: b?.points ?? 0,
-        secret,
-      });
-      setSent("done");
-    } catch {
-      setSent("fail");
+      /* 공유 취소는 조용히 */
     }
   };
 
-  const ld = load(g);
-  const cells = lineCells(g);
-  const lk = links(g);
-  const selU = sel ? g.zones[sel.z][sel.i] : null;
-  const note =
-    g.note && g.t - g.note.at < 2.5
-      ? g.note.text
-      : selU?.kind === "j"
-        ? `「${shown(selU.text)}」 골랐어요 — 다음에 누르는 자모 · 글자와 누른 순서대로 합쳐요${(selU.n ?? 1) > 1 ? " (같은 칸을 또 누르면 둘끼리)" : ""}`
-        : null;
-  const unknown = j?.morphs.filter((m) => !m.k) ?? [];
-  const endsLikeSentence = !!j && j.morphs.length >= 2 && j.morphs[j.morphs.length - 1].t === "EF";
-  // "이거 말 되는데?" — 사전에 없는 말이 있거나 외계어로 판정됐을 때만
-  const canReport = !!j && !j.sentence && (unknown.length > 0 || (endsLikeSentence && !j.word));
-  const report = () => {
-    if (!j || reported.has(j.text)) return;
-    setReported((s) => new Set(s).add(j.text));
-    reportHangul(j.text).catch(() => {});
+  const no = dailyNo(day);
+  const solvedOf = (t: DailyTier) => {
+    const x = stats[t];
+    return !!(x?.done || x?.gaveUp);
   };
-  const lineMsg = !text
-    ? "글자칸 · 단어칸의 글자를 누르면 여기 이어 붙어요"
-    : judgeErr
-      ? judgeErr
-      : !j
-        ? "읽는 중…"
-        : j.sentence
-          ? `문장이 됐어요! [${gradeName(j)}] 「${withEnd(j.spaced || j.text)}」 완성하면 +${fmt(j.points)}점${j.rude ? " (말끝을 맺으면 점수 더)" : ""}`
-          : unknown.length
-            ? `「${unknown.map((m) => m.f).join(", ")}」 — 사전에 없는 말이에요`
-            : endsLikeSentence && !j.word
-              ? `외계어예요 (말맛 ${j.nat}) — 사람이 쓰는 말처럼 이어 보세요`
-              : j.word
-                ? `낱말 「${j.text}」(${j.word}) — 묶으면 단어칸에서 ${POS_STYLE[j.word]?.desc ?? "싸워요"}`
-                : "아직 문장이 아니에요 — ~다 · ~요 · ~임 으로 끝을 맺거나, ~님 · ~야 로 불러 보세요";
-  const bestNow = best(g);
-  // 훈장님 표정 · 한마디: 방금 완성한 문장(번쩍임) > 지금 줄 판정 > 기본
-  const face: ImgName = flash
-    ? (GRADE_FACE[flash.grade] ?? "hunjangNod")
-    : !text || !j
-      ? "hunjang"
-      : j.sentence
-        ? (GRADE_FACE[gradeName(j)] ?? "hunjangNod")
-        : unknown.length || (endsLikeSentence && !j.word)
-          ? "hunjangAngry"
-          : "hunjang";
-  const rudeNow = flash ? flash.grade === "막말" : !!j?.sentence && !!j.rude;
-  const teacher = { face, say: lineOf(rudeNow ? RUDE_SAY : TEACHER[face], flash?.text ?? text) };
-
-  const slot = (z: Zone, i: number) => {
-    const u = g.zones[z][i];
-    const on = sel?.z === z && sel.i === i;
-    const st = u ? statsOf(g, u) : null;
-    const len = u ? [...u.text].length : 0;
-    // 자음칸 · 모음칸의 고정 자리는 비어 있어도 그 자리 글자를 흐리게 보여 줌 (자판처럼)
-    const ph = z === "c" ? CONS_SLOTS[i] : z === "v" ? VOWEL_SLOTS[i] : undefined;
-    return (
-      <button
-        key={i}
-        type="button"
-        className={`hg-slot hg-${z}${u ? "" : " is-empty"}${on ? " is-on" : ""}${selling && u ? " is-sell" : ""}`}
-        data-uid={u?.id}
-        onClick={() => onSlot(z, i)}
-        aria-label={u ? u.text : "빈 칸"}
-        style={st && "color" in st && u?.kind === "w" ? { color: st.color } : undefined}
-      >
-        {!u && ph && (
-          <span className={`hg-glyph is-ph${shown(ph) !== ph ? " is-dot" : ""}`}>{shown(ph)}</span>
-        )}
-        {u && (
-          <>
-            <span
-              className={`hg-glyph${u.kind === "j" && shown(u.text) !== u.text ? " is-dot" : ""}`}
-              style={len > 2 ? { fontSize: `${Math.max(11, 26 - len * 3.2)}px` } : undefined}
-            >
-              {u.kind === "j" ? shown(u.text) : u.text}
-            </span>
-            {u.kind === "w" && <span className="hg-pos">{u.pos}</span>}
-            {u.kind === "j" && (u.n ?? 1) > 1 && <span className="hg-n">×{u.n}</span>}
-          </>
-        )}
-      </button>
-    );
-  };
-  const zone = (z: Zone, title: string, cls = "") => (
-    <section className={`hg-zone ${cls}`}>
-      <h3>
-        {title}
-        {/* 자모마다 상한 — 그 자모가 차면 그 자모만 안 들어옴 (쓰면 다시) */}
-        {(z === "c" || z === "v") && (
-          <small className="hg-hold">같은 자모 ×{z === "c" ? STACK_C : STACK_V}까지</small>
-        )}
-      </h3>
-      <div className={`hg-grid hg-grid-${z}`}>
-        {Array.from({ length: CAP[z] }, (_, i) => slot(z, i))}
-      </div>
-    </section>
-  );
 
   return (
     <>
-      {/* 사이트 공통 게임 머리말 (가이드) + 이 게임 랭킹 창 · 소리 버튼 — 랭킹은 문장이 주인공이라 자체 창.
-          hg-root 밖에 둬야 사이트 글자색(흰색)을 그대로 씀 */}
+      {/* 사이트 공통 게임 머리말 (가이드) + 랭킹 · 소리 — hg-root 밖에 둬야 사이트 글자색(흰색)을 그대로 씀 */}
       <div className="mx-auto w-full max-w-[1180px]">
         <GameHeader
           icon="px:hangul"
           title="니들이 한글을 알아?"
-          en="Korean Word Defense"
+          en="Daily Jamo Puzzle"
           accent="#E0533F"
-          desc="자모로 아무 문장이나 지어서 먹물 괴물을 막는 한글 문장 디펜스"
-          tags={["한글 게임", "문장 만들기", "형태소 분석", "웹 디펜스"]}
+          desc="매일 흩어진 자모를 다 써서 숨은 속담을 맞히는 한글 데일리 퍼즐"
+          tags={["한글 게임", "데일리 퍼즐", "속담", "자모 퍼즐"]}
           guide={HANGUL_GUIDE}
           badge="NEW"
           extra={(pill) => (
@@ -951,619 +720,358 @@ export default function HangulApp() {
         />
       </div>
       <div className="hg-root">
-        {vs && vsRoom && vsRoom.phase !== "waiting" ? (
-          <>
-            <VsBar
-              room={vsRoom}
-              me={vs.me}
-              myLoad={ld}
-              left={vsRoom.phase === "play" ? Math.min(vsRoom.endAt - vsNow, 180_000) : 0}
-              emotes={emotes}
-              onEmote={(e) => void emoteVs(vs.id, e).catch(() => {})}
-            />
-            <VsFeed room={vsRoom} me={vs.me} incoming={incomingList} now={vsNow} />
-          </>
-        ) : (
-          <div className="hg-hud">
-            <div>
-              <span>웨이브</span>
-              <b>{g.wave}</b>
-            </div>
-            <div className={ld >= LOAD_MAX * 0.7 ? "is-warn" : ""}>
-              <span>먹물</span>
-              <b>
-                {ld}/{LOAD_MAX}
-              </b>
-            </div>
-            <div>
-              <span>점수</span>
-              <b>{fmt(score(g))}</b>
-            </div>
-            <div>
-              <span>기세</span>
-              <b>×{g.power.toFixed(2)}</b>
-            </div>
-          </div>
-        )}
-
-        <div className="hg-field" ref={fieldRef}>
-          <canvas ref={canvasRef} className="hg-canvas" aria-hidden />
-          <div className="hg-panel">
-            <section className="hg-line">
-              <div className="hg-linehead">
-                <h3>
-                  원고지{" "}
-                  <small>
-                    {hangulLen(text)}/{LINE_MAX}
-                  </small>
-                </h3>
-                {/* 훈장님: 지금 쓰는 줄을 보고 반응 */}
-                <div className={`hg-teacher is-${teacher.face}`} key={teacher.face}>
-                  <p>{teacher.say}</p>
-                  <img src={IMG[teacher.face]} alt="" draggable={false} />
-                </div>
-              </div>
-              <div className="hg-paper" role="list">
-                {Array.from(
-                  { length: Math.max(LINE_MAX, Math.ceil(cells.length / 15) * 15) },
-                  (_, k) => {
-                    const c = cells[k];
+        <div className="hg-board">
+          {!tier ? (
+            // ── 시작 화면: 오늘의 자모 #N · 난이도 셋 ──
+            <div className="hg-title">
+              <img className="hg-title-teacher" src={IMG.hunjang} alt="" draggable={false} />
+              <h2 className="hg-logo">
+                니들이 <em>한글</em>을 알아?
+              </h2>
+              <p className="hg-title-sub">
+                <b>오늘의 자모 #{no}</b> · 흩어진 자모를 <b>다 써서</b> 숨은 속담을 맞혀라
+              </p>
+              {ready ? (
+                <div className="hg-tiers">
+                  {DAILY_TIERS.map((t) => {
+                    const x = stats[t.id];
+                    const state = x?.done
+                      ? `${x.done.kind} ✓ ${fmtTime(x.done.score)}`
+                      : x?.gaveUp
+                        ? "포기"
+                        : x && (x.keys.length || x.time > 0)
+                          ? `이어 풀기 · ${fmtTime(x.time)}`
+                          : "풀기";
                     return (
                       <button
-                        key={k}
+                        key={t.id}
                         type="button"
-                        role="listitem"
-                        className={`hg-cell${c ? (c.k % 2 ? " is-b" : " is-a") : ""}`}
-                        onClick={() => c && popLine(c.k)}
-                        disabled={!c}
+                        className={`hg-tier t${t.id}${x?.done ? " is-done" : ""}${x?.gaveUp ? " is-gave" : ""}`}
+                        onClick={() => open(t.id)}
                       >
-                        {c?.ch}
+                        <b>{t.label}</b>
+                        <small>{t.desc}</small>
+                        <span>{state}</span>
                       </button>
                     );
-                  }
-                )}
-              </div>
-              <div className="hg-morphs">
-                {j?.morphs.map((m, k) => (
-                  <span key={k} className={m.k ? "" : "is-unk"}>
-                    {m.f}
-                    <small>{tagName(m)}</small>
-                  </span>
-                ))}
-              </div>
-              <p className={`hg-msg${j?.sentence ? " is-ok" : ""}`}>
-                {lineMsg}
-                {canReport && (
-                  <button
-                    type="button"
-                    className="hg-report"
-                    onClick={report}
-                    disabled={reported.has(j.text)}
-                  >
-                    {reported.has(j.text)
-                      ? "신고했어요 ✓ 사전에 넣어 볼게요"
-                      : "🙋 이거 말 되는데?"}
-                  </button>
-                )}
-              </p>
-              <div className="hg-sugs">
-                <button
-                  type="button"
-                  className="hg-ask"
-                  onClick={askSuggest}
-                  disabled={sugBusy || phase !== "play" || !pieces(g).length}
-                >
-                  {sugBusy ? "찾는 중…" : text ? "뒤에 뭐 붙이지?" : "뭐 되지?"}
-                </button>
-                {sugs &&
-                  sugs.line === text &&
-                  (sugs.list.length ? (
-                    sugs.list.map((s) => (
-                      <button
-                        key={s.text}
-                        type="button"
-                        className={s.sentence ? "is-sent" : ""}
-                        onClick={() => applySug(s.ids)}
-                      >
-                        {s.text}
-                        <small>{s.sentence ? `문장 +${fmt(s.points)}` : s.word}</small>
-                      </button>
-                    ))
-                  ) : (
-                    <span className="hg-dim">
-                      가진 글자로는 안 보여요 — 자모가 더 들어오면 다시 눌러 보세요
-                    </span>
-                  ))}
-              </div>
-              <div className="hg-punct">
-                <span>부호</span>
-                {PUNCTS.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => (addPunct(g, p), refresh())}
-                    disabled={!g.line.length || phase !== "play"}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <small>띄어쓰기는 완성할 때 알아서</small>
-              </div>
-              <div className="hg-line-btns">
-                <button type="button" onClick={() => popLine()} disabled={!g.line.length}>
-                  하나 빼기
-                </button>
-                <button type="button" onClick={clearLine} disabled={!g.line.length}>
-                  비우기
-                </button>
-                <button type="button" onClick={onBind} disabled={!j?.word || phase !== "play"}>
-                  낱말로 묶기
-                </button>
-                {vsOn ? (
-                  // 대전: 문장 완성 = 내 판 공격 + 상대에게 공격 (날아오는 문장과 이어지면 받아치기)
-                  <button
-                    type="button"
-                    className={`hg-go${ctr ? " is-counter" : ""}`}
-                    onClick={onVsFinish}
-                    disabled={!j?.sentence || phase !== "play" || vsWait}
-                  >
-                    {ctr ? "↩️ 받아치기!" : "⚔️ 문장 공격!"}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="hg-go"
-                    onClick={onFinish}
-                    disabled={!j?.sentence || phase !== "play"}
-                  >
-                    문장 완성!
-                  </button>
-                )}
-              </div>
-              {/* 문장칸 = 글: 완성한 문장이 끝없이 쌓이고(스크롤) 순서를 바꿀 수 있음. 글 전체가 READ_SEC 초마다 낭독 */}
-              <div className="hg-shelf" data-uid={SHELF_ID}>
-                <h3>
-                  문장칸 · 글{" "}
-                  <small>
-                    {g.shelf.length}문장 · 낭독 {fmt(writingPower(g) * g.power)} · 이음 +
-                    {fmt(linkBonus(g))}점
-                  </small>
-                </h3>
-                <i
-                  className="hg-sbar"
-                  style={{
-                    transform: `scaleX(${g.shelf.length ? 1 - Math.max(0, Math.min(1, g.readCd)) : 0})`,
-                  }}
-                />
-                <div className="hg-shelf-list" ref={shelfRef}>
-                  {!g.shelf.length && (
-                    <p className="hg-dim">
-                      완성한 문장이 여기 차례로 쌓여 한 편의 글이 돼요. 앞뒤가 이어지면 이음 점수!
-                    </p>
-                  )}
-                  {g.shelf.map((u, k) => (
-                    <div key={u.id}>
-                      {k > 0 && (
-                        <p className={`hg-link l${lk[k - 1].level}`}>
-                          <span>
-                            {lk[k - 1].level === 2 ? "●●" : lk[k - 1].level === 1 ? "●○" : "○○"}
-                          </span>
-                          {lk[k - 1].why.length ? lk[k - 1].why.join(" · ") : "안 이어짐"}
-                        </p>
-                      )}
-                      <div className="hg-sent">
-                        <span className={`hg-sgrade g-${(u.grade ?? "").replace(" ", "")}`}>
-                          {u.grade}
-                        </span>
-                        <span className="hg-stext">{u.spaced ?? withEnd(u.text)}</span>
-                        <b>{fmt(u.points ?? 0)}</b>
-                        <span className="hg-sact">
-                          <button
-                            type="button"
-                            onClick={() => (moveSentence(g, k, -1), refresh())}
-                            disabled={k === 0}
-                            aria-label="위로"
-                          >
-                            ▲
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => (moveSentence(g, k, 1), refresh())}
-                            disabled={k === g.shelf.length - 1}
-                            aria-label="아래로"
-                          >
-                            ▼
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => (dropSentence(g, k), refresh())}
-                            aria-label="글에서 빼기"
-                          >
-                            ✕
-                          </button>
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                  })}
                 </div>
-              </div>
-            </section>
-            <div className="hg-right">
-              {zone("w", "단어칸")}
-              {zone("s", "글자칸")}
-              <div className="hg-jamo">
-                {zone("c", "자음칸")}
-                {zone("v", "모음칸 · 천지인")}
-              </div>
-            </div>
-          </div>
-
-          {flash && (
-            <div className="hg-flash" aria-live="polite">
-              <span className={`hg-grade g-${flash.grade.replace(" ", "")}`}>{flash.grade}</span>
-              <p>{flash.spaced}</p>
-              <b>+{fmt(flash.points)}</b>
-            </div>
-          )}
-
-          {/* 대전: 날아오는 공격 · 도착한 공격 컷인 · 시작 카운트다운 */}
-          {vsOn && cutin && <VsCutin a={cutin} name={oppName(cutin.from)} />}
-          {vsWait && vsRoom && (
-            <div className="hg-vscount" aria-live="assertive">
-              <b>{Math.max(1, Math.ceil((vsRoom.startAt - vsNow) / 1000))}</b>
-              <small>같은 자모로 시작! 문장을 완성해서 막거나 보내요</small>
-            </div>
-          )}
-
-          {/* 메인 화면: 제목 · 훈장님 · 모드 고르기 (1인 / 대전) */}
-          {phase === "ready" && (
-            <div className="hg-over">
-              {vs && vsRoom?.phase === "waiting" ? (
-                <VsWaiting
-                  room={vsRoom}
-                  me={vs.me}
-                  onStart={() => void startVs(vs.id).catch(vsFail)}
-                  onBot={(lv) => void botVs(vs.id, lv).catch(vsFail)}
-                  onLeave={vsLeave}
-                />
-              ) : vsLobby || (vs && !vsRoom) ? (
-                <VsLobby
-                  busy={vsBusy || !ready}
-                  err={vsErr}
-                  onFriend={vsFriend}
-                  onBot={vsBot}
-                  onBack={() => {
-                    playSfx("click");
-                    setVsErr(null);
-                    if (vs) vsLeave();
-                    else setVsLobby(false);
-                  }}
-                />
               ) : (
-                <div className="hg-title">
-                  <div className="hg-title-art" aria-hidden>
-                    {INK.map((src, i) => (
-                      <img
-                        key={i}
-                        className={`hg-title-ink i${i}`}
-                        src={src}
-                        alt=""
-                        draggable={false}
-                      />
-                    ))}
-                    <img className="hg-title-teacher" src={IMG.hunjang} alt="" draggable={false} />
+                <div
+                  className="hg-loading"
+                  role="progressbar"
+                  aria-valuenow={Math.round((assets.done / assets.total) * 100)}
+                >
+                  <i style={{ transform: `scaleX(${assets.done / assets.total})` }} />
+                  <span>먹을 가는 중… {Math.round((assets.done / assets.total) * 100)}%</span>
+                </div>
+              )}
+              <p className="hg-title-rule">
+                속담 그대로면 <b>정답</b>, 다른 문장이라도 말이 되면 <b>별해</b> · 기록 = 시간 + 힌트 ×
+                {HINT_SEC}초 · 다음 문제까지 {untilNext(now)}
+              </p>
+            </div>
+          ) : (
+            <div className="hg-play">
+              <div className="hg-top">
+                <button type="button" className="hg-back" onClick={back} aria-label="난이도 고르기로">
+                  ← 난이도
+                </button>
+                <b>
+                  #{no} · {tierLabel(tier)}
+                </b>
+                <span className="hg-clock" aria-label="걸린 시간">
+                  ⏱ {fmtTime(s.done?.time ?? s.time)}
+                </span>
+                {s.hint > 0 && <span className="hg-pen">힌트 +{s.hint * HINT_SEC}초</span>}
+              </div>
+
+              <section className="hg-sheet">
+                <div className="hg-linehead">
+                  <h3>
+                    원고지 <small>{puzzle ? `${hangulLen(text)}/${puzzle.len}글자` : ""}</small>
+                  </h3>
+                  <div className={`hg-teacher is-${teacher.face}`} key={teacher.face}>
+                    <p>{teacher.say}</p>
+                    <img src={IMG[teacher.face]} alt="" draggable={false} />
                   </div>
-                  <h2 className="hg-logo">
-                    니들이 <em>한글</em>을 알아?
-                  </h2>
-                  <p className="hg-title-sub">
-                    자모로 <b>아무 문장</b>이나 지어서 먹물 괴물을 막아라
-                  </p>
-                  {ready ? (
-                    <div className="hg-modes">
-                      <button type="button" className="hg-mode is-solo" onClick={start}>
-                        <i aria-hidden>📜</i>
-                        <b>1인 모드</b>
-                        <small>혼자 먹물 막기 · 점수 랭킹</small>
+                </div>
+                {!puzzle ? (
+                  <p className="hg-dim hg-wait">{loadErr ?? "문제를 펼치는 중…"}</p>
+                ) : (
+                  <>
+                    <div className="hg-words" aria-label={text || "빈 원고지"}>
+                      {cellsOf()}
+                      {pend && <span className="hg-pend">{pend}+</span>}
+                    </div>
+                    <p className={`hg-msg${complete ? " is-ok" : ""}${wrong && wrong.text === text ? " is-bad" : ""}`}>
+                      {msg}
+                      {wrong?.why === "sentence" && wrong.text === text && (
+                        <button
+                          type="button"
+                          className="hg-report"
+                          onClick={report}
+                          disabled={reported.has(wrong.text)}
+                        >
+                          {reported.has(wrong.text) ? "신고했어요 ✓" : "🙋 이거 말 되는데?"}
+                        </button>
+                      )}
+                    </p>
+                    {err && <p className="hg-err">{err}</p>}
+                    {s.hint > 0 && (
+                      <div className="hg-hintbox">
+                        {s.hints[1] && <span>띄어쓰기 {(s.hints[1] as number[]).join(" · ")}</span>}
+                        {s.hints[2] && <span>첫 글자 「{s.hints[2] as string}」</span>}
+                        {s.hints[3] && <span>초성 {s.hints[3] as string}</span>}
+                      </div>
+                    )}
+                  </>
+                )}
+              </section>
+
+              {puzzle && playing && (
+                <>
+                  <div className="hg-keys">
+                    {[cons, vows].map((row, ri) => (
+                      <div key={ri} className={`hg-keyrow ${ri ? "is-v" : "is-c"}`}>
+                        {row.map((k) => {
+                          const n = rem(k);
+                          return (
+                            <button
+                              key={k}
+                              type="button"
+                              className={`hg-key${n ? "" : " is-out"}${bump === k ? " is-bump" : ""}`}
+                              onClick={() => press(k)}
+                              disabled={!playing}
+                              aria-label={`${k} ${n}개 남음`}
+                            >
+                              <span>{k}</span>
+                              {(total.get(k) ?? 0) > 1 && <small>×{n}</small>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hg-acts">
+                    <button type="button" onClick={erase} disabled={!playing || (!s.keys.length && !pend)}>
+                      ⌫ 하나 지우기
+                    </button>
+                    <button type="button" onClick={clearAll} disabled={!playing || !s.keys.length}>
+                      전부 지우기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={askHint}
+                      disabled={!playing || hintBusy || s.hint >= HINT_MAX}
+                      title={`힌트마다 +${HINT_SEC}초`}
+                    >
+                      💡 힌트 {s.hint}/{HINT_MAX}
+                      <small>
+                        {s.hint >= HINT_MAX
+                          ? "다 봤어요"
+                          : ["띄어쓰기", "첫 글자", "초성"][s.hint] + ` +${HINT_SEC}초`}
+                      </small>
+                    </button>
+                    <button type="button" className={giveSure ? "is-sure" : ""} onClick={giveUp} disabled={!playing}>
+                      {giveSure ? "정말 포기?" : "🏳️ 포기"}
+                    </button>
+                    <button
+                      type="button"
+                      className="hg-go"
+                      onClick={submit}
+                      disabled={!playing || !complete || checking}
+                    >
+                      {checking ? "보는 중…" : "제출!"}
+                    </button>
+                  </div>
+                  <p className="hg-kbd">키보드로도 쳐요 (두벌식 자리 · Shift 된소리 · ⌫ 지우기 · Enter 제출)</p>
+                </>
+              )}
+
+              {/* ── 결과: 자판 자리에 ── */}
+              {(s.done || s.gaveUp) && (
+                <div className="hg-result">
+                  <div className="hg-card">
+                    <img
+                      className="hg-cardteacher"
+                      src={IMG[teacher.face]}
+                      alt=""
+                      draggable={false}
+                    />
+                    <h2>{s.done ? (s.done.kind === "정답" ? "장원 급제!" : "별해 인정!") : "포기했어요"}</h2>
+                    {s.done && (
+                      <p className="hg-best">
+                        {withEnd(s.done.spaced)}
+                        <small>{s.done.kind === "정답" ? "숨은 속담을 그대로 맞혔어요" : "내가 지은 문장"}</small>
+                      </p>
+                    )}
+                    {(s.gaveUp || s.done?.kind === "별해") && (
+                      <p className="hg-answer">
+                        <small>오늘의 속담</small>
+                        {s.gaveUp ?? s.done?.answer}
+                      </p>
+                    )}
+                    {s.done && (
+                      <p className="hg-recline">
+                        ⏱ {fmtTime(s.done.time)}
+                        {s.done.hint ? ` + 힌트 ${s.done.hint}개(${s.done.hint * HINT_SEC}초)` : ""} → 기록{" "}
+                        <b>{fmtTime(s.done.score)}</b>
+                        {s.tries ? <span className="hg-dim"> · 틀린 제출 {s.tries}번</span> : null}
+                      </p>
+                    )}
+                    {s.done &&
+                      (s.sent ? (
+                        <p className="hg-dim">랭킹에 올렸어요 ✓</p>
+                      ) : (
+                        <>
+                          <div className="hg-submit">
+                            <input
+                              value={secret ? "익명" : name}
+                              onChange={(e) => setName(e.target.value.slice(0, 10))}
+                              placeholder="이름 (회원은 별명으로)"
+                              maxLength={10}
+                              disabled={secret}
+                              onKeyDown={(e) => e.key === "Enter" && void send()}
+                            />
+                            <button type="button" onClick={send} disabled={sending === "sending"}>
+                              {sending === "sending" ? "올리는 중…" : "랭킹 올리기"}
+                            </button>
+                          </div>
+                          <label className="hg-secret">
+                            <input
+                              type="checkbox"
+                              checked={secret}
+                              onChange={(e) => setSecret(e.target.checked)}
+                            />
+                            시크릿 (익명으로 올리기)
+                          </label>
+                          {sending === "fail" && (
+                            <p className="hg-err">올리지 못했어요 (이미 올렸거나 연결이 안 돼요)</p>
+                          )}
+                        </>
+                      ))}
+                    <div className="hg-overbtns">
+                      <button type="button" className="hg-ghost" onClick={share}>
+                        {shared ? "복사했어요 ✓" : "📤 자랑하기"}
                       </button>
                       <button
                         type="button"
-                        className="hg-mode is-vs"
-                        onClick={() => (playSfx("click"), setVsLobby(true))}
+                        className="hg-ghost"
+                        onClick={() => openRanks(tier, s.done?.kind === "별해" ? "fun" : "top")}
                       >
-                        <i aria-hidden>⚔️</i>
-                        <b>대전 모드</b>
-                        <small>1:1 말싸움 · 문장으로 막고 보내고 받아치기</small>
+                        🏆 랭킹 · 별해 구경
                       </button>
                     </div>
-                  ) : (
-                    <div
-                      className="hg-loading"
-                      role="progressbar"
-                      aria-valuenow={Math.round((assets.done / assets.total) * 100)}
-                    >
-                      <i style={{ transform: `scaleX(${assets.done / assets.total})` }} />
-                      <span>먹을 가는 중… {Math.round((assets.done / assets.total) * 100)}%</span>
-                    </div>
-                  )}
-                  <p className="hg-title-rule">
-                    「~다 · ~요 · ~임」으로 끝나면 문장 완성 · 길수록 점수가 확 커져요 · 먹물 얼룩{" "}
-                    {LOAD_MAX}마리면 끝
-                  </p>
+                    <button type="button" className="hg-go" onClick={back}>
+                      다른 난이도 풀기
+                    </button>
+                    <p className="hg-dim">다음 문제까지 {untilNext(now)}</p>
+                  </div>
                 </div>
               )}
             </div>
           )}
-          {/* 대전 중에 방이 사라짐 (서버 재시작 · 오래 비움) */}
-          {vs && !vsRoom && phase !== "ready" && (
-            <div className="hg-over">
-              <div className="hg-card">
-                <img className="hg-cardteacher" src={IMG.hunjangHmm} alt="" draggable={false} />
-                <h2>방이 사라졌어요</h2>
-                <p className="hg-dim">서버가 다시 켜졌거나 연결이 오래 끊겼어요</p>
-                <button type="button" className="hg-go" onClick={vsLeave}>
-                  처음 화면으로
-                </button>
-              </div>
-            </div>
-          )}
-          {phase === "over" && vs && vsRoom && (
-            <div className="hg-over">
-              <VsResult
-                room={vsRoom}
-                me={vs.me}
-                sharing={sharing}
-                onVote={(m) =>
-                  void voteVs(vs.id, m)
-                    .then(() => playSfx("like"))
-                    .catch(vsFail)
-                }
-                onAgain={() => void againVs(vs.id).catch(vsFail)}
-                onLeave={vsLeave}
-                onShare={(m) =>
-                  share({
-                    text: withEnd(m.spaced),
-                    grade: m.grade,
-                    line1: `말싸움 · ${vsRoom.players.map((p) => p.name).join(" vs ")}`,
-                    line2: "오늘의 한 마디",
-                  })
-                }
-              />
-            </div>
-          )}
-          {phase === "over" && !vs && (
-            <div className="hg-over">
-              <div className="hg-card">
-                <img
-                  className="hg-cardteacher"
-                  src={IMG.hunjangAngry}
-                  alt="화난 훈장님"
-                  draggable={false}
-                />
-                <h2>먹물에 덮였어요</h2>
-                <p>
-                  {g.wave}웨이브 · 문장 {g.sentences.length}개 · 점수 <b>{fmt(score(g))}</b>
-                  <br />
-                  <small>
-                    (문장 점수 {fmt(g.points)} + 이음 {fmt(linkBonus(g))} + 웨이브 {g.wave} ×{" "}
-                    {HANGUL_WAVE_PTS})
-                  </small>
-                </p>
-                {bestNow ? (
-                  <blockquote className="hg-best">
-                    {bestNow.spaced}
-                    <small>대표글 · {fmt(bestNow.points)}점</small>
-                    <button
-                      type="button"
-                      className="hg-sharebtn"
-                      disabled={sharing}
-                      onClick={() =>
-                        share({
-                          text: withEnd(bestNow.spaced),
-                          grade: bestNow.grade,
-                          line1: `이 문장 ${fmt(bestNow.points)}점`,
-                          line2: `${g.wave}웨이브 · 문장 ${g.sentences.length}개 · 총 ${fmt(score(g))}점`,
-                        })
-                      }
-                    >
-                      {sharing ? "만드는 중…" : "🖼 카드로 자랑하기"}
-                    </button>
-                  </blockquote>
-                ) : (
-                  <p className="hg-dim">완성한 문장이 없어요</p>
-                )}
-                <div className="hg-submit">
-                  <input
-                    value={secret ? "" : name}
-                    onChange={(e) => setName(e.target.value)}
-                    maxLength={10}
-                    disabled={secret || sent === "done"}
-                    placeholder={secret ? "🕶 익명으로 올라가요" : "이름 (로그인하면 별명)"}
-                  />
-                  <button
-                    type="button"
-                    onClick={submit}
-                    disabled={sent === "sending" || sent === "done"}
-                  >
-                    {sent === "done" ? "등록됨" : sent === "sending" ? "등록 중…" : "랭킹 등록"}
-                  </button>
-                </div>
-                <label className="hg-secret">
-                  <input
-                    type="checkbox"
-                    checked={secret}
-                    onChange={(e) => setSecret(e.target.checked)}
-                    disabled={sent === "done"}
-                  />
-                  🕶 시크릿 — 이름 · 별명 없이 「익명」으로 올리기
-                </label>
-                {sent === "fail" && <p className="hg-dim">등록하지 못했어요</p>}
-                {sent === "done" && (
-                  <button type="button" className="hg-linkbtn" onClick={() => openRanks("new")}>
-                    올라간 문장 보러 가기 →
-                  </button>
-                )}
-                <div className="hg-overbtns">
-                  <button
-                    type="button"
-                    className="hg-linkbtn"
-                    onClick={() => (playSfx("click"), setG(newGame()), setPhase("ready"))}
-                  >
-                    ← 처음 화면
-                  </button>
-                  <button type="button" className="hg-go" onClick={start}>
-                    다시 하기
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-
-        <p className="hg-note">{note}</p>
-
-        <div className="hg-ctrl">
-          <button
-            type="button"
-            onClick={() => (autoPair(g), refresh())}
-            disabled={phase !== "play"}
-          >
-            글자 짝짓기<small>자음+모음 → 글자</small>
-          </button>
-          <button type="button" onClick={autoWord} disabled={phase !== "play" || wordBusy}>
-            {wordBusy ? "찾는 중…" : "낱말 짝짓기"}
-            <small>글자+글자 → 낱말</small>
-          </button>
-          <button
-            type="button"
-            onClick={() => (playSfx("click"), setSpeed((s) => (s === 1 ? 2 : s === 2 ? 3 : 1)))}
-            disabled={vsOn}
-          >
-            배속<small>×{speed}</small>
-          </button>
-          {/* 버리기 모드: 켜면 누르는 칸을 버려요 (말 안 되는 낱말 정리용) */}
-          <button
-            type="button"
-            className={selling ? "is-on" : undefined}
-            onClick={() => (playSfx("click"), setSelling((s) => !s), setSel(null))}
-            disabled={phase !== "play"}
-          >
-            🗑 버리기<small>{selling ? "누르는 칸 버림 · 끄기" : "꺼짐"}</small>
-          </button>
-        </div>
-
         {review && <SfxReview />}
-
-        {/* 랭킹: 문장이 주인공 — 대표글을 크게, 누가 · 몇 점은 작게. 사이트 메뉴 버튼보다 위에 뜨게 body 로 (색 · 글꼴은 hg-root 그대로) */}
-        {rankOpen &&
-          createPortal(
-            <div className="hg-root hg-portal">
-              <div
-                className="hg-rankpop"
-                role="dialog"
-                aria-modal="true"
-                aria-label="랭킹"
-                onClick={() => setRankOpen(false)}
-              >
-                <section className="hg-ranks" onClick={(e) => e.stopPropagation()}>
-                  <header>
-                    <h2>명예의 전당</h2>
-                    <div className="hg-rtabs" role="tablist">
-                      {(["top", "fun", "new"] as const).map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          role="tab"
-                          aria-selected={rankSort === s}
-                          className={rankSort === s ? "is-on" : ""}
-                          onClick={() => openRanks(s)}
-                        >
-                          {s === "top" ? "점수순" : s === "fun" ? "😂 웃긴순" : "방금 올라온"}
-                        </button>
-                      ))}
-                    </div>
-                    <button
-                      type="button"
-                      className="hg-rclose"
-                      onClick={() => setRankOpen(false)}
-                      aria-label="닫기"
-                    >
-                      ✕
-                    </button>
-                  </header>
-                  {phase === "play" && (
-                    <p className="hg-dim hg-rpause">보는 동안 판은 멈춰 있어요</p>
-                  )}
-                  {rankMsg && <p className="hg-rmsg">{rankMsg}</p>}
-                  {!ranks ? (
-                    <p className="hg-dim">불러오는 중…</p>
-                  ) : !ranks.length ? (
-                    <p className="hg-dim">
-                      {rankSort === "fun"
-                        ? "아직 👍 받은 문장이 없어요 — 「방금 올라온」에서 웃긴 문장에 👍 를 눌러 주세요"
-                        : "아직 기록이 없어요"}
-                    </p>
-                  ) : (
-                    <ol>
-                      {ranks.map((r, k) => (
-                        <li
-                          key={r.id}
-                          className={rankSort !== "new" && k < 3 ? `is-top t${k + 1}` : ""}
-                        >
-                          {rankSort !== "new" && <span className="hg-rk">{k + 1}</span>}
-                          {r.best ? (
-                            <blockquote className="hg-rq">
-                              {withEnd(r.bestSpaced || r.best)}
-                            </blockquote>
-                          ) : (
-                            <p className="hg-rq is-none">완성한 문장 없이 버텼어요</p>
-                          )}
-                          <p className="hg-rn">
-                            <span>
-                              {r.secret ? "🕶 익명" : r.member ? r.name : `${r.name} (손님)`}
-                            </span>
-                            <span>
-                              <b>{fmt(r.score)}</b>점 · {r.wave}웨이브
-                              {r.bestPts ? ` · 이 문장 ${fmt(r.bestPts)}점` : ""}
-                            </span>
-                            <span>{ago(r.createdAt)}</span>
-                          </p>
-                          {r.best && (
-                            <p className="hg-ract">
-                              <button
-                                type="button"
-                                className={liked.has(r.id) ? "is-on" : ""}
-                                aria-pressed={liked.has(r.id)}
-                                disabled={liking === r.id}
-                                onClick={() => toggleLike(r)}
-                              >
-                                👍 웃겨요 <b>{r.likes ?? 0}</b>
-                              </button>
-                              <button
-                                type="button"
-                                disabled={sharing}
-                                onClick={() =>
-                                  share({
-                                    text: withEnd(r.bestSpaced || r.best),
-                                    line1: `이 문장 ${fmt(r.bestPts)}점`,
-                                    line2: `${r.secret ? "익명" : r.name} · ${r.wave}웨이브 · 총 ${fmt(r.score)}점`,
-                                  })
-                                }
-                              >
-                                🖼 카드
-                              </button>
-                            </p>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </section>
-              </div>
-            </div>,
-            document.body
-          )}
       </div>
+
+      {/* 랭킹 창 — 내가 아직 안 푼 난이도는 문장을 가림 (정답 스포일러) */}
+      {rankOpen &&
+        createPortal(
+          <div className="hg-root hg-portal">
+            <div
+              className="hg-rankpop"
+              role="dialog"
+              aria-modal="true"
+              aria-label="오늘의 자모 랭킹"
+              onClick={(e) => e.target === e.currentTarget && setRankOpen(false)}
+            >
+              <div className="hg-ranks">
+                <header>
+                  <h2>#{no} 랭킹</h2>
+                  <div className="hg-rtabs">
+                    {DAILY_TIERS.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        className={rankTier === t.id ? "is-on" : ""}
+                        onClick={() => (playSfx("click"), setRankTier(t.id), loadRanks(t.id, rankSort))}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button type="button" className="hg-rclose" onClick={() => setRankOpen(false)} aria-label="닫기">
+                    ✕
+                  </button>
+                </header>
+                <div className="hg-rtabs is-sort">
+                  {(
+                    [
+                      ["top", "기록순"],
+                      ["fun", "별해 자랑"],
+                      ["new", "별해 최신"],
+                    ] as const
+                  ).map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className={rankSort === k ? "is-on" : ""}
+                      onClick={() => (playSfx("click"), setRankSort(k), loadRanks(rankTier, k))}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {!solvedOf(rankTier) && (
+                  <p className="hg-rlock">🔒 {tierLabel(rankTier)}을 풀거나 포기하면 문장이 보여요</p>
+                )}
+                {rankMsg && <p className="hg-rmsg">{rankMsg}</p>}
+                {!ranks ? (
+                  <p className="hg-dim">불러오는 중…</p>
+                ) : !ranks.length ? (
+                  <p className="hg-dim">
+                    {rankSort === "top" ? "아직 아무도 못 풀었어요. 첫 번째가 되어 보세요!" : "아직 별해가 없어요"}
+                  </p>
+                ) : (
+                  <ol>
+                    {ranks.map((r, i) => {
+                      const show = solvedOf(rankTier);
+                      return (
+                        <li key={r.id} className={rankSort === "top" && i < 3 ? `is-top t${i + 1}` : ""}>
+                          {rankSort === "top" && <span className="hg-rk">{i + 1}</span>}
+                          <p className={`hg-rq${show ? "" : " is-none"}`}>
+                            {show ? withEnd(r.spaced ?? r.text) : "🔒 풀면 보여요"}
+                          </p>
+                          <p className="hg-rn">
+                            <span>{r.name}</span>
+                            <span className={`hg-kind k-${r.kind === "별해" ? "alt" : "ans"}`}>{r.kind ?? "정답"}</span>
+                            <span>
+                              <b>{fmtTime(r.score)}</b>
+                              {r.hint ? ` (힌트 ${r.hint})` : ""}
+                            </span>
+                            {rankSort !== "top" && (
+                              <button
+                                type="button"
+                                className={`hg-like${liked.has(r.id) ? " is-on" : ""}`}
+                                onClick={() => void toggleLike(r)}
+                                disabled={!show || liking === r.id}
+                              >
+                                👍 <b>{r.likes ?? 0}</b>
+                              </button>
+                            )}
+                          </p>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                )}
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
     </>
   );
 }

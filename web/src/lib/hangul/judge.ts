@@ -68,9 +68,6 @@ export function sentencePoints(text: string, morphs: Morph[], nat: number, rude 
   return Math.round(10 * n ** 1.6 * (1 + 0.12 * Math.max(0, content - 1)) * (rude ? RUDE.k : g.k));
 }
 
-/** 랭킹 점수 = 완성한 문장 점수 합 + 버틴 웨이브 × 이 값 */
-export const HANGUL_WAVE_PTS = 100;
-
 /** 글자 줄로 받을 수 있는 최대 글자 수 (한글만 셈) */
 export const LINE_MAX = 30;
 /** 글자 · 낱말 조각 형식 (완성된 한글 음절만) */
