@@ -10,6 +10,7 @@ import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
+import imgStock from "@/img/menu/stock.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
 import imgLove from "@/img/menu/love.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
@@ -137,6 +138,15 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "DOODLE PARTY",
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
+      },
+      {
+        href: "/games/stock",
+        image: imgStock,
+        label: "ANIME CHART",
+        desc: "차트 하나로 50턴 솔로 · 10배 코인 · 7분 실시간 주식 대전, 번 돈으로 마을에 집 사기",
+        icon: "px:stock",
+        featured: true,
+        badge: "NEW",
       },
       {
         href: "/games/melongame",

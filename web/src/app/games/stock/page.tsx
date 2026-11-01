@@ -11,7 +11,7 @@ function StockPage() {
     <>
       <div className="mx-auto max-w-5xl px-3 pt-6 sm:px-6">
         <GameHeader
-          icon="📈"
+          icon="px:stock"
           title="ANIME CHART"
           en="Chart · Coin · Live Battle"
           accent="#F2C14E"

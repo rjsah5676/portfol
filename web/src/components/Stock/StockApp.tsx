@@ -116,8 +116,11 @@ function Inner({ w, h }: { w: number; h: number }) {
   if (loading) return <Empty>로그인 상태를 확인하는 중…</Empty>;
   if (!member)
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-[12px] px-[20px] text-center" style={{ background: "radial-gradient(ellipse at 50% 30%, #1f2b45, #0f1420 70%)" }}>
-        <div className={`${TITLE} text-[38px] leading-none`} style={{ color: C.gold }}>
+      <div className="relative flex h-full flex-col items-center justify-center gap-[12px] px-[20px] text-center" style={{ background: "radial-gradient(ellipse at 50% 30%, #1f2b45, #0f1420 70%)" }}>
+        <img src="/stock/keyart.jpg" alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover" style={{ opacity: 0.55 }} />
+        <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(9,13,22,0.2), rgba(9,13,22,0.85) 70%)" }} />
+        <div className="relative flex flex-col items-center gap-[12px]">
+        <div className={`${TITLE} text-[38px] leading-none`} style={{ color: C.gold, textShadow: "0 2px 12px rgba(0,0,0,0.8)" }}>
           ANIME CHART
         </div>
         <div className="text-[14px]">애니메 차트 · 차트 하나로 50턴, 코인 레버리지, 친구 · 봇과 7분 대전</div>
@@ -134,6 +137,7 @@ function Inner({ w, h }: { w: number; h: number }) {
             <NickForm submitLabel="시작하기" />
           </div>
         )}
+        </div>
         {toastMsg && <Toast text={toastMsg.text} tone={toastMsg.tone} />}
       </div>
     );
