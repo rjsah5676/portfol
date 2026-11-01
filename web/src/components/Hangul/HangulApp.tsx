@@ -42,9 +42,8 @@ import {
   VOWEL_SLOTS,
   draw,
   incoming,
-  HOLD_C,
-  HOLD_V,
-  held,
+  STACK_C,
+  STACK_V,
   START_DRAW,
   finishSentence,
   fromLine,
@@ -893,7 +892,13 @@ export default function HangulApp() {
               {u.kind === "j" ? shown(u.text) : u.text}
             </span>
             {u.kind === "w" && <span className="hg-pos">{u.pos}</span>}
-            {u.kind === "j" && (u.n ?? 1) > 1 && <span className="hg-n">×{u.n}</span>}
+            {u.kind === "j" && (u.n ?? 1) > 1 && (
+              <span
+                className={`hg-n${(u.n ?? 1) >= (z === "c" ? STACK_C : STACK_V) ? " is-full" : ""}`}
+              >
+                ×{u.n}
+              </span>
+            )}
           </>
         )}
       </button>
@@ -903,17 +908,10 @@ export default function HangulApp() {
     <section className={`hg-zone ${cls}`}>
       <h3>
         {title}
-        {(z === "c" || z === "v") &&
-          (() => {
-            // 칸마다 상한 — 차면 그 칸 자모는 안 들어옴 (쓰면 다시)
-            const n = held(g, z),
-              max = z === "c" ? HOLD_C : HOLD_V;
-            return (
-              <small className={`hg-hold${n >= max ? " is-full" : ""}`}>
-                {n >= max ? `꽉 참 — 써야 더 들어와요` : `${n}/${max}`}
-              </small>
-            );
-          })()}
+        {/* 자모마다 상한 — 그 자모가 차면 그 자모만 안 들어옴 (쓰면 다시). 다 찬 칸은 빨간 숫자 */}
+        {(z === "c" || z === "v") && (
+          <small className="hg-hold">같은 자모 ×{z === "c" ? STACK_C : STACK_V}까지</small>
+        )}
       </h3>
       <div className={`hg-grid hg-grid-${z}`}>
         {Array.from({ length: CAP[z] }, (_, i) => slot(z, i))}

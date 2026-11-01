@@ -138,12 +138,13 @@ export interface Sentence {
  * 0.3초는 문장 만드는 속도보다 훨씬 빨라서 칸마다 ×20 넘게 쌓였음(사용자) → 0.8초 + 칸마다 상한
  */
 export const DRAW_EVERY = 0.8;
-/** 자음칸에 쌓인 자음이 이만큼이면 자음은 그만 (모음은 계속) */
-export const HOLD_C = 48;
-/** 모음칸에 쌓인 모음 재료가 이만큼이면 모음은 그만 (자음은 계속) — 24/20 은 빡빡하다 해서(사용자) 두 배로 */
-export const HOLD_V = 40;
-/** 둘 다 차면 멈춤 (도움말 표시용) */
-export const HOLD_MAX = HOLD_C + HOLD_V;
+/**
+ * 뽑기 상한은 자모마다: 같은 자음은 STACK_C 개, 같은 모음 재료(ㆍ ㅡ ㅣ)는 STACK_V 개까지 쌓이고 그 자모만 멈춤 (사용자).
+ *   (예전: 자음칸 · 모음칸 전체 개수로 막았더니 ㅅ만 잔뜩 쥐고도 막히거나 너무 늦게 막힘)
+ *   합쳐서 생기는 자모(ㄲ · ㆍㆍ · ㅏ …)는 상한 없이 STACK_MAX 까지
+ */
+export const STACK_C = 6;
+export const STACK_V = 12;
 /** 시작할 때 쥐고 시작하는 자모 수 */
 export const START_DRAW = 16;
 export const LOAD_MAX = 100;
@@ -321,9 +322,10 @@ function takeJamo(g: Game, z: Zone, i: number) {
   if (countOf(u) > 1) u.n = countOf(u) - 1;
   else g.zones[z][i] = null;
 }
+/** 뽑기로 들어올 수 있는 자리가 있는지 — 같은 자모가 자음은 STACK_C, 모음은 STACK_V 개 차 있으면 그 자모는 안 들어옴 */
 const hasRoomFor = (g: Game, j: string) => {
   const at = slotFor(g, j);
-  return at >= 0 && countOf(g.zones[zoneOfJamo(j)][at]) < STACK_MAX;
+  return at >= 0 && countOf(g.zones[zoneOfJamo(j)][at]) < (isCons(j) ? STACK_C : STACK_V);
 };
 
 /**
@@ -707,12 +709,10 @@ export function step(g: Game, dt: number) {
     emit(g, boss ? "boss" : "wave");
     if (boss) say(g, `${g.wave}웨이브 · 왕먹물 (얼룩 10마리 몫)`);
   }
-  // 자모는 저절로 계속 들어옴. 자음 · 모음 따로 상한 — 합쳐서 막으면 자음만 잔뜩 쥐고 모음이 안 와서 멈춰 버림(사용자)
+  // 자모는 저절로 계속 들어옴 (그 자모가 상한까지 차 있으면 다른 자모로 다시 뽑음 — draw)
   if ((g.drawT -= dt) <= 0) {
     g.drawT = DRAW_EVERY;
-    const cFull = held(g, "c") >= HOLD_C,
-      vFull = held(g, "v") >= HOLD_V;
-    if (!cFull || !vFull) draw(g, 1, cFull ? "v" : vFull ? "c" : undefined);
+    draw(g, 1);
   }
   if (g.spawnLeft > 0 && (g.spawnT -= dt) <= 0) {
     spawn(g, g.spawnBoss);
