@@ -166,13 +166,6 @@
   font-weight: 700;
   color: var(--red);
 }
-/* 그 자모가 상한까지 참 — 더 안 들어옴 */
-.hg-n.is-full {
-  padding: 0 3px;
-  border-radius: 4px;
-  background: var(--red);
-  color: #fff;
-}
 
 .hg-slot {
   position: relative;

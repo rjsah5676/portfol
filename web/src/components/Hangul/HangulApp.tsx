@@ -892,13 +892,7 @@ export default function HangulApp() {
               {u.kind === "j" ? shown(u.text) : u.text}
             </span>
             {u.kind === "w" && <span className="hg-pos">{u.pos}</span>}
-            {u.kind === "j" && (u.n ?? 1) > 1 && (
-              <span
-                className={`hg-n${(u.n ?? 1) >= (z === "c" ? STACK_C : STACK_V) ? " is-full" : ""}`}
-              >
-                ×{u.n}
-              </span>
-            )}
+            {u.kind === "j" && (u.n ?? 1) > 1 && <span className="hg-n">×{u.n}</span>}
           </>
         )}
       </button>
@@ -908,7 +902,7 @@ export default function HangulApp() {
     <section className={`hg-zone ${cls}`}>
       <h3>
         {title}
-        {/* 자모마다 상한 — 그 자모가 차면 그 자모만 안 들어옴 (쓰면 다시). 다 찬 칸은 빨간 숫자 */}
+        {/* 자모마다 상한 — 그 자모가 차면 그 자모만 안 들어옴 (쓰면 다시) */}
         {(z === "c" || z === "v") && (
           <small className="hg-hold">같은 자모 ×{z === "c" ? STACK_C : STACK_V}까지</small>
         )}
