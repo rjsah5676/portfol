@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DAILY, HOME_TYPES, LOT_NAMES, MAX_UNITS, RESALE, dailyOf, homeType, resaleOf } from "@/lib/stock/estate";
 import type { EstateView } from "@/lib/stock/types";
 import { attend, buyHome, getEstate, sellHome } from "@/realtime/stock";
+import { sfx } from "@/lib/stock/sound";
 import { Avatar, Btn, C, Empty, NUM, Sheet, TopBar, WalletChip, won } from "./ui";
 
 /*
@@ -36,6 +37,7 @@ export default function Estate({
   const run = async (p: Promise<EstateView>, ok: string) => {
     try {
       setV(await p);
+      sfx("cash");
       toast(ok, "up");
       onChanged();
     } catch (e) {
@@ -47,7 +49,10 @@ export default function Estate({
   const claim = () =>
     void attend().then(
       (r) => {
-        if (r) toast(`출석 보너스 +${won(r.amount)} (집 ${r.homes}채)`, "up");
+        if (r) {
+          sfx("cash");
+          toast(`출석 보너스 +${won(r.amount)} (집 ${r.homes}채)`, "up");
+        }
         onChanged();
         load();
       },

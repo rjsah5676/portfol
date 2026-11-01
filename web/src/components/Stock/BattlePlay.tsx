@@ -6,6 +6,7 @@ import { BATTLE, STOCKS, afterBuy, afterSell, buyCost, maxBuy, sellGain, shocksB
 import { BOT_STYLES } from "@/lib/stock/bots";
 import type { BGameWire, BResult, BRoomWire } from "@/lib/stock/types";
 import { order, sellAll, serverNow } from "@/realtime/stock";
+import { bgm, sfx } from "@/lib/stock/sound";
 import { Avatar, Btn, C, NUM, Sheet, TITLE, josa, mult, pct, signColor, won } from "./ui";
 
 /*
@@ -41,6 +42,7 @@ export function Play({
   const [now, setNow] = useState(() => serverNow());
   const [flash, setFlash] = useState<{ k: number; mult: number[]; ev: number[] } | null>(null);
   useEffect(() => {
+    bgm("battle");
     const t = setInterval(() => setNow(serverNow()), 100);
     return () => clearInterval(t);
   }, []);
@@ -49,6 +51,8 @@ export function Play({
   useEffect(() => {
     if (!shockN) return;
     const sh = { k: shockN - 1, mult: game.last, ev: game.lastEv };
+    // 변동 소리: 대박 · 폭락이 섞였으면 둥, 아니면 봉 소리
+    sfx(game.lastEv.some((e) => e !== 0) ? "shock" : "next");
     const on = setTimeout(() => setFlash(sh), 0);
     const off = setTimeout(() => setFlash(null), 1600);
     return () => (clearTimeout(on), clearTimeout(off));
@@ -74,11 +78,13 @@ export function Play({
     void order(room.id, stock, side, qty)
       .then((r) => {
         if (!r.ok) toast(side === "buy" ? "현금이 모자라요" : "팔 주식이 없어요", "warn");
+        else sfx(side);
       })
       .catch((e) => toast((e as Error).message, "warn"))
       .finally(() => (busy.current = false));
   };
   const dumpAll = () => {
+    sfx("sell");
     void sellAll(room.id)
       .then((r) => r.ok && toast(`전부 매각 · ${won(r.amount)}`, "down"))
       .catch((e) => toast((e as Error).message, "warn"));
@@ -110,6 +116,10 @@ export function Play({
   const tileH = Math.floor((h - 40 - 30 - 12) / 5) - 6;
   const ring = 1 - nextIn / (buyPhase ? BATTLE.buyPhaseMs : BATTLE.shockEveryMs);
   const urgent = nextIn < 3000 && done < BATTLE.shocks;
+  const tickSec = urgent ? Math.ceil(nextIn / 1000) : 0;
+  useEffect(() => {
+    if (tickSec > 0) sfx(tickSec === 1 ? "tickLast" : "tick");
+  }, [tickSec]);
 
   return (
     <div className="relative flex h-full flex-col">
@@ -326,8 +336,11 @@ function RankList({ room, game, ranking, me }: { room: BRoomWire; game: BGameWir
 export function Result({ r, myUid, onClose }: { r: BResult; myUid: string; onClose: () => void }) {
   const [cut, setCut] = useState(true);
   useEffect(() => {
+    const mine = r.rows.find((x) => x.uid === myUid);
+    if (mine) sfx(mine.rank === 1 ? "big" : mine.rank <= Math.ceil(r.rows.length / 2) ? "win" : "lose");
     const t = setTimeout(() => setCut(false), 2600);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const top = r.rows[0];
   const seatName = (seat: number) => r.rows.find((x) => x.seat === seat)?.nick ?? "?";

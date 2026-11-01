@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { HOME_TYPES, LOT_NAMES, homeRank, homeType } from "@/lib/stock/estate";
 import type { HomeView } from "@/lib/stock/types";
 import { getHome } from "@/realtime/stock";
+import { bgm, sfx } from "@/lib/stock/sound";
 import { Avatar, Btn, C, Empty, NUM, TopBar, WalletChip, won } from "./ui";
 
 /*
@@ -36,6 +37,8 @@ export default function Home({
   const [pick, setPick] = useState<string | null>(null);
   useEffect(() => {
     let live = true;
+    sfx("home");
+    bgm("home");
     getHome(uid || undefined).then(
       (x) => {
         if (!live) return;

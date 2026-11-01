@@ -62,6 +62,7 @@ export default function Chart({
   dim,
   lines = [],
   log,
+  fmt = comma,
 }: {
   candles: Candle[];
   width: number;
@@ -76,6 +77,8 @@ export default function Chart({
   lines?: PriceLine[];
   /** 로그 스케일 */
   log?: boolean;
+  /** 가격 표시 (코인은 소수점) */
+  fmt?: (p: number) => string;
 }) {
   const cv = useRef<HTMLCanvasElement | null>(null);
   const [bars, setBars] = useState(barsDefault);
@@ -85,6 +88,24 @@ export default function Chart({
   const pinch = useRef<{ d: number; bars: number } | null>(null);
   const pts = useRef(new Map<number, number>());
   const [dragging, setDragging] = useState(false);
+  // 새 봉이 붙을 때 0.3초 동안 시가에서 자라나는 연출 (0 → 1)
+  const [grow, setGrow] = useState(1);
+  const lastLen = useRef(candles.length);
+  useEffect(() => {
+    const prev = lastLen.current;
+    lastLen.current = candles.length;
+    if (candles.length <= prev || candles.length - prev > 5 || prev === 0) return;
+    let raf = 0;
+    const t0 = performance.now();
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - t0) / 300);
+      setGrow(1 - (1 - k) * (1 - k));
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    setGrow(0);
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [candles.length]);
   const tabsH = 22;
   const nInd = Math.max(1, Math.min(2, inds.length));
   const priceH = Math.round((height - tabsH * nInd) * (nInd === 2 ? 0.62 : 0.7));
@@ -124,6 +145,11 @@ export default function Chart({
     g.clearRect(0, 0, width, height);
     if (!candles.length) return;
     const vis = candles.slice(start, end);
+    // 자라는 중인 마지막 봉
+    if (grow < 1 && end === candles.length && vis.length) {
+      const c = vis[vis.length - 1];
+      vis[vis.length - 1] = { ...c, h: c.o + (c.h - c.o) * grow, l: c.o + (c.l - c.o) * grow, c: c.o + (c.c - c.o) * grow, v: c.v * grow };
+    }
     let hi = -Infinity,
       lo = Infinity,
       vmax = 0;
@@ -166,7 +192,7 @@ export default function Chart({
       g.lineTo(plotW + 4, Math.round(yy) + 0.5);
       g.stroke();
       g.fillStyle = C.mute;
-      g.fillText(comma(pv), plotW + 10, yy);
+      g.fillText(fmt(pv), plotW + 10, yy);
     }
     // 판 시작 지점 (복기)
     if (dim !== undefined && dim > start && dim < end) {
@@ -248,7 +274,7 @@ export default function Chart({
     for (const m of sorted) {
       const c = candles[m.i];
       const buy = m.side === "buy";
-      const label = `${buy ? "B" : "S"}${m.n > 1 ? `×${m.n}` : ""} ${comma(m.price)}`;
+      const label = `${buy ? "B" : "S"}${m.n > 1 ? `×${m.n}` : ""} ${fmt(m.price)}`;
       const tw = g.measureText(label).width + 8;
       const xx = Math.min(plotW - tw + 4, Math.max(4, x(m.i) - tw / 2));
       const laneArr = lanes[m.side];
@@ -273,11 +299,13 @@ export default function Chart({
       g.fillStyle = "#fff";
       g.fillText(label, xx + 4, yy + 7);
     }
-    // 현재가 (최신 봉)
-    const last = candles[candles.length - 1];
+    // 현재가 (최신 봉) — 전 봉보다 오르면 빨강 · 내리면 파랑
+    const last = vis[vis.length - 1] ?? candles[candles.length - 1];
+    const before = candles[candles.length - 2];
+    const lastUp = !before || last.c >= before.c;
     const ly = y(last.c);
     if (ly > top - 2 && ly < top + ph + 2) {
-      g.strokeStyle = C.up;
+      g.strokeStyle = lastUp ? C.up : C.down;
       g.setLineDash([4, 3]);
       g.lineWidth = 1;
       g.beginPath();
@@ -287,13 +315,13 @@ export default function Chart({
       g.setLineDash([]);
     }
     const tagY = Math.min(top + ph - 8, Math.max(top + 8, ly));
-    g.fillStyle = C.upBg;
+    g.fillStyle = lastUp ? C.upBg : C.downBg;
     g.beginPath();
     g.roundRect(plotW + 6, tagY - 8, AXIS - 4, 16, 3);
     g.fill();
     g.fillStyle = "#fff";
     g.font = "bold 10px Barlow, sans-serif";
-    g.fillText(comma(last.c), plotW + 10, tagY);
+    g.fillText(fmt(last.c), plotW + 10, tagY);
 
     // 보조지표 칸들
     let iy0 = priceH + tabsH + 4;
@@ -364,7 +392,7 @@ export default function Chart({
       g.lineTo(Math.round(x(hover)) + 0.5, height);
       g.stroke();
     }
-  }, [candles, width, height, start, end, step, priceH, indH, plotW, ma, indData, inds, markers, hover, dim, lines, log, tabsH]);
+  }, [candles, width, height, start, end, step, priceH, indH, plotW, ma, indData, inds, markers, hover, dim, lines, log, tabsH, grow, fmt]);
 
   const idxAt = (clientX: number) => {
     const el = cv.current!;
@@ -439,7 +467,7 @@ export default function Chart({
       <div className="pointer-events-none absolute top-[2px] left-[8px] flex gap-[8px] text-[10px]" style={{ color: C.mute }}>
         {hv ? (
           <span>
-            시 {comma(hv.o)} · 고 <b style={{ color: C.up }}>{comma(hv.h)}</b> · 저 <b style={{ color: C.down }}>{comma(hv.l)}</b> · 종 <b style={{ color: C.text }}>{comma(hv.c)}</b>
+            시 {fmt(hv.o)} · 고 <b style={{ color: C.up }}>{fmt(hv.h)}</b> · 저 <b style={{ color: C.down }}>{fmt(hv.l)}</b> · 종 <b style={{ color: C.text }}>{fmt(hv.c)}</b>
             {prev && (
               <b className="ml-[4px]" style={{ color: hv.c >= prev.c ? C.up : C.down }}>
                 {hv.c >= prev.c ? "+" : ""}

@@ -1,5 +1,29 @@
-/* 주식 마을 (components/Stock) 애니메이션 */
+/* 애니메 차트 (components/Stock) — 공용 스타일 · 애니메이션 */
 .stk button { font-family: inherit; }
+/* 버튼: 위가 밝고 아래가 어두운 입체감, 누르면 살짝 꺼짐 */
+.stk-btn {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -2px 0 rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.4);
+  transition: filter 0.12s, transform 0.08s, box-shadow 0.08s;
+}
+.stk-btn:hover:not(:disabled) { filter: brightness(1.1); }
+.stk-btn:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+/* HTS 격자 바탕 */
+.stk-grid {
+  background-color: #090d16;
+  background-image: linear-gradient(rgba(61, 214, 255, 0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(61, 214, 255, 0.045) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+/* 바뀐 숫자: 0.5초 번쩍 */
+.stk-num-up { animation: stk-num-up 0.5s ease-out both; }
+.stk-num-down { animation: stk-num-down 0.5s ease-out both; }
+@keyframes stk-num-up { 0% { color: #ff5c66; text-shadow: 0 0 10px rgba(255, 92, 102, 0.9); } 100% { text-shadow: none; } }
+@keyframes stk-num-down { 0% { color: #4d8dff; text-shadow: 0 0 10px rgba(77, 141, 255, 0.9); } 100% { text-shadow: none; } }
+/* 전광판 글자 흐름 */
+.stk-ticker { animation: stk-ticker 28s linear infinite; }
+@keyframes stk-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .stk-enter { animation: stk-enter 0.28s ease-out both; }
 @keyframes stk-enter { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
 /* 건물에 들어갈 때 0.4초 줌인 */
@@ -22,6 +46,12 @@
 @keyframes stk-cutin { 0% { opacity: 0; transform: translateX(-40px); } 12%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; } }
 .stk-rotate { animation: stk-rotate 1.8s ease-in-out infinite; }
 @keyframes stk-rotate { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
+/* 청산 · 급락 경보: 화면 가장자리 붉은 맥박 */
+.stk-alarm { animation: stk-alarm 0.6s ease-in-out 3; }
+@keyframes stk-alarm { 0%, 100% { box-shadow: inset 0 0 0 0 rgba(255, 92, 102, 0); } 50% { box-shadow: inset 0 0 60px 0 rgba(255, 92, 102, 0.55); } }
+/* 큰 수익 때 금빛 번쩍 */
+.stk-shine { animation: stk-shine 1.2s ease-out both; }
+@keyframes stk-shine { 0% { box-shadow: inset 0 0 0 0 rgba(242, 193, 78, 0); } 30% { box-shadow: inset 0 0 80px 0 rgba(242, 193, 78, 0.45); } 100% { box-shadow: inset 0 0 0 0 rgba(242, 193, 78, 0); } }
 @media (prefers-reduced-motion: reduce) {
-  .stk-enter, .stk-zoomin, .stk-fadeout, .stk-pop, .stk-cutin, .stk-rotate, .stk-blink { animation: none; }
+  .stk-enter, .stk-zoomin, .stk-fadeout, .stk-pop, .stk-cutin, .stk-rotate, .stk-blink, .stk-ticker, .stk-alarm, .stk-shine, .stk-num-up, .stk-num-down { animation: none; }
 }

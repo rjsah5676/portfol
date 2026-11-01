@@ -19,10 +19,11 @@ import Hub from "./Hub";
 import Records, { type RecTab } from "./Records";
 import Solo, { Review } from "./Solo";
 import Stage from "./Stage";
+import { sfx } from "@/lib/stock/sound";
 import { C, Empty, TITLE, Toast, won } from "./ui";
 
 /*
- * 주식 마을 (STOCK VILLAGE) — 화면 전환 · 지갑 · 로그인.
+ * 애니메 차트 (ANIME CHART) — 화면 전환 · 지갑 · 로그인.
  *   마을(허브) → 증권거래소(솔로) · 트레이딩 홀(대전) · 부동산 · 명예의 전당 · 포커 하우스(애니메 포커로)
  * 회원만 (돈이 애니메 포커와 같은 지갑이라). 주소 ?r=방번호 로 대전 방에 바로 들어감.
  */
@@ -34,7 +35,7 @@ const preload = () => CHAR_IDS.flatMap((c) => [asset.profile(c), asset.face(c, "
 
 export default function StockApp() {
   return (
-    <GameLoader tasks={preload} title="STOCK VILLAGE" accent={C.gold} className="mx-auto aspect-[2.1] w-full max-w-[1280px] rounded-[14px]">
+    <GameLoader tasks={preload} title="ANIME CHART" accent={C.gold} className="mx-auto aspect-[2.1] w-full max-w-[1280px] rounded-[14px]">
       <Stage>{(s) => <Inner w={s.w} h={s.h} />}</Stage>
     </GameLoader>
   );
@@ -86,6 +87,7 @@ function Inner({ w, h }: { w: number; h: number }) {
     void attend().then(
       (r) => {
         if (r) {
+          sfx("cash");
           toast(`🏠 출석 보너스 +${won(r.amount)} (집 ${r.homes}채)`, "up");
           refresh();
         }
@@ -115,9 +117,9 @@ function Inner({ w, h }: { w: number; h: number }) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-[12px] px-[20px] text-center" style={{ background: "radial-gradient(ellipse at 50% 30%, #1f2b45, #0f1420 70%)" }}>
         <div className={`${TITLE} text-[38px] leading-none`} style={{ color: C.gold }}>
-          STOCK VILLAGE
+          ANIME CHART
         </div>
-        <div className="text-[14px]">주식 마을 · 차트 하나로 50턴, 친구 · 봇과 7분 대전</div>
+        <div className="text-[14px]">애니메 차트 · 차트 하나로 50턴, 코인 레버리지, 친구 · 봇과 7분 대전</div>
         <div className="text-[11px]" style={{ color: C.mute }}>
           애니메 포커와 같은 지갑을 써요 · 실제 돈이 오가지 않는 게임이에요
         </div>

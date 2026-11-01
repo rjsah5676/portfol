@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HISTORY, MAX_ORDERS, ORDER_NAME, TURNS, dateAt, fmtDate, maxBuy, roundTick, tickSize, type Candle, type OrderKind, type SoloOrder } from "@/lib/stock/solo";
 import type { SoloReview, SoloView } from "@/lib/stock/types";
 import { soloCancelOrder, soloMemo, soloNext, soloOrder, soloQuit, soloStart, soloState, soloTrade } from "@/realtime/stock";
+import { bgm, resultSound, sfx } from "@/lib/stock/sound";
+import type { Face } from "@/lib/poker/rules";
 import Chart, { tradeMarkers, type Ind, type PriceLine } from "./Chart";
-import { Btn, C, NUM, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
+import { Btn, C, FaceBubble, Frame, NUM, Num, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
 
 /*
  * 증권거래소 (솔로) — 들어오면 차트 하나로 바로 시작. 종목명은 처음부터 보임. 턴 = 봉, 거래는 턴을 쓰지 않음.
@@ -16,6 +18,34 @@ import { Btn, C, NUM, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signCo
 const CHIPS = [10, 25, 50, 100] as const;
 const ORDER_COLOR: Record<OrderKind, string> = { buy: C.up, take: C.green, stop: "#FF9F43" };
 const dateOf = (v: SoloView | null, candles: Candle[]) => (v ? dateAt(v.date0, candles.length - 1) : 0);
+
+/** 에이미 한마디 — 상황(방금 봉 · 보유 손익 · 체결)에 맞춰 */
+type Quip = { face: Face; text: string };
+function quipFor(v: SoloView, candles: Candle[], ev: "start" | "buy" | "sell" | "next" | "fill" | "order"): Quip {
+  const n = candles.length;
+  const last = candles[n - 1];
+  const prev = candles[n - 2];
+  const move = prev ? last.c / prev.c - 1 : 0;
+  const avg = v.shares ? v.cost / v.shares : 0;
+  const pnl = v.shares && avg ? last.c / avg - 1 : 0;
+  if (ev === "fill") return { face: "smile", text: "예약 체결! 계획대로 가고 있어요." };
+  if (ev === "order") return { face: "think", text: "예약은 봉이 열릴 때 가격이 닿으면 체결돼요." };
+  if (ev === "buy") return { face: "smile", text: v.shares && v.cash < last.c ? "몰빵! 손절선은 예약으로 걸어 둬요." : "들어갔어요. 손절선부터 정해 두는 게 좋아요." };
+  if (ev === "sell") return { face: v.trades.length ? "joy" : "idle", text: v.shares ? "일부 정리. 남은 건 흐름 보면서~" : "정리 완료. 다음 자리를 찾아봐요." };
+  if (ev === "start") return { face: "idle", text: `${v.name}, 일봉이에요. 「전체」로 큰 흐름부터 보고 들어가요.` };
+  if (v.shares) {
+    if (move >= 0.07) return { face: "joy", text: `+${(move * 100).toFixed(1)}%! 오른다 올라~ 익절 자리도 생각해요.` };
+    if (move <= -0.07) return { face: "shock", text: `${(move * 100).toFixed(1)}%… 손절 기준은 지켰나요?` };
+    if (pnl >= 0.25) return { face: "joy", text: "수익 25% 넘었어요. 일부라도 챙기는 것도 실력!" };
+    if (pnl <= -0.15) return { face: "sad", text: "물타기는 신중하게… 추세가 꺾였는지 먼저 봐요." };
+    return { face: move >= 0 ? "smile" : "idle", text: move >= 0 ? "순조로워요. 이평선 위에 있으면 느긋하게." : "살짝 눌림. 거래량이 줄면 눌림, 늘면 꺾임이에요." };
+  }
+  if (move >= 0.07) return { face: "shock", text: "급등! 추격 매수는 신중하게, 눌림을 기다려 봐요." };
+  if (move <= -0.07) return { face: "think", text: "급락. 바닥은 잡는 게 아니라 확인하는 거예요." };
+  const turnsLeft = TURNS - v.turn;
+  if (turnsLeft <= 10) return { face: "think", text: `${turnsLeft}턴 남았어요. 안 들어가는 것도 전략이에요.` };
+  return { face: "idle", text: "관망 중. 5일선이 20일선을 뚫는 자리를 노려 봐요." };
+}
 
 export default function Solo({
   w,
@@ -42,11 +72,15 @@ export default function Solo({
   const [busy, setBusy] = useState(false);
   const [menu, setMenu] = useState(false);
   const [result, setResult] = useState<SoloView | null>(null);
+  const [quip, setQuip] = useState<Quip>({ face: "idle", text: "차트를 불러오는 중…" });
   const candlesRef = useRef<Candle[]>([]);
+  useEffect(() => {
+    bgm("trade");
+  }, []);
 
   /** 서버 응답 → 봉 붙이기 (from 이후만 옴) */
   const apply = useCallback(
-    (nv: SoloView | null) => {
+    (nv: SoloView | null, ev: "start" | "buy" | "sell" | "next" | "fill" | "order" = "next") => {
       if (!nv) return;
       const merged = nv.from === 0 ? nv.candles : [...candlesRef.current.slice(0, nv.from), ...nv.candles];
       candlesRef.current = merged;
@@ -54,19 +88,24 @@ export default function Solo({
       setV(nv);
       if (nv.filled?.length) {
         const f = nv.filled[nv.filled.length - 1];
+        sfx("fill");
         toast(`예약 체결 · ${ORDER_NAME[f.kind]} ${comma(f.qty)}주 @ ${comma(f.price)}`, f.kind === "buy" ? "up" : f.kind === "take" ? "up" : "down");
+        ev = "fill";
       }
-      if (nv.done) setResult(nv);
+      if (nv.done) {
+        setResult(nv);
+        if (nv.result) resultSound(nv.result.ret);
+      } else setQuip(quipFor(nv, merged, ev));
     },
     [toast]
   );
 
   const run = useCallback(
-    async (fn: () => Promise<SoloView | null>) => {
+    async (fn: () => Promise<SoloView | null>, ev: "start" | "buy" | "sell" | "next" | "fill" | "order" = "next") => {
       if (busy) return;
       setBusy(true);
       try {
-        apply(await fn());
+        apply(await fn(), ev);
         onChanged();
       } catch (e) {
         toast((e as Error).message || "잠시 후 다시 해 주세요.", "warn");
@@ -82,7 +121,7 @@ export default function Solo({
     setMode(null);
     candlesRef.current = [];
     setCandles([]);
-    await run(async () => (await soloState(0)) ?? (await soloStart()));
+    await run(async () => (await soloState(0)) ?? (await soloStart()), "start");
   }, [run]);
 
   useEffect(() => {
@@ -114,11 +153,13 @@ export default function Solo({
   const confirm = () => {
     if (!mode || mode === "order" || qty <= 0) return;
     const side = mode;
-    void run(() => soloTrade({ side, qty: Math.min(qty, most), have })).then(() => setMode(null));
+    sfx(side);
+    void run(() => soloTrade({ side, qty: Math.min(qty, most), have }), side).then(() => setMode(null));
   };
   const next = (n: number) => {
     if (!v || v.done) return;
     if (mode !== "order") setMode(null);
+    sfx(n > 1 ? "fast" : "next");
     void run(() => soloNext(n, have));
   };
 
@@ -185,38 +226,43 @@ export default function Solo({
       </TopBar>
 
       <div className="flex min-h-0 flex-1">
-        <div style={{ width: chartW, height: chartH }}>
+        <div className="stk-grid" style={{ width: chartW, height: chartH }}>
           {candles.length > 0 && <Chart candles={candles} width={chartW} height={chartH} markers={v ? tradeMarkers(v.trades, HISTORY) : []} inds={inds} onInds={setInds} bars={pc ? 110 : 90} lines={lines} />}
         </div>
-        <div className="flex flex-col gap-[8px] px-[12px] pt-[10px] pb-[12px]" style={{ width: panelW, background: C.panel, borderLeft: `1px solid ${C.line}` }}>
+        <div className="flex flex-col gap-[8px] px-[10px] pt-[8px] pb-[10px]" style={{ width: panelW, background: C.panel, borderLeft: `1px solid ${C.line}` }}>
           {!mode ? (
             <>
-              <Row k="현재가" v={<b style={{ color: C.up }}>{comma(price)}</b>} />
-              <Row k="현금" v={won(cash)} />
-              <div className="my-[2px] h-px" style={{ background: C.line }} />
-              <Row k="보유" v={`${comma(shares)}주`} />
-              <Row k="평단" v={shares ? comma(avg) : "-"} />
-              <Row
-                k="평가"
-                v={
-                  shares ? (
-                    <b style={{ color: signColor(pnl) }}>
-                      {pct(pnl / Math.max(1, v?.cost ?? 1))} {pnl >= 0 ? "+" : ""}
-                      {won(pnl)}
-                    </b>
-                  ) : (
-                    "-"
-                  )
-                }
-              />
+              <FaceBubble face={quip.face} text={quip.text} size={36} />
+              <Frame title="시세 · 보유" bodyClass="flex flex-col gap-[4px] px-[8px] py-[6px]">
+                <Row k="현재가" v={<Num value={price} className="text-[15px] font-black" style={{ color: candles.length > 1 && price < candles[candles.length - 2].c ? C.down : C.up }}>{comma(price)}</Num>} />
+                <Row k="현금" v={won(cash)} />
+                <div className="my-[1px] h-px" style={{ background: C.line }} />
+                <Row k="보유" v={`${comma(shares)}주`} />
+                <Row k="평단" v={shares ? comma(avg) : "-"} />
+                <Row
+                  k="평가"
+                  v={
+                    shares ? (
+                      <Num value={pnl} className="font-bold" style={{ color: signColor(pnl) }}>
+                        {pct(pnl / Math.max(1, v?.cost ?? 1))} {pnl >= 0 ? "+" : ""}
+                        {won(pnl)}
+                      </Num>
+                    ) : (
+                      "-"
+                    )
+                  }
+                />
+              </Frame>
               {orders.length > 0 && (
-                <button type="button" onClick={() => setMode("order")} className="flex cursor-pointer flex-col gap-[2px] rounded-[8px] px-[8px] py-[5px] text-left text-[10px]" style={{ background: C.bg, border: `1px solid ${C.line}` }}>
-                  {orders.map((o) => (
-                    <span key={o.id} className={NUM} style={{ color: ORDER_COLOR[o.kind] }}>
-                      {ORDER_NAME[o.kind]} {comma(o.price)} · {comma(o.qty)}주
-                    </span>
-                  ))}
-                </button>
+                <Frame title={`예약 ${orders.length}`} accent={C.gold} bodyClass="px-[8px] py-[4px]">
+                  <button type="button" onClick={() => setMode("order")} className="flex w-full cursor-pointer flex-col gap-[2px] text-left text-[10px]">
+                    {orders.map((o) => (
+                      <span key={o.id} className={NUM} style={{ color: ORDER_COLOR[o.kind] }}>
+                        {ORDER_NAME[o.kind]} {comma(o.price)} · {comma(o.qty)}주
+                      </span>
+                    ))}
+                  </button>
+                </Frame>
               )}
               <div className="flex-1" />
               <div className="flex gap-[8px]">
@@ -231,10 +277,10 @@ export default function Solo({
                 ⏱ 예약 {orders.length ? `(${orders.length})` : ""}
               </Btn>
               <div className="flex gap-[8px]">
-                <Btn className="h-[46px] flex-1 text-[14px]" disabled={busy || !v || v.done} onClick={() => next(1)}>
+                <Btn silent className="h-[46px] flex-1 text-[14px]" disabled={busy || !v || v.done} onClick={() => next(1)}>
                   ▶ 다음
                 </Btn>
-                <Btn className="h-[46px] w-[72px] text-[14px]" disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
+                <Btn silent className="h-[46px] w-[72px] text-[14px]" disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
                   ▶▶
                 </Btn>
               </div>
@@ -246,8 +292,8 @@ export default function Solo({
               shares={shares}
               orders={orders}
               busy={busy}
-              onAdd={(kind, p, q) => void run(() => soloOrder({ kind, price: p, qty: q, have }))}
-              onCancel={(id) => void run(() => soloCancelOrder(id, have))}
+              onAdd={(kind, p, q) => (sfx("order"), void run(() => soloOrder({ kind, price: p, qty: q, have }), "order"))}
+              onCancel={(id) => void run(() => soloCancelOrder(id, have), "order")}
               onClose={() => setMode(null)}
               onNext={() => next(1)}
             />
@@ -376,7 +422,7 @@ function OrderPanel({
       </div>
       <div className="flex-1" />
       <div className="flex gap-[8px]">
-        <Btn tone={buy ? "buy" : "sell"} className="h-[48px] flex-1 text-[15px]" disabled={busy || q <= 0} onClick={onConfirm}>
+        <Btn tone={buy ? "buy" : "sell"} silent className="h-[48px] flex-1 text-[15px]" disabled={busy || q <= 0} onClick={onConfirm}>
           {buy ? "매수" : "매도"} 확인
         </Btn>
         <Btn tone="ghost" className="h-[48px] w-[72px] text-[14px]" onClick={onCancel}>
@@ -505,7 +551,7 @@ function OrderBook({
       )}
       <div className="flex-1" />
       <div className="flex gap-[6px]">
-        <Btn tone="gold" className="h-[42px] flex-1 text-[13px]" disabled={busy || !can} onClick={() => onAdd(kind, p, qq)}>
+        <Btn tone="gold" silent className="h-[42px] flex-1 text-[13px]" disabled={busy || !can} onClick={() => onAdd(kind, p, qq)}>
           예약 걸기 {orders.length ? `(${orders.length}/${MAX_ORDERS})` : ""}
         </Btn>
         <Btn className="h-[42px] w-[64px] text-[13px]" disabled={busy} onClick={onNext} title="다음 봉">
@@ -521,7 +567,8 @@ function ResultSheet({ v, onNext, onBack }: { v: SoloView; onNext: () => void; o
   const win = r.pnl > 0;
   return (
     <Sheet width={440}>
-      <div className="flex flex-col items-center gap-[10px] p-[18px] text-center">
+      <div className={`flex flex-col items-center gap-[10px] p-[18px] text-center ${r.ret >= 0.3 ? "stk-shine" : r.ret <= -0.3 ? "stk-alarm" : ""}`}>
+        <FaceBubble face={r.ret >= 0.3 ? "joy" : r.pnl > 0 ? "smile" : r.ret <= -0.3 ? "shock" : "sad"} text={r.ret >= 0.3 ? "대박! 이 차트는 복기해 둘 만해요." : r.pnl > 0 ? "수익 마감. 기록에 메모 남겨 두면 다음에 도움돼요." : r.ret <= -0.3 ? "크게 잃었어요… 어디서 꺾였는지 복기해 봐요." : "아쉽지만 수업료. 다음 판은 손절선부터!"} size={34} className="w-full text-left" />
         <div className={`${TITLE} text-[26px] leading-none`}>{r.name}</div>
         {r.period && (
           <div className={`text-[11px] ${NUM}`} style={{ color: C.mute }}>

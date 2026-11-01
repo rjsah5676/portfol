@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Look } from "@/lib/poker/rules";
 import type { HubStatus } from "@/lib/stock/types";
 import { BUILDINGS, LOTS, SHORTCUTS, VILLAGE, walkMs, type Building } from "@/lib/stock/village";
+import { bgm, sfx } from "@/lib/stock/sound";
 import { Avatar, Btn, C, NUM, Sheet, TITLE, TopBar, WalletChip, ro } from "./ui";
 
 /*
@@ -54,8 +55,12 @@ export default function Hub({
   const [zoom, setZoom] = useState<Building | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => {
+    bgm("village");
+  }, []);
   const enter = (b: Building) => {
     if (b.action.type === "soon") return;
+    sfx("enter");
     if (timer.current) clearTimeout(timer.current);
     setWalk(null);
     setPos(b.door);
@@ -117,10 +122,10 @@ export default function Hub({
         title={
           <>
             <span className={`${TITLE} text-[17px] tracking-wide`} style={{ color: C.gold }}>
-              STOCK VILLAGE
+              ANIME CHART
             </span>
             <span className="text-[12px] font-medium" style={{ color: C.mute }}>
-              주식 마을
+              애니메 차트 · 마을
             </span>
           </>
         }

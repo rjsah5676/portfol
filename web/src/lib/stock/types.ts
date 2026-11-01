@@ -1,5 +1,5 @@
 /*
- * 주식 마을 — 서버 ↔ 화면 데이터 모양 (서버도 이 파일을 그대로 import).
+ * 애니메 차트 — 서버 ↔ 화면 데이터 모양 (서버도 이 파일을 그대로 import).
  */
 
 import type { CharId, Look } from "../poker/rules";

@@ -6,7 +6,9 @@ import type { Candle } from "@/lib/stock/solo";
 import type { CoinReview, CoinView } from "@/lib/stock/types";
 import { coinClose, coinNext, coinOpen, coinQuit, coinStart, coinState } from "@/realtime/stock";
 import Chart, { type Ind, type Marker, type PriceLine } from "./Chart";
-import { Btn, C, NUM, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
+import { bgm, resultSound, sfx } from "@/lib/stock/sound";
+import type { Face } from "@/lib/poker/rules";
+import { Btn, C, FaceBubble, Frame, NUM, Num, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
 
 /*
  * 코인 거래소 — 1턴 = 1시간봉 · 50턴 · 가격제한 없음 · 레버리지 1 · 3 · 10배 (롱) · 청산.
@@ -17,6 +19,31 @@ import { Btn, C, NUM, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signCo
 const CHIPS = [10, 25, 50, 100] as const;
 const ACC = "#F7B32B";
 const fmtPrice = (p: number) => (p < 100 ? p.toFixed(2) : p < 1000 ? p.toFixed(1) : comma(p));
+
+type Quip = { face: Face; text: string };
+function quipFor(v: CoinView, candles: Candle[], ev: "start" | "open" | "close" | "next" | "liq"): Quip {
+  const n = candles.length;
+  const last = candles[n - 1];
+  const prev = candles[n - 2];
+  const move = prev ? last.c / prev.c - 1 : 0;
+  const pos = v.pos;
+  if (ev === "liq") return { face: "shock", text: "청산… 레버리지는 증거금이 전부 날아갈 수 있어요." };
+  if (ev === "start") return { face: "think", text: `${v.sym}, 1시간봉. 여긴 변동이 주식의 몇 배예요. 증거금은 잃어도 되는 만큼만.` };
+  if (ev === "open") return { face: pos && pos.lev >= 10 ? "shock" : "smile", text: pos && pos.lev >= 10 ? "10배! 9%만 빠져도 청산이에요. 청산가 선을 꼭 봐요." : "진입. 청산가(빨간 선)가 어디인지 기억해요." };
+  if (ev === "close") return { face: "joy", text: pos ? "일부 정리. 남은 건 청산가 여유가 더 생겼어요." : "정리 완료. 코인은 쉬는 것도 포지션이에요." };
+  if (pos) {
+    const pnl = marginValue(pos.margin, pos.lev, pos.entry, last.c) / pos.margin - 1;
+    const toLiq = last.c / liqPrice(pos.lev, pos.entry) - 1;
+    if (toLiq < 0.04) return { face: "shock", text: `청산가까지 ${(toLiq * 100).toFixed(1)}%… 일부라도 정리할까요?` };
+    if (pnl >= 0.5) return { face: "joy", text: `+${(pnl * 100).toFixed(0)}%! 여기서 반만 챙겨도 남는 장사예요.` };
+    if (move <= -0.08) return { face: "sad", text: `${(move * 100).toFixed(1)}% 급락. 코인은 되돌림이 없을 수도 있어요.` };
+    if (move >= 0.08) return { face: "joy", text: `+${(move * 100).toFixed(1)}% 펌핑! 욕심은 청산가 옆에 두고 와요.` };
+    return { face: move >= 0 ? "smile" : "think", text: move >= 0 ? "버티는 중. 청산가와의 거리를 보며 가요." : "흔들리네요. 추가 진입은 평단만 올릴 수 있어요." };
+  }
+  if (move >= 0.1) return { face: "shock", text: "펌핑! 뒤늦게 올라타면 덤핑에 물려요." };
+  if (move <= -0.1) return { face: "think", text: "덤핑. 코인 바닥은 지하실이 있을 수 있어요." };
+  return { face: "idle", text: "관망 중. 변동이 줄어들 때가 진입 자리예요." };
+}
 
 function coinMarkers(trades: CoinTrade[]): Marker[] {
   const seen = new Map<string, { i: number; side: "buy" | "sell"; amt: number; q: number; n: number }>();
@@ -60,10 +87,14 @@ export default function Coin({
   const [menu, setMenu] = useState(false);
   const [result, setResult] = useState<CoinView | null>(null);
   const [liqFx, setLiqFx] = useState<{ margin: number } | null>(null);
+  const [quip, setQuip] = useState<Quip>({ face: "idle", text: "시세를 불러오는 중…" });
   const candlesRef = useRef<Candle[]>([]);
+  useEffect(() => {
+    bgm("coin");
+  }, []);
 
   const apply = useCallback(
-    (nv: CoinView | null) => {
+    (nv: CoinView | null, ev: "start" | "open" | "close" | "next" | "liq" = "next") => {
       if (!nv) return;
       const merged = nv.from === 0 ? nv.candles : [...candlesRef.current.slice(0, nv.from), ...nv.candles];
       candlesRef.current = merged;
@@ -71,18 +102,23 @@ export default function Coin({
       setV(nv);
       if (nv.liq) {
         setLiqFx({ margin: nv.liq.margin });
+        sfx("liq");
         toast(`청산! 증거금 ${won(nv.liq.margin)}이 사라졌어요`, "down");
+        ev = "liq";
       }
-      if (nv.done) setResult(nv);
+      if (nv.done) {
+        setResult(nv);
+        if (nv.result) resultSound(nv.result.ret);
+      } else setQuip(quipFor(nv, merged, ev));
     },
     [toast]
   );
   const run = useCallback(
-    async (fn: () => Promise<CoinView | null>) => {
+    async (fn: () => Promise<CoinView | null>, ev: "start" | "open" | "close" | "next" | "liq" = "next") => {
       if (busy) return;
       setBusy(true);
       try {
-        apply(await fn());
+        apply(await fn(), ev);
         onChanged();
       } catch (e) {
         toast((e as Error).message || "잠시 후 다시 해 주세요.", "warn");
@@ -98,7 +134,7 @@ export default function Coin({
     setLiqFx(null);
     candlesRef.current = [];
     setCandles([]);
-    await run(async () => (await coinState(0)) ?? (await coinStart()));
+    await run(async () => (await coinState(0)) ?? (await coinStart()), "start");
   }, [run]);
   useEffect(() => {
     const t = setTimeout(() => void start(), 0);
@@ -134,12 +170,18 @@ export default function Coin({
     setClosePct(100);
   };
   const confirm = () => {
-    if (mode === "open") void run(() => coinOpen({ margin: Math.max(10_000, Math.min(margin, cash)), lev, have })).then(() => setMode(null));
-    else if (mode === "close") void run(() => coinClose(closePct, have)).then(() => setMode(null));
+    if (mode === "open") {
+      sfx("coin");
+      void run(() => coinOpen({ margin: Math.max(10_000, Math.min(margin, cash)), lev, have }), "open").then(() => setMode(null));
+    } else if (mode === "close") {
+      sfx("sell");
+      void run(() => coinClose(closePct, have), "close").then(() => setMode(null));
+    }
   };
   const next = (n: number) => {
     if (!v || v.done) return;
     setMode(null);
+    sfx(n > 1 ? "fast" : "next");
     void run(() => coinNext(n, have));
   };
 
@@ -207,46 +249,49 @@ export default function Coin({
         </Pill>
       </TopBar>
       <div className="relative flex min-h-0 flex-1">
-        <div style={{ width: chartW, height: chartH }}>
-          {candles.length > 0 && <Chart candles={candles} width={chartW} height={chartH} markers={v ? coinMarkers(v.trades) : []} inds={inds} onInds={setInds} bars={pc ? 110 : 90} lines={lines} log />}
+        <div className="stk-grid" style={{ width: chartW, height: chartH }}>
+          {candles.length > 0 && <Chart candles={candles} width={chartW} height={chartH} markers={v ? coinMarkers(v.trades) : []} inds={inds} onInds={setInds} bars={pc ? 110 : 90} lines={lines} log fmt={fmtPrice} />}
         </div>
         {liqFx && (
-          <div className="stk-pop pointer-events-none absolute inset-0 z-10 flex items-center justify-center" style={{ background: "rgba(217,48,59,0.18)" }}>
+          <div className="stk-pop stk-alarm pointer-events-none absolute inset-0 z-10 flex items-center justify-center" style={{ background: "rgba(217,48,59,0.18)" }}>
             <div className={`${TITLE} text-[46px]`} style={{ color: C.up, textShadow: "0 4px 24px rgba(0,0,0,0.6)" }}>
               청산
             </div>
           </div>
         )}
-        <div className="flex flex-col gap-[8px] px-[12px] pt-[10px] pb-[12px]" style={{ width: panelW, background: C.panel, borderLeft: `1px solid ${C.line}` }}>
+        <div className="flex flex-col gap-[8px] px-[10px] pt-[8px] pb-[10px]" style={{ width: panelW, background: C.panel, borderLeft: `1px solid ${C.line}` }}>
           {!mode ? (
             <>
-              <Row k="현재가" v={<b style={{ color: ACC }}>{fmtPrice(price)}</b>} />
-              <Row k="현금" v={won(cash)} />
-              <div className="my-[2px] h-px" style={{ background: C.line }} />
-              {pos ? (
-                <>
-                  <Row k="포지션" v={<span style={{ color: ACC }}>롱 {pos.lev}배</span>} />
-                  <Row k="증거금" v={won(pos.margin)} />
-                  <Row k="진입가" v={fmtPrice(pos.entry)} />
-                  <Row
-                    k="평가"
-                    v={
-                      <b style={{ color: signColor(posPnl) }}>
-                        {pct(posPnl / Math.max(1, pos.margin))} {posPnl >= 0 ? "+" : ""}
-                        {won(posPnl)}
-                      </b>
-                    }
-                  />
-                  <Row k="청산가" v={<span style={{ color: C.up }}>{fmtPrice(liqPrice(pos.lev, pos.entry))}</span>} />
-                </>
-              ) : (
-                <div className="rounded-[8px] px-[8px] py-[6px] text-[10px] leading-snug" style={{ background: C.bg, color: C.mute }}>
-                  포지션 없음 · 진입하면 증거금 × 배수만큼 코인을 사요. 손실이 증거금의 90%를 넘는 저가가 나오면 청산돼요.
-                </div>
-              )}
+              <FaceBubble face={quip.face} text={quip.text} size={36} />
+              <Frame title="시세 · 포지션" accent={ACC} bodyClass="flex flex-col gap-[4px] px-[8px] py-[6px]">
+                <Row k="현재가" v={<Num value={price} className="text-[15px] font-black" style={{ color: candles.length > 1 && price < candles[candles.length - 2].c ? C.down : ACC }}>{fmtPrice(price)}</Num>} />
+                <Row k="현금" v={won(cash)} />
+                <div className="my-[1px] h-px" style={{ background: C.line }} />
+                {pos ? (
+                  <>
+                    <Row k="포지션" v={<span style={{ color: ACC }}>롱 {pos.lev}배</span>} />
+                    <Row k="증거금" v={won(pos.margin)} />
+                    <Row k="진입가" v={fmtPrice(pos.entry)} />
+                    <Row
+                      k="평가"
+                      v={
+                        <Num value={posPnl} className="font-bold" style={{ color: signColor(posPnl) }}>
+                          {pct(posPnl / Math.max(1, pos.margin))} {posPnl >= 0 ? "+" : ""}
+                          {won(posPnl)}
+                        </Num>
+                      }
+                    />
+                    <Row k="청산가" v={<span style={{ color: C.up }}>{fmtPrice(liqPrice(pos.lev, pos.entry))}</span>} />
+                  </>
+                ) : (
+                  <div className="text-[10px] leading-snug" style={{ color: C.mute }}>
+                    포지션 없음 · 진입하면 증거금 × 배수만큼 코인을 사요. 손실이 증거금의 90%를 넘는 저가가 나오면 청산돼요.
+                  </div>
+                )}
+              </Frame>
               <div className="flex-1" />
               <div className="flex gap-[8px]">
-                <Btn className="h-[50px] flex-1 text-[16px]" style={{ background: ACC, border: `1px solid ${ACC}`, color: "#1A1408" }} disabled={busy || !v || v.done} onClick={openIt}>
+                <Btn className="h-[50px] flex-1 text-[16px]" style={{ background: `linear-gradient(180deg, #FFCC55, ${ACC})`, border: "1px solid #FFD97A", color: "#1A1408" }} disabled={busy || !v || v.done} onClick={openIt}>
                   {pos ? "추가 진입" : "진입"}
                 </Btn>
                 <Btn tone="sell" className="h-[50px] flex-1 text-[16px]" disabled={busy || !v || v.done || !pos} onClick={closeIt}>
@@ -254,10 +299,10 @@ export default function Coin({
                 </Btn>
               </div>
               <div className="flex gap-[8px]">
-                <Btn className="h-[46px] flex-1 text-[14px]" disabled={busy || !v || v.done} onClick={() => next(1)}>
+                <Btn silent className="h-[46px] flex-1 text-[14px]" disabled={busy || !v || v.done} onClick={() => next(1)}>
                   ▶ 다음
                 </Btn>
-                <Btn className="h-[46px] w-[72px] text-[14px]" disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
+                <Btn silent className="h-[46px] w-[72px] text-[14px]" disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
                   ▶▶
                 </Btn>
               </div>
@@ -310,7 +355,7 @@ export default function Coin({
               </div>
               <div className="flex-1" />
               <div className="flex gap-[8px]">
-                <Btn className="h-[48px] flex-1 text-[15px]" style={{ background: ACC, border: `1px solid ${ACC}`, color: "#1A1408" }} disabled={busy || cash < 10_000} onClick={confirm}>
+                <Btn silent className="h-[48px] flex-1 text-[15px]" style={{ background: `linear-gradient(180deg, #FFCC55, ${ACC})`, border: "1px solid #FFD97A", color: "#1A1408" }} disabled={busy || cash < 10_000} onClick={confirm}>
                   {lev}배 진입
                 </Btn>
                 <Btn tone="ghost" className="h-[48px] w-[72px] text-[14px]" onClick={() => setMode(null)}>
@@ -343,7 +388,7 @@ export default function Coin({
               </div>
               <div className="flex-1" />
               <div className="flex gap-[8px]">
-                <Btn tone="sell" className="h-[48px] flex-1 text-[15px]" disabled={busy} onClick={confirm}>
+                <Btn tone="sell" silent className="h-[48px] flex-1 text-[15px]" disabled={busy} onClick={confirm}>
                   정리 확인
                 </Btn>
                 <Btn tone="ghost" className="h-[48px] w-[72px] text-[14px]" onClick={() => setMode(null)}>
@@ -374,7 +419,8 @@ export default function Coin({
           {(() => {
             const r = result.result!;
             return (
-              <div className="flex flex-col items-center gap-[10px] p-[18px] text-center">
+              <div className={`flex flex-col items-center gap-[10px] p-[18px] text-center ${r.ret >= 0.5 ? "stk-shine" : r.liqs ? "stk-alarm" : ""}`}>
+                <FaceBubble face={r.ret >= 0.5 ? "joy" : r.pnl > 0 ? "smile" : r.liqs ? "shock" : "sad"} text={r.ret >= 0.5 ? "코인으로 이기다니! 다음 판은 더 조심해요." : r.pnl > 0 ? "수익 마감. 코인은 익절이 반이에요." : r.liqs ? `청산 ${r.liqs}번… 배수를 낮추거나 증거금을 나눠요.` : "손실 마감. 코인은 안 하는 날이 버는 날이에요."} size={34} className="w-full text-left" />
                 <div className={`${TITLE} text-[26px] leading-none`}>
                   <span style={{ color: ACC }}>{r.sym}</span> {r.name}
                 </div>
@@ -455,7 +501,7 @@ export function CoinReviewView({ r, w, h, onBack }: { r: CoinReview; w: number; 
           </span>
         }
       />
-      <Chart candles={r.candles} width={w} height={h - 40} markers={coinMarkers(r.trades)} inds={inds} onInds={setInds} bars={110} dim={COIN_HISTORY} log />
+      <Chart candles={r.candles} width={w} height={h - 40} markers={coinMarkers(r.trades)} inds={inds} onInds={setInds} bars={110} dim={COIN_HISTORY} log fmt={fmtPrice} />
     </div>
   );
 }
