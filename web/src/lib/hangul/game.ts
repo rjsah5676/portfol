@@ -13,6 +13,7 @@ import {
   VOWS_W,
 } from "./jamo";
 import { gradeName, hangulLen, LINE_MAX, withEnd, type Judge, type Morph } from "./judge";
+import { linkMorphs, type Link } from "./link";
 
 /*
  * 니들이 한글을 알아? — 게임 진행 (화면과 따로, 숫자만)
@@ -93,6 +94,8 @@ export interface Enemy {
   hp: number;
   max: number;
   boss: boolean;
+  /** 대전: 상대가 보낸 명문 · 랠리 공격에 섞인 단단한 놈 (체력 ×6, 먹물 3마리 몫) */
+  heavy?: boolean;
   slow: number;
   slowT: number;
   stun: number;
@@ -210,6 +213,10 @@ export interface Game {
   sfx: string[];
   /** 먹물 70% 경고를 이미 울렸는지 */
   warned?: boolean;
+  /** 대전: 자모 뽑기 난수 (둘이 같은 시드 → 같은 순서) · 웨이브를 가볍게 · 상대 공격으로 들어올 먹물 */
+  rng?: () => number;
+  vs?: boolean;
+  inject?: { n: number; heavy: number; t: number };
 }
 
 export function newGame(): Game {
@@ -249,7 +256,7 @@ export function newGame(): Game {
 export const say = (g: Game, text: string) => (g.note = { text, at: g.t });
 /** 소리 내기 (이름 = public/hangul/sfx/<이름>.mp3) */
 const emit = (g: Game, name: string) => void g.sfx.push(name);
-export const load = (g: Game) => g.enemies.reduce((s, e) => s + (e.boss ? 10 : 1), 0);
+export const load = (g: Game) => g.enemies.reduce((s, e) => s + (e.boss ? 10 : e.heavy ? 3 : 1), 0);
 /** 점수 = 완성한 문장 점수 합 + 글의 이음 점수(지금 순서 기준) + 버틴 웨이브 × 100 */
 export const score = (g: Game) => g.points + linkBonus(g) + g.wave * 100;
 /** 글 낭독이 쏘는 선의 출발점 (화면의 문장칸 상자) */
@@ -357,8 +364,9 @@ export function draw(g: Game, n = 1, only?: Zone): number {
     const odds = drawOdds(g);
     let j = "";
     for (let t = 0; t < 12 && !j; t++) {
-      const cons = only ? only === "c" : Math.random() < odds.cons;
-      const c = pick(cons ? CONS_W : odds.vows);
+      const rnd = g.rng ?? Math.random;
+      const cons = only ? only === "c" : rnd() < odds.cons;
+      const c = pick(cons ? CONS_W : odds.vows, rnd);
       if (hasRoomFor(g, c)) j = c;
     }
     if (!j) break;
@@ -536,8 +544,11 @@ export function bindWord(g: Game, j: Judge): boolean {
   return true;
 }
 
-/** 문장 완성: 낭독 공격 + 점수 + 기세 */
-export function finishSentence(g: Game, j: Judge): Sentence | null {
+/**
+ * 문장 완성: 낭독 공격 + 점수 + 기세.
+ * 대전(mode): 막기(guard) = 내 판 낭독 공격 ×1.5 · 보내기(send) = 내 판엔 공격 없이 상대에게 (서버가 보냄)
+ */
+export function finishSentence(g: Game, j: Judge, mode?: "guard" | "send"): Sentence | null {
   if (!j.sentence || j.text !== lineText(g)) return null;
   const n = hangulLen(j.text);
   const s = {
@@ -557,16 +568,18 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
   u.morphs = j.morphs;
   u.spaced = s.spaced;
   g.shelf.push(u);
-  const dmg = j.points * 0.6 * g.power;
-  for (const e of g.enemies) e.hp -= dmg;
+  if (mode !== "send") {
+    const dmg = j.points * 0.6 * g.power * (mode === "guard" ? 1.5 : 1);
+    for (const e of g.enemies) e.hp -= dmg;
+    g.fx.push({
+      x: g.path.x + g.path.w / 2,
+      y: g.path.y + g.path.h / 2,
+      t: 0,
+      kind: "read",
+      r: Math.max(g.path.w, g.path.h),
+    });
+  }
   g.power += 0.02 * n;
-  g.fx.push({
-    x: g.path.x + g.path.w / 2,
-    y: g.path.y + g.path.h / 2,
-    t: 0,
-    kind: "read",
-    r: Math.max(g.path.w, g.path.h),
-  });
   emit(
     g,
     s.grade === "명문"
@@ -580,52 +593,9 @@ export function finishSentence(g: Game, j: Judge): Sentence | null {
   return s;
 }
 
-// ── 글(문장칸): 앞뒤 문장이 이어지는지 ──
-// 형태소 분석기는 문장을 하나씩 따로 읽어서(순서를 섞어도 점수가 같음) 문장끼리는 규칙으로 봄:
-//   이음말로 시작(그래서 · 근데 · 그리고 …) · 가리키는 말(그거 · 거기 · 그때 …) · 앞 문장의 뜻 있는 말을 다시 씀
-// 한 쌍에 최대 2 (이음말만 붙여 대는 것 막기)
-const POINTERS = new Set([
-  "그",
-  "이",
-  "저",
-  "그거",
-  "이거",
-  "저거",
-  "그것",
-  "이것",
-  "저것",
-  "거기",
-  "여기",
-  "저기",
-  "그곳",
-  "이곳",
-  "그때",
-  "그녀",
-  "걔",
-  "얘",
-  "쟤",
-  "그놈",
-  "이놈",
-  "저놈",
-]);
-export interface Link {
-  level: 0 | 1 | 2;
-  why: string[];
-}
-export function linkOf(a: Unit, b: Unit): Link {
-  const am = a.morphs ?? [],
-    bm = b.morphs ?? [];
-  const why: string[] = [];
-  const first = bm.find((m) => m.t !== "IC");
-  if (first?.t === "MAJ") why.push(`이음말 「${first.f}」`);
-  const ptr = bm.find((m) => /^(NP|MM|NN)/.test(m.t) && POINTERS.has(m.f));
-  if (ptr) why.push(`가리킴 「${ptr.f}」`);
-  const key = (m: Morph) => (/^(NNG|NNP|VV|VA|XR)/.test(m.t) ? m.f : null);
-  const seen = new Set(am.map(key).filter(Boolean));
-  const same = bm.map(key).find((f) => f && seen.has(f));
-  if (same) why.push(`같은 말 「${same}」`);
-  return { level: Math.min(2, why.length) as Link["level"], why };
-}
+// ── 글(문장칸): 앞뒤 문장이 이어지는지 (규칙은 link.ts — 대전 받아치기와 같이 씀) ──
+export type { Link };
+export const linkOf = (a: Unit, b: Unit): Link => linkMorphs(a.morphs ?? [], b.morphs ?? []);
 export const links = (g: Game): Link[] => g.shelf.slice(1).map((b, k) => linkOf(g.shelf[k], b));
 /** 이음 점수: 이어진 쌍마다 (두 문장 중 낮은 점수) × 0.5 × 단계 */
 export const linkBonus = (g: Game) =>
@@ -689,14 +659,24 @@ function pathPos(g: Game, d: number): [number, number] {
   return [x, y + h - d];
 }
 
-function spawn(g: Game, boss: boolean) {
-  const hp = waveHp(g.wave) * (boss ? 20 : 1);
+/** 대전: 상대 공격이 도착 → 먹물 얼룩 n 마리(그중 heavy 마리는 단단한 놈)가 차례로 들어옴 */
+export function incoming(g: Game, n: number, heavy = 0) {
+  g.inject ??= { n: 0, heavy: 0, t: 0 };
+  g.inject.n += n;
+  g.inject.heavy += heavy;
+  emit(g, "boss");
+}
+
+function spawn(g: Game, boss: boolean, heavy = false) {
+  // 상대 공격 먹물도 지금 웨이브 체력 (첫 웨이브 전이면 1웨이브)
+  const hp = waveHp(Math.max(1, g.wave)) * (boss ? 20 : heavy ? 6 : 1);
   g.enemies.push({
     id: g.seq++,
     d: 0,
     hp,
     max: hp,
     boss,
+    ...(heavy && { heavy }),
     slow: 0,
     slowT: 0,
     stun: 0,
@@ -718,8 +698,9 @@ export function step(g: Game, dt: number) {
   g.nextWave -= dt;
   if (g.nextWave <= 0) {
     g.wave++;
-    const boss = g.wave % 10 === 0;
-    g.spawnLeft = boss ? 1 : 8 + Math.min(22, g.wave);
+    // 대전은 3분 · 상대 공격이 주인공 — 기본 웨이브는 가볍게, 왕먹물 없음
+    const boss = !g.vs && g.wave % 10 === 0;
+    g.spawnLeft = boss ? 1 : g.vs ? 3 + Math.min(8, g.wave) : 8 + Math.min(22, g.wave);
     g.spawnBoss = boss;
     g.spawnT = 0;
     g.nextWave = WAVE_SEC;
@@ -737,6 +718,14 @@ export function step(g: Game, dt: number) {
     spawn(g, g.spawnBoss);
     g.spawnLeft--;
     g.spawnT = 0.5;
+  }
+  // 대전: 상대가 보낸 먹물이 줄지어 들어옴 (단단한 놈 먼저)
+  if (g.inject && g.inject.n > 0 && (g.inject.t -= dt) <= 0) {
+    const heavy = g.inject.heavy > 0;
+    spawn(g, false, heavy);
+    if (heavy) g.inject.heavy--;
+    g.inject.n--;
+    g.inject.t = 0.2;
   }
   const speed = perimeter(g) / LAP_SEC;
   for (const e of g.enemies) {

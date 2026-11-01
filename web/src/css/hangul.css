@@ -1480,3 +1480,555 @@
     animation-delay: 2.5s;
   }
 }
+
+/* ───────── 대전 「말싸움」 ───────── */
+.hg-title.hg-vs {
+  margin-top: 0;
+}
+.hg-vs .hg-title-sub {
+  line-height: 1.6;
+  max-width: 460px;
+}
+/* 훈장님 고르기 칸: 난이도 버튼 셋 */
+.hg-root .hg-botpick {
+  cursor: default;
+}
+.hg-root .hg-botpick:hover {
+  transform: none;
+  box-shadow: none;
+}
+.hg-botpick i img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+.hg-botpick span {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.hg-root .hg-botpick span button,
+.hg-root .hg-vsbots button {
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  background: #fffdf6;
+  padding: 3px 10px;
+  font-size: 12.5px;
+}
+.hg-root .hg-botpick span button:hover,
+.hg-root .hg-vsbots button:hover,
+.hg-root .hg-vsbots button.is-on {
+  background: var(--ink);
+  color: var(--paper);
+}
+/* 대기실 */
+.hg-vsseats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  width: 100%;
+}
+.hg-vsseat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border: 1.5px solid var(--ink);
+  border-radius: 12px;
+  background: #fffdf6;
+}
+.hg-vsseat.is-me {
+  border-color: var(--red);
+}
+.hg-vsseat.is-empty {
+  border-style: dashed;
+  opacity: 0.6;
+}
+.hg-vsseat img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+}
+.hg-vsseat.is-empty img {
+  filter: grayscale(1);
+  opacity: 0.4;
+}
+.hg-vsseat b {
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 18px;
+}
+.hg-vsseat small {
+  font-size: 12px;
+  color: var(--ink2);
+}
+.hg-vsinvite {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+.hg-vsinvite input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+  background: #fffdf6;
+  color: var(--ink2);
+}
+.hg-root .hg-vsinvite button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--paper);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.hg-vsbots {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.hg-title.hg-vs .hg-go {
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 16px;
+}
+.hg-title.hg-vs .hg-go:disabled {
+  opacity: 0.45;
+}
+
+/* 판 위 띠: 나 · 시계 · 상대 */
+.hg-vsbar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  align-items: stretch;
+}
+.hg-vsside {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--paper);
+  border-left: 4px solid var(--red);
+}
+.hg-vsside.is-right {
+  border-left: 0;
+  border-right: 4px solid var(--ink);
+}
+.hg-vsside b {
+  position: relative;
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 17px;
+  white-space: nowrap;
+  overflow: visible;
+}
+.hg-vsside small {
+  font-family: "Nanum Gothic Coding", monospace;
+  font-size: 12px;
+  color: var(--ink2);
+}
+.hg-vsload {
+  grid-column: 1 / -1;
+  position: relative;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--paper2);
+  overflow: hidden;
+}
+.hg-vsload i {
+  position: absolute;
+  inset: 0;
+  background: var(--ink);
+  transform-origin: left;
+  transition: transform 0.3s;
+}
+.hg-vsside.is-warn .hg-vsload i {
+  background: var(--red);
+}
+.hg-vsload em {
+  position: relative;
+  display: block;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 16px;
+  padding-left: 8px;
+  color: #fff;
+  mix-blend-mode: difference;
+}
+.hg-vsemote {
+  position: absolute;
+  left: calc(100% + 4px);
+  top: -6px;
+  font-size: 22px;
+  animation: hg-emote 2s ease-out forwards;
+}
+@keyframes hg-emote {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  15% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+  80% {
+    transform: none;
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+}
+.hg-vsclock {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 120px;
+}
+.hg-vsclock b {
+  font-family: "Nanum Gothic Coding", monospace;
+  font-size: 24px;
+  color: #fff;
+}
+.hg-vsclock b.is-warn {
+  color: #ff8a7a;
+}
+.hg-vsemotes {
+  display: flex;
+  gap: 2px;
+}
+.hg-root .hg-vsemotes button {
+  border: 0;
+  background: rgba(244, 237, 220, 0.12);
+  border-radius: 6px;
+  padding: 2px 4px;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.hg-root .hg-vsemotes button:hover {
+  background: rgba(244, 237, 220, 0.3);
+}
+
+/* 중계석: 오간 문장이 대화처럼 (내 말 오른쪽 · 상대 말 왼쪽) */
+.hg-vsfeed {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 340px);
+  gap: 8px;
+}
+.hg-vsfeed-log {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px 8px 76px;
+  min-height: 112px;
+  border-radius: 10px;
+  background: #fffdf6;
+}
+.hg-vsfeed-mc {
+  position: absolute;
+  left: 8px;
+  top: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 11px;
+  color: var(--ink2);
+}
+.hg-vsfeed-mc img {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+.hg-vsmsg {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  max-width: 88%;
+  padding: 3px 10px;
+  border-radius: 12px 12px 12px 2px;
+  background: var(--paper2);
+  animation: hg-sent-in 0.4s ease-out;
+}
+.hg-vsmsg.is-me {
+  align-self: flex-end;
+  border-radius: 12px 12px 2px 12px;
+  background: #f7d9d2;
+}
+.hg-vsmsg q {
+  font-family: var(--brush);
+  font-size: 18px;
+  line-height: 1.4;
+  quotes: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.hg-vsmsg small {
+  font-size: 11px;
+  color: var(--ink2);
+  white-space: nowrap;
+}
+.hg-vsmsg.k-counter,
+.hg-vsmsg.k-block {
+  outline: 2px solid var(--red);
+}
+.hg-vsmsg.k-counter small,
+.hg-vsmsg.k-block small {
+  color: var(--red);
+  font-weight: 700;
+}
+
+/* 날아오는 공격 (중계석 오른쪽 칸 — 자리 고정) */
+.hg-vsin {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  background: rgba(26, 23, 20, 0.25);
+  max-height: 140px;
+  overflow: hidden;
+}
+.hg-vsin.is-empty {
+  justify-content: center;
+  align-items: center;
+}
+.hg-vsin.is-empty em {
+  align-self: center;
+  text-align: center;
+  background: none;
+  color: var(--paper);
+  opacity: 0.7;
+}
+.hg-vsin p {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 8px;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 10px;
+  background: rgba(26, 23, 20, 0.88);
+  color: var(--paper);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  animation: hg-sent-in 0.3s ease-out;
+}
+.hg-vsin p.is-rally {
+  background: rgba(192, 57, 43, 0.92);
+}
+.hg-vsin b {
+  grid-row: span 2;
+  font-family: "Nanum Gothic Coding", monospace;
+  font-size: 18px;
+  color: #ffb3a6;
+}
+.hg-vsin q {
+  font-family: var(--brush);
+  font-size: 17px;
+  quotes: none;
+}
+.hg-vsin small {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.hg-vsin em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--ink);
+  background: rgba(255, 253, 246, 0.9);
+  border-radius: 6px;
+  padding: 2px 8px;
+  align-self: flex-start;
+}
+/* 공격 도착 컷인 */
+.hg-vscut {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+  animation: hg-cut 2.2s ease-out forwards;
+}
+.hg-vscut small {
+  font-size: 13px;
+  color: var(--paper);
+  background: var(--ink);
+  border-radius: 999px;
+  padding: 2px 12px;
+}
+.hg-vscut p {
+  margin: 0;
+  max-width: 90%;
+  font-family: var(--brush);
+  font-size: clamp(26px, 6vw, 50px);
+  line-height: 1.25;
+  color: #fff;
+  background: rgba(26, 23, 20, 0.9);
+  padding: 12px 22px;
+  border-radius: 18px 18px 18px 4px;
+  word-break: keep-all;
+  text-align: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.hg-vscut b {
+  font-size: 15px;
+  color: #fff;
+  background: var(--red);
+  border-radius: 6px;
+  padding: 2px 10px;
+}
+@keyframes hg-cut {
+  0% {
+    transform: scale(1.6) rotate(-4deg);
+    opacity: 0;
+  }
+  12% {
+    transform: scale(1) rotate(-1deg);
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+}
+/* 시작 카운트다운 */
+.hg-vscount {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(26, 23, 20, 0.45);
+  border-radius: 14px;
+}
+.hg-vscount b {
+  font-family: var(--brush);
+  font-weight: 400;
+  font-size: 120px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.hg-vscount small {
+  font-size: 14px;
+  color: var(--paper);
+}
+/* 막기 · 보내기 — 두 버튼이 들어가니 원고지 버튼 줄에서 자리를 더 줌 */
+.hg-line-btns:has(.hg-vsgo) {
+  grid-template-columns: 0.8fr 0.8fr 1fr 2.4fr;
+}
+.hg-vsgo button {
+  white-space: nowrap;
+}
+.hg-vsgo {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+.hg-root .hg-guard {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+}
+.hg-root .hg-guard:disabled {
+  opacity: 0.3;
+}
+.hg-root .hg-go.is-counter:not(:disabled) {
+  background: #e67e22;
+  border-color: #e67e22;
+  animation: hg-pulse 0.6s ease-in-out infinite;
+}
+/* 결과: 말싸움 기록 */
+.hg-vsresult {
+  max-width: 560px;
+}
+.hg-vslog {
+  max-height: 260px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fffdf6;
+  text-align: left;
+}
+.hg-vslog h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink2);
+}
+.hg-root .hg-vslog .hg-vsmsg button {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fffdf6;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+.hg-root .hg-vslog .hg-vsmsg button.is-on {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+@media (max-width: 900px) {
+  .hg-vsfeed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .hg-vsin.is-empty {
+    display: none;
+  }
+  .hg-line-btns:has(.hg-vsgo) {
+    grid-template-columns: 1fr 1fr 1.3fr;
+  }
+  .hg-line-btns .hg-vsgo {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 520px) {
+  .hg-vsbar {
+    grid-template-columns: 1fr 1fr;
+  }
+  .hg-vsclock {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    flex-direction: row;
+    gap: 8px;
+  }
+  .hg-vsfeed-log {
+    padding-left: 10px;
+    min-height: 0;
+  }
+  .hg-vsfeed-mc {
+    display: none;
+  }
+}

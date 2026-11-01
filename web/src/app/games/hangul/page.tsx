@@ -61,8 +61,8 @@ const FAQ: { q: string; a: string }[] = [
     a: "문장 점수는 글자 수가 많을수록 확 커지고(글자 수^1.6), 뜻 있는 말이 많을수록 조금 더, 말맛 등급을 곱합니다. 판 점수 = 문장 점수 합 + 앞뒤 문장이 이어지는 이음 점수 + 버틴 웨이브 × 100. 랭킹에는 가장 높은 문장이 대표글로 크게 올라갑니다.",
   },
   {
-    q: "대전 모드는 언제 나오나요?",
-    a: "같은 자모를 받아 누가 더 말 되는 문장을 쓰는지 겨루는 1:1 대전 모드를 준비하고 있습니다. 지금은 1인 모드로 플레이할 수 있습니다.",
+    q: "대전 모드(말싸움)는 어떻게 하나요?",
+    a: "친구에게 초대 링크를 보내거나 훈장님 AI와 1:1로 3분 동안 붙습니다. 문장을 완성할 때마다 내 먹물을 정리하는 '막기'와 상대 판에 먹물 떼를 보내는 '보내기' 중에 고르고, 날아오는 상대 문장과 이어지는 말로 받아치면 1.5배로 되돌려 보냅니다. 판이 끝나면 오간 문장을 다시 보며 가장 웃긴 한 마디에 투표합니다.",
   },
   {
     q: "회원가입이 필요한가요?",
@@ -86,7 +86,7 @@ export default function Page() {
       gamePlatform: ["Web browser", "Mobile web"],
       applicationCategory: "GameApplication",
       operatingSystem: "Any (web browser)",
-      playMode: "SinglePlayer",
+      playMode: ["SinglePlayer", "MultiPlayer"],
       inLanguage: "ko",
       isAccessibleForFree: true,
       offers: { "@type": "Offer", price: "0", priceCurrency: "KRW" },

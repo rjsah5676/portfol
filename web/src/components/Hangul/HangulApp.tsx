@@ -9,8 +9,32 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { prepareRuns } from "@/lib/api/rankRun";
+import { prepareRuns, signIn } from "@/lib/api/rankRun";
 import { ApiError } from "@/lib/api/errors";
+import { serverNow } from "@/lib/api/socket";
+import { auth } from "@/firebase";
+import { linkMorphs } from "@/lib/hangul/link";
+import {
+  counterTarget,
+  seeded,
+  type VsAttack,
+  type VsMode,
+  type VsRoom,
+} from "@/lib/hangul/versus";
+import {
+  againVs,
+  botVs,
+  createVs,
+  emoteVs,
+  joinVs,
+  leaveVs,
+  loadVs,
+  sentenceVs,
+  startVs,
+  voteVs,
+  watchVs,
+} from "@/realtime/hangulVs";
+import { VsBar, VsCutin, VsFeed, VsLobby, VsResult, VsWaiting } from "./Versus";
 import {
   addByIds,
   addPunct,
@@ -23,6 +47,7 @@ import {
   CONS_SLOTS,
   VOWEL_SLOTS,
   draw,
+  incoming,
   HOLD_C,
   HOLD_V,
   held,
@@ -183,8 +208,19 @@ export default function HangulApp() {
   const [g, setG] = useState<Game>(newGame);
   const [, setTick] = useState(0);
   const [phase, setPhase] = useState<"ready" | "play" | "over">("ready");
-  /** 메인 화면에서 대전 모드를 눌렀을 때 「구현 예정」 안내 */
-  const [vsNote, setVsNote] = useState(false);
+  // ── 대전 「말싸움」: 고르는 화면 · 들어간 방 · 방 상태 (규칙 lib/hangul/versus.ts, 서버 games/hangulVs.ts) ──
+  const [vsLobby, setVsLobby] = useState(false);
+  const [vs, setVs] = useState<{ id: string; me: string } | null>(null);
+  const [vsRoom, setVsRoom] = useState<VsRoom | null>(null);
+  const [vsBusy, setVsBusy] = useState(false);
+  const [vsErr, setVsErr] = useState<string | null>(null);
+  const [emotes, setEmotes] = useState<{ uid: string; e: string; at: number }[]>([]);
+  const [cutin, setCutin] = useState<VsAttack | null>(null);
+  const vsRef = useRef<{ id: string; me: string; room: VsRoom | null } | null>(null);
+  /** 지금 판을 시작한 시드 (같은 방 상태가 다시 와도 판을 새로 만들지 않게) · 이미 먹물로 받은 공격 */
+  const vsSeedRef = useRef(0);
+  const landedRef = useRef(new Set<string>());
+  const vsOn = !!vs;
   // 배경음악: 판 중엔 play, 그 밖엔 title (파일 없으면 조용)
   useEffect(() => {
     playBgm(phase === "play" ? "play" : "title");
@@ -247,8 +283,10 @@ export default function HangulApp() {
   useEffect(() => {
     speedRef.current = speed;
     phaseRef.current = phase;
-    pauseRef.current = rankOpen;
-  }, [speed, phase, rankOpen]);
+    // 대전은 실시간이라 랭킹 창을 열어도 안 멈춤
+    pauseRef.current = rankOpen && !vs;
+    vsRef.current = vs ? { ...vs, room: vsRoom } : null;
+  }, [speed, phase, rankOpen, vs, vsRoom]);
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
@@ -380,17 +418,51 @@ export default function HangulApp() {
   // 진행 · 그리기
   useEffect(() => {
     // 개발 중 점검용 (콘솔에서 판 상태 보기)
-    if (process.env.NODE_ENV !== "production")
-      (window as unknown as { __hangul?: Game }).__hangul = g;
+    if (process.env.NODE_ENV !== "production") {
+      const w = window as unknown as { __hangul?: Game; __hangulLine?: (t: string) => void };
+      w.__hangul = g;
+      // 개발 점검용: 원고지에 아무 줄이나 바로 써 넣기 (대전 받아치기 확인 등)
+      w.__hangulLine = (t: string) => {
+        g.line = [...t].map((ch) => ({
+          id: g.seq++,
+          kind: /[,.?!]/.test(ch) ? ("p" as const) : ("s" as const),
+          text: ch,
+          cd: 0,
+        }));
+        refresh();
+      };
+    }
     let raf = 0,
       last = performance.now(),
       ui = 0;
     const loop = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
-      if (phaseRef.current === "play" && !pauseRef.current) {
+      const v = vsRef.current;
+      // 대전: 카운트다운 동안은 멈춤
+      const vsHold = !!v?.room && v.room.phase === "play" && serverNow() < v.room.startAt;
+      if (phaseRef.current === "play" && !pauseRef.current && !vsHold) {
         for (let k = 0; k < speedRef.current; k++) step(g, dt);
-        if (g.over) setPhase("over");
+        // 대전: 도착 시각이 지난 상대 공격 → 내 판에 먹물 (막혔으면 서버가 상태를 바꿔 둬서 안 들어옴)
+        if (v?.room && g.vs) {
+          const t = serverNow();
+          for (const a of v.room.attacks)
+            if (
+              a.to === v.me &&
+              a.status === "flying" &&
+              a.arriveAt <= t &&
+              !landedRef.current.has(a.id)
+            ) {
+              landedRef.current.add(a.id);
+              incoming(g, a.blobs, a.heavy ? 1 : 0);
+              setCutin(a);
+              window.setTimeout(() => setCutin((c) => (c === a ? null : c)), 2200);
+            }
+        }
+        if (g.over) {
+          setPhase("over");
+          if (v && g.vs) void loadVs(v.id, load(g)).catch(() => {});
+        }
       }
       // 게임이 낸 소리 (판 진행 · 버튼으로 바꾼 것 모두 여기서 한 번에)
       if (g.sfx.length) {
@@ -435,6 +507,167 @@ export default function HangulApp() {
     };
   }, [text]);
   const j = judge && judge.text === text ? judge : null;
+
+  // ── 대전 ──
+  const vsName = () => {
+    try {
+      return (localStorage.getItem(NAME_KEY) ?? "").slice(0, 10);
+    } catch {
+      return "";
+    }
+  };
+  const setVsUrl = (id: string | null) => {
+    const u = new URL(location.href);
+    if (id) u.searchParams.set("vs", id);
+    else u.searchParams.delete("vs");
+    history.replaceState(history.state, "", u);
+  };
+  const enterVs = (id: string) => {
+    const me = auth.currentUser?.uid;
+    if (!me) throw new Error("로그인이 안 됐어요");
+    landedRef.current.clear();
+    vsSeedRef.current = 0;
+    setVs({ id, me });
+    setVsUrl(id);
+  };
+  const vsFail = (e: unknown) =>
+    setVsErr(
+      e instanceof ApiError
+        ? e.code === "JUDGE_OFF"
+          ? "판정 서버가 아직 준비되지 않았어요"
+          : e.message
+        : "서버에 연결할 수 없어요"
+    );
+  const vsFriend = async () => {
+    setVsBusy(true);
+    setVsErr(null);
+    try {
+      await signIn();
+      enterVs(await createVs(vsName()));
+    } catch (e) {
+      vsFail(e);
+    } finally {
+      setVsBusy(false);
+    }
+  };
+  const vsBot = async (level: number) => {
+    setVsBusy(true);
+    setVsErr(null);
+    try {
+      await signIn();
+      const id = await createVs(vsName());
+      await botVs(id, level);
+      enterVs(id);
+      await startVs(id);
+    } catch (e) {
+      vsFail(e);
+    } finally {
+      setVsBusy(false);
+    }
+  };
+  const vsLeave = () => {
+    if (vs) void leaveVs(vs.id);
+    setVs(null);
+    setVsRoom(null);
+    setVsLobby(false);
+    setVsUrl(null);
+    setCutin(null);
+    setG(newGame());
+    setPhase("ready");
+  };
+  // 초대 링크(?vs=방)로 들어옴 → 바로 그 방에 앉음
+  useEffect(() => {
+    const id = new URLSearchParams(location.search).get("vs");
+    if (!id) return;
+    void (async () => {
+      await Promise.resolve();
+      setVsLobby(true);
+      setVsBusy(true);
+      try {
+        await signIn();
+        await joinVs(id, vsName());
+        enterVs(id);
+      } catch (e) {
+        vsFail(e);
+        setVsUrl(null);
+      } finally {
+        setVsBusy(false);
+      }
+    })();
+    // 처음 한 번만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // 방 구독 — 방 상태가 바뀌면 판 시작 · 끝 · 대기실로
+  useEffect(() => {
+    if (!vs) return;
+    const onRoom = (r: VsRoom | null) => {
+      setVsRoom(r);
+      if (!r) return setVsErr("방이 사라졌어요");
+      if (r.phase === "play" && r.seed !== vsSeedRef.current) {
+        vsSeedRef.current = r.seed;
+        landedRef.current.clear();
+        const ng = newGame();
+        ng.vs = true;
+        ng.rng = seeded(r.seed);
+        draw(ng, START_DRAW);
+        setG(ng);
+        setSel(null);
+        setSelling(false);
+        setJudge(null);
+        setSpeed(1);
+        setPhase("play");
+        playSfx("switch");
+        window.setTimeout(() => playSfx("start"), 120);
+      } else if (r.phase === "ended") setPhase("over");
+      else if (r.phase === "waiting") {
+        // 끝난 판에서 대기실로 돌아오면 판도 새로 (뒤에 지난 판이 비치지 않게)
+        if (vsSeedRef.current) setG(newGame());
+        vsSeedRef.current = 0;
+        setPhase("ready");
+      }
+    };
+    return watchVs(vs.id, {
+      room: onRoom,
+      emote: (uid, e) => setEmotes((l) => [...l.slice(-6), { uid, e, at: Date.now() }]),
+    });
+  }, [vs]);
+  // 내 먹물 양을 상대에게 (바뀌었을 때만, 0.7초마다)
+  useEffect(() => {
+    if (!vs || phase !== "play") return;
+    let sent = -1;
+    const t = window.setInterval(() => {
+      const ld = load(g);
+      if (ld !== sent) {
+        sent = ld;
+        void loadVs(vs.id, ld).catch(() => {});
+      }
+    }, 700);
+    return () => window.clearInterval(t);
+  }, [vs, phase, g]);
+  const vsNow = serverNow();
+  const vsWait = !!vsRoom && vsRoom.phase === "play" && vsNow < vsRoom.startAt;
+  const ctr =
+    vs && vsRoom && j?.sentence ? counterTarget(vsRoom, vs.me, j.morphs, vsNow, linkMorphs) : null;
+  const onVsFinish = (mode: VsMode) => {
+    if (!j || !vs) return;
+    const line = j.text;
+    const s = finishSentence(g, j, mode);
+    if (!s) return;
+    setFlash(s);
+    window.setTimeout(() => setFlash((f) => (f === s ? null : f)), 2200);
+    if (mode === "send") playSfx(ctr ? "sent-best" : "link");
+    sentenceVs(vs.id, line, mode).catch((e) =>
+      say(g, e instanceof ApiError ? `서버가 안 받았어요: ${e.message}` : "서버에 못 보냈어요")
+    );
+    refresh();
+  };
+  const incomingList =
+    vs && vsRoom
+      ? vsRoom.attacks
+          .filter((a) => a.to === vs.me && a.status === "flying" && a.arriveAt > vsNow)
+          .sort((a, b) => a.arriveAt - b.arriveAt)
+      : [];
+  const oppName = (uid: string) => vsRoom?.players.find((p) => p.uid === uid)?.name ?? "상대";
 
   const start = () => {
     const ng = newGame();
@@ -731,26 +964,40 @@ export default function HangulApp() {
         />
       </div>
       <div className="hg-root">
-        <div className="hg-hud">
-          <div>
-            <span>웨이브</span>
-            <b>{g.wave}</b>
+        {vs && vsRoom && vsRoom.phase !== "waiting" ? (
+          <>
+            <VsBar
+              room={vsRoom}
+              me={vs.me}
+              myLoad={ld}
+              left={vsRoom.phase === "play" ? Math.min(vsRoom.endAt - vsNow, 180_000) : 0}
+              emotes={emotes}
+              onEmote={(e) => void emoteVs(vs.id, e).catch(() => {})}
+            />
+            <VsFeed room={vsRoom} me={vs.me} incoming={incomingList} now={vsNow} />
+          </>
+        ) : (
+          <div className="hg-hud">
+            <div>
+              <span>웨이브</span>
+              <b>{g.wave}</b>
+            </div>
+            <div className={ld >= LOAD_MAX * 0.7 ? "is-warn" : ""}>
+              <span>먹물</span>
+              <b>
+                {ld}/{LOAD_MAX}
+              </b>
+            </div>
+            <div>
+              <span>점수</span>
+              <b>{fmt(score(g))}</b>
+            </div>
+            <div>
+              <span>기세</span>
+              <b>×{g.power.toFixed(2)}</b>
+            </div>
           </div>
-          <div className={ld >= LOAD_MAX * 0.7 ? "is-warn" : ""}>
-            <span>먹물</span>
-            <b>
-              {ld}/{LOAD_MAX}
-            </b>
-          </div>
-          <div>
-            <span>점수</span>
-            <b>{fmt(score(g))}</b>
-          </div>
-          <div>
-            <span>기세</span>
-            <b>×{g.power.toFixed(2)}</b>
-          </div>
-        </div>
+        )}
 
         <div className="hg-field" ref={fieldRef}>
           <canvas ref={canvasRef} className="hg-canvas" aria-hidden />
@@ -865,14 +1112,36 @@ export default function HangulApp() {
                 <button type="button" onClick={onBind} disabled={!j?.word || phase !== "play"}>
                   낱말로 묶기
                 </button>
-                <button
-                  type="button"
-                  className="hg-go"
-                  onClick={onFinish}
-                  disabled={!j?.sentence || phase !== "play"}
-                >
-                  문장 완성!
-                </button>
+                {vsOn ? (
+                  // 대전: 완성한 문장으로 막을지 보낼지 (날아오는 문장과 이어지면 받아치기)
+                  <span className="hg-vsgo">
+                    <button
+                      type="button"
+                      className="hg-guard"
+                      onClick={() => onVsFinish("guard")}
+                      disabled={!j?.sentence || phase !== "play" || vsWait}
+                    >
+                      {ctr ? "🛡 완벽 방어" : "🛡 막기"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`hg-go${ctr ? " is-counter" : ""}`}
+                      onClick={() => onVsFinish("send")}
+                      disabled={!j?.sentence || phase !== "play" || vsWait}
+                    >
+                      {ctr ? "↩️ 받아치기!" : "⚔️ 보내기"}
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="hg-go"
+                    onClick={onFinish}
+                    disabled={!j?.sentence || phase !== "play"}
+                  >
+                    문장 완성!
+                  </button>
+                )}
               </div>
               {/* 문장칸 = 글: 완성한 문장이 끝없이 쌓이고(스크롤) 순서를 바꿀 수 있음. 글 전체가 READ_SEC 초마다 낭독 */}
               <div className="hg-shelf" data-uid={SHELF_ID}>
@@ -960,71 +1229,132 @@ export default function HangulApp() {
             </div>
           )}
 
-          {/* 메인 화면: 제목 · 훈장님 · 모드 고르기 (1인 / 대전은 준비 중) */}
+          {/* 대전: 날아오는 공격 · 도착한 공격 컷인 · 시작 카운트다운 */}
+          {vsOn && cutin && <VsCutin a={cutin} name={oppName(cutin.from)} />}
+          {vsWait && vsRoom && (
+            <div className="hg-vscount" aria-live="assertive">
+              <b>{Math.max(1, Math.ceil((vsRoom.startAt - vsNow) / 1000))}</b>
+              <small>같은 자모로 시작! 문장을 완성해서 막거나 보내요</small>
+            </div>
+          )}
+
+          {/* 메인 화면: 제목 · 훈장님 · 모드 고르기 (1인 / 대전) */}
           {phase === "ready" && (
             <div className="hg-over">
-              <div className="hg-title">
-                <div className="hg-title-art" aria-hidden>
-                  {INK.map((src, i) => (
-                    <img
-                      key={i}
-                      className={`hg-title-ink i${i}`}
-                      src={src}
-                      alt=""
-                      draggable={false}
-                    />
-                  ))}
-                  <img className="hg-title-teacher" src={IMG.hunjang} alt="" draggable={false} />
+              {vs && vsRoom?.phase === "waiting" ? (
+                <VsWaiting
+                  room={vsRoom}
+                  me={vs.me}
+                  onStart={() => void startVs(vs.id).catch(vsFail)}
+                  onBot={(lv) => void botVs(vs.id, lv).catch(vsFail)}
+                  onLeave={vsLeave}
+                />
+              ) : vsLobby || (vs && !vsRoom) ? (
+                <VsLobby
+                  busy={vsBusy || !ready}
+                  err={vsErr}
+                  onFriend={vsFriend}
+                  onBot={vsBot}
+                  onBack={() => {
+                    playSfx("click");
+                    setVsErr(null);
+                    if (vs) vsLeave();
+                    else setVsLobby(false);
+                  }}
+                />
+              ) : (
+                <div className="hg-title">
+                  <div className="hg-title-art" aria-hidden>
+                    {INK.map((src, i) => (
+                      <img
+                        key={i}
+                        className={`hg-title-ink i${i}`}
+                        src={src}
+                        alt=""
+                        draggable={false}
+                      />
+                    ))}
+                    <img className="hg-title-teacher" src={IMG.hunjang} alt="" draggable={false} />
+                  </div>
+                  <h2 className="hg-logo">
+                    니들이 <em>한글</em>을 알아?
+                  </h2>
+                  <p className="hg-title-sub">
+                    자모로 <b>아무 문장</b>이나 지어서 먹물 괴물을 막아라
+                  </p>
+                  {ready ? (
+                    <div className="hg-modes">
+                      <button type="button" className="hg-mode is-solo" onClick={start}>
+                        <i aria-hidden>📜</i>
+                        <b>1인 모드</b>
+                        <small>혼자 먹물 막기 · 점수 랭킹</small>
+                      </button>
+                      <button
+                        type="button"
+                        className="hg-mode is-vs"
+                        onClick={() => (playSfx("click"), setVsLobby(true))}
+                      >
+                        <i aria-hidden>⚔️</i>
+                        <b>대전 모드</b>
+                        <small>1:1 말싸움 · 문장으로 막고 보내고 받아치기</small>
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      className="hg-loading"
+                      role="progressbar"
+                      aria-valuenow={Math.round((assets.done / assets.total) * 100)}
+                    >
+                      <i style={{ transform: `scaleX(${assets.done / assets.total})` }} />
+                      <span>먹을 가는 중… {Math.round((assets.done / assets.total) * 100)}%</span>
+                    </div>
+                  )}
+                  <p className="hg-title-rule">
+                    「~다 · ~요 · ~임」으로 끝나면 문장 완성 · 길수록 점수가 확 커져요 · 먹물 얼룩{" "}
+                    {LOAD_MAX}마리면 끝
+                  </p>
                 </div>
-                <h2 className="hg-logo">
-                  니들이 <em>한글</em>을 알아?
-                </h2>
-                <p className="hg-title-sub">
-                  자모로 <b>아무 문장</b>이나 지어서 먹물 괴물을 막아라
-                </p>
-                {ready ? (
-                  <div className="hg-modes">
-                    <button
-                      type="button"
-                      className="hg-mode is-solo"
-                      onClick={() => (setVsNote(false), start())}
-                    >
-                      <i aria-hidden>📜</i>
-                      <b>1인 모드</b>
-                      <small>혼자 먹물 막기 · 점수 랭킹</small>
-                    </button>
-                    <button
-                      type="button"
-                      className="hg-mode is-vs"
-                      aria-describedby="hg-vsnote"
-                      onClick={() => (playSfx("click"), setVsNote(true))}
-                    >
-                      <i aria-hidden>⚔️</i>
-                      <b>대전 모드</b>
-                      <small>1:1 · 같은 자모로 누가 더 말 되게</small>
-                    </button>
-                  </div>
-                ) : (
-                  <div
-                    className="hg-loading"
-                    role="progressbar"
-                    aria-valuenow={Math.round((assets.done / assets.total) * 100)}
-                  >
-                    <i style={{ transform: `scaleX(${assets.done / assets.total})` }} />
-                    <span>먹을 가는 중… {Math.round((assets.done / assets.total) * 100)}%</span>
-                  </div>
-                )}
-                <p id="hg-vsnote" className={`hg-vsnote${vsNote ? " is-on" : ""}`} role="status">
-                  {vsNote ? "⚔️ 대전 모드는 구현 예정입니다." : " "}
-                </p>
-                <p className="hg-title-rule">
-                  「~다 · ~요 · ~임」으로 끝나면 문장 완성 · 길수록 점수가 확 커져요 · 먹물 얼룩{" "}
-                  {LOAD_MAX}마리면 끝
-                </p>
+              )}
+            </div>
+          )}
+          {/* 대전 중에 방이 사라짐 (서버 재시작 · 오래 비움) */}
+          {vs && !vsRoom && phase !== "ready" && (
+            <div className="hg-over">
+              <div className="hg-card">
+                <img className="hg-cardteacher" src={IMG.hunjangHmm} alt="" draggable={false} />
+                <h2>방이 사라졌어요</h2>
+                <p className="hg-dim">서버가 다시 켜졌거나 연결이 오래 끊겼어요</p>
+                <button type="button" className="hg-go" onClick={vsLeave}>
+                  처음 화면으로
+                </button>
               </div>
             </div>
           )}
-          {phase === "over" && (
+          {phase === "over" && vs && vsRoom && (
+            <div className="hg-over">
+              <VsResult
+                room={vsRoom}
+                me={vs.me}
+                sharing={sharing}
+                onVote={(m) =>
+                  void voteVs(vs.id, m)
+                    .then(() => playSfx("like"))
+                    .catch(vsFail)
+                }
+                onAgain={() => void againVs(vs.id).catch(vsFail)}
+                onLeave={vsLeave}
+                onShare={(m) =>
+                  share({
+                    text: withEnd(m.spaced),
+                    grade: m.grade,
+                    line1: `말싸움 · ${vsRoom.players.map((p) => p.name).join(" vs ")}`,
+                    line2: "오늘의 한 마디",
+                  })
+                }
+              />
+            </div>
+          )}
+          {phase === "over" && !vs && (
             <div className="hg-over">
               <div className="hg-card">
                 <img
@@ -1130,6 +1460,7 @@ export default function HangulApp() {
           <button
             type="button"
             onClick={() => (playSfx("click"), setSpeed((s) => (s === 1 ? 2 : s === 2 ? 3 : 1)))}
+            disabled={vsOn}
           >
             배속<small>×{speed}</small>
           </button>

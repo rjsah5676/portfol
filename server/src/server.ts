@@ -15,6 +15,7 @@ import { registerSurvivor } from "./games/survivor";
 import { registerPatrol } from "./games/patrol";
 import { registerRogue } from "./games/rogue";
 import { registerTown } from "./games/town";
+import { registerHangulVs } from "./games/hangulVs";
 import { createApp } from "./http/app";
 import { restoreLive, saveLive, waitIdle, type LiveGame } from "./live";
 import { Gateway } from "./realtime/gateway";
@@ -68,6 +69,7 @@ export async function createAppServer(
   registerPatrol(deps);
   registerRogue(deps);
   const town = registerTown(deps);
+  registerHangulVs(deps);
   const live = { sketch, fight, poker, rhythm };
   const liveGames: Record<string, LiveGame> = { sketch: sketch.live, fight: fight.live, poker: poker.live, rhythm: rhythm.live };
   // 배포 직전에 저장해 둔 방이 있으면 이어받음

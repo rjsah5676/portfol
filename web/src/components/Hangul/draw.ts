@@ -46,11 +46,12 @@ export function drawField(
   }
 
   for (const e of g.enemies) {
-    const r = e.boss ? 17 : 9;
+    const r = e.boss ? 17 : e.heavy ? 12 : 9;
     // 먹물 괴물 그림 (졸병 3종은 seed 로 고름) — 꿈틀꿈틀 · 통통. 그림이 없으면 예전 먹물 동그라미
-    const sp = img(e.boss ? INK_BOSS : INK[Math.floor(e.seed) % INK.length]);
+    // 대전의 단단한 놈은 왕먹물 그림을 작게
+    const sp = img(e.boss || e.heavy ? INK_BOSS : INK[Math.floor(e.seed) % INK.length]);
+    const size = e.boss ? 64 : e.heavy ? 42 : 30;
     if (sp) {
-      const size = e.boss ? 64 : 30;
       const sq = 1 + 0.08 * Math.sin(g.t * 9 + e.seed);
       const w = size * sq,
         h = size / sq;
@@ -76,7 +77,7 @@ export function drawField(
     }
     if (e.hp < e.max) {
       const bw = r * 2;
-      const top = sp ? (e.boss ? 64 : 30) * 0.58 + 4 : r + 6;
+      const top = sp ? size * 0.58 + 4 : r + 6;
       cx.fillStyle = "rgba(0,0,0,0.15)";
       cx.fillRect(e.x - bw / 2, e.y - top, bw, 3);
       cx.fillStyle = "#c0392b";
