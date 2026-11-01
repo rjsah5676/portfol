@@ -65,6 +65,7 @@ import { getBpTop, rhythmBoard, type BpRanking } from "@/firestore/rhythmRanking
 import RankList from "@/components/RankList";
 import { bpChartLabel } from "./RankingBoard";
 import RhythmShop from "./RhythmShop";
+import RhythmRankModal from "./RhythmRankModal";
 import { canWear, useRhythmItems } from "@/lib/rhythm/myItems";
 import { LoadingPanel, usePreload } from "@/components/GameLoader";
 import { allSettled, preloadAll } from "@/lib/preload";
@@ -255,6 +256,8 @@ export default function RhythmGame() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // 회원 BP 랭킹: 게임 머리말(랭킹 버튼·창)에 — 들어올 때와 판이 끝날 때마다 다시 불러옴
   const [rankOpen, setRankOpen] = useState(false);
+  // 타이틀의 RANKING 메뉴는 게임 화면 안 창으로 (머리말 버튼은 사이트 공통 창 그대로)
+  const [gameRankOpen, setGameRankOpen] = useState(false);
   const [bpTop, setBpTop] = useState<BpRanking[] | null>(null);
   const [bpRefresh, setBpRefresh] = useState(0);
   useEffect(() => {
@@ -1329,14 +1332,17 @@ export default function RhythmGame() {
               onEnter={enter}
               onStart={() => setScreen("select")}
               onSettings={() => setSettingsOpen(true)}
-              onRanking={() => setRankOpen(true)}
+              onRanking={() => {
+                setGameRankOpen(true);
+                setBpRefresh((n) => n + 1);
+              }}
               onShop={() => setShopOpen(true)}
               onOnline={openOnline}
               bgmMute={bgmMute}
               onToggleBgm={toggleBgm}
               fs={fs}
               onToggleFs={toggleFs}
-              blocked={settingsOpen || shopOpen}
+              blocked={settingsOpen || shopOpen || gameRankOpen}
             />
           )}
           {view === "select" && (
@@ -1479,6 +1485,16 @@ export default function RhythmGame() {
               onWear={(k) => setSettings((st) => ({ ...st, skin: k }))}
               onClose={() => {
                 setShopOpen(false);
+                sfx("ui-back", 0.7);
+              }}
+            />
+          )}
+          {gameRankOpen && (
+            <RhythmRankModal
+              rows={bpTop}
+              me={profile?.nick}
+              onClose={() => {
+                setGameRankOpen(false);
                 sfx("ui-back", 0.7);
               }}
             />
