@@ -133,22 +133,11 @@ export const NAV_GROUPS: NavGroup[] = [
         badge: "NEW",
       },
       {
-        href: "/games/hangul",
-        image: imgHangul,
-        label: "니들이 한글을 알아?",
-        desc: "매일 흩어진 자모를 다 써서 숨은 속담을 맞히는 한글 데일리 퍼즐, 별해 자랑",
-        icon: "px:hangul",
-        featured: true,
-        badge: "NEW",
-      },
-      {
         href: "/games/sketch",
         image: imgSketch,
         label: "DOODLE PARTY",
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
-        // 메인 큰 그림은 2칸씩이라 짝수로 — 한글 게임(7번째)이 들어와서 두들파티(8번째)도 큰 그림으로
-        featured: true,
       },
       {
         href: "/games/melongame",
@@ -156,6 +145,14 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "멜론 게임",
         desc: "합이 10·20이 되게 묶어 지우는 2분 타임어택",
         icon: "🍈",
+      },
+      {
+        href: "/games/hangul",
+        image: imgHangul,
+        label: "니들이 한글을 알아?",
+        desc: "매일 흩어진 자모를 다 써서 숨은 속담을 맞히는 한글 데일리 퍼즐, 별해 자랑",
+        icon: "px:hangul",
+        badge: "NEW",
       },
       {
         href: "/games/board",
