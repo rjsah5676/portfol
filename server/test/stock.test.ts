@@ -2,10 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REVIVE, START_MONEY } from "../../web/src/lib/poker/rules";
 import { BATTLE, BattleGame, buyCost, maxBuy, sellGain } from "../../web/src/lib/stock/battle";
 import { botThink, newMind } from "../../web/src/lib/stock/bots";
-import { RESALE, UNIT_TYPES, LANDMARKS } from "../../web/src/lib/stock/estate";
+import { COIN_TURNS, LIQ, coinQty, genCoin, liqPrice, marginValue } from "../../web/src/lib/stock/coin";
+import { DAILY, HOME_TYPES, RESALE, dailyOf, resaleOf } from "../../web/src/lib/stock/estate";
 import { rngFrom } from "../../web/src/lib/stock/rng";
 import { HISTORY, TURNS, genSolo } from "../../web/src/lib/stock/solo";
-import type { BRecords, BResult, EstateView, SoloView, StockMe } from "../../web/src/lib/stock/types";
+import type { AttendResult, BRecords, BResult, CoinView, EstateView, HomeView, SoloView, StockMe } from "../../web/src/lib/stock/types";
 import { STRATS, playOnce } from "../scripts/stock-solo-sim";
 import { RpcError, sleep, startTestServer, type TestClient, type TestServer } from "./helpers";
 
@@ -138,11 +139,13 @@ describe("솔로", () => {
     expect(await code(g.rpc("stock.solo.start"))).toBe("FORBIDDEN");
   });
 
-  it("시작 → 과거 봉만 보임 · 종목명 숨김 · 매수 · 매도 · 다음 봉 · 끝까지 → 정산", async () => {
+  it("시작 → 과거 봉만 보임 · 종목명은 처음부터 · 매수 · 매도 · 다음 봉 · 끝까지 → 정산", async () => {
     const { uid, c } = await member();
     let v = await c.rpc<SoloView>("stock.solo.start");
     expect(v.candles.length).toBe(HISTORY);
-    expect(v.name).toBe("???");
+    expect(v.name.length).toBeGreaterThan(0);
+    expect(v.date0).toBeGreaterThan(0);
+    expect(v.orders).toEqual([]);
     expect(v.preset).toBeNull();
     expect(v.cash).toBe(START_MONEY);
     const price = v.candles[HISTORY - 1].c;
@@ -167,8 +170,8 @@ describe("솔로", () => {
 
     v = await c.rpc<SoloView>("stock.solo.next", { n: TURNS, have: HISTORY + 1 });
     expect(v.done).toBe(true);
-    expect(v.name).not.toBe("???");
     expect(v.preset).not.toBeNull();
+    expect(v.result!.period).toBeTruthy();
     const res = v.result!;
     const d = (await doc(uid))!;
     expect(d.money).toBe(START_MONEY + res.pnl);
@@ -180,9 +183,39 @@ describe("솔로", () => {
     expect(me.total).toBe(d.money);
     const hist = await c.rpc<{ id: string }[]>("stock.solo.history");
     expect(hist[0].id).toBe(v.id);
+    // 끝난 판에 메모
+    await c.rpc("stock.solo.memo", { id: v.id, memo: "급등 뒤 추격은 금물" });
+    expect((await c.rpc<{ id: string; memo?: string }[]>("stock.solo.history"))[0].memo).toBe("급등 뒤 추격은 금물");
     const rv = await c.rpc<{ candles: unknown[] }>("stock.solo.review", { id: v.id });
     expect(rv.candles.length).toBe(HISTORY + TURNS);
     expect(await c.rpc("stock.solo.state")).toBeNull();
+  });
+
+  it("예약 주문: 지정가 매수는 지금보다 낮게 · 손절은 들고 있어야 · 체결되면 멈춤 · 최대 4개", async () => {
+    const { uid, c } = await member();
+    let v = await c.rpc<SoloView>("stock.solo.start");
+    const price = v.candles[HISTORY - 1].c;
+    expect(await code(c.rpc("stock.solo.order", { kind: "buy", price: price * 1.1, qty: 1 }))).toBe("BAD_PRICE");
+    // 아주 낮은 지정가 매수는 안 걸림 → 끝까지 가도 체결 없음
+    v = await c.rpc<SoloView>("stock.solo.order", { kind: "buy", price: Math.max(1, Math.round(price * 0.01)), qty: 1, have: HISTORY });
+    expect(v.orders.length).toBe(1);
+    for (let k = 0; k < 3; k++) v = await c.rpc<SoloView>("stock.solo.order", { kind: "buy", price: Math.max(1, Math.round(price * 0.02)), qty: 1, have: HISTORY });
+    expect(v.orders.length).toBe(4);
+    expect(await code(c.rpc("stock.solo.order", { kind: "buy", price: Math.max(1, Math.round(price * 0.03)), qty: 1 }))).toBe("TOO_MANY");
+    v = await c.rpc<SoloView>("stock.solo.cancelOrder", { id: v.orders[3].id, have: HISTORY });
+    expect(v.orders.length).toBe(3);
+    // 지금 가격 바로 밑 지정가 → 몇 턴 안에 체결되고 거기서 멈춤
+    v = await c.rpc<SoloView>("stock.solo.order", { kind: "buy", price: Math.round(price * 0.97), qty: 1, have: HISTORY });
+    const id = v.orders[3].id;
+    v = await c.rpc<SoloView>("stock.solo.next", { n: TURNS, have: HISTORY });
+    if (v.filled?.length) {
+      expect(v.filled[0].kind).toBe("buy");
+      expect(v.turn).toBeLessThan(TURNS);
+      expect(v.shares).toBe(1);
+      expect(v.orders.find((o) => o.id === id)).toBeUndefined();
+      expect((await doc(uid))!.money).toBeLessThan(START_MONEY);
+    } else expect(v.done).toBe(true);
+    await c.rpc("stock.solo.quit");
   });
 
   it("들고 있는 주식은 회생 판정에 합침 (주식에 다 넣고 회생 받기 막기)", async () => {
@@ -197,15 +230,16 @@ describe("솔로", () => {
 });
 
 describe("부동산", () => {
-  it("원룸 사고 팔기: 10% 손해 · 집 값은 총자산에 합침", async () => {
+  it("고시원 사고 팔기: 되팔면 50% · 집 값(되팔 값)은 총자산에 합침", async () => {
     const { uid, c } = await member();
-    const st = UNIT_TYPES[0];
+    const st = HOME_TYPES[0];
     await users().updateOne({ _id: uid }, { $set: { money: st.price } });
     let v = await c.rpc<EstateView>("stock.estate.buy", { type: st.id });
     expect(v.units.length).toBe(1);
+    expect(v.units[0].no).toBeGreaterThan(0);
     let d = (await doc(uid))!;
     expect(d.money).toBe(0);
-    expect(d.estate.value).toBe(st.price * RESALE);
+    expect(d.estate.value).toBe(resaleOf(st.price));
     expect(await code(c.rpc("poker.revive"))).toBe("NOT_BROKE");
     expect(await code(c.rpc("stock.estate.buy", { type: st.id }))).toBe("NOT_ENOUGH");
     v = await c.rpc<EstateView>("stock.estate.sell", { id: v.units[0].id });
@@ -215,32 +249,104 @@ describe("부동산", () => {
     expect(d.estate.value).toBe(0);
   });
 
-  it("명당 경매: 더 높은 입찰이 오면 앞사람 입찰금을 돌려줌", async () => {
+  it("단독주택 자리: 선착순 · 팔면 자리가 비고 · 남의 집 구경하면 방문 수가 오름", async () => {
     const a = await member(),
       b = await member();
-    const lm = LANDMARKS[0];
-    await users().updateMany({ _id: { $in: [a.uid, b.uid] } }, { $set: { money: lm.min * 3 } });
-    let v = await a.c.rpc<EstateView>("stock.estate.bid", { lot: lm.id, amount: lm.min });
-    expect(v.lots.find((l) => l.id === lm.id)!.bid!.mine).toBe(true);
-    expect((await doc(a.uid))!.money).toBe(lm.min * 2);
-    expect((await doc(a.uid))!.estate.escrow).toBe(lm.min);
-    // 낮은 입찰은 거절
-    expect(await code(b.c.rpc("stock.estate.bid", { lot: lm.id, amount: lm.min }))).toBe("LOW_BID");
-    const next = v.lots.find((l) => l.id === lm.id)!.minNext;
-    v = await b.c.rpc<EstateView>("stock.estate.bid", { lot: lm.id, amount: next });
-    expect((await doc(a.uid))!.money).toBe(lm.min * 3);
-    expect((await doc(a.uid))!.estate.escrow).toBe(0);
-    expect((await doc(b.uid))!.money).toBe(lm.min * 3 - next);
+    const ht = HOME_TYPES.find((h) => h.kind === "house")!;
+    await users().updateMany({ _id: { $in: [a.uid, b.uid] } }, { $set: { money: ht.price * 2 } });
+    const lot = ht.lots![0];
+    let v = await a.c.rpc<EstateView>("stock.estate.buy", { type: ht.id, lot });
+    expect(v.units[0].lot).toBe(lot);
+    expect(v.lots.find((l) => l.lot === lot)!.owner!.uid).toBe(a.uid);
+    expect(await code(b.c.rpc("stock.estate.buy", { type: ht.id, lot }))).toBe("SOLD_OUT");
+    // 남의 집 구경
+    const h = await b.c.rpc<HomeView>("stock.home", { uid: a.uid });
+    expect(h.mine).toBe(false);
+    expect(h.owner.uid).toBe(a.uid);
+    expect(h.visits).toBe(1);
+    expect(h.furniture).toEqual([]);
+    expect(await code(b.c.rpc("stock.home"))).toBe("NO_HOME");
+    // 팔면 자리가 빔
+    v = await a.c.rpc<EstateView>("stock.estate.sell", { id: v.units[0].id });
+    expect(v.lots.find((l) => l.lot === lot)!.owner).toBeNull();
+    expect((await doc(a.uid))!.money).toBe(ht.price * 2 - ht.price + resaleOf(ht.price));
+  });
+
+  it("출석 보너스: 집값의 0.2% · 하루 한 번", async () => {
+    const { uid, c } = await member();
+    expect(await c.rpc<AttendResult | null>("stock.estate.attend")).toBeNull();
+    const st = HOME_TYPES[1];
+    await users().updateOne({ _id: uid }, { $set: { money: st.price } });
+    await c.rpc<EstateView>("stock.estate.buy", { type: st.id });
+    const r = await c.rpc<AttendResult | null>("stock.estate.attend");
+    expect(r!.amount).toBe(dailyOf(st.price));
+    expect(r!.amount).toBe(Math.round(st.price * DAILY));
+    expect((await doc(uid))!.money).toBe(r!.amount);
+    expect(await c.rpc<AttendResult | null>("stock.estate.attend")).toBeNull();
+    const v = await c.rpc<EstateView>("stock.estate");
+    expect(v.daily.claimed).toBe(true);
+  });
+});
+
+describe("코인", () => {
+  it("생성기: 기대수익이 주식보다 뚜렷하게 마이너스 (−3% ~ −12%)", () => {
+    let sum = 0;
+    const N = 400;
+    for (let k = 0; k < N; k++) {
+      const ch = genCoin(`ev${k}`);
+      const a = ch.candles[ch.candles.length - 1 - COIN_TURNS].c;
+      const b = ch.candles[ch.candles.length - 1].c;
+      sum += b / a - 1;
+    }
+    const ev = sum / N;
+    expect(ev).toBeLessThan(-0.03);
+    expect(ev).toBeGreaterThan(-0.12);
+  });
+
+  it("레버리지 수식: 10배는 9% 빠지면 청산 · 평가액은 증거금 × (1 + 배수 × 수익률)", () => {
+    expect(liqPrice(10, 1000)).toBeCloseTo(1000 * (1 - LIQ / 10));
+    expect(marginValue(100_000, 3, 1000, 1100)).toBe(130_000);
+    expect(marginValue(100_000, 10, 1000, 900)).toBe(0);
+    expect(coinQty(100_000, 10, 1000)).toBe(1000);
+  });
+
+  it("진입 · 정리 · 넘기기 · 끝 → 기록", async () => {
+    const { uid, c } = await member();
+    await users().updateOne({ _id: uid }, { $set: { money: 10_000_000 } });
+    let v = await c.rpc<CoinView>("stock.coin.start");
+    expect(v.turn).toBe(0);
+    expect(v.pos).toBeNull();
+    v = await c.rpc<CoinView>("stock.coin.open", { margin: 1_000_000, lev: 1 });
+    expect(v.pos!.margin).toBe(1_000_000);
+    expect((await doc(uid))!.money).toBe(9_000_000);
+    expect(await code(c.rpc("stock.coin.open", { margin: 1_000_000, lev: 10 }))).toBe("LEV");
+    v = await c.rpc<CoinView>("stock.coin.close", { pct: 50 });
+    expect(v.pos!.margin).toBe(500_000);
+    expect((await doc(uid))!.money).toBe(9_500_000);
+    v = await c.rpc<CoinView>("stock.coin.next", { n: COIN_TURNS });
+    expect(v.done).toBe(true);
+    expect(v.result).not.toBeNull();
+    const d = (await doc(uid))!;
+    expect(d.stock.coinHeld ?? 0).toBe(0);
+    // 1배는 청산이 없으니 남은 증거금이 가격대로 돌아옴
+    expect(d.money).toBeGreaterThan(9_500_000);
+    const hist = await c.rpc<{ id: string }[]>("stock.coin.history");
+    expect(hist.length).toBe(1);
+    const me = await c.rpc<StockMe>("stock.me");
+    expect(me.coin.games).toBe(1);
   });
 });
 
 describe("대전", () => {
   it("방 만들기 · 봇 · 시작 · 주문 · 끝 → 결과 · 전적", async () => {
     const { uid, c } = await member();
-    const { id } = await c.rpc<{ id: string }>("stock.room.create", { bots: 3, max: 6, level: 2 });
+    const { id } = await c.rpc<{ id: string }>("stock.room.create", { bots: 3, max: 6 });
     const room = await c.sub<any>("stock.room", { id });
     expect(room.data.room.seats.filter(Boolean).length).toBe(4);
-    await c.rpc("stock.room.addBot", { id, style: "whale", level: 0 });
+    await c.rpc("stock.room.addBot", { id });
+    // 처음 봇 3명은 성격이 서로 다름 (랜덤이지만 안 겹치게)
+    const styles = new Set(room.data.room.seats.filter((s: any) => s?.bot).map((s: any) => s.bot.style));
+    expect(styles.size).toBe(3);
     expect(await code(c.rpc("stock.room.order", { id, stock: 0, side: "buy", qty: 1 }))).toBe("NOT_PLAYING");
     await c.rpc("stock.room.start", { id });
     const r1 = await c.rpc<{ ok: boolean; qty: number }>("stock.room.order", { id, stock: 2, side: "buy", qty: 10 });

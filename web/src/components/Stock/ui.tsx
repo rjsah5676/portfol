@@ -25,7 +25,7 @@ export const C = {
   gold: "#F2C14E",
   goldBg: "#2A2614",
   green: "#4FD1A5",
-  ma: { 5: "#F2C14E", 20: "#C77DFF", 60: "#4FD1A5", 120: "#5BA8FF" } as Record<number, string>,
+  ma: { 5: "#F2C14E", 10: "#FF9F43", 20: "#C77DFF", 60: "#4FD1A5", 120: "#5BA8FF" } as Record<number, string>,
 };
 
 export const FONT = "font-['Nanum_Gothic',sans-serif]";

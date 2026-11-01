@@ -9,7 +9,7 @@ import type { UserDoc } from "../../users";
 import { newId } from "../../ids";
 import { BOT_CHAR_IDS, CHAR_IDS, type CharId, type Look } from "../../../../web/src/lib/poker/rules";
 import { BATTLE, BattleGame, N_STOCKS } from "../../../../web/src/lib/stock/battle";
-import { BOT_STYLE_IDS, botThink, newMind, type BotLevel, type BotMind, type BotStyle } from "../../../../web/src/lib/stock/bots";
+import { BOT_STYLE_IDS, LEVEL_WEIGHT, botThink, newMind, type BotLevel, type BotMind, type BotStyle } from "../../../../web/src/lib/stock/bots";
 import { newSeed, rngFrom } from "../../../../web/src/lib/stock/rng";
 import type { BGameWire, BLobbyRow, BRecordRow, BRecords, BResult, BResultRow, BRoomWire, BSeatWire, BattleStats } from "../../../../web/src/lib/stock/types";
 import { faceOf, member } from "./common";
@@ -269,10 +269,22 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
     max: z.number().int().min(BATTLE.minPlayers).max(BATTLE.maxPlayers).default(6),
     pub: z.boolean().default(true),
     password: z.string().max(8).default(""),
-    /** 처음에 앉힐 봇 수 */
+    /** 처음에 앉힐 봇 수 (성격 · 난이도는 랜덤) */
     bots: z.number().int().min(0).max(7).default(3),
-    level: z.number().int().min(0).max(2).default(1),
   });
+  /** 난이도 뽑기 (초급 · 중급 · 고급 비율) */
+  const randLevel = (): BotLevel => {
+    const t = LEVEL_WEIGHT[0] + LEVEL_WEIGHT[1] + LEVEL_WEIGHT[2];
+    const x = randomInt(t);
+    return x < LEVEL_WEIGHT[0] ? 0 : x < LEVEL_WEIGHT[0] + LEVEL_WEIGHT[1] ? 1 : 2;
+  };
+  const randStyle = (r: Room): BotStyle => {
+    // 같은 성격이 몰리지 않게: 아직 없는 성격 우선
+    const have = new Set(r.seats.filter((s) => s?.bot).map((s) => s!.bot!.style));
+    const pool = BOT_STYLE_IDS.filter((x) => !have.has(x));
+    const from = pool.length ? pool : BOT_STYLE_IDS;
+    return from[randomInt(from.length)];
+  };
 
   async function createRoom(ctx: Ctx, o: z.infer<typeof createSchema>) {
     const { uid, nick } = member(ctx);
@@ -309,10 +321,9 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
     };
     rooms.set(id, r);
     await sit(ctx, r);
-    const rng = rngFrom(newSeed());
     for (let k = 0; k < Math.min(o.bots, o.max - 1); k++) {
       const i = r.seats.findIndex((s) => !s);
-      r.seats[i] = botSeat(r, BOT_STYLE_IDS[Math.floor(rng() * BOT_STYLE_IDS.length)], o.level as BotLevel);
+      r.seats[i] = botSeat(r, randStyle(r), randLevel());
     }
     changed(r);
     return r;
@@ -393,28 +404,12 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
     return r;
   }
 
-  const styleSchema = z.union([z.enum(BOT_STYLE_IDS as [BotStyle, ...BotStyle[]]), z.literal("random")]);
-  const pickStyle = (s: BotStyle | "random"): BotStyle => (s === "random" ? BOT_STYLE_IDS[randomInt(BOT_STYLE_IDS.length)] : s);
-
   gateway.rpc("stock.room.addBot", (ctx, raw) => {
-    const o = idOnly.extend({ style: styleSchema.default("random"), level: z.number().int().min(0).max(2).default(1) }).parse(raw);
+    const o = idOnly.parse(raw);
     const r = asHost(ctx, o.id);
     const i = r.seats.findIndex((s) => !s);
     if (i < 0) throw bad("자리가 다 찼어요.");
-    r.seats[i] = botSeat(r, pickStyle(o.style), o.level as BotLevel);
-    changed(r);
-    return null;
-  });
-
-  /** 봇 성격 · 난이도 바꾸기 */
-  gateway.rpc("stock.room.setBot", (ctx, raw) => {
-    const o = idOnly.extend({ seat: z.number().int().min(0).max(7), style: styleSchema.optional(), level: z.number().int().min(0).max(2).optional() }).parse(raw);
-    const r = asHost(ctx, o.id);
-    const s = r.seats[o.seat];
-    if (!s?.bot) return null;
-    const style = o.style ? pickStyle(o.style) : s.bot.style;
-    const level = (o.level ?? s.bot.level) as BotLevel;
-    r.seats[o.seat] = style === s.bot.style ? { ...s, bot: { style, level } } : botSeat(r, style, level);
+    r.seats[i] = botSeat(r, randStyle(r), randLevel());
     changed(r);
     return null;
   });

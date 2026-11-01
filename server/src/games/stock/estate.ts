@@ -4,77 +4,55 @@ import { AppError } from "../../errors";
 import type { Gateway } from "../../realtime/gateway";
 import type { UserDoc } from "../../users";
 import { newId } from "../../ids";
-import { charOf, lookOf, type CharId, type Look } from "../../../../web/src/lib/poker/rules";
-import { LANDMARKS, MAX_UNITS, UNIT_TYPES, landmarkOf, minNextBid, nextSeason, resaleOf, seasonEnd, seasonOf, unitType } from "../../../../web/src/lib/stock/estate";
-import type { EstateLotWire, EstateUnitWire, EstateView } from "../../../../web/src/lib/stock/types";
+import { charOf, kstDay, lookOf, type CharId, type Look } from "../../../../web/src/lib/poker/rules";
+import { HOME_TYPES, LOT_NAMES, MAX_UNITS, dailyOf, homeRank, homeType, lotHome, resaleOf } from "../../../../web/src/lib/stock/estate";
+import type { AttendResult, EstateLotWire, EstateUnitWire, EstateView, HomeView } from "../../../../web/src/lib/stock/types";
 import { skinsOf } from "../poker/wallet";
 import { createLocks, faceOf, materialize, member, noBuyWhileSeated, type PokerLink } from "./common";
 
 /*
- * 부동산 · 경매장.
- *  아파트: users.estate.units 에 호실 목록, users.estate.value 에 되팔 때 받을 값의 합 (회생 · 총자산)
- *  명당: stock_lots 문서 하나에 지금 시즌 주인 + 다음 시즌 최고 입찰.
- *    입찰할 때 돈을 바로 빼 두고(users.estate.escrow — 회생 판정에 합침), 더 높은 입찰이 들어오면 앞사람에게 돌려줌.
- *    시즌이 바뀐 뒤 처음 읽을 때 정산: 최고 입찰자가 새 주인 (입찰금은 사라짐) · 입찰이 없으면 빈집.
+ * 부동산.
+ *  집: users.estate.units 에 목록(아파트형 호수 · 단독형 자리), users.estate.value 에 되팔 때 받을 값의 합 (회생 · 총자산)
+ *  단독형 자리: stock_lots 문서 하나에 주인 (선착순 고정가, 경매 없음)
+ *  출석 보너스: 집이 있으면 하루 한 번 (KST) 가진 집값 합 × DAILY — users.estate.attend 에 받은 날
+ *  집 안: 내 집 · 남의 집 구경 (stock.home) — 방문 수는 users.estate.visits
  */
 
 interface UnitDoc {
   id: string;
   type: string;
   no: number;
+  lot?: string;
   at: number;
 }
 interface LotDoc {
   _id: string;
   owner: { uid: string; nick: string; char: CharId; look: Look } | null;
-  ownerSeason: string | null;
-  /** 다음 시즌(season) 을 위한 최고 입찰 */
-  bid: { uid: string; nick: string; amount: number; season: string; at: number } | null;
+  unit: string | null;
+  at: number | null;
 }
-type EstateFields = { estate?: { units?: UnitDoc[]; value?: number } };
+type EstateFields = { estate?: { units?: UnitDoc[]; value?: number; attend?: string; visits?: number } };
 
 export function createEstate(db: Database, gateway: Gateway, poker: PokerLink, now: () => number = Date.now) {
   const users = db.col<UserDoc>("users");
   const lots = db.col<Omit<LotDoc, "_id">>("stock_lots");
   const withLock = createLocks();
-
-  /** 시즌이 바뀌었으면 정산 (여러 번 불러도 한 번만: 조건부 갱신) */
-  async function settle(): Promise<LotDoc[]> {
-    const season = seasonOf(now());
-    const docs = (await lots.find({}).toArray()) as unknown as LotDoc[];
-    const byId = new Map(docs.map((d) => [d._id, d]));
-    const out: LotDoc[] = [];
-    for (const lm of LANDMARKS) {
-      let d = byId.get(lm.id);
-      if (!d) {
-        d = { _id: lm.id, owner: null, ownerSeason: null, bid: null };
-        await lots.updateOne({ _id: lm.id }, { $setOnInsert: { owner: null, ownerSeason: null, bid: null } }, { upsert: true });
-      }
-      // 입찰한 시즌이 왔거나 지났으면 → 주인이 바뀜
-      if (d.bid && d.bid.season <= season) {
-        const b = d.bid;
-        const face = await faceOf(db, b.uid);
-        const owner = { uid: b.uid, nick: b.nick, char: face.char, look: face.look };
-        const r = await lots.updateOne({ _id: lm.id, "bid.uid": b.uid, "bid.amount": b.amount }, { $set: { owner, ownerSeason: b.season, bid: null } });
-        if (r.modifiedCount) {
-          // 낙찰: 맡겨 둔 입찰금은 사라짐 (돈 소모처)
-          await users.updateOne({ _id: b.uid }, { $inc: { "estate.escrow": -b.amount, "stats.stock.estate.won": 1 } });
-          d = { ...d, owner, ownerSeason: b.season, bid: null };
-        }
-        else d = ((await lots.findOne({ _id: lm.id })) as unknown as LotDoc) ?? d;
-      }
-      // 주인의 시즌이 끝났는데 새 입찰이 없었으면 → 빈집
-      if (d.owner && d.ownerSeason && d.ownerSeason < season) {
-        await lots.updateOne({ _id: lm.id, ownerSeason: d.ownerSeason }, { $set: { owner: null, ownerSeason: null } });
-        d = { ...d, owner: null, ownerSeason: null };
-      }
-      out.push(d);
-    }
-    return out;
-  }
+  const ALL_LOTS = HOME_TYPES.flatMap((t) => t.lots ?? []);
 
   const unitsOf = async (uid: string) =>
     ((await users.findOne({ _id: uid }, { projection: { "estate.units": 1 } })) as EstateFields | null)?.estate?.units ?? [];
+  const wire = (u: UnitDoc): EstateUnitWire => ({ id: u.id, type: u.type, no: u.no, ...(u.lot && { lot: u.lot }), at: u.at });
+  const valueOf = (units: UnitDoc[]) => units.reduce((a, u) => a + resaleOf(homeType(u.type)?.price ?? 0), 0);
+  const dailyOfUnits = (units: UnitDoc[]) => units.reduce((a, u) => a + dailyOf(homeType(u.type)?.price ?? 0), 0);
+  const bestOf = (units: UnitDoc[]) => units.reduce<UnitDoc | null>((a, x) => (!a || homeRank(x.type) > homeRank(a.type) || (homeRank(x.type) === homeRank(a.type) && x.no > a.no) ? x : a), null);
+  const label = (u: UnitDoc | null) => (u ? (u.lot ? LOT_NAMES[u.lot] : `${u.no}호 ${homeType(u.type)?.name ?? ""}`) : "");
+
+  async function lotDocs(): Promise<LotDoc[]> {
+    const docs = (await lots.find({}).toArray()) as unknown as LotDoc[];
+    const by = new Map(docs.map((d) => [d._id, d]));
+    return ALL_LOTS.map((id) => by.get(id) ?? { _id: id, owner: null, unit: null, at: null });
+  }
+  const lotsWire = (docs: LotDoc[]): EstateLotWire[] => docs.map((d) => ({ lot: d._id, name: LOT_NAMES[d._id] ?? d._id, type: lotHome(d._id)!.id, owner: d.owner }));
 
   async function plate() {
     const docs = await users
@@ -83,58 +61,70 @@ export function createEstate(db: Database, gateway: Gateway, poker: PokerLink, n
       .limit(5)
       .toArray();
     return docs.map((d) => {
-      const u = d as unknown as UserDoc & EstateFields & { poker?: { char?: string; skins?: string[]; wear?: Record<string, string> } };
-      const units = u.estate?.units ?? [];
-      const top = units.reduce<UnitDoc | null>((a, x) => (!a || x.no > a.no ? x : a), null);
+      const u = d as unknown as UserDoc & EstateFields & { _id: string; poker?: { char?: string; skins?: string[]; wear?: Record<string, string> } };
       const char = charOf(u.poker?.char);
-      return { nick: u.nick, char, look: lookOf(char, skinsOf(u.poker).wear), value: u.estate?.value ?? 0, top: top ? `${top.no}호 ${unitType(top.type)?.name ?? ""}` : "" };
+      return { uid: String(u._id), nick: u.nick, char, look: lookOf(char, skinsOf(u.poker).wear), value: u.estate?.value ?? 0, top: label(bestOf(u.estate?.units ?? [])) };
     });
   }
 
   async function viewOf(uid: string): Promise<EstateView> {
-    const season = seasonOf(now());
-    const [docs, units, pl, residents] = await Promise.all([settle(), unitsOf(uid), plate(), users.countDocuments({ "estate.value": { $gt: 0 } } as never)]);
-    const lotsW: EstateLotWire[] = docs.map((d) => {
-      const lm = landmarkOf(d._id)!;
-      return {
-        id: d._id,
-        name: lm.name,
-        owner: d.owner ? { nick: d.owner.nick, char: d.owner.char, look: d.owner.look } : null,
-        ownerSeason: d.ownerSeason,
-        bid: d.bid ? { nick: d.bid.nick, amount: d.bid.amount, mine: d.bid.uid === uid } : null,
-        minNext: minNextBid(lm, d.bid?.amount ?? null),
-      };
-    });
+    const [doc, docs, pl, residents] = await Promise.all([
+      users.findOne({ _id: uid }, { projection: { "estate.units": 1, "estate.attend": 1 } }) as Promise<EstateFields | null>,
+      lotDocs(),
+      plate(),
+      users.countDocuments({ "estate.value": { $gt: 0 } } as never),
+    ]);
+    const units = doc?.estate?.units ?? [];
     return {
-      season,
-      next: nextSeason(season),
-      endsAt: seasonEnd(season),
-      units: units.map((u): EstateUnitWire => ({ id: u.id, type: u.type, no: u.no, at: u.at })),
-      lots: lotsW,
+      units: units.map(wire),
+      lots: lotsWire(docs),
       plate: pl,
       residents,
+      daily: { amount: dailyOfUnits(units), claimed: doc?.estate?.attend === kstDay(now()) },
     };
   }
 
   gateway.rpc("stock.estate", (ctx) => viewOf(member(ctx).uid));
 
   gateway.rpc("stock.estate.buy", (ctx, raw) => {
-    const { uid } = member(ctx);
-    const { type } = z.object({ type: z.enum(UNIT_TYPES.map((u) => u.id) as [string, ...string[]]) }).parse(raw);
-    const ut = unitType(type)!;
+    const { uid, nick } = member(ctx);
+    const o = z.object({ type: z.enum(HOME_TYPES.map((u) => u.id) as [string, ...string[]]), lot: z.string().max(20).optional() }).parse(raw);
+    const ht = homeType(o.type)!;
     return withLock(uid, async () => {
       noBuyWhileSeated(poker, uid);
       await materialize(db, uid);
       const units = await unitsOf(uid);
-      if (units.length >= MAX_UNITS) throw new AppError("TOO_MANY", `호실은 ${MAX_UNITS}개까지 가질 수 있어요.`, 409);
-      // 호수: 그 평형의 층 · 01~12호 (펜트하우스는 30층 한 줄)
-      const floor = ut.floors[0] + Math.floor(Math.random() * (ut.floors[1] - ut.floors[0] + 1));
-      const unit: UnitDoc = { id: newId(10), type: ut.id, no: floor * 100 + 1 + Math.floor(Math.random() * 12), at: now() };
-      const r = await users.updateOne(
-        { _id: uid, money: { $gte: ut.price } },
-        { $inc: { money: -ut.price, "estate.value": resaleOf(ut.price), "stats.stock.estate.bought": ut.price }, $push: { "estate.units": unit } } as never
-      );
-      if (!r.modifiedCount) throw new AppError("NOT_ENOUGH", "현금이 모자라요.", 409);
+      if (units.length >= MAX_UNITS) throw new AppError("TOO_MANY", `집은 ${MAX_UNITS}채까지 가질 수 있어요.`, 409);
+      let unit: UnitDoc;
+      if (ht.kind === "house") {
+        // 단독형: 빈 자리 하나 (고른 자리가 있으면 그 자리)
+        const docs = await lotDocs();
+        const free = docs.filter((d) => ht.lots!.includes(d._id) && !d.owner);
+        const pick = o.lot ? free.find((d) => d._id === o.lot) : free[0];
+        if (!pick) throw new AppError("SOLD_OUT", o.lot ? "방금 다른 분이 샀어요." : "남은 자리가 없어요.", 409);
+        unit = { id: newId(10), type: ht.id, no: 0, lot: pick._id, at: now() };
+        const face = await faceOf(db, uid);
+        // 자리 먼저 잡고(선착순) → 돈. 돈이 모자라면 자리를 되돌림
+        const l = await lots.updateOne({ _id: pick._id, owner: null } as never, { $set: { owner: { uid, nick, char: face.char, look: face.look }, unit: unit.id, at: now() } }, { upsert: true }).catch(() => null);
+        if (!l || (!l.modifiedCount && !l.upsertedCount)) throw new AppError("SOLD_OUT", "방금 다른 분이 샀어요.", 409);
+        const r = await users.updateOne(
+          { _id: uid, money: { $gte: ht.price } },
+          { $inc: { money: -ht.price, "estate.value": resaleOf(ht.price), "stats.stock.estate.bought": ht.price }, $push: { "estate.units": unit } } as never
+        );
+        if (!r.modifiedCount) {
+          await lots.updateOne({ _id: pick._id, unit: unit.id } as never, { $set: { owner: null, unit: null, at: null } });
+          throw new AppError("NOT_ENOUGH", "현금이 모자라요.", 409);
+        }
+      } else {
+        // 아파트형: 그 평형의 층 · 01~12호
+        const floor = ht.floors![0] + Math.floor(Math.random() * (ht.floors![1] - ht.floors![0] + 1));
+        unit = { id: newId(10), type: ht.id, no: floor * 100 + 1 + Math.floor(Math.random() * 12), at: now() };
+        const r = await users.updateOne(
+          { _id: uid, money: { $gte: ht.price } },
+          { $inc: { money: -ht.price, "estate.value": resaleOf(ht.price), "stats.stock.estate.bought": ht.price }, $push: { "estate.units": unit } } as never
+        );
+        if (!r.modifiedCount) throw new AppError("NOT_ENOUGH", "현금이 모자라요.", 409);
+      }
       await poker.wallet.refresh(uid).catch(() => {});
       return viewOf(uid);
     });
@@ -145,15 +135,13 @@ export function createEstate(db: Database, gateway: Gateway, poker: PokerLink, n
     const { id } = z.object({ id: z.string().max(20) }).parse(raw);
     return withLock(uid, async () => {
       const unit = (await unitsOf(uid)).find((u) => u.id === id);
-      if (!unit) throw new AppError("NOT_FOUND", "없는 호실이에요.", 404);
-      const ut = unitType(unit.type);
-      if (!ut) throw new AppError("NOT_FOUND", "없는 호실이에요.", 404);
-      const back = resaleOf(ut.price);
-      const r = await users.updateOne(
-        { _id: uid, "estate.units.id": id } as never,
-        { $pull: { "estate.units": unit }, $inc: { money: back, "estate.value": -back } } as never
-      );
-      if (!r.modifiedCount) throw new AppError("NOT_FOUND", "없는 호실이에요.", 404);
+      if (!unit) throw new AppError("NOT_FOUND", "없는 집이에요.", 404);
+      const ht = homeType(unit.type);
+      if (!ht) throw new AppError("NOT_FOUND", "없는 집이에요.", 404);
+      const back = resaleOf(ht.price);
+      const r = await users.updateOne({ _id: uid, "estate.units.id": id } as never, { $pull: { "estate.units": { id } }, $inc: { money: back, "estate.value": -back } } as never);
+      if (!r.modifiedCount) throw new AppError("NOT_FOUND", "없는 집이에요.", 404);
+      if (unit.lot) await lots.updateOne({ _id: unit.lot, unit: id } as never, { $set: { owner: null, unit: null, at: null } });
       // 소수점 · 옛 값 때문에 음수가 되지 않게
       await users.updateOne({ _id: uid, "estate.value": { $lt: 0 } } as never, { $set: { "estate.value": 0 } });
       await poker.wallet.refresh(uid).catch(() => {});
@@ -161,45 +149,64 @@ export function createEstate(db: Database, gateway: Gateway, poker: PokerLink, n
     });
   });
 
-  gateway.rpc("stock.estate.bid", (ctx, raw) => {
-    const { uid, nick } = member(ctx);
-    const o = z.object({ lot: z.string().max(10), amount: z.number().int().min(1).max(1e15) }).parse(raw);
-    const lm = landmarkOf(o.lot);
-    if (!lm) throw new AppError("NOT_FOUND", "없는 집이에요.", 404);
+  /** 출석 보너스 (하루 한 번 · 집이 있을 때). 받을 게 없으면 null */
+  async function attend(uid: string): Promise<AttendResult | null> {
     return withLock(uid, async () => {
-      noBuyWhileSeated(poker, uid);
+      const d = (await users.findOne({ _id: uid }, { projection: { "estate.units": 1, "estate.attend": 1 } })) as EstateFields | null;
+      const units = d?.estate?.units ?? [];
+      const day = kstDay(now());
+      if (!units.length || d?.estate?.attend === day) return null;
+      const amount = dailyOfUnits(units);
+      if (amount <= 0) return null;
       await materialize(db, uid);
-      const docs = await settle();
-      const d = docs.find((x) => x._id === lm.id)!;
-      const season = nextSeason(seasonOf(now()));
-      const top = d.bid?.amount ?? null;
-      if (o.amount < minNextBid(lm, top)) throw new AppError("LOW_BID", "입찰가가 낮아요. 화면을 새로 보고 다시 입찰해 주세요.", 409);
-      const mine = d.bid?.uid === uid;
-      // 내 입찰을 올리는 거면 차액만, 아니면 전액을 빼 둠
-      const pay = mine ? o.amount - (top ?? 0) : o.amount;
-      const m = await users.updateOne({ _id: uid, money: { $gte: pay } }, { $inc: { money: -pay, "estate.escrow": pay, "stats.stock.estate.bids": 1 } });
-      if (!m.modifiedCount) throw new AppError("NOT_ENOUGH", "현금이 모자라요.", 409);
-      const cond = d.bid ? { _id: lm.id, "bid.uid": d.bid.uid, "bid.amount": d.bid.amount } : { _id: lm.id, bid: null };
-      const r = await lots.updateOne(cond as never, { $set: { bid: { uid, nick, amount: o.amount, season, at: now() } } });
-      if (!r.modifiedCount) {
-        await users.updateOne({ _id: uid }, { $inc: { money: pay, "estate.escrow": -pay } });
-        throw new AppError("OUTBID", "방금 다른 입찰이 들어왔어요. 다시 봐 주세요.", 409);
-      }
-      // 앞사람 입찰금 돌려주기
-      if (d.bid && !mine) {
-        await users.updateOne({ _id: d.bid.uid }, { $inc: { money: d.bid.amount, "estate.escrow": -d.bid.amount } });
-        void poker.wallet.refresh(d.bid.uid).catch(() => {});
-      }
+      const r = await users.updateOne({ _id: uid, "estate.attend": { $ne: day } } as never, { $set: { "estate.attend": day }, $inc: { money: amount, "stats.stock.estate.daily": amount } });
+      if (!r.modifiedCount) return null;
       await poker.wallet.refresh(uid).catch(() => {});
-      return viewOf(uid);
+      return { amount, homes: units.length };
     });
+  }
+  gateway.rpc("stock.estate.attend", (ctx) => attend(member(ctx).uid));
+
+  /** 집 안 (uid 없으면 내 집). 남의 집이면 방문 수 +1 */
+  gateway.rpc("stock.home", async (ctx, raw) => {
+    const me = member(ctx);
+    const { uid } = z.object({ uid: z.string().max(64).optional() }).parse(raw ?? {});
+    const target = uid ?? me.uid;
+    const d = (await users.findOne({ _id: target }, { projection: { nick: 1, "estate.units": 1, "estate.value": 1, "estate.visits": 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1 } })) as
+      | (UserDoc & EstateFields & { poker?: { char?: string; skins?: string[]; wear?: Record<string, string> } })
+      | null;
+    if (!d) throw new AppError("NOT_FOUND", "없는 분이에요.", 404);
+    const units = d.estate?.units ?? [];
+    if (!units.length) throw new AppError("NO_HOME", uid ? "아직 집이 없는 분이에요." : "아직 집이 없어요. 부동산에서 집을 사 보세요.", 404);
+    const mine = target === me.uid;
+    let visits = d.estate?.visits ?? 0;
+    if (!mine) {
+      await users.updateOne({ _id: target }, { $inc: { "estate.visits": 1 } });
+      visits++;
+    }
+    const char = charOf(d.poker?.char);
+    const out: HomeView = {
+      owner: { uid: target, nick: d.nick, char, look: lookOf(char, skinsOf(d.poker).wear) },
+      mine,
+      homes: [...units].sort((a, b) => homeRank(b.type) - homeRank(a.type)).map(wire),
+      best: bestOf(units) ? wire(bestOf(units)!) : null,
+      value: d.estate?.value ?? valueOf(units),
+      daily: dailyOfUnits(units),
+      visits,
+      furniture: [],
+    };
+    return out;
   });
 
   return {
-    async hub(): Promise<{ bids: number; residents: number }> {
-      const docs = await settle();
-      return { bids: docs.filter((d) => d.bid).length, residents: await users.countDocuments({ "estate.value": { $gt: 0 } } as never) };
+    async hub(uid: string | null): Promise<{ residents: number; homes: number; dailyLeft: boolean }> {
+      const residents = await users.countDocuments({ "estate.value": { $gt: 0 } } as never);
+      if (!uid) return { residents, homes: 0, dailyLeft: false };
+      const d = (await users.findOne({ _id: uid }, { projection: { "estate.units": 1, "estate.attend": 1 } })) as EstateFields | null;
+      const n = d?.estate?.units?.length ?? 0;
+      return { residents, homes: n, dailyLeft: n > 0 && d?.estate?.attend !== kstDay(now()) };
     },
-    settle,
+    attend,
+    lotDocs,
   };
 }

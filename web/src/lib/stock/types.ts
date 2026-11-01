@@ -4,7 +4,8 @@
 
 import type { CharId, Look } from "../poker/rules";
 import type { BotLevel, BotStyle } from "./bots";
-import type { Candle, Preset, SoloTrade } from "./solo";
+import type { CoinPos, CoinPreset, CoinTrade } from "./coin";
+import type { Candle, Preset, SoloOrder, SoloTrade } from "./solo";
 
 // ───────────── 지갑 · 허브 ─────────────
 
@@ -26,7 +27,18 @@ export interface StockMe {
   /** 포커 테이블에 앉아 있으면 (그동안은 사기 · 입찰 불가) */
   seated: boolean;
   solo: SoloStats;
+  coin: CoinStats;
   battle: BattleStats;
+}
+
+export interface CoinStats {
+  games: number;
+  wins: number;
+  sumRet: number;
+  best: number | null;
+  worst: number | null;
+  /** 청산당한 판 수 */
+  liq: number;
 }
 
 export interface SoloStats {
@@ -55,21 +67,25 @@ export interface HubStatus {
   soloTurn: number | null;
   /** 솔로: 마지막 판 수익률 */
   soloLast: number | null;
+  coinTurn: number | null;
+  coinLast: number | null;
   /** 대전: 열린 방 수 · 지금 대전 중인 방 수 */
   rooms: number;
   playing: number;
-  /** 부동산: 이번 시즌 입찰이 들어온 명당 수 */
-  bids: number;
   /** 아파트 입주 세대 수 */
   residents: number;
+  /** 내 집 수 · 오늘 출석 보너스를 아직 안 받았으면 */
+  homes: number;
+  dailyLeft: boolean;
 }
 
 // ───────────── 솔로 ─────────────
 
 export interface SoloView {
   id: string;
-  /** 판이 끝나기 전엔 "???" */
   name: string;
+  /** 첫 봉(과거 봉 0번)의 가상 날짜 */
+  date0: number;
   /** 끝난 뒤에만 */
   preset: Preset | null;
   turn: number;
@@ -85,6 +101,10 @@ export interface SoloView {
   /** 판을 시작할 때 현금 (수익률 기준) */
   startCash: number;
   trades: SoloTrade[];
+  /** 걸어 둔 예약 주문 */
+  orders: SoloOrder[];
+  /** 방금 요청으로 체결된 예약 (알림용) */
+  filled?: { kind: SoloOrder["kind"]; qty: number; price: number; turn: number }[];
   done: boolean;
   result: SoloResult | null;
 }
@@ -100,6 +120,8 @@ export interface SoloResult {
   trips: number;
   wins: number;
   turns: number;
+  /** 판 구간 (가상 날짜) */
+  period?: [number, number];
   /** 판이 끝나서 자동 회생을 받았으면 */
   revived?: { amount: number; left: number };
 }
@@ -113,6 +135,7 @@ export interface SoloHistoryRow {
   pnl: number;
   trips: number;
   turns: number;
+  memo?: string;
 }
 
 export interface SoloReview {
@@ -122,6 +145,71 @@ export interface SoloReview {
   candles: Candle[];
   trades: SoloTrade[];
   result: SoloResult;
+  date0: number;
+  memo: string;
+}
+
+// ───────────── 코인 ─────────────
+
+export interface CoinView {
+  id: string;
+  name: string;
+  sym: string;
+  date0: number;
+  preset: CoinPreset | null;
+  turn: number;
+  turns: number;
+  from: number;
+  candles: Candle[];
+  pos: CoinPos | null;
+  cash: number;
+  startCash: number;
+  trades: CoinTrade[];
+  /** 방금 요청으로 청산됐으면 */
+  liq?: { turn: number; price: number; margin: number };
+  done: boolean;
+  result: CoinResult | null;
+}
+
+export interface CoinResult {
+  name: string;
+  sym: string;
+  preset: CoinPreset;
+  start: number;
+  final: number;
+  pnl: number;
+  ret: number;
+  /** 진입 횟수 · 이익으로 끝난 진입 · 청산당한 횟수 */
+  opens: number;
+  wins: number;
+  liqs: number;
+  /** 제일 크게 쓴 배수 */
+  maxLev: number;
+  turns: number;
+  period?: [number, number];
+  revived?: { amount: number; left: number };
+}
+
+export interface CoinHistoryRow {
+  id: string;
+  at: number;
+  name: string;
+  sym: string;
+  ret: number;
+  pnl: number;
+  liqs: number;
+  maxLev: number;
+  turns: number;
+}
+
+export interface CoinReview {
+  id: string;
+  name: string;
+  sym: string;
+  candles: Candle[];
+  trades: CoinTrade[];
+  result: CoinResult;
+  date0: number;
 }
 
 // ───────────── 대전 ─────────────
@@ -245,6 +333,7 @@ export interface BRecords {
 // ───────────── 순위 ─────────────
 
 export interface StockRankRow {
+  uid: string;
   nick: string;
   char: CharId;
   look: Look;
@@ -261,31 +350,50 @@ export interface StockRankRow {
 export interface EstateUnitWire {
   id: string;
   type: string;
-  /** 호수 (예: 1203) */
+  /** 아파트형: 호수 (예: 1203) · 단독형: 0 */
   no: number;
+  /** 단독형: 마을 자리 */
+  lot?: string;
   at: number;
 }
 
 export interface EstateLotWire {
-  id: string;
+  lot: string;
   name: string;
-  /** 지금 시즌 주인 */
-  owner: { nick: string; char: CharId; look: Look } | null;
-  ownerSeason: string | null;
-  /** 다음 시즌 최고 입찰 */
-  bid: { nick: string; amount: number; mine: boolean } | null;
-  /** 다음 입찰 최소 금액 */
-  minNext: number;
+  /** 집 종류 (HOME_TYPES id) */
+  type: string;
+  owner: { uid: string; nick: string; char: CharId; look: Look } | null;
 }
 
 export interface EstateView {
-  season: string;
-  next: string;
-  /** 이번 시즌 경매 마감 (서버 시각 ms) */
-  endsAt: number;
   units: EstateUnitWire[];
+  /** 단독형 자리 전부 (빈 자리 · 주인) */
   lots: EstateLotWire[];
-  /** 아파트 입구 명패 TOP 5 */
-  plate: { nick: string; char: CharId; look: Look; value: number; top: string }[];
+  /** 아파트 입구 명패 TOP 5 (집값 합) */
+  plate: { uid: string; nick: string; char: CharId; look: Look; value: number; top: string }[];
   residents: number;
+  /** 오늘 출석 보너스 (가진 집 기준) · 오늘 이미 받았으면 claimed */
+  daily: { amount: number; claimed: boolean };
+}
+
+/** 집 안 (내 집 · 남의 집 구경) */
+export interface HomeView {
+  owner: { uid: string; nick: string; char: CharId; look: Look };
+  mine: boolean;
+  homes: EstateUnitWire[];
+  /** 제일 좋은 집 (화면 배경 기준) */
+  best: EstateUnitWire | null;
+  /** 집값 합 · 하루 출석 보너스 */
+  value: number;
+  daily: number;
+  /** 구경 온 횟수 */
+  visits: number;
+  /** 가구 (아직 없음 · 나중에 상점) */
+  furniture: { id: string; x: number; y: number }[];
+}
+
+/** 출석 보너스 */
+export interface AttendResult {
+  amount: number;
+  homes: number;
 }

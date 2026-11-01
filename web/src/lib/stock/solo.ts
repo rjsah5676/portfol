@@ -264,6 +264,54 @@ export interface SoloTrade {
   price: number;
 }
 
+// ───────────── 예약 주문 ─────────────
+
+/**
+ * 예약 주문 (차트스쿨의 「예약」). 다음 봉이 열릴 때 그 봉의 고가 · 저가가 예약가에 닿으면 체결.
+ *  - buy   : 지정가 매수 — 저가 ≤ 예약가면 min(예약가, 시가)에 삼
+ *  - take  : 익절 매도 — 고가 ≥ 예약가면 max(예약가, 시가)에 팖
+ *  - stop  : 손절 매도 — 저가 ≤ 예약가면 min(예약가, 시가)에 팖 (갭 하락이면 시가)
+ * 수량은 예약할 때 정한 주 수 (매수는 체결 시점 현금 안에서).
+ */
+export type OrderKind = "buy" | "take" | "stop";
+export interface SoloOrder {
+  id: string;
+  kind: OrderKind;
+  price: number;
+  qty: number;
+}
+export const MAX_ORDERS = 4;
+export const ORDER_NAME: Record<OrderKind, string> = { buy: "지정가 매수", take: "익절 매도", stop: "손절 매도" };
+/** 봉 하나에서 예약이 체결되는지 · 체결가 */
+export function fillOrder(o: SoloOrder, c: Candle): number | null {
+  if (o.kind === "buy") return c.l <= o.price ? roundTick(Math.min(o.price, c.o)) : null;
+  if (o.kind === "take") return c.h >= o.price ? roundTick(Math.max(o.price, c.o)) : null;
+  return c.l <= o.price ? roundTick(Math.min(o.price, c.o)) : null;
+}
+
+// ───────────── 가상 날짜 ─────────────
+
+/** 판의 첫 봉 날짜 (시드로 정함, 최근 몇 년 안의 어느 날) · 주말은 건너뜀 */
+export function soloDate0(seed: string): number {
+  const r = rngFrom(`date:${seed}`);
+  const d = new Date(Date.UTC(2018 + Math.floor(r() * 7), Math.floor(r() * 12), 1 + Math.floor(r() * 28)));
+  return d.getTime();
+}
+export function dateAt(date0: number, i: number): number {
+  const d = new Date(date0);
+  let k = 0;
+  while (k < i) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const w = d.getUTCDay();
+    if (w !== 0 && w !== 6) k++;
+  }
+  return d.getTime();
+}
+export const fmtDate = (t: number) => {
+  const d = new Date(t);
+  return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, "0")}.${String(d.getUTCDate()).padStart(2, "0")}`;
+};
+
 /** 거래 기록 → 왕복 횟수 · 이긴 왕복 수 (매도로 포지션이 0 이 될 때마다 한 번) */
 export function roundTrips(trades: SoloTrade[]): { trips: number; wins: number } {
   let sh = 0,

@@ -11,7 +11,7 @@
 
 import type { HubStatus } from "./types";
 
-export type StockScreen = "hub" | "solo" | "lobby" | "room" | "records" | "estate" | "rank";
+export type StockScreen = "hub" | "solo" | "coin" | "lobby" | "room" | "records" | "estate" | "home" | "rank";
 
 export type BuildingAction =
   | { type: "screen"; screen: StockScreen }
@@ -61,15 +61,27 @@ export const BUILDINGS: Building[] = [
     status: (s) => (s.soloTurn !== null ? `하던 판 ${s.soloTurn}/50턴` : s.soloLast !== null ? `지난 판 ${s.soloLast >= 0 ? "+" : ""}${(s.soloLast * 100).toFixed(1)}%` : null),
   },
   {
+    id: "coin",
+    name: "코인 거래소",
+    sub: "1시간봉 50턴 · 레버리지 10배 · 청산",
+    action: { type: "screen", screen: "coin" },
+    icon: "🪙",
+    color: "#F7B32B",
+    shortcut: 2,
+    map: { x: 42, y: 4, w: 12, h: 8 },
+    door: { x: 48, y: 12 },
+    status: (s) => (s.coinTurn !== null ? `하던 판 ${s.coinTurn}/50턴` : s.coinLast !== null ? `지난 판 ${s.coinLast >= 0 ? "+" : ""}${(s.coinLast * 100).toFixed(1)}%` : "하이리스크 · 하이리턴"),
+  },
+  {
     id: "hall",
     name: "트레이딩 홀",
     sub: "대전 · 2~8명 7분 승부",
     action: { type: "screen", screen: "lobby" },
     icon: "⚔️",
     color: "#F2C14E",
-    shortcut: 2,
-    map: { x: 44, y: 10, w: 14, h: 10 },
-    door: { x: 50, y: 20 },
+    shortcut: 3,
+    map: { x: 46, y: 14, w: 14, h: 10 },
+    door: { x: 52, y: 24 },
     status: (s) => (s.rooms ? `열린 방 ${s.rooms}${s.playing ? ` · 대전 중 ${s.playing}` : ""}` : "열린 방 없음 · 먼저 열어 보세요"),
   },
   {
@@ -79,31 +91,31 @@ export const BUILDINGS: Building[] = [
     action: { type: "link", href: "/games/poker" },
     icon: "🃏",
     color: "#FFC93C",
-    shortcut: 3,
+    shortcut: 4,
     map: { x: 6, y: 10, w: 12, h: 10 },
     door: { x: 12, y: 20 },
   },
   {
     id: "realty",
-    name: "부동산 · 경매장",
-    sub: "아파트 분양 · 명당 경매",
+    name: "부동산",
+    sub: "집 사기 · 되팔기 50% · 출석 보너스",
     action: { type: "screen", screen: "estate" },
     icon: "🏠",
     color: "#36C2A0",
     map: { x: 6, y: 26, w: 10, h: 8 },
     door: { x: 11, y: 26 },
-    status: (s) => (s.bids ? `명당 입찰 ${s.bids}곳 진행 중` : "명당 입찰 받는 중"),
+    status: (s) => (s.homes ? (s.dailyLeft ? "오늘 출석 보너스 받을 수 있어요" : `내 집 ${s.homes}채`) : `입주 ${s.residents}세대 · 첫 집을 사 보세요`),
   },
   {
-    id: "apartment",
-    name: "주식 아파트",
-    sub: "내 호실 · 입구 명패 TOP 5",
-    action: { type: "screen", screen: "estate" },
+    id: "home",
+    name: "내 집",
+    sub: "집 안 · 친구 집 구경",
+    action: { type: "screen", screen: "home" },
     icon: "🏢",
     color: "#3FA9F5",
     map: { x: 48, y: 26, w: 10, h: 10 },
     door: { x: 53, y: 26 },
-    status: (s) => `입주 ${s.residents}세대`,
+    status: (s) => (s.homes ? `내 집 ${s.homes}채` : "집이 없어요 · 부동산으로"),
   },
   {
     id: "board",
@@ -127,7 +139,7 @@ export const BUILDINGS: Building[] = [
   },
 ];
 
-/** 명당 단독주택 자리 (estate.ts 의 LANDMARKS.lot) */
+/** 단독주택 자리 (estate.ts HOME_TYPES.lots) */
 export const LOTS: Record<string, { x: number; y: number }> = {
   hill: { x: 4, y: 2 },
   blossom1: { x: 20, y: 2 },

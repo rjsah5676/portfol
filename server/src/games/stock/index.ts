@@ -7,9 +7,10 @@ import type { Preset } from "../../../../web/src/lib/stock/solo";
 import type { HubStatus, SoloStats, StockMe, StockRankRow } from "../../../../web/src/lib/stock/types";
 import { skinsOf } from "../poker/wallet";
 import { createBattle, type BattleOptions } from "./battle";
-import { member, weekStart, type PokerLink } from "./common";
+import { member, monthStart, weekStart, type PokerLink } from "./common";
 import { createEstate } from "./estate";
 import { createSolo } from "./solo";
+import { createCoin } from "./coin";
 
 /*
  * 주식 마을 (STOCK VILLAGE) — 솔로(증권거래소) · 대전(트레이딩 홀) · 부동산 · 순위.
@@ -28,11 +29,12 @@ type MeDoc = UserDoc & {
   money?: number;
   revive?: { day: string; n: number };
   poker?: { char?: string; skins?: string[]; wear?: Record<string, string>; vault?: number };
-  stock?: { held?: number };
+  stock?: { held?: number; coinHeld?: number };
   estate?: { value?: number; escrow?: number };
   stats?: {
     stock?: {
       solo?: { games?: number; wins?: number; sumRet?: number; best?: number; worst?: number; p?: Partial<Record<Preset, { games?: number; wins?: number }>> };
+      coin?: { games?: number; wins?: number; sumRet?: number; best?: number; worst?: number; liq?: number };
       battle?: { games?: number; wins?: number; rankSum?: number; best?: number; top3?: number };
     };
   };
@@ -43,6 +45,7 @@ export function registerStock({ db, gateway }: Deps, poker: PokerLink, opts: Sto
   const users = db.col<UserDoc>("users");
   const solo = createSolo(db, gateway, poker, now);
   const estate = createEstate(db, gateway, poker, now);
+  const coin = createCoin(db, gateway, poker, now);
   const battle = createBattle(db, gateway, opts);
 
   const soloStats = (d: MeDoc | null): SoloStats => {
@@ -60,7 +63,7 @@ export function registerStock({ db, gateway }: Deps, poker: PokerLink, opts: Sto
     const w = await poker.wallet.get(uid);
     const money = d?.money ?? START_MONEY;
     const vault = Math.max(0, d?.poker?.vault ?? 0);
-    const held = Math.max(0, d?.stock?.held ?? 0);
+    const held = Math.max(0, d?.stock?.held ?? 0) + Math.max(0, d?.stock?.coinHeld ?? 0);
     const est = Math.max(0, d?.estate?.value ?? 0) + Math.max(0, d?.estate?.escrow ?? 0);
     const b = d?.stats?.stock?.battle ?? {};
     return {
@@ -75,30 +78,40 @@ export function registerStock({ db, gateway }: Deps, poker: PokerLink, opts: Sto
       reviveUsed: w?.reviveUsed ?? 0,
       seated: poker.seated(uid),
       solo: soloStats(d),
+      coin: { games: d?.stats?.stock?.coin?.games ?? 0, wins: d?.stats?.stock?.coin?.wins ?? 0, sumRet: d?.stats?.stock?.coin?.sumRet ?? 0, best: d?.stats?.stock?.coin?.best ?? null, worst: d?.stats?.stock?.coin?.worst ?? null, liq: d?.stats?.stock?.coin?.liq ?? 0 },
       battle: { games: b.games ?? 0, wins: b.wins ?? 0, rankSum: b.rankSum ?? 0, best: b.best ?? null, top3: b.top3 ?? 0 },
     };
   });
 
   gateway.rpc("stock.hub", async (ctx): Promise<HubStatus> => {
     const uid = ctx.nick && !ctx.user?.anonymous ? ctx.uid : null;
-    const [s, e] = await Promise.all([uid ? solo.hub(uid) : Promise.resolve({ turn: null, last: null }), estate.hub()]);
+    const [s, e, c] = await Promise.all([uid ? solo.hub(uid) : Promise.resolve({ turn: null, last: null }), estate.hub(uid), uid ? coin.hub(uid) : Promise.resolve({ turn: null, last: null })]);
     const b = battle.hub();
-    return { soloTurn: s.turn, soloLast: s.last, rooms: b.rooms, playing: b.playing, bids: e.bids, residents: e.residents };
+    return { soloTurn: s.turn, soloLast: s.last, coinTurn: c.turn, coinLast: c.last, rooms: b.rooms, playing: b.playing, residents: e.residents, homes: e.homes, dailyLeft: e.dailyLeft };
   });
 
   const TOTAL = {
-    $add: [{ $ifNull: ["$money", START_MONEY] }, { $ifNull: ["$poker.vault", 0] }, { $ifNull: ["$stock.held", 0] }, { $ifNull: ["$estate.value", 0] }, { $ifNull: ["$estate.escrow", 0] }],
+    $add: [{ $ifNull: ["$money", START_MONEY] }, { $ifNull: ["$poker.vault", 0] }, { $ifNull: ["$stock.held", 0] }, { $ifNull: ["$stock.coinHeld", 0] }, { $ifNull: ["$estate.value", 0] }, { $ifNull: ["$estate.escrow", 0] }],
   };
   const PROJ = { nick: 1, "poker.char": 1, "poker.skins": 1, "poker.wear": 1, "avatar.at": 1, photo: 1, "stats.stock": 1 } as const;
   const face = (d: MeDoc & { _id?: string; avatar?: { at?: number }; photo?: string | null }) => {
     const char = charOf(d.poker?.char);
-    return { nick: d.nick, char, look: lookOf(char, skinsOf(d.poker).wear), avatar: pictureOf(String(d._id ?? ""), d) };
+    return { uid: String(d._id ?? ""), nick: d.nick, char, look: lookOf(char, skinsOf(d.poker).wear), avatar: pictureOf(String(d._id ?? ""), d) };
   };
 
   gateway.rpc("stock.rank", async (_ctx, raw): Promise<StockRankRow[]> => {
-    const { kind } = z.object({ kind: z.enum(["assets", "week"]).default("assets") }).parse(raw ?? {});
-    if (kind === "week") {
-      const rows = await solo.week(weekStart(now()));
+    const { kind } = z.object({ kind: z.enum(["assets", "week", "month"]).default("assets") }).parse(raw ?? {});
+    if (kind === "week" || kind === "month") {
+      const from = kind === "week" ? weekStart(now()) : monthStart(now());
+      const [sRows, cRows] = await Promise.all([solo.week(from, 200), coin.since(from)]);
+      const merged = new Map<string, { _id: string; pnl: number; games: number }>();
+      for (const r of [...sRows, ...cRows]) {
+        const m = merged.get(r._id) ?? { _id: r._id, pnl: 0, games: 0 };
+        m.pnl += r.pnl;
+        m.games += r.games;
+        merged.set(r._id, m);
+      }
+      const rows = [...merged.values()].sort((a, b) => b.pnl - a.pnl).slice(0, 50);
       const docs = await users.find({ _id: { $in: rows.map((r) => r._id) } }, { projection: PROJ }).toArray();
       const by = new Map(docs.map((d) => [String(d._id), d as unknown as MeDoc]));
       return rows
@@ -109,7 +122,7 @@ export function registerStock({ db, gateway }: Deps, poker: PokerLink, opts: Sto
     const docs = await users
       .aggregate([
         { $match: { $or: [{ "stats.stock.solo.games": { $gte: 1 } }, { "stats.stock.battle.games": { $gte: 1 } }, { "estate.value": { $gt: 0 } }] } },
-        { $project: { ...PROJ, money: 1, "poker.vault": 1, "stock.held": 1, "estate.value": 1, "estate.escrow": 1 } },
+        { $project: { ...PROJ, money: 1, "poker.vault": 1, "stock.held": 1, "stock.coinHeld": 1, "estate.value": 1, "estate.escrow": 1 } },
         { $addFields: { total: TOTAL } },
         { $sort: { total: -1 } },
         { $limit: 50 },
@@ -130,5 +143,6 @@ export function registerStock({ db, gateway }: Deps, poker: PokerLink, opts: Sto
     _battle: battle,
     _solo: solo,
     _estate: estate,
+    _coin: coin,
   };
 }

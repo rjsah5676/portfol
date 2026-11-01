@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { BATTLE } from "@/lib/stock/battle";
-import { BOT_LEVELS, BOT_STYLES, BOT_STYLE_IDS, type BotLevel, type BotStyle } from "@/lib/stock/bots";
+import { BOT_STYLES } from "@/lib/stock/bots";
 import type { BLobbyRow, BRoomWire } from "@/lib/stock/types";
-import { addBot, createRoom, joinRoom, kickSeat, quickRoom, roomChat, roomSettings, setBot, startRoom, subscribeLobby } from "@/realtime/stock";
+import { addBot, createRoom, joinRoom, kickSeat, quickRoom, roomChat, roomSettings, startRoom, subscribeLobby } from "@/realtime/stock";
 import { Avatar, Btn, C, Empty, NUM, Sheet, TopBar, WalletChip } from "./ui";
 
 /*
@@ -128,12 +128,11 @@ function MakeRoom({ onClose, onMade, toast }: { onClose: () => void; onMade: (id
   const [title, setTitle] = useState("");
   const [max, setMax] = useState(6);
   const [bots, setBots] = useState(3);
-  const [level, setLevel] = useState<BotLevel>(1);
   const [pw, setPw] = useState("");
   const [pub, setPub] = useState(true);
   const go = async () => {
     try {
-      const r = await createRoom({ title, max, bots: Math.min(bots, max - 1), level, password: pw, pub });
+      const r = await createRoom({ title, max, bots: Math.min(bots, max - 1), password: pw, pub });
       onMade(r.id);
     } catch (e) {
       toast((e as Error).message, "warn");
@@ -150,7 +149,9 @@ function MakeRoom({ onClose, onMade, toast }: { onClose: () => void; onMade: (id
         </label>
         <Choice label="인원" value={max} options={[2, 3, 4, 5, 6, 7, 8].map((n) => [n, `${n}`])} onChange={(n) => (setMax(n), setBots((b) => Math.min(b, n - 1)))} />
         <Choice label="봇" value={bots} options={Array.from({ length: max }, (_, i) => [i, `${i}`])} onChange={setBots} />
-        <Choice label="봇 난이도" value={level} options={([0, 1, 2] as BotLevel[]).map((l) => [l, BOT_LEVELS[l].name])} onChange={(l) => setLevel(l as BotLevel)} />
+        <div className="text-[10px]" style={{ color: C.mute }}>
+          봇은 성격 · 실력이 제각각이에요 (랜덤). 사람처럼 매매해요.
+        </div>
         <Choice label="공개" value={pub ? 1 : 0} options={[[1, "공개"], [0, "비공개"]]} onChange={(v) => setPub(!!v)} />
         <label className="flex items-center gap-[8px]">
           <span className="w-[70px]" style={{ color: C.mute }}>
@@ -213,13 +214,9 @@ export function Room({
   toast: (t: string, tone?: "warn") => void;
 }) {
   const host = room.hostUid === myUid;
-  const [edit, setEdit] = useState<number | null>(null);
   const [chat, setChat] = useState("");
-  const [addStyle, setAddStyle] = useState<BotStyle | "random">("random");
-  const [addLevel, setAddLevel] = useState<BotLevel>(1);
   const safe = (p: Promise<unknown>) => void p.catch((e) => toast((e as Error).message, "warn"));
   const filled = room.seats.filter(Boolean).length;
-  const editing = edit !== null ? room.seats[edit] : null;
   return (
     <div className="flex h-full flex-col">
       <TopBar
@@ -260,15 +257,10 @@ export function Room({
                     {s.nick}
                   </div>
                   <div className="text-[10px]" style={{ color: s.bot ? C.gold : C.mute }}>
-                    {s.bot ? `봇 · ${BOT_STYLES[s.bot.style].name} · ${BOT_LEVELS[s.bot.level].name}` : s.away ? "연결 끊김" : s.uid === myUid ? "나" : "참가자"}
+                    {s.bot ? `봇 · ${BOT_STYLES[s.bot.style].name}` : s.away ? "연결 끊김" : s.uid === myUid ? "나" : "참가자"}
                   </div>
                   {host && s.uid !== myUid && (
                     <div className="flex gap-[4px]">
-                      {s.bot && (
-                        <Btn className="h-[22px] px-[6px] text-[10px]" onClick={() => setEdit(i)}>
-                          바꾸기
-                        </Btn>
-                      )}
                       <Btn tone="ghost" className="h-[22px] px-[6px] text-[10px]" onClick={() => safe(kickSeat(room.id, i))}>
                         {s.bot ? "빼기" : "내보내기"}
                       </Btn>
@@ -276,7 +268,7 @@ export function Room({
                   )}
                 </>
               ) : host ? (
-                <Btn tone="ghost" className="h-[30px] px-[10px] text-[11px]" onClick={() => safe(addBot(room.id, addStyle, addLevel))}>
+                <Btn tone="ghost" className="h-[30px] px-[10px] text-[11px]" onClick={() => safe(addBot(room.id))}>
                   ＋ 봇
                 </Btn>
               ) : (
@@ -290,26 +282,12 @@ export function Room({
         <div className="flex w-[240px] flex-col gap-[8px] p-[10px]" style={{ background: C.panel, borderLeft: `1px solid ${C.line}` }}>
           {host ? (
             <>
-              <div className="text-[11px]" style={{ color: C.mute }}>
-                새 봇: 성격 · 난이도
-              </div>
-              <div className="flex flex-wrap gap-[4px]">
-                {(["random", ...BOT_STYLE_IDS] as const).map((st) => (
-                  <Btn key={st} active={addStyle === st} className="h-[26px] px-[7px] text-[11px]" onClick={() => setAddStyle(st)} title={st === "random" ? "아무 성격" : BOT_STYLES[st].blurb}>
-                    {st === "random" ? "랜덤" : BOT_STYLES[st].name}
-                  </Btn>
-                ))}
-              </div>
-              <div className="flex gap-[4px]">
-                {([0, 1, 2] as BotLevel[]).map((l) => (
-                  <Btn key={l} active={addLevel === l} className="h-[26px] flex-1 text-[11px]" onClick={() => setAddLevel(l)}>
-                    {BOT_LEVELS[l].name}
-                  </Btn>
-                ))}
-              </div>
-              <Btn className="h-[34px] text-[12px]" disabled={filled >= room.max} onClick={() => safe(addBot(room.id, addStyle, addLevel))}>
+              <Btn className="h-[34px] text-[12px]" disabled={filled >= room.max} onClick={() => safe(addBot(room.id))}>
                 ＋ 봇 앉히기
               </Btn>
+              <div className="text-[10px] leading-snug" style={{ color: C.mute }}>
+                봇은 성격이 제각각(추격 · 세력 · 역추세 · 개미)이고 실력도 랜덤이에요. 사람처럼 익절은 빠르고 손절은 느려요.
+              </div>
               <Btn tone="gold" className="h-[48px] text-[15px]" disabled={filled < BATTLE.minPlayers} onClick={() => safe(startRoom(room.id))}>
                 ▶ 시작 ({filled}명)
               </Btn>
@@ -345,27 +323,6 @@ export function Room({
           </form>
         </div>
       </div>
-      {editing?.bot && edit !== null && (
-        <Sheet title={`${editing.nick} 바꾸기`} onClose={() => setEdit(null)} width={360}>
-          <div className="flex flex-col gap-[8px] p-[14px]">
-            {BOT_STYLE_IDS.map((st) => (
-              <Btn key={st} active={editing.bot!.style === st} className="h-[40px] justify-start px-[10px] text-left text-[12px]" onClick={() => safe(setBot(room.id, edit, { style: st }))}>
-                <b>{BOT_STYLES[st].name}</b>
-                <span className="ml-[6px] text-[11px] font-normal" style={{ color: C.mute }}>
-                  {BOT_STYLES[st].blurb}
-                </span>
-              </Btn>
-            ))}
-            <div className="flex gap-[4px]">
-              {([0, 1, 2] as BotLevel[]).map((l) => (
-                <Btn key={l} active={editing.bot!.level === l} className="h-[34px] flex-1 text-[12px]" onClick={() => safe(setBot(room.id, edit, { level: l }))}>
-                  {BOT_LEVELS[l].name}
-                </Btn>
-              ))}
-            </div>
-          </div>
-        </Sheet>
-      )}
     </div>
   );
 }

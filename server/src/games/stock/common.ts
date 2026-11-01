@@ -58,3 +58,9 @@ export function weekStart(t: number): number {
   const mon = Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), k.getUTCDate() - day);
   return mon - 9 * 3600_000;
 }
+
+/** 한국 시간 이번 달 1일 0시 */
+export function monthStart(t: number): number {
+  const k = new Date(t + 9 * 3600_000);
+  return Date.UTC(k.getUTCFullYear(), k.getUTCMonth(), 1) - 9 * 3600_000;
+}

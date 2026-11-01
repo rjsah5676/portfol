@@ -7,17 +7,19 @@ import GameLoader from "@/components/GameLoader";
 import { useAuth } from "@/lib/AuthContext";
 import { asset } from "@/lib/poker/assets";
 import { CHAR_IDS } from "@/lib/poker/rules";
-import type { BGameWire, BResult, BRoomWire, HubStatus, SoloReview, StockMe } from "@/lib/stock/types";
+import type { BGameWire, BResult, BRoomWire, CoinReview, HubStatus, SoloReview, StockMe } from "@/lib/stock/types";
 import type { Building, StockScreen } from "@/lib/stock/village";
-import { battleGame, getHub, getMe, joinRoom, leaveRoom, soloReview, subscribeRoom, subscribeWallet, watchClock } from "@/realtime/stock";
+import { attend, battleGame, coinReview, getHub, getMe, joinRoom, leaveRoom, soloReview, subscribeRoom, subscribeWallet, watchClock } from "@/realtime/stock";
 import { Lobby, Room } from "./BattleLobby";
 import { Play, Result } from "./BattlePlay";
+import Coin, { CoinReviewView } from "./Coin";
 import Estate from "./Estate";
+import Home from "./Home";
 import Hub from "./Hub";
 import Records, { type RecTab } from "./Records";
 import Solo, { Review } from "./Solo";
 import Stage from "./Stage";
-import { C, Empty, TITLE, Toast } from "./ui";
+import { C, Empty, TITLE, Toast, won } from "./ui";
 
 /*
  * 주식 마을 (STOCK VILLAGE) — 화면 전환 · 지갑 · 로그인.
@@ -25,7 +27,7 @@ import { C, Empty, TITLE, Toast } from "./ui";
  * 회원만 (돈이 애니메 포커와 같은 지갑이라). 주소 ?r=방번호 로 대전 방에 바로 들어감.
  */
 
-type Screen = StockScreen | "review" | "records";
+type Screen = StockScreen | "review" | "coinReview" | "records";
 
 /** 처음 들어올 때 받아 둘 그림: 캐릭터 얼굴 · 표정 · 1등 컷인 */
 const preload = () => CHAR_IDS.flatMap((c) => [asset.profile(c), asset.face(c, "joy"), asset.face(c, "smile"), asset.face(c, "sad"), asset.face(c, "shock"), asset.face(c, "idle"), asset.cutin(c)]);
@@ -47,6 +49,9 @@ function Inner({ w, h }: { w: number; h: number }) {
   const [hub, setHub] = useState<HubStatus | null>(null);
   const [roomId, setRoomId] = useState<string | null>(params.get("r"));
   const [review, setReview] = useState<SoloReview | null>(null);
+  const [cReview, setCReview] = useState<CoinReview | null>(null);
+  const [homeUid, setHomeUid] = useState("");
+  const attended = useRef(false);
   const [recTab, setRecTab] = useState<RecTab>("assets");
   const [shown, setShown] = useState<BResult | null>(null);
   const [toastMsg, setToastMsg] = useState<{ text: string; tone: "plain" | "up" | "down" | "warn"; k: number } | null>(null);
@@ -74,6 +79,20 @@ function Inner({ w, h }: { w: number; h: number }) {
   useEffect(() => {
     if (member && screen === "hub") void getHub().then(setHub, () => {});
   }, [member, screen]);
+  // 마을에 들어오면 집 출석 보너스 (하루 한 번)
+  useEffect(() => {
+    if (!member || attended.current) return;
+    attended.current = true;
+    void attend().then(
+      (r) => {
+        if (r) {
+          toast(`🏠 출석 보너스 +${won(r.amount)} (집 ${r.homes}채)`, "up");
+          refresh();
+        }
+      },
+      () => {}
+    );
+  }, [member, refresh, toast]);
 
   const go = (s: Screen) => setScreen(s);
   const enter = (b: Building) => {
@@ -128,8 +147,17 @@ function Inner({ w, h }: { w: number; h: number }) {
     case "room":
       body = roomId ? <BattleCtl id={roomId} uid={uid} w={w} h={h} onLeave={() => setRoom(null)} toast={toast} /> : null;
       break;
+    case "coin":
+      body = <Coin w={w} h={h} total={total} onBack={toHub} onChanged={refresh} toast={toast} />;
+      break;
     case "estate":
-      body = <Estate total={total} cash={me?.money ?? 0} onBack={toHub} onChanged={refresh} toast={toast} />;
+      body = <Estate total={total} cash={me?.money ?? 0} onBack={toHub} onChanged={refresh} onVisit={(u) => (setHomeUid(u), go("home"))} toast={toast} />;
+      break;
+    case "home":
+      body = <Home uid={homeUid} me={uid} total={total} w={w} onBack={() => (setHomeUid(""), toHub())} onEstate={() => go("estate")} toast={toast} />;
+      break;
+    case "coinReview":
+      body = cReview ? <CoinReviewView r={cReview} w={w} h={h} onBack={() => (setRecTab("coin"), go("records"))} /> : null;
       break;
     case "rank":
     case "records":
@@ -140,12 +168,14 @@ function Inner({ w, h }: { w: number; h: number }) {
           tab={screen === "records" ? recTab : "assets"}
           onBack={toHub}
           onReview={(id) => void soloReview(id).then((r) => (setReview(r), go("review")), (e) => toast((e as Error).message, "warn"))}
+          onCoinReview={(id) => void coinReview(id).then((r) => (setCReview(r), go("coinReview")), (e) => toast((e as Error).message, "warn"))}
+          onVisit={(u) => (setHomeUid(u), go("home"))}
           onBattleGame={(id) => void battleGame(id).then(setShown, (e) => toast((e as Error).message, "warn"))}
         />
       );
       break;
     case "review":
-      body = review ? <Review r={review} w={w} h={h} onBack={() => (setRecTab("solo"), go("records"))} /> : null;
+      body = review ? <Review r={review} w={w} h={h} onBack={() => (setRecTab("solo"), go("records"))} toast={toast} /> : null;
       break;
     default:
       body = <Hub w={w} h={h} me={me ? { nick: me.nick, look: me.look } : null} total={total} status={hub} onEnter={enter} />;

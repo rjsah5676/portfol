@@ -222,7 +222,7 @@ export default function Hub({
       <div className="flex h-[52px] shrink-0 items-center gap-[8px] px-[10px]" style={{ borderTop: `1px solid ${C.line}`, background: C.bg }}>
         {SHORTCUTS.map((b) => (
           <Btn key={b.id} className="h-[38px] flex-1 text-[13px]" onClick={() => enter(b)} title={`${b.name} (${b.shortcut})`}>
-            <span>{b.icon}</span> {b.id === "exchange" ? "솔로" : b.id === "hall" ? "대전" : b.id === "poker" ? "포커" : b.name}
+            <span>{b.icon}</span> {b.id === "exchange" ? "솔로" : b.id === "coin" ? "코인" : b.id === "hall" ? "대전" : b.id === "poker" ? "포커" : b.name}
             <span className={`ml-[4px] rounded-[4px] px-[4px] text-[10px] ${NUM}`} style={{ background: C.bg, color: C.mute }}>
               {b.shortcut}
             </span>
@@ -237,7 +237,7 @@ export default function Hub({
               <PlaceRow key={b.id} b={b} status={status} fav={fav.includes(b.id)} recent={recent.includes(b.id)} onFav={() => toggleFav(b.id)} onWalk={() => walkTo(b)} onEnter={() => (setMap(false), enter(b))} />
             ))}
             <p className="pt-[4px] text-center text-[11px]" style={{ color: C.mute }}>
-              PC: M 지도 · 1 솔로 · 2 대전 · 3 포커
+              PC: M 지도 · 1 솔로 · 2 코인 · 3 대전 · 4 포커
             </p>
           </div>
         </Sheet>
