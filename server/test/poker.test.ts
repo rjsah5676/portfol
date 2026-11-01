@@ -280,12 +280,15 @@ describe("홀덤 테이블", () => {
     expect(pa.state()?.bots).toBe(true);
     await until(() => !!pa.state()?.seats.some((s) => s?.uid === ""), "봇 입장", 20_000);
     await until(() => (pa.state()?.handNo ?? 0) >= 6 && !!pa.state()?.hand?.result, "6판 진행", 40_000);
+    const lastNo = pa.state()!.handNo;
     pa.stop();
     pb.stop();
     await a.c.rpc("poker.leave", { id });
     await b.c.rpc("poker.leave", { id });
     // 판 도중에 나갔으면 그 판이 정산될 때까지 기다림
     await until(async () => (await a.c.rpc<Wallet>("poker.wallet")).table === null && (await b.c.rpc<Wallet>("poker.wallet")).table === null, "자리 비움");
+    // 핸드 기록은 정산과 따로 늦게 들어감 (전체 테스트로 바쁠 때 200ms 로는 마지막 판 기록이 아직 없었음) — 본 판까지 다 들어올 때까지
+    await until(async () => (await srv.db.col("poker_hands").countDocuments({ table: id })) >= lastNo, "핸드 기록");
     await sleep(200);
 
     // DB 의 돈 = 1억 + 핸드 기록의 증감 합
