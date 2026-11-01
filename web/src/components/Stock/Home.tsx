@@ -5,12 +5,15 @@ import { HOME_TYPES, LOT_NAMES, homeRank, homeType } from "@/lib/stock/estate";
 import type { HomeView } from "@/lib/stock/types";
 import { getHome } from "@/realtime/stock";
 import { bgm, sfx } from "@/lib/stock/sound";
+import { AmyIdle } from "./Village";
 import { Avatar, Btn, C, Empty, NUM, TopBar, WalletChip, won } from "./ui";
 
+/** 집 등급 → 실내 그림 (0~3 원룸 · 4~7 아파트 · 8~9 저택) */
+const interiorOf = (rank: number) => (rank >= 8 ? "mansion" : rank >= 4 ? "apt" : "small");
+
 /*
- * 집 안 — 내 집이든 남의 집이든 들어가 봄 (GTA 식). 지금은 집 종류별 분위기(배경 톤) + 명패 + 가진 집 목록 + 방문 수.
- * 가구는 아직 없음: furniture 칸이 비어 있고, 나중에 상점에서 산 가구를 여기 좌표로 놓는 구조.
- * 아트가 들어오면 집 종류별 실내 그림(HOME_TYPES.id → img) 으로 배경을 바꿈.
+ * 집 안 — 내 집이든 남의 집이든 들어가 봄 (GTA 식). 실내 그림 3종(원룸 · 아파트 · 저택, 35° 쿼터뷰) 위에 에이미가 서 있고, 명패 + 가진 집 목록 + 방문 수.
+ * 가구는 아직 없음: furniture 칸이 비어 있고, 나중에 상점에서 산 가구를 그림 좌표(1536×1024 기준)로 놓는 구조.
  */
 
 export default function Home({
@@ -79,8 +82,8 @@ export default function Home({
   const t = cur ? homeType(cur.type) : null;
   const rank = cur ? homeRank(cur.type) : 0;
   const label = cur ? (cur.lot ? LOT_NAMES[cur.lot] : `${cur.no}호 ${t?.name ?? ""}`) : "";
-  // 실내 분위기: 등급이 높을수록 넓고 밝은 방 (아트 전 자리표시)
-  const roomW = Math.round(Math.min(w - 260, 420 + rank * 40));
+  // 실내 그림(1536×1024)을 방 칸(화면 폭 − 오른쪽 패널 230)에 맞춤 — 세로를 채우고 가로는 잘릴 수 있음
+  const roomScale = Math.max((w - 230) / 1536, 420 / 1024);
 
   return (
     <div className="flex h-full flex-col">
@@ -96,16 +99,18 @@ export default function Home({
         )}
       </TopBar>
       <div className="relative flex min-h-0 flex-1">
-        {/* 방 (아트 전: 종류별 톤 + 창문 + 바닥) */}
-        <div className={`relative flex flex-1 items-end justify-center overflow-hidden ${entered ? "stk-enter" : ""}`} style={{ background: `radial-gradient(ellipse at 50% 20%, ${t?.tone ?? "#2f3542"} 0%, #0f1420 90%)` }}>
-          <div className="absolute" style={{ left: "50%", top: "12%", width: roomW * 0.28, height: roomW * 0.2, transform: "translateX(-50%)", background: rank >= 5 ? "linear-gradient(180deg,#c9e6ff,#5aa0e6)" : "linear-gradient(180deg,#8ea6c4,#3f5e86)", borderRadius: 6, border: "4px solid #1b2232", boxShadow: "0 0 40px rgba(120,170,255,0.25)" }} />
-          <div className="absolute bottom-0 left-0 right-0" style={{ height: "34%", background: `linear-gradient(180deg, ${t?.tone ?? "#2f3542"}cc, #0b0f18)`, borderTop: `2px solid ${C.line}` }} />
-          {/* 가구 칸 (비어 있음) */}
-          {v.furniture.length === 0 && (
-            <div className="absolute bottom-[14%] left-1/2 -translate-x-1/2 rounded-[8px] px-[10px] py-[4px] text-[10px]" style={{ background: "rgba(10,13,22,0.6)", border: `1px dashed ${C.chipLine}`, color: C.mute }}>
-              가구는 곧 상점에서 · 지금은 빈 방
-            </div>
-          )}
+        {/* 방 — 실내 그림을 화면에 꽉 채움 (가운데 기준) · 에이미는 현관 앞 */}
+        <div className={`relative flex-1 overflow-hidden ${entered ? "stk-enter" : ""}`} style={{ background: "#0b0f18" }}>
+          <div className="absolute" style={{ left: "50%", top: "50%", width: 1536, height: 1024, transform: `translate(-50%, -50%) scale(${roomScale})` }}>
+            <img src={`/stock/village/home_${interiorOf(rank)}.webp`} alt="" draggable={false} className="absolute top-0 left-0" style={{ width: 1536, height: 1024 }} />
+            <AmyIdle x={768} y={900} scale={1.7} dir="front" />
+            {/* 가구 칸 (비어 있음) */}
+            {v.furniture.length === 0 && (
+              <div className="absolute rounded-[12px] px-[18px] py-[8px] text-[24px]" style={{ left: 768, top: 600, transform: "translateX(-50%)", background: "rgba(10,13,22,0.55)", border: `1px dashed ${C.chipLine}`, color: C.mute }}>
+                가구는 곧 상점에서 · 지금은 빈 방
+              </div>
+            )}
+          </div>
           {/* 명패 */}
           <div className="absolute top-[10px] left-[12px] flex items-center gap-[8px] rounded-[10px] px-[10px] py-[6px]" style={{ background: "rgba(10,13,22,0.75)", border: `1px solid ${C.gold}` }}>
             <Avatar look={v.owner.look} size={30} ring={C.gold} />

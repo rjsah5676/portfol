@@ -9,6 +9,7 @@ import { asset } from "@/lib/poker/assets";
 import { CHAR_IDS } from "@/lib/poker/rules";
 import type { BGameWire, BResult, BRoomWire, CoinReview, HubStatus, SoloReview, StockMe } from "@/lib/stock/types";
 import type { Building, StockScreen } from "@/lib/stock/village";
+import { AMY_FILES } from "@/lib/stock/villageArt";
 import { attend, battleGame, coinReview, getHub, getMe, joinRoom, leaveRoom, soloReview, subscribeRoom, subscribeWallet, watchClock } from "@/realtime/stock";
 import { Lobby, Room } from "./BattleLobby";
 import { Play, Result } from "./BattlePlay";
@@ -30,8 +31,8 @@ import { C, Empty, TITLE, Toast, won } from "./ui";
 
 type Screen = StockScreen | "review" | "coinReview" | "records";
 
-/** 처음 들어올 때 받아 둘 그림: 캐릭터 얼굴 · 표정 · 1등 컷인 */
-const preload = () => CHAR_IDS.flatMap((c) => [asset.profile(c), asset.face(c, "joy"), asset.face(c, "smile"), asset.face(c, "sad"), asset.face(c, "shock"), asset.face(c, "idle"), asset.cutin(c)]);
+/** 처음 들어올 때 받아 둘 그림: 마을 · 에이미 스프라이트 · 캐릭터 얼굴 · 표정 · 1등 컷인 */
+const preload = () => ["/stock/village/day.webp", ...AMY_FILES, ...CHAR_IDS.flatMap((c) => [asset.profile(c), asset.face(c, "joy"), asset.face(c, "smile"), asset.face(c, "sad"), asset.face(c, "shock"), asset.face(c, "idle"), asset.cutin(c)])];
 
 export default function StockApp() {
   return (

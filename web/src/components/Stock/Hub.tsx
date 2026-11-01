@@ -3,18 +3,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Look } from "@/lib/poker/rules";
 import type { HubStatus } from "@/lib/stock/types";
-import { BUILDINGS, LOTS, SHORTCUTS, VILLAGE, walkMs, type Building } from "@/lib/stock/village";
-import { bgm, sfx } from "@/lib/stock/sound";
-import { Avatar, Btn, C, NUM, Sheet, TITLE, TopBar, WalletChip, ro } from "./ui";
+import { BUILDINGS, SHORTCUTS, buildingOf, type Building } from "@/lib/stock/village";
+import { bgm } from "@/lib/stock/sound";
+import Village, { isNightNow, type NightMode, type VillageApi } from "./Village";
+import { Btn, C, NUM, Sheet, TITLE, TopBar, WalletChip } from "./ui";
 
 /*
- * 마을 허브 — 아트가 들어오기 전의 마을 (건물 목록 · 평면 지도는 village.ts 데이터로 그림. 3D 마을도 같은 데이터를 씀).
- * 편의가 먼저: 걷기는 선택. 상단 「지도」(M) · 하단 바로가기(1~3) · 즐겨찾기 · 최근 간 곳 · 이어서 하기.
- * 건물을 고르면 걸어가고(화면을 누르면 바로 도착) → 0.4초 줌인 → 그 화면.
+ * 마을 허브 — 2.5D 마을(Village) 위에 UI 를 얹음. 편의가 먼저: 걷기는 선택.
+ * 상단 「지도」(M) · 낮/밤 · 하단 바로가기(1~4) · 즐겨찾기 · 최근 간 곳 · 이어서 하기.
+ * 건물을 누르면 길 따라 걸어가서 → 문으로 줌인 → 그 화면. 목록의 「바로 입장」은 걷기 생략.
  */
 
 const LS_RECENT = "stock:recent";
 const LS_FAV = "stock:fav";
+const LS_NIGHT = "stock:night";
 const load = (k: string): string[] => {
   try {
     const v = JSON.parse(localStorage.getItem(k) ?? "[]");
@@ -50,39 +52,47 @@ export default function Hub({
   const [recent, setRecent] = useState<string[]>(() => load(LS_RECENT));
   const [fav, setFav] = useState<string[]>(() => load(LS_FAV));
   const [map, setMap] = useState(false);
-  const [pos, setPos] = useState(VILLAGE.spawn);
-  const [walk, setWalk] = useState<{ b: Building; ms: number } | null>(null);
-  const [zoom, setZoom] = useState<Building | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [nightMode, setNightMode] = useState<NightMode>(() => {
+    try {
+      const v = localStorage.getItem(LS_NIGHT);
+      return v === "day" || v === "night" ? v : "auto";
+    } catch {
+      return "auto";
+    }
+  });
+  const night = nightMode === "auto" ? isNightNow() : nightMode === "night";
+  const ctl = useRef<VillageApi | null>(null);
 
   useEffect(() => {
-    bgm("village");
-  }, []);
-  const enter = (b: Building) => {
-    if (b.action.type === "soon") return;
-    sfx("enter");
-    if (timer.current) clearTimeout(timer.current);
-    setWalk(null);
-    setPos(b.door);
-    setZoom(b);
+    bgm(night ? "night" : "village");
+  }, [night]);
+  const remember = (b: Building) => {
     const r = [b.id, ...recent.filter((x) => x !== b.id)].slice(0, 5);
     setRecent(r);
     save(LS_RECENT, r);
-    timer.current = setTimeout(() => {
-      setZoom(null);
-      onEnter(b);
-    }, 400);
   };
+  /** 바로 입장 (걷기 생략) */
+  const enter = (b: Building) => {
+    if (b.action.type === "soon") return;
+    setMap(false);
+    remember(b);
+    if (ctl.current) ctl.current.enterNow(b);
+    else onEnter(b);
+  };
+  /** 걸어가서 입장 */
   const walkTo = (b: Building) => {
     if (b.action.type === "soon") return;
     setMap(false);
-    const ms = walkMs(pos, b.door);
-    setWalk({ b, ms });
-    setPos(b.door);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => enter(b), ms);
+    remember(b);
+    ctl.current?.goBuilding(b);
   };
-  useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
+  const cycleNight = () => {
+    const next: NightMode = nightMode === "auto" ? (night ? "day" : "night") : nightMode === "day" ? "night" : "auto";
+    setNightMode(next);
+    try {
+      localStorage.setItem(LS_NIGHT, next);
+    } catch {}
+  };
   const toggleFav = (id: string) => {
     const f = fav.includes(id) ? fav.filter((x) => x !== id) : [...fav, id];
     setFav(f);
@@ -108,13 +118,8 @@ export default function Hub({
     return [...BUILDINGS].sort((a, b) => rank(a) - rank(b));
   }, [fav, recent]);
 
-  const listW = Math.round(Math.max(300, w * 0.4));
-  const mapW = w - listW;
-  const mapH = h - 40 - 52;
-  const cell = Math.min(mapW / VILLAGE.w, mapH / VILLAGE.h);
-  const ox = (mapW - cell * VILLAGE.w) / 2,
-    oy = (mapH - cell * VILLAGE.h) / 2;
   const cont = status?.soloTurn !== null && status?.soloTurn !== undefined;
+  const mapH = h - 40;
 
   return (
     <div className="relative flex h-full flex-col">
@@ -131,6 +136,9 @@ export default function Hub({
         }
         right={
           <>
+            <Btn className="h-[28px] w-[34px] text-[14px]" onClick={cycleNight} title={nightMode === "auto" ? "낮 · 밤 (지금은 시간에 맞춤)" : nightMode === "day" ? "낮으로 고정" : "밤으로 고정"}>
+              {night ? "🌙" : "☀️"}
+            </Btn>
             <Btn className="h-[28px] px-[10px] text-[12px]" onClick={() => setMap(true)} title="지도 (M)">
               🗺 지도
             </Btn>
@@ -138,103 +146,44 @@ export default function Hub({
           </>
         }
       />
-      <div className="flex min-h-0 flex-1">
-        {/* 평면 마을 (아트 전 자리) */}
-        <div
-          className={`relative overflow-hidden ${zoom ? "stk-zoomin" : ""}`}
-          style={{ width: mapW, background: "radial-gradient(ellipse at 50% 40%, #1d2a3f, #0f1420 75%)", transformOrigin: zoom ? `${ox + zoom.door.x * cell}px ${oy + zoom.door.y * cell}px` : undefined }}
-          onClick={() => walk && enter(walk.b)}
-        >
-          <div className="absolute" style={{ left: ox, top: oy, width: cell * VILLAGE.w, height: cell * VILLAGE.h }}>
-            {/* 길 */}
-            <div className="absolute rounded-[6px]" style={{ left: cell * 4, top: cell * 21, width: cell * 56, height: cell * 4, background: "#2a3550" }} />
-            <div className="absolute rounded-[6px]" style={{ left: cell * 30, top: cell * 16, width: cell * 4, height: cell * 14, background: "#2a3550" }} />
-            {/* 명당 자리 */}
-            {Object.entries(LOTS).map(([k, p]) => (
-              <div key={k} className="absolute rounded-[3px]" title="명당 단독주택" style={{ left: p.x * cell, top: p.y * cell, width: cell * 3, height: cell * 3, background: "#22314a", border: "1px dashed #3a4a6e" }} />
-            ))}
-            {BUILDINGS.map((b) => (
-              <button
-                key={b.id}
-                type="button"
-                onClick={(e) => (e.stopPropagation(), walkTo(b))}
-                className="absolute flex cursor-pointer flex-col items-center justify-center gap-[2px] rounded-[8px] text-center transition-transform hover:scale-[1.04]"
-                style={{
-                  left: b.map.x * cell,
-                  top: b.map.y * cell,
-                  width: b.map.w * cell,
-                  height: b.map.h * cell,
-                  background: `linear-gradient(180deg, ${b.color}33, ${b.color}14)`,
-                  border: `1px solid ${b.color}88`,
-                  opacity: b.action.type === "soon" ? 0.5 : 1,
-                }}
-              >
-                <span className="text-[18px] leading-none">{b.icon}</span>
-                <span className="text-[10px] leading-tight font-bold whitespace-nowrap" style={{ color: C.text }}>
-                  {b.name}
-                </span>
-              </button>
-            ))}
-            {/* 나 */}
-            {me && (
-              <div
-                className="pointer-events-none absolute z-10 flex flex-col items-center"
-                style={{
-                  left: pos.x * cell - 14,
-                  top: pos.y * cell - 30,
-                  transition: walk ? `left ${walk.ms}ms linear, top ${walk.ms}ms linear` : "left 0.2s, top 0.2s",
-                }}
-              >
-                <Avatar look={me.look} size={28} ring={C.gold} />
-                <span className="mt-[1px] rounded-[4px] px-[4px] text-[9px] font-bold" style={{ background: "rgba(0,0,0,0.55)" }}>
-                  {me.nick}
-                </span>
-              </div>
-            )}
-          </div>
-          {walk && (
-            <div className="absolute bottom-[8px] left-1/2 -translate-x-1/2 rounded-full px-[10px] py-[3px] text-[11px]" style={{ background: "rgba(0,0,0,0.6)", color: C.mute }}>
-              {ro(walk.b.name)} 가는 중 · 화면을 누르면 바로 도착
-            </div>
-          )}
-        </div>
-        {/* 목록 */}
-        <div className="flex min-h-0 flex-col gap-[6px] overflow-y-auto p-[10px]" style={{ width: listW, background: C.panel, borderLeft: `1px solid ${C.line}` }}>
+      <div className="relative min-h-0 flex-1" style={{ height: mapH }}>
+        <Village w={w} h={mapH} nick={me?.nick ?? ""} status={status} night={night} ctlRef={ctl} onEnter={(b) => (remember(b), onEnter(b))} onLot={() => walkTo(buildingOf("realty")!)}>
+          {/* 이어서 하기 */}
           {cont && (
             <button
               type="button"
+              data-ui
               onClick={() => enter(BUILDINGS[0])}
-              className="flex cursor-pointer items-center gap-[8px] rounded-[10px] px-[10px] py-[8px] text-left"
-              style={{ background: C.goldBg, border: `1px solid ${C.gold}` }}
+              className="stk-pop absolute top-[10px] left-[10px] flex cursor-pointer items-center gap-[8px] rounded-[10px] px-[10px] py-[6px] text-left"
+              style={{ background: "rgba(42,38,20,0.92)", border: `1px solid ${C.gold}`, boxShadow: "0 4px 16px rgba(0,0,0,0.4)" }}
             >
-              <span className="text-[18px]">▶</span>
-              <span className="flex-1">
-                <span className="block text-[13px] font-bold" style={{ color: C.gold }}>
+              <span className="text-[16px]">▶</span>
+              <span>
+                <span className="block text-[12px] font-bold" style={{ color: C.gold }}>
                   이어서 하기
                 </span>
-                <span className="block text-[11px]" style={{ color: C.mute }}>
+                <span className="block text-[10px]" style={{ color: C.mute }}>
                   증권거래소 · {status!.soloTurn}/50턴
                 </span>
               </span>
             </button>
           )}
-          {ordered.map((b) => (
-            <PlaceRow key={b.id} b={b} status={status} fav={fav.includes(b.id)} recent={recent.includes(b.id)} onFav={() => toggleFav(b.id)} onWalk={() => walkTo(b)} onEnter={() => enter(b)} />
-          ))}
-        </div>
+          <div className="pointer-events-none absolute right-[10px] bottom-[58px] rounded-full px-[8px] py-[2px] text-[10px]" style={{ background: "rgba(9,13,22,0.6)", color: C.mute }}>
+            건물을 누르면 걸어가요 · 방향키로 산책 · M 지도
+          </div>
+          {/* 하단 바로가기 (지도 위에 겹침) */}
+          <div data-ui className="absolute right-0 bottom-0 left-0 flex h-[52px] items-center gap-[8px] px-[10px]" style={{ background: "linear-gradient(180deg, rgba(9,13,22,0) 0%, rgba(9,13,22,0.85) 40%)" }}>
+            {SHORTCUTS.map((b) => (
+              <Btn key={b.id} className="h-[36px] flex-1 text-[13px]" onClick={() => enter(b)} title={`${b.name} (${b.shortcut})`}>
+                <span>{b.icon}</span> {b.id === "exchange" ? "솔로" : b.id === "coin" ? "코인" : b.id === "hall" ? "대전" : b.id === "poker" ? "포커" : b.name}
+                <span className={`ml-[4px] rounded-[4px] px-[4px] text-[10px] ${NUM}`} style={{ background: C.bg, color: C.mute }}>
+                  {b.shortcut}
+                </span>
+              </Btn>
+            ))}
+          </div>
+        </Village>
       </div>
-      {/* 하단 바로가기 */}
-      <div className="flex h-[52px] shrink-0 items-center gap-[8px] px-[10px]" style={{ borderTop: `1px solid ${C.line}`, background: C.bg }}>
-        {SHORTCUTS.map((b) => (
-          <Btn key={b.id} className="h-[38px] flex-1 text-[13px]" onClick={() => enter(b)} title={`${b.name} (${b.shortcut})`}>
-            <span>{b.icon}</span> {b.id === "exchange" ? "솔로" : b.id === "coin" ? "코인" : b.id === "hall" ? "대전" : b.id === "poker" ? "포커" : b.name}
-            <span className={`ml-[4px] rounded-[4px] px-[4px] text-[10px] ${NUM}`} style={{ background: C.bg, color: C.mute }}>
-              {b.shortcut}
-            </span>
-          </Btn>
-        ))}
-      </div>
-
       {map && (
         <Sheet title="마을 지도" onClose={() => setMap(false)} width={560}>
           <div className="flex flex-col gap-[6px] p-[10px]">
@@ -242,12 +191,11 @@ export default function Hub({
               <PlaceRow key={b.id} b={b} status={status} fav={fav.includes(b.id)} recent={recent.includes(b.id)} onFav={() => toggleFav(b.id)} onWalk={() => walkTo(b)} onEnter={() => (setMap(false), enter(b))} />
             ))}
             <p className="pt-[4px] text-center text-[11px]" style={{ color: C.mute }}>
-              PC: M 지도 · 1 솔로 · 2 코인 · 3 대전 · 4 포커
+              PC: M 지도 · 1 솔로 · 2 코인 · 3 대전 · 4 포커 · 방향키 산책
             </p>
           </div>
         </Sheet>
       )}
-      {zoom && <div className="stk-fadeout pointer-events-none absolute inset-0 z-50" style={{ background: C.bg }} />}
     </div>
   );
 }

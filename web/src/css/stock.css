@@ -55,3 +55,10 @@
 @media (prefers-reduced-motion: reduce) {
   .stk-enter, .stk-zoomin, .stk-fadeout, .stk-pop, .stk-cutin, .stk-rotate, .stk-blink, .stk-ticker, .stk-alarm, .stk-shine, .stk-num-up, .stk-num-down { animation: none; }
 }
+/* 마을: 문으로 줌인 · 어두워짐 · 밤 조명 일렁임 */
+.stk-doorzoom { animation: stk-doorzoom 0.48s ease-in both; }
+@keyframes stk-doorzoom { to { transform: scale(2.6); } }
+.stk-doorfade { animation: stk-doorfade 0.48s ease-in both; }
+@keyframes stk-doorfade { from { opacity: 0; } 50% { opacity: 0.1; } to { opacity: 1; } }
+.stk-glow { animation: stk-glow 2.4s ease-in-out infinite alternate; }
+@keyframes stk-glow { from { opacity: 0.85; transform: scale(0.97); } to { opacity: 1; transform: scale(1.04); } }
