@@ -1,7 +1,24 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BOARD, BUILDINGS, CHANNEL_CAP, SPAWN, blocked, doorAt, doorFront } from "../../web/src/lib/gmtown/world";
+import {
+  BOARD,
+  BUILDINGS,
+  CHANNEL_CAP,
+  SPAWN,
+  WORLD,
+  blocked,
+  doorAt,
+  doorFront,
+  hiddenBy,
+  isLot,
+} from "../../web/src/lib/gmtown/world";
 import type { ChannelList, TownSnap } from "../../web/src/lib/gmtown/types";
-import { RpcError, sleep, startTestServer, type TestClient, type TestServer } from "./helpers";
+import {
+  RpcError,
+  sleep,
+  startTestServer,
+  type TestClient,
+  type TestServer,
+} from "./helpers";
 
 /*
  * GMTOWN: 마을 지도(부딪힘 · 문) + 채널 들어가기 · 서로 보이기 · 움직이기 검사 · 채팅 · 나가기.
@@ -14,17 +31,66 @@ describe("마을 지도", () => {
       const f = doorFront(b);
       expect(blocked(f.x, f.y), b.id).toBe(false);
       expect(doorAt(f.x, f.y)?.id, b.id).toBe(b.id);
-      // 건물 안은 막힘
-      expect(blocked(b.x + b.w / 2, b.y + b.d / 2), b.id).toBe(true);
+      // 건물 안은 막힘 (빈 터는 걸어 들어갈 수 있음)
+      expect(blocked(b.x + b.w / 2, b.y + b.d / 2), b.id).toBe(!isLot(b));
     }
     expect(blocked(BOARD.x, BOARD.y)).toBe(true);
+  });
+
+  it("들어오는 곳에서 모든 문까지 걸어갈 수 있음 (0.5m 격자)", () => {
+    const G = 0.5,
+      W = Math.ceil(WORLD.w / G),
+      H = Math.ceil(WORLD.h / G);
+    const seen = new Uint8Array(W * H);
+    const at = (x: number, y: number) =>
+      Math.floor(y / G) * W + Math.floor(x / G);
+    const q = [at(SPAWN.x, SPAWN.y)];
+    seen[q[0]] = 1;
+    while (q.length) {
+      const i = q.pop()!;
+      const x = i % W,
+        y = (i / W) | 0;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ]) {
+        const nx = x + dx,
+          ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const j = ny * W + nx;
+        if (!seen[j] && !blocked((nx + 0.5) * G, (ny + 0.5) * G, 0.36)) {
+          seen[j] = 1;
+          q.push(j);
+        }
+      }
+    }
+    for (const b of BUILDINGS)
+      expect(seen[at(doorFront(b).x, doorFront(b).y)], b.id).toBe(1);
+  });
+
+  it("문 앞은 다른 건물에 가려지지 않음 (쿼터뷰에서 건물 뒤는 안 보임)", () => {
+    for (const b of BUILDINGS) {
+      const f = doorFront(b);
+      for (const o of BUILDINGS)
+        if (o !== b)
+          expect(
+            hiddenBy(o, f.x, f.y, 0) || hiddenBy(o, f.x, f.y, 1.6),
+            `${b.id} ← ${o.id}`,
+          ).toBe(false);
+    }
   });
 
   it("건물끼리 겹치지 않음", () => {
     for (const a of BUILDINGS)
       for (const b of BUILDINGS) {
         if (a === b) continue;
-        const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.d && b.y < a.y + a.d;
+        const overlap =
+          a.x < b.x + b.w &&
+          b.x < a.x + a.w &&
+          a.y < b.y + b.d &&
+          b.y < a.y + a.d;
         expect(overlap, `${a.id} · ${b.id}`).toBe(false);
       }
   });
@@ -43,11 +109,16 @@ async function member(): Promise<TestClient> {
   const uid = `gm${++n}_${Math.random().toString(36).slice(2, 8)}`;
   const email = `${uid}@example.com`;
   const token = await srv.token(uid, { email });
-  const r = await srv.http("/api/me/nick", { method: "PUT", token, body: { nick: `마을${n}` } });
+  const r = await srv.http("/api/me/nick", {
+    method: "PUT",
+    token,
+    body: { nick: `마을${n}` },
+  });
   expect(r.status).toBe(200);
   return srv.client(uid, { email });
 }
-const guest = () => srv.client(`guest_${++n}_${Math.random().toString(36).slice(2, 6)}`);
+const guest = () =>
+  srv.client(`guest_${++n}_${Math.random().toString(36).slice(2, 6)}`);
 const code = async (p: Promise<unknown>) => {
   try {
     await p;
@@ -79,12 +150,16 @@ describe("광장", () => {
     expect(meG.guest).toBe(true);
     expect(meG.name).toMatch(/^◦손님\d{4}$/);
     expect(sg.data.players.some((p) => p.id === sa.data.me)).toBe(true);
-    const joined = await sa.wait((e) => e.t === "join" && e.d.id === sg.data.me);
+    const joined = await sa.wait(
+      (e) => e.t === "join" && e.d.id === sg.data.me,
+    );
     expect(joined.d.guest).toBe(true);
 
     // 조금 걸음 → 다른 사람에게 mv
     await g.rpc("gmtown.move", { x: meG.x + 0.2, y: meG.y, d: 2, m: 1 });
-    const mv = await sa.wait((e) => e.t === "mv" && e.d.some((r: unknown[]) => r[0] === sg.data.me));
+    const mv = await sa.wait(
+      (e) => e.t === "mv" && e.d.some((r: unknown[]) => r[0] === sg.data.me),
+    );
     const row = mv.d.find((r: unknown[]) => r[0] === sg.data.me);
     expect(row[1]).toBeCloseTo(meG.x + 0.2, 1);
     expect(row[3]).toBe(2);
@@ -99,17 +174,26 @@ describe("광장", () => {
 
   it("순간이동 · 막힌 곳은 서버가 바로잡음 (snap)", async () => {
     const a = await member();
-    const s = await a.sub<TownSnap>("gmtown.ch", { ch: 3, x: 34, y: 41.3 });
+    const s = await a.sub<TownSnap>("gmtown.ch", {
+      ch: 3,
+      x: SPAWN.x,
+      y: SPAWN.y,
+    });
     const me = s.data.players.find((p) => p.id === s.data.me)!;
-    expect(me.x).toBe(34);
+    expect(me.x).toBe(SPAWN.x);
     // 안내판 안으로
     await a.rpc("gmtown.move", { x: BOARD.x, y: BOARD.y, d: 2, m: 1 });
     const back = await s.wait((e) => e.t === "snap");
-    expect(back.d).toEqual({ x: 34, y: 41.3 });
-    // 멀리 순간이동 → 예산(2.5칸)만큼만
-    await a.rpc("gmtown.move", { x: 10, y: 30, d: 6, m: 1 });
-    const cut = await s.wait((e) => e.t === "snap" && e.d.x !== 34);
-    const moved = Math.hypot(cut.d.x - 34, cut.d.y - 41.3);
+    expect(back.d).toEqual({ x: SPAWN.x, y: SPAWN.y });
+    // 멀리 순간이동 (광장 쪽 큰길) → 예산(2.5m)만큼만
+    await a.rpc("gmtown.move", {
+      x: SPAWN.x - 20,
+      y: SPAWN.y - 20,
+      d: 7,
+      m: 1,
+    });
+    const cut = await s.wait((e) => e.t === "snap" && e.d.x !== SPAWN.x);
+    const moved = Math.hypot(cut.d.x - SPAWN.x, cut.d.y - SPAWN.y);
     expect(moved).toBeGreaterThan(2);
     expect(moved).toBeLessThan(2.7);
     a.close();
@@ -126,10 +210,14 @@ describe("광장", () => {
     const got = await sb.wait((e) => e.t === "chat");
     expect(got.d.text).toBe("안녕 하세요");
     expect(got.d.id).toBe(sa.data.me);
-    expect(await code(a.rpc("gmtown.chat", { text: "또" }))).toBe("RATE_LIMITED");
+    expect(await code(a.rpc("gmtown.chat", { text: "또" }))).toBe(
+      "RATE_LIMITED",
+    );
     await sleep(750);
     await a.rpc("gmtown.chat", { text: "가".repeat(200) });
-    const long = await sb.wait((e) => e.t === "chat" && e.d.text.startsWith("가"));
+    const long = await sb.wait(
+      (e) => e.t === "chat" && e.d.text.startsWith("가"),
+    );
     expect(long.d.text.length).toBe(60);
     await sleep(100);
     expect(sc.events.some((e) => e.t === "chat")).toBe(false);
@@ -150,7 +238,11 @@ describe("광장", () => {
     expect(list.list.some((r) => r.n === 0)).toBe(true);
     // b 가 8채널로 (위치 이어감)
     const pos = sb.data.players.find((p) => p.id === sb.data.me)!;
-    const s8 = await b.sub<TownSnap>("gmtown.ch", { ch: 8, x: pos.x, y: pos.y });
+    const s8 = await b.sub<TownSnap>("gmtown.ch", {
+      ch: 8,
+      x: pos.x,
+      y: pos.y,
+    });
     sb.close();
     expect(s8.data.ch).toBe(8);
     expect(s8.data.players.find((p) => p.id === s8.data.me)!.x).toBe(pos.x);
