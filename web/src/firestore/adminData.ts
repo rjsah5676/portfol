@@ -399,7 +399,7 @@ export const resetSuspect = () =>
 export const getSuspectStats = () =>
   api<{ today: number; total: number }>("/api/admin/suspect/stats", { auth: true });
 export const resetSuspectRankings = (day: string) =>
-  api<{ deleted: number }>("/api/admin/suspect/rankings/reset", {
+  api<{ deleted: number; at: number }>("/api/admin/suspect/rankings/reset", {
     method: "POST",
     body: { confirm: "데일리 랭킹 초기화", day },
     auth: true,

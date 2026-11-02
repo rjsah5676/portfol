@@ -57,8 +57,11 @@ export default function SuspectReset() {
     setRankMsg("");
     try {
       const r = await resetSuspectRankings(scope === "all" ? "all" : kstDay());
+      setAt(r.at);
       setRankText("");
-      setRankMsg(`랭킹 기록 ${r.deleted}개를 지웠어요.`);
+      setRankMsg(
+        `랭킹 기록 ${r.deleted}개를 지웠어요. ${scope === "all" ? "모든" : "오늘"} 판 진행도 플레이어가 다음에 게임을 열 때 지워져요.`
+      );
       await loadStats();
     } catch (e) {
       setRankMsg((e as Error).message);
@@ -75,6 +78,8 @@ export default function SuspectReset() {
           모든 플레이어의 오늘의 사건 판 진행 · 푼 기록 · 해결 수 · 연속 해결 · 난이도별 최고 기록을 지워요. 입문
           튜토리얼을 끝낸 것과 랭킹 이름은 그대로. 진행은 각 브라우저에 있어서, 플레이어가 다음에 게임을 열 때
           지워져요. 랭킹 기록은 안 지워요 (아래).
+          <br />
+          (게임을 열어 둔 채면 첫 화면으로 돌아오거나 탭으로 다시 올 때 지워져요 — 푸는 중엔 안 지움)
         </p>
         <p className="mt-2 text-xs text-white/60">마지막 초기화: {at === null ? "불러오는 중…" : fmt(at)}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -89,8 +94,9 @@ export default function SuspectReset() {
       <div className={box}>
         <p className="font-bold text-red-300">데일리 랭킹 초기화</p>
         <p className="mt-1 text-xs text-white/60">
-          오늘의 사건 랭킹 기록을 서버에서 지워요. 오늘(한국 시간 {kstDay().slice(4, 6)}/{kstDay().slice(6, 8)}) 네
-          난이도만, 또는 지난 날짜까지 전부. 지운 뒤엔 같은 사람이 다시 풀어 올릴 수 있어요.
+          오늘의 사건 랭킹 기록을 서버에서 지우고, 그 날짜의 판 진행도 같이 초기화해요. 오늘(한국 시간{" "}
+          {kstDay().slice(4, 6)}/{kstDay().slice(6, 8)}) 모든 난이도만, 또는 지난 날짜까지 전부(= 데일리 초기화까지).
+          지운 뒤엔 같은 사람이 처음부터 다시 풀어 올릴 수 있어요. GP 는 사건마다 한 번이라 다시 받지 않아요.
         </p>
         {stats && (
           <p className="mt-2 text-xs text-white/60">

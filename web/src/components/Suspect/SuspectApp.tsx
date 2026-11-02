@@ -86,10 +86,7 @@ function useStore(ready: boolean): Store | null {
     if (!ready) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 는 화면이 뜬 뒤에만 읽을 수 있음
     setS({ ...loadStore() });
-    const off = onStoreChange(() => setS({ ...loadStore() }));
-    // 관리자가 「데일리 초기화」를 했으면 이 브라우저의 지난 기록을 지움 (지우면 위 구독으로 화면도 갱신)
-    void applySuspectReset().catch(() => {});
-    return off;
+    return onStoreChange(() => setS({ ...loadStore() }));
   }, [ready]);
   return s;
 }
@@ -237,6 +234,17 @@ export default function SuspectApp() {
   const { rows, reload } = useRankings(ready ? rankCase : null);
 
   useEffect(prepareRuns, []);
+
+  // 관리자 초기화(데일리 · 랭킹) 따라가기: 첫 화면에 있을 때 · 탭으로 돌아올 때마다 확인 (http/suspect.ts).
+  // 푸는 중엔 안 함 — 지운 판을 보드가 바로 다시 저장해 버려서
+  useEffect(() => {
+    if (!ready || run) return;
+    const go = () => void applySuspectReset().catch(() => {});
+    go();
+    const vis = () => !document.hidden && go();
+    document.addEventListener("visibilitychange", vis);
+    return () => document.removeEventListener("visibilitychange", vis);
+  }, [ready, run]);
 
   // 자정이 지나면 오늘의 사건이 바뀜 (첫 화면에 있을 때)
   useEffect(() => {

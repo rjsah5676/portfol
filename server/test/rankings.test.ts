@@ -562,7 +562,7 @@ describe("랭킹: 오늘의 용의자", () => {
 
   it("관리자 데일리 초기화 · 랭킹 초기화는 확인 문구가 맞아야 · 관리자만", async () => {
     const admin = await s.adminToken();
-    expect((await s.http("/api/suspect/reset")).body).toEqual({ at: 0 });
+    expect((await s.http("/api/suspect/reset")).body).toMatchObject({ at: expect.any(Number) });
     const bad = await s.http("/api/admin/suspect/reset", { method: "POST", token: admin, body: { confirm: "x" } });
     expect(bad.status).toBe(400);
     const notAdmin = await s.http("/api/admin/suspect/reset", {
@@ -581,5 +581,14 @@ describe("랭킹: 오늘의 용의자", () => {
     });
     expect(all.status).toBe(200);
     expect((await s.http("/api/admin/suspect/stats", { token: admin })).body).toEqual({ today: 0, total: 0 });
+    // 랭킹 초기화는 그 날짜 판 진행 초기화도 같이 남김 (브라우저가 따라 지움) — 최근 것부터
+    const day = await s.http("/api/admin/suspect/rankings/reset", {
+      method: "POST",
+      token: admin,
+      body: { confirm: "데일리 랭킹 초기화", day: kstDay() },
+    });
+    const r = (await s.http("/api/suspect/reset")).body;
+    expect(r.at).toBe(day.body.at);
+    expect(r.resets.slice(0, 3).map((x: { day: string }) => x.day)).toEqual([kstDay(), "all", "all"]);
   });
 });

@@ -80,23 +80,34 @@ export function saveStore(patch?: (s: Store) => void) {
 }
 
 /**
- * 관리자 「데일리 초기화」: 초기화 시각보다 오래된 이 브라우저의 판 진행 · 해결 수 · 연속 해결 · 최고 기록을 지움
- * (튜토리얼을 끝낸 것 · 랭킹 이름은 남김). 기준 시각이 없는 브라우저는 기록이 없으면 지금이 기준.
- * http/suspect.ts · 올인 러브 초기화와 같은 방식
+ * 관리자 초기화 따라가기 (http/suspect.ts · 올인 러브 초기화와 같은 방식). 이 브라우저 기준 시각보다 나중 초기화만:
+ *  - day "all" (데일리 초기화 · 랭킹 전체 초기화): 판 진행 · 해결 수 · 연속 해결 · 최고 기록을 전부 지움
+ *  - day "YYYYMMDD" (그날 랭킹 초기화): 그날 판 진행만 지움 → 다시 풀어서 올릴 수 있게
+ * 튜토리얼을 끝낸 것 · 랭킹 이름은 남김. 기준 시각이 없는 브라우저는 기록이 없으면 지금이 기준.
+ * 지웠으면 true (화면은 onStoreChange 로 갱신)
  */
-export async function applySuspectReset(): Promise<void> {
+export async function applySuspectReset(): Promise<boolean> {
   const { api } = await import("@/lib/api/http");
   const s = loadStore();
   if (!s.resetAt && !Object.keys(s.days).length && !s.solved) saveStore((x) => void (x.resetAt = Date.now()));
-  const { at } = await api<{ at: number }>("/api/suspect/reset", { timeoutMs: 5000 });
-  if (!at || at <= (loadStore().resetAt ?? 0)) return;
-  saveStore((x) => {
-    x.days = {};
-    x.streak = { last: null, count: 0, best: 0 };
-    x.solved = 0;
-    x.best = {};
-    x.resetAt = at;
+  const r = await api<{ at: number; resets?: { at: number; day: string }[] }>("/api/suspect/reset", {
+    timeoutMs: 5000,
   });
+  const mine = loadStore().resetAt ?? 0;
+  const todo = (r.resets ?? (r.at ? [{ at: r.at, day: "all" }] : [])).filter((x) => x.at > mine);
+  if (!todo.length) return false;
+  saveStore((x) => {
+    for (const t of todo) {
+      if (t.day === "all") {
+        x.days = {};
+        x.streak = { last: null, count: 0, best: 0 };
+        x.solved = 0;
+        x.best = {};
+      } else delete x.days[t.day];
+    }
+    x.resetAt = Math.max(...todo.map((t) => t.at));
+  });
+  return true;
 }
 
 export function onStoreChange(cb: () => void): () => void {
