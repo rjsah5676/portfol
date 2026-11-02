@@ -10,7 +10,7 @@ import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
 import imgSketch from "@/img/menu/sketch.jpg";
 import imgPoker from "@/img/menu/poker.jpg";
-// import imgStock from "@/img/menu/stock.jpg"; // 주식게임 — 메인 그림 확인 전까지 숨김
+import imgStock from "@/img/menu/stock.jpg";
 import imgDefense from "@/img/menu/defense.jpg";
 import imgLove from "@/img/menu/love.jpg";
 import imgLadder from "@/img/menu/ladder.jpg";
@@ -139,16 +139,14 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "그림 맞히기 · 가짜 화가 · 그림 릴레이, 최대 8명 그림 파티게임",
         icon: "🎨",
       },
-      // 주식게임 — 메인 그림 확인 전까지 숨김. 공개할 때 아래 주석 풀고 imgStock import · sitemap.ts · layout noindex 같이 되돌리기
-      // {
-      //   href: "/games/stock",
-      //   image: imgStock,
-      //   label: "주식게임",
-      //   desc: "차트 하나로 50턴 솔로 · 10배 코인 · 친구 · 봇과 7분 실시간 주식 대전",
-      //   icon: "px:stock",
-      //   featured: true,
-      //   badge: "NEW",
-      // },
+      {
+        href: "/games/stock",
+        image: imgStock,
+        label: "주식게임",
+        desc: "차트 하나로 50턴 솔로 · 10배 코인 · 친구 · 봇과 7분 실시간 주식 대전",
+        icon: "px:stock",
+        badge: "NEW",
+      },
       {
         href: "/games/melongame",
         image: imgMelongame,
