@@ -1,5 +1,5 @@
 import { api } from "@/lib/api/http";
-import { beginRun, submitRun } from "@/lib/api/rankRun";
+import { beginRun, submitRunRes } from "@/lib/api/rankRun";
 import { toDate } from "@/lib/rankDate";
 
 /*
@@ -43,9 +43,10 @@ export async function getCaseRanking(c: string, limit = 50): Promise<SuspectRank
 /** 오늘의 사건을 처음 열 때 (서버가 판 시작 시각을 알게 함) */
 export const beginCase = (c: string) => beginRun(boardOf(c));
 
+/** 올린 기록 id · 처음 올려서 받은 GP (회원만, 사건마다 한 번 — 난이도별 DAILY_GP) */
 export async function submitCase(
   c: string,
   rec: { name: string; time: number; miss: number; hint: number; score: number }
-): Promise<string> {
-  return submitRun(boardOf(c), suspectRankPath(c), rec);
+): Promise<{ id: string; gp?: number; kept?: boolean }> {
+  return submitRunRes<{ id: string; gp?: number; kept?: boolean }>(boardOf(c), suspectRankPath(c), rec);
 }

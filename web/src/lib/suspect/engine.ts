@@ -203,6 +203,8 @@ export const TIERS: Record<TierId, TierSpec> = {
   },
 };
 export const RANKED_TIERS: TierId[] = ["easy", "normal", "hard", "hell"];
+/** 오늘의 사건을 풀어 랭킹에 처음 올리면 회원에게 주는 GP (사건마다 한 번 — server/src/http/rankings.ts) */
+export const DAILY_GP: Partial<Record<TierId, number>> = { easy: 200, normal: 300, hard: 500, hell: 1000 };
 export const isTier = (v: string): v is TierId => Object.hasOwn(TIERS, v);
 
 const NAMES = [

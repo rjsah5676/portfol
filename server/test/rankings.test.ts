@@ -533,4 +533,53 @@ describe("랭킹: 오늘의 용의자", () => {
       ).status,
     ).toBe(400);
   });
+
+  it("회원이 처음 올리면 난이도별 GP (어려움 500) · 사건마다 한 번 · 랭킹을 지우고 다시 올려도 또 안 줌", async () => {
+    const hard = `suspect:${kstDay()}_hard`;
+    const token = await s.token("gp1", { email: "gp1@example.com" });
+    expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "탐정gp" } })).status).toBe(200);
+    const before = Number((await s.db.col("users").findOne({ _id: "gp1" }))?.points ?? 0);
+    // 회원(이메일 로그인)으로 올리기 — play() 는 익명 토큰이라 따로
+    const memberPlay = async () =>
+      s.http(pathOf(hard), { method: "POST", token, body: { ...row, ticket: await ticket("gp1", hard, 600) } });
+    const first = await memberPlay();
+    expect(first.body).toMatchObject({ gp: 500 });
+    expect((await memberPlay()).body.gp).toBeUndefined(); // 이미 올림 (kept)
+    const admin = await s.adminToken();
+    const del = await s.http("/api/admin/suspect/rankings/reset", {
+      method: "POST",
+      token: admin,
+      body: { confirm: "데일리 랭킹 초기화", day: kstDay() },
+    });
+    expect(del.body.deleted).toBeGreaterThan(0);
+    const again = await memberPlay();
+    expect(again.status).toBe(200);
+    expect(again.body.gp).toBeUndefined(); // 원장에 있어서 또 안 줌
+    expect(Number((await s.db.col("users").findOne({ _id: "gp1" }))?.points ?? 0)).toBe(before + 500);
+    // 비회원은 GP 없이 등록만
+    expect((await play("gp2", `suspect:${kstDay()}_easy`, row)).body.gp).toBeUndefined();
+  });
+
+  it("관리자 데일리 초기화 · 랭킹 초기화는 확인 문구가 맞아야 · 관리자만", async () => {
+    const admin = await s.adminToken();
+    expect((await s.http("/api/suspect/reset")).body).toEqual({ at: 0 });
+    const bad = await s.http("/api/admin/suspect/reset", { method: "POST", token: admin, body: { confirm: "x" } });
+    expect(bad.status).toBe(400);
+    const notAdmin = await s.http("/api/admin/suspect/reset", {
+      method: "POST",
+      token: await s.token("d9"),
+      body: { confirm: "데일리 초기화" },
+    });
+    expect(notAdmin.status).toBe(403);
+    const ok = await s.http("/api/admin/suspect/reset", { method: "POST", token: admin, body: { confirm: "데일리 초기화" } });
+    expect(ok.body.at).toBeGreaterThan(0);
+    expect((await s.http("/api/suspect/reset")).body.at).toBe(ok.body.at);
+    const all = await s.http("/api/admin/suspect/rankings/reset", {
+      method: "POST",
+      token: admin,
+      body: { confirm: "데일리 랭킹 초기화", day: "all" },
+    });
+    expect(all.status).toBe(200);
+    expect((await s.http("/api/admin/suspect/stats", { token: admin })).body).toEqual({ today: 0, total: 0 });
+  });
 });

@@ -36,6 +36,7 @@ const REASON: Record<string, string> = {
   exchange: "포커 환전",
   admin: "운영자 조정",
   mail: "우편",
+  suspect: "오늘의 용의자",
   defense: "디펜스",
 };
 const reasonName = (r: string) => REASON[r] ?? r;

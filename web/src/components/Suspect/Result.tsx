@@ -158,6 +158,8 @@ export default function Result({
   const [name, setName] = useState(() => loadStore().name ?? "");
   const [rank, setRank] = useState<{ pos: number; total: number } | null>(null);
   const [copied, setCopied] = useState(false);
+  /** 처음 올려서 받은 GP (회원만) */
+  const [gp, setGp] = useState(0);
 
   const markSubmitted = () => {
     if (!day) return;
@@ -169,13 +171,14 @@ export default function Result({
     setSend("sending");
     setErr("");
     try {
-      await submitCase(ck, {
+      const res = await submitCase(ck, {
         name: nick,
         time: result.time,
         miss: result.miss,
         hint: result.hint,
         score,
       });
+      if (res.gp) setGp(res.gp);
       markSubmitted();
       setSend("done");
     } catch (e) {
@@ -274,7 +277,9 @@ export default function Result({
               ) : send === "sending" || auto.state === "sending" ? (
                 <span>기록 올리는 중…</span>
               ) : send === "done" ? (
-                <span className="font-bold text-[var(--inno)]">랭킹에 올렸어요!</span>
+                <span className="font-bold text-[var(--inno)]">
+                  랭킹에 올렸어요!{gp > 0 && <span className="text-[var(--crim)]"> +{gp.toLocaleString("ko-KR")} GP</span>}
+                </span>
               ) : send === "error" ? (
                 <span className="text-[var(--crim)]">{err}</span>
               ) : null}

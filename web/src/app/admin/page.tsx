@@ -13,6 +13,7 @@ import PostManager from "@/components/Admin/PostManager";
 import DataManager from "@/components/Admin/DataManager";
 import DefenseReset from "@/components/Admin/DefenseReset";
 import LoveReset from "@/components/Admin/LoveReset";
+import SuspectReset from "@/components/Admin/SuspectReset";
 import MailSender from "@/components/Admin/MailSender";
 import Economy from "@/components/Admin/Economy";
 import NoticeEditor from "@/components/Admin/NoticeEditor";
@@ -278,6 +279,8 @@ export default function AdminDashboard() {
             <DefenseReset />
             <SubHeading>올인 러브</SubHeading>
             <LoveReset />
+            <SubHeading>오늘의 용의자</SubHeading>
+            <SuspectReset />
           </div>
         )}
         {tab === "guest" && <DataManager key="guest" groups={G_GUEST} />}

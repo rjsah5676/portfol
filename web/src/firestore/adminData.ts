@@ -392,6 +392,18 @@ export const getDefenseStats = () =>
 export const getLoveReset = () => api<{ at: number }>("/api/love/reset", { timeoutMs: 5000 });
 export const resetLove = () =>
   api<{ at: number }>("/api/admin/love/reset", { method: "POST", body: { confirm: "미연시 초기화" }, auth: true });
+/** 오늘의 용의자: 데일리 초기화 시각 (게임이 열릴 때 이보다 오래된 브라우저 기록을 지움) · 랭킹 기록 수 · 랭킹 지우기 */
+export const getSuspectReset = () => api<{ at: number }>("/api/suspect/reset", { timeoutMs: 5000 });
+export const resetSuspect = () =>
+  api<{ at: number }>("/api/admin/suspect/reset", { method: "POST", body: { confirm: "데일리 초기화" }, auth: true });
+export const getSuspectStats = () =>
+  api<{ today: number; total: number }>("/api/admin/suspect/stats", { auth: true });
+export const resetSuspectRankings = (day: string) =>
+  api<{ deleted: number }>("/api/admin/suspect/rankings/reset", {
+    method: "POST",
+    body: { confirm: "데일리 랭킹 초기화", day },
+    auth: true,
+  });
 export const resetDefense = () =>
   api<Record<string, number>>("/api/admin/defense/reset", {
     method: "POST",

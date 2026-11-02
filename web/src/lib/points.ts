@@ -990,6 +990,12 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
       return "PIXEL PATROL";
     case "mail":
       return `우편 · ${r.ref ?? ""}`;
+    case "suspect": {
+      // ref = "YYYYMMDD_tier"
+      const [d = "", t = ""] = (r.ref ?? "").split("_");
+      const tier = ({ easy: "쉬움", normal: "보통", hard: "어려움", hell: "지옥" } as Record<string, string>)[t] ?? t;
+      return `오늘의 용의자 · ${+d.slice(4, 6)}/${+d.slice(6, 8)} ${tier}`;
+    }
     default:
       return r.reason;
   }

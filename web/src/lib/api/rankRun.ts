@@ -80,13 +80,22 @@ async function ticketOf(board: string): Promise<string | undefined> {
  * (한 사람당 가장 좋은 기록 하나만 남으므로, 이번 기록이 더 나쁘면 예전 기록의 id).
  */
 export async function submitRun(board: string, path: string, body: object): Promise<string> {
+  return (await submitRunRes(board, path, body)).id;
+}
+
+/** submitRun 과 같은데 서버 응답을 통째로 (오늘의 용의자: 받은 GP { gp } 도 같이 옴) */
+export async function submitRunRes<T extends { id: string } = { id: string }>(
+  board: string,
+  path: string,
+  body: object
+): Promise<T> {
   await signIn();
   // 이름은 어디서 입력받았든(입력 칸·prompt) 여기서 한 번 더 길이를 맞춤
   const typed = (body as { name?: unknown }).name;
   const name = typeof typed === "string" ? typed.trim().slice(0, RANK_NAME_MAX) : undefined;
   const ticket = await ticketOf(board);
   const res = await withCaptcha((headers) =>
-    api<{ id: string }>(path, {
+    api<T>(path, {
       method: "POST",
       auth: true,
       headers,
@@ -98,5 +107,5 @@ export async function submitRun(board: string, path: string, body: object): Prom
   try {
     localStorage.removeItem(storeKey(board));
   } catch {}
-  return res.id;
+  return res;
 }

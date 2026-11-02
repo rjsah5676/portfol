@@ -16,7 +16,13 @@ import { bpOf, BP_TOP_SONGS } from "./bp";
 import { pictureOf } from "../users";
 import { createFightRating } from "../games/fightRating";
 import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
-import { CASE_RE as SUSPECT_CASE_RE, kstDay, scoreOf as suspectScore } from "../../../web/src/lib/suspect/engine";
+import {
+  CASE_RE as SUSPECT_CASE_RE,
+  DAILY_GP as SUSPECT_GP,
+  kstDay,
+  scoreOf as suspectScore,
+  type TierId as SuspectTier,
+} from "../../../web/src/lib/suspect/engine";
 import { h, ms, userOf } from "./util";
 
 /*
@@ -384,7 +390,7 @@ export async function bpBoard(db: Deps["db"]): Promise<BpRow[]> {
   return list;
 }
 
-export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Router {
+export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Captcha): Router {
   const r = Router();
   const tickets = db.col<Ticket>("rank_tickets");
   const fightRating = createFightRating(db, users);
@@ -562,10 +568,24 @@ export function rankingsRouter({ db, auth, users }: Deps, captcha?: Captcha): Ro
   );
   r.post(
     "/suspect/:case",
-    h((req) => {
+    h(async (req) => {
       const c = String(req.params.case);
       if (!SUSPECT_CASE_RE.test(c)) throw bad();
-      return submit(req, `suspect:${c}`, "suspect_rankings", { case: c });
+      const out = await submit(req, `suspect:${c}`, "suspect_rankings", { case: c });
+      // 처음 올린 기록이면 회원에게 난이도별 GP (사건마다 한 번 — 원장에 같은 사건이 있으면 안 줌. 비회원은 건너뜀)
+      const gp = SUSPECT_GP[c.slice(9) as SuspectTier] ?? 0;
+      if (!("kept" in out) && gp) {
+        const user = await userOf(auth, req);
+        const got = user && (await db.col("point_log").findOne({ uid: user.uid, reason: "suspect", ref: c }));
+        if (user && !user.anonymous && !got) {
+          const ok = await points.grant(user.uid, gp, "suspect", c).then(
+            () => true,
+            () => false,
+          );
+          if (ok) return { ...out, gp };
+        }
+      }
+      return out;
     }),
   );
 

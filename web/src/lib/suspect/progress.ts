@@ -31,6 +31,8 @@ export interface PlayState {
 }
 
 export interface Store {
+  /** 이 브라우저 기록이 언제 기준인지 (관리자 「데일리 초기화」 시각과 비교) */
+  resetAt?: number;
   /** 입문 튜토리얼을 끝냈는지 */
   tutorial: boolean;
   /** 비회원이 랭킹에 적은 이름 (다음에 미리 채움) */
@@ -75,6 +77,26 @@ export function saveStore(patch?: (s: Store) => void) {
     localStorage.setItem(KEY, JSON.stringify(s));
   } catch {}
   for (const l of listeners) l();
+}
+
+/**
+ * 관리자 「데일리 초기화」: 초기화 시각보다 오래된 이 브라우저의 판 진행 · 해결 수 · 연속 해결 · 최고 기록을 지움
+ * (튜토리얼을 끝낸 것 · 랭킹 이름은 남김). 기준 시각이 없는 브라우저는 기록이 없으면 지금이 기준.
+ * http/suspect.ts · 올인 러브 초기화와 같은 방식
+ */
+export async function applySuspectReset(): Promise<void> {
+  const { api } = await import("@/lib/api/http");
+  const s = loadStore();
+  if (!s.resetAt && !Object.keys(s.days).length && !s.solved) saveStore((x) => void (x.resetAt = Date.now()));
+  const { at } = await api<{ at: number }>("/api/suspect/reset", { timeoutMs: 5000 });
+  if (!at || at <= (loadStore().resetAt ?? 0)) return;
+  saveStore((x) => {
+    x.days = {};
+    x.streak = { last: null, count: 0, best: 0 };
+    x.solved = 0;
+    x.best = {};
+    x.resetAt = at;
+  });
 }
 
 export function onStoreChange(cb: () => void): () => void {

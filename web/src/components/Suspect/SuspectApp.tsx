@@ -11,6 +11,7 @@ import {
   caseNo,
   dailySeed,
   dayLabel,
+  DAILY_GP,
   ALL_FACES,
   kstDay,
   RANKED_TIERS,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/suspect/engine";
 import { makePuzzle } from "@/lib/suspect/makePuzzle";
 import {
+  applySuspectReset,
   getPlay,
   liveStreak,
   loadStore,
@@ -80,7 +82,10 @@ function useStore(ready: boolean): Store | null {
     if (!ready) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage 는 화면이 뜬 뒤에만 읽을 수 있음
     setS({ ...loadStore() });
-    return onStoreChange(() => setS({ ...loadStore() }));
+    const off = onStoreChange(() => setS({ ...loadStore() }));
+    // 관리자가 「데일리 초기화」를 했으면 이 브라우저의 지난 기록을 지움 (지우면 위 구독으로 화면도 갱신)
+    void applySuspectReset().catch(() => {});
+    return off;
   }, [ready]);
   return s;
 }
@@ -654,6 +659,7 @@ function Home({
                 <span className="sp-dots">{"●".repeat(DOTS[t]) + "○".repeat(4 - DOTS[t])}</span>
                 <h3 style={{ color: TIER_COLOR[t] }}>{T.label}</h3>
                 <p>{T.desc.includes("명") ? T.desc : `${n}명 · ${T.desc}`}</p>
+                {DAILY_GP[t] && <span className="sp-gp">회원 +{DAILY_GP[t]!.toLocaleString("ko-KR")} GP</span>}
                 <span className="st">
                   {p?.done
                     ? `기록 ${fmtTime(p.score ?? scoreOf(p.ms / 1000, p.miss, p.hint))}`
@@ -673,7 +679,8 @@ function Home({
           })}
         </div>
         <p className="mt-2 mb-0 text-center text-[12px] break-keep text-[var(--ink2)]">
-          같은 날 같은 난이도는 모두에게 같은 사건 · 자정(한국 시간)에 새 사건 · 랭킹엔 첫 풀이만
+          같은 날 같은 난이도는 모두에게 같은 사건 · 자정(한국 시간)에 새 사건 · 랭킹엔 첫 풀이만 · 회원은 처음
+          올릴 때 GP
         </p>
       </div>
 
