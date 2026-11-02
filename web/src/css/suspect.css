@@ -789,17 +789,6 @@
     gap: 6px;
   }
 
-  /* 잠깐 멈춤 (보드 가림) */
-  .sp-pause {
-    position: absolute;
-    inset: 0;
-    z-index: 20;
-    display: grid;
-    place-items: center;
-    background: rgba(216, 194, 150, 0.93);
-    backdrop-filter: blur(6px);
-  }
-
   /* 홈: 난이도 = 서류철 카드 */
   .sp-tiers {
     display: grid;

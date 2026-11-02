@@ -807,8 +807,10 @@ export function caseNo(day: string): number {
 /** "10월 31일" */
 export const dayLabel = (day: string) => `${+day.slice(4, 6)}월 ${+day.slice(6, 8)}일`;
 
-/** 기록 점수 (초): 걸린 시간 + 실수 30초 + 힌트 60초. 작을수록 좋음 */
-export const PENALTY = { miss: 30, hint: 60 } as const;
+/** 기록 점수 (초): 걸린 시간 + 실수 2분 + 힌트 1분. 작을수록 좋음 */
+export const PENALTY = { miss: 120, hint: 60 } as const;
+/** 벌점 보여 줄 때: 120 → "2분", 45 → "45초" */
+export const penaltyLabel = (sec: number) => (sec % 60 === 0 ? `${sec / 60}분` : `${sec}초`);
 export const scoreOf = (time: number, miss: number, hint: number) =>
   Math.round((time + miss * PENALTY.miss + hint * PENALTY.hint) * 10) / 10;
 

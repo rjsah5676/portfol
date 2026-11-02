@@ -200,7 +200,7 @@ const rhythmBoard = (chart: string): Board => {
 };
 
 /**
- * 오늘의 용의자: 날짜 · 난이도(case = "YYYYMMDD_tier")마다 랭킹. 점수 = 시간 + 실수 30초 + 힌트 60초 (작을수록 좋음).
+ * 오늘의 용의자: 날짜 · 난이도(case = "YYYYMMDD_tier")마다 랭킹. 점수 = 시간 + 실수 2분 + 힌트 1분 (작을수록 좋음).
  * 퍼즐은 날짜 시드로 누구나 같은 판이 나오고, 첫 기록만 남음. 어제 · 오늘 · 내일(시차 여유) 사건만 받음.
  */
 const suspectSchema = z.strictObject({

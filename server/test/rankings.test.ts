@@ -487,7 +487,7 @@ describe("랭킹: 리듬게임", () => {
 
 describe("랭킹: 오늘의 용의자", () => {
   const today = `suspect:${kstDay()}_normal`;
-  const row = { name: "탐정", time: 100, miss: 1, hint: 1, score: 190 };
+  const row = { name: "탐정", time: 100, miss: 1, hint: 1, score: 280 };
 
   it("날짜·난이도별로 따로, 사건마다 첫 기록만", async () => {
     expect(await status("d1", today, row)).toBe(200);
@@ -510,7 +510,7 @@ describe("랭킹: 오늘의 용의자", () => {
   });
 
   it("점수 계산 · 날짜 · 시간이 안 맞으면 거절", async () => {
-    expect(await status("d2", today, { ...row, score: 100 })).toBe(400); // 시간+실수30+힌트60 과 다름
+    expect(await status("d2", today, { ...row, score: 100 })).toBe(400); // 시간+실수120+힌트60 과 다름
     expect(await status("d2", "suspect:20200101_normal", row)).toBe(400); // 지난 사건
     expect(await status("d2", today, row, 20)).toBe(400); // 100초 기록인데 20초만 지남
     const token = await s.token("d2");

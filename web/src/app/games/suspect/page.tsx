@@ -1,7 +1,7 @@
 import Link from "next/link";
 import Faded from "@/components/Faded";
 import SuspectApp from "@/components/Suspect/SuspectApp";
-import { PENALTY, RANKED_TIERS, TIERS } from "@/lib/suspect/engine";
+import { PENALTY, penaltyLabel, RANKED_TIERS, TIERS } from "@/lib/suspect/engine";
 import { pageMeta, SITE_NAME, SITE_URL } from "@/lib/seo";
 import "@/css/suspect.css";
 
@@ -50,7 +50,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "찍어서 맞히면 안 되나요?",
-    a: `모든 사건은 찍지 않고 논리만으로 끝까지 풀리도록 만들어져 있습니다. 랭킹이 걸린 오늘의 사건에서는 아직 단서로 확정되지 않은 사람을 지목하면 맞든 틀리든 실수(+${PENALTY.miss}초)로 치고, 정답 여부도 알려 주지 않습니다. 연습 사건과 입문 사건은 벌점 없이 '아직 근거가 없어요'라고만 알려 줍니다.`,
+    a: `모든 사건은 찍지 않고 논리만으로 끝까지 풀리도록 만들어져 있습니다. 랭킹이 걸린 오늘의 사건에서는 아직 단서로 확정되지 않은 사람을 지목하면 맞든 틀리든 실수(+${penaltyLabel(PENALTY.miss)})로 치고, 정답 여부도 알려 주지 않습니다. 연습 사건과 입문 사건은 벌점 없이 '아직 근거가 없어요'라고만 알려 줍니다.`,
   },
   {
     q: "오늘의 사건은 언제 바뀌나요?",
@@ -58,7 +58,7 @@ const FAQ: { q: string; a: string }[] = [
   },
   {
     q: "기록은 어떻게 매기나요?",
-    a: `걸린 시간 + 실수 × ${PENALTY.miss}초 + 힌트 × ${PENALTY.hint}초이고, 작을수록 높은 순위입니다. 시간은 화면을 보고 있을 때만 흐르고, 랭킹에는 사건마다 처음 푼 기록만 남습니다. 실수와 힌트 없이 풀면 '완벽 해결' 도장을 받습니다.`,
+    a: `걸린 시간 + 실수 × ${penaltyLabel(PENALTY.miss)} + 힌트 × ${penaltyLabel(PENALTY.hint)}이고, 작을수록 높은 순위입니다. 시작하면 시간은 멈추지 않고(다른 탭으로 가거나 창을 닫아도 흐름), 랭킹에는 사건마다 처음 푼 기록만 남습니다. 실수와 힌트 없이 풀면 '완벽 해결' 도장을 받습니다.`,
   },
   {
     q: "회원가입이 필요한가요?",

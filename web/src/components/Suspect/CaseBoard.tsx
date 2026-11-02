@@ -18,6 +18,7 @@ import {
   faceOf,
   josa,
   PENALTY,
+  penaltyLabel,
   singleClueSteps,
   type Person,
   type Puzzle,
@@ -140,9 +141,13 @@ export default function CaseBoard({
   const [miss, setMiss] = useState(saved?.miss ?? 0);
   const [hint, setHint] = useState(saved?.hint ?? 0);
   const [missed, setMissed] = useState<number[]>(saved?.missed ?? []);
-  const msRef = useRef(saved?.ms ?? 0);
-  const [shownSec, setShownSec] = useState(Math.floor((saved?.ms ?? 0) / 1000));
-  const [paused, setPaused] = useState(false);
+  // 오늘의 사건은 창을 닫아 둔 시간도 셈 (마지막 저장 뒤로 지난 시간을 더함 — 캡처해 두고 닫았다가 풀기 막기)
+  const [ms0] = useState(() =>
+    (saved?.ms ?? 0) +
+    (strict && saved && !saved.done && saved.at ? Math.max(0, Date.now() - saved.at) : 0)
+  );
+  const msRef = useRef(ms0);
+  const [shownSec, setShownSec] = useState(Math.floor(ms0 / 1000));
   const [sel, setSel] = useState(-1);
   const [focus, setFocus] = useState(-1);
   const [target, setTarget] = useState(-1);
@@ -165,7 +170,8 @@ export default function CaseBoard({
 
   // ───── 저장 (오늘의 사건: 새로고침 · 다른 화면 갔다 와도 이어서) ─────
   const save = useCallback(
-    () => onSave?.({ x, memo, miss, hint, missed, ms: msRef.current, done: doneRef.current }),
+    () =>
+      onSave?.({ x, memo, miss, hint, missed, ms: msRef.current, at: Date.now(), done: doneRef.current }),
     [onSave, x, memo, miss, hint, missed]
   );
   const saveRef = useRef(save);
@@ -175,21 +181,18 @@ export default function CaseBoard({
   }, [save]);
   useEffect(() => () => saveRef.current(), []);
 
-  // ───── 시간: 화면을 보고 있을 때만 흐름 ─────
+  // ───── 시간: 멈춤 없음 — 다른 탭 · 창을 내려 둬도 흐름 (벽시계 기준, 탭이 느려져도 밀리지 않게) ─────
   useEffect(() => {
-    let last = performance.now();
+    let last = Date.now();
     const id = setInterval(() => {
-      const now = performance.now();
-      const dt = now - last;
+      const now = Date.now();
+      const dt = Math.max(0, now - last);
       last = now;
-      if (paused || doneRef.current || document.hidden) return;
-      msRef.current += Math.min(dt, 1000);
+      if (doneRef.current) return;
+      msRef.current += dt;
       setShownSec(Math.floor(msRef.current / 1000));
     }, 250);
-    const vis = () => {
-      if (document.hidden && !doneRef.current) setPaused(true);
-      saveRef.current();
-    };
+    const vis = () => saveRef.current();
     document.addEventListener("visibilitychange", vis);
     window.addEventListener("pagehide", vis);
     return () => {
@@ -197,7 +200,7 @@ export default function CaseBoard({
       document.removeEventListener("visibilitychange", vis);
       window.removeEventListener("pagehide", vis);
     };
-  }, [paused]);
+  }, []);
 
   // ───── 튜토리얼: 지금 짚어 줄 한 수 ─────
   const guideStep = useMemo(() => {
@@ -282,7 +285,7 @@ export default function CaseBoard({
             main="밝혀진 사람 카드를 누르면 단서가 여기 떠요"
             sub={
               strict
-                ? `확실한 사람만 지목 · 근거 없이 찍으면 실수 +${PENALTY.miss}초`
+                ? `확실한 사람만 지목 · 근거 없이 찍으면 실수 +${penaltyLabel(PENALTY.miss)}`
                 : "모르는 사람을 눌러 지목 · 확실한 사람만"
             }
           />
@@ -307,7 +310,7 @@ export default function CaseBoard({
   }
 
   function tapCell(i: number) {
-    if (paused || (doneRef.current && !review)) return;
+    if (doneRef.current && !review) return;
     if (x[i] >= 0) {
       playSfx("sfx-tap", 0.7);
       setSel(-1);
@@ -336,7 +339,7 @@ export default function CaseBoard({
   /** 우클릭: 연필 메모 바로 돌리기 (범인? → 무고? → 지움) — 메모 모드를 켜지 않아도 됨 */
   function memoClick(e: MouseEvent, i: number) {
     e.preventDefault();
-    if (paused || doneRef.current || x[i] >= 0 || guideStep) return;
+    if (doneRef.current || x[i] >= 0 || guideStep) return;
     playSfx("sfx-tap");
     setMemo((m) => m.map((v, k) => (k === i ? (v + 1) % 3 : v)));
     if (sel === i) setSel(-1);
@@ -386,13 +389,13 @@ export default function CaseBoard({
             <Lines
               head="실수 +1 · 근거 부족"
               main={`${name}${josa(name, "은", "는")} 아직 확정할 근거가 없어요`}
-              sub={`찍기는 실수(+${PENALTY.miss}초) · 정답 여부는 알려 주지 않아요`}
+              sub={`찍기는 실수(+${penaltyLabel(PENALTY.miss)}) · 정답 여부는 알려 주지 않아요`}
             />
           ) : (
             <Lines
               head="실수 +1"
               main="틀렸어요. 단서를 다시 맞춰 보세요"
-              sub={strict ? `기록에 +${PENALTY.miss}초` : "연습이라 기록엔 영향 없어요"}
+              sub={strict ? `기록에 +${penaltyLabel(PENALTY.miss)}` : "연습이라 기록엔 영향 없어요"}
             />
           ),
       });
@@ -447,7 +450,7 @@ export default function CaseBoard({
   }
 
   function askHint() {
-    if (paused || doneRef.current || guideStep) return;
+    if (doneRef.current || guideStep) return;
     playSfx("sfx-hint");
     setSel(-1);
     setHint((h) => h + 1);
@@ -544,9 +547,9 @@ export default function CaseBoard({
             className="sp-btn sp-btn-sm sp-btn-sun"
             onClick={askHint}
             disabled={!!guideStep || left === 0}
-            title={strict ? `힌트 (누를 때마다 +${PENALTY.hint}초)` : "힌트"}
+            title={strict ? `힌트 (누를 때마다 +${penaltyLabel(PENALTY.hint)})` : "힌트"}
           >
-            힌트{strict && <span className="text-[13px] opacity-70"> +{PENALTY.hint}초</span>}
+            힌트{strict && <span className="text-[13px] opacity-70"> +{penaltyLabel(PENALTY.hint)}</span>}
           </button>
           <button
             type="button"
@@ -563,19 +566,6 @@ export default function CaseBoard({
             ✎ 연필 메모 {memoMode ? "켜짐" : "꺼짐"}
           </button>
           <span className="sp-chip ml-auto">남은 {left}명</span>
-          <button
-            type="button"
-            className="sp-btn sp-btn-sm sp-btn-ghost"
-            onClick={() => {
-              playSfx("sfx-tap");
-              setPaused(true);
-              saveRef.current();
-            }}
-            disabled={left === 0}
-            aria-label="잠깐 멈춤"
-          >
-            ❚❚
-          </button>
         </div>
       )}
 
@@ -596,10 +586,7 @@ export default function CaseBoard({
 
       {/* 보드 */}
       <div className="relative">
-        <div
-          className="sp-boardwrap"
-          style={paused ? { filter: "blur(9px)", pointerEvents: "none" } : undefined}
-        >
+        <div className="sp-boardwrap">
           <div className="sp-collab" style={cols}>
             {Array.from({ length: b.cols }, (_, c) => (
               <span key={c}>{b.colName(c)}</span>
@@ -670,23 +657,6 @@ export default function CaseBoard({
             })}
           </div>
         </div>
-        {paused && (
-          <button
-            type="button"
-            className="sp-pause"
-            onClick={() => {
-              playSfx("sfx-tap");
-              setPaused(false);
-            }}
-          >
-            <span className="sp-card block px-6 py-4 text-center">
-              <span className="sp-hand block text-[26px]">잠깐 멈춤</span>
-              <span className="block text-[13px] text-[var(--ink2)]">
-                누르면 이어서 · 멈춘 동안 시간은 안 흘러요
-              </span>
-            </span>
-          </button>
-        )}
       </div>
 
       {/*

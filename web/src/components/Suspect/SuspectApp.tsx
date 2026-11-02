@@ -519,7 +519,7 @@ export default function SuspectApp() {
                 ))}
               </div>
               <p className="m-0 text-[11px] text-white/40">
-                기록 = 시간 + 실수×30초 + 힌트×60초 · 사건마다 첫 풀이만
+                기록 = 시간 + 실수×2분 + 힌트×1분 · 사건마다 첫 풀이만
               </p>
             </div>
           ),

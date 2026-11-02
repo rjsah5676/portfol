@@ -5,6 +5,7 @@ import {
   caseKey,
   caseNo,
   PENALTY,
+  penaltyLabel,
   rng,
   scoreOf,
   TIERS,
@@ -261,7 +262,7 @@ export default function Result({
               <span className="text-[12px] text-[var(--ink2)]">랭킹 기록 (작을수록 좋아요)</span>
               <div className="sp-num text-[34px] leading-none">{fmtTime(score)}</div>
               <div className="text-[11.5px] text-[var(--ink3)]">
-                시간 + 실수×{PENALTY.miss}초 + 힌트×{PENALTY.hint}초
+                시간 + 실수×{penaltyLabel(PENALTY.miss)} + 힌트×{penaltyLabel(PENALTY.hint)}
               </div>
             </div>
             <div className="mt-2 text-[14px]">

@@ -20,8 +20,10 @@ export interface PlayState {
   hint: number;
   /** 실수한 사람 (공유 격자에 노란 칸) */
   missed: number[];
-  /** 실제로 들여다본 시간 (탭을 내려 두면 멈춤) */
+  /** 걸린 시간 (멈춤 없음 — 탭을 내려 둬도 흐름) */
   ms: number;
+  /** 마지막으로 저장한 시각 (Date.now) — 오늘의 사건은 창을 닫아 둔 동안도 시간에 더함 */
+  at?: number;
   done: boolean;
   /** 랭킹에 올렸는지 (오늘의 사건은 첫 기록만) */
   submitted?: boolean;
