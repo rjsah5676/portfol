@@ -9,6 +9,8 @@ export const metadata = pageMeta({
     "무료 웹 주식게임 애니메 차트. 차트 하나로 50턴 동안 사고팔아 돈을 불리는 솔로 모드, 10배 레버리지 코인 거래소, 친구 · 봇과 7분 동안 10개 종목을 사고파는 실시간 대전, 번 돈으로 집을 사는 마을까지. PC · 모바일 가로 화면 지원, 실제 돈이 오가지 않는 게임이에요.",
   path: "/games/stock/",
   keywords: ["주식게임", "웹 주식게임", "주식 게임", "모의 투자 게임", "차트 게임", "코인 게임", "주식 대전", "무료 주식 게임"],
+  // 마을(3D) 다시 만드는 동안 메뉴 · 검색에서 잠깐 숨김 — 다시 열 때 지우고 sitemap.ts · navMenu.ts 되돌리기
+  noindex: true,
 });
 
 export default function Layout({ children }: { children: ReactNode }) {
