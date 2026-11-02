@@ -23,6 +23,8 @@ export interface CharDef {
   base: string;
   /** 머리 꼭대기까지 그림 px (화면 키를 맞추는 기준) */
   tall: number;
+  /** 3D 모델 (리깅 + 걷기 · 숨쉬기 동작, 키 1 로 만든 것). 있으면 판 대신 3D 로 세움 — 못 받으면 판으로 */
+  model?: string;
   dirs: Record<SheetDir, { walk: Sheet; idle: Sheet; start: number }>;
 }
 
@@ -31,6 +33,7 @@ export const CHARS: Record<CharId, CharDef> = {
     name: "에이미",
     base: "/gmtown/char/amy",
     tall: 168,
+    model: "/gmtown/char/amy3d.glb",
     dirs: {
       front: { walk: { file: "amy_front_walk.webp", n: 20, w: 110, h: 178, ax: 55.2, ay: 168 }, idle: { file: "amy_front_idle.webp", n: 23, w: 111, h: 169, ax: 55.3, ay: 166 }, start: 15 },
       frontdiag: { walk: { file: "amy_frontdiag_walk.webp", n: 20, w: 116, h: 180, ax: 72.6, ay: 171 }, idle: { file: "amy_frontdiag_idle.webp", n: 26, w: 97, h: 172, ax: 62.6, ay: 169 }, start: 5 },
@@ -49,7 +52,10 @@ export function sheetOf(d: number): { dir: SheetDir; flip: boolean } {
 }
 
 /** 이 캐릭터가 쓰는 그림 주소 전부 (미리 받기) */
-export const charFiles = (c: CharId) => Object.values(CHARS[c].dirs).flatMap((d) => [`${CHARS[c].base}/${d.walk.file}`, `${CHARS[c].base}/${d.idle.file}`]);
+export const charFiles = (c: CharId) => [
+  ...Object.values(CHARS[c].dirs).flatMap((d) => [`${CHARS[c].base}/${d.walk.file}`, `${CHARS[c].base}/${d.idle.file}`]),
+  ...(CHARS[c].model ? [CHARS[c].model!] : []),
+];
 
 /** 화면에서 캐릭터 키 (칸) — 건물 · 나무 크기는 이걸 기준으로 맞춤 */
 export const CHAR_TALL = 1.65;

@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneRig } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { CHARS, CHAR_TALL, IDLE_MS, WALK_MS, sheetOf, type Sheet } from "@/lib/gmtown/chars";
 import type { ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
 import {
@@ -31,7 +33,8 @@ import { buildTown, type TownScene } from "./scene3d";
  * React(GMTownApp)는 HUD(채널 · 채팅 · 건물 카드)만 맡고 여기 훅으로 주고받음.
  *
  * 카메라: 고정 쿼터뷰 (위 35° · 남동 45°) 직교. 내 캐릭터를 따라가고 휠 · 두 손가락으로 당기고 밀기, 「지도」는 마을 전체.
- * 사람: 에이미 스프라이트를 카메라를 보는 세로 판에 (35° 로 눌린 만큼 세로로 늘려서 원래 비율) — 깊이로 건물 · 나무와 앞뒤가 맞음.
+ * 사람: 3D 모델이 있는 캐릭터는 리깅된 3D 로 (걷기 · 숨쉬기 동작, 가는 쪽을 보며 돌아섬, 툰 2단 명암 + 화면 두께가 같은 외곽선).
+ *   모델이 없거나 못 받았으면 스프라이트를 카메라를 보는 세로 판에 (35° 로 눌린 만큼 세로로 늘려서 원래 비율).
  *   가려진 사람은 반투명으로 한 번 더 (어디 있는지는 보이게), 내가 건물 뒤에 들어가면 그 건물을 비치게.
  * 이름표 · 말풍선 · 조이스틱은 위에 겹친 2D 캔버스.
  * 움직이기: 키보드(WASD · 방향키 = 화면 방향) · 누른 곳으로 걸어가기(0.5m 격자 A* → 직선으로 펴기) · 폰은 왼쪽 손가락 조이스틱.
@@ -70,6 +73,18 @@ interface AvatarView {
   tex: Map<string, THREE.Texture>;
 }
 
+/** 3D 캐릭터 한 명 (모델을 뼈까지 복제 — 그림 · 모양 데이터는 나눠 씀) */
+interface RigView {
+  root: THREE.Object3D;
+  mixer: THREE.AnimationMixer;
+  walk: THREE.AnimationAction | null;
+  idle: THREE.AnimationAction | null;
+  /** 가려졌을 때만 보이는 반투명 몸 */
+  ghosts: THREE.Object3D[];
+  shadow: THREE.Mesh;
+  moving: boolean;
+}
+
 interface Avatar {
   id: string;
   name: string;
@@ -84,6 +99,10 @@ interface Avatar {
   samples: Sample[];
   bubble: { text: string; until: number; lines: string[] | null } | null;
   view?: AvatarView;
+  rig?: RigView;
+  /** 3D: 지금 보는 쪽 (라디안, 땅 위 +y 쪽이 0) · 돌아설 쪽 */
+  face?: number;
+  faceTo?: number;
 }
 
 const GRID = 0.5;
@@ -100,6 +119,25 @@ const CAM_DIR = new THREE.Vector3(
   Math.cos(PITCH) * Math.cos(YAW)
 );
 const SUN_OFF = new THREE.Vector3(-34, 52, 30);
+/** 3D 캐릭터: 키 1 짜리 모델을 판과 같은 화면 키로 (세운 키 h 는 화면에서 h·cos35 로 보임) */
+const RIG_SCALE = CHAR_TALL / Math.cos(PITCH);
+/** 툰 명암: 빛 방향 (화면 기준 — 보는 사람 왼쪽 위 앞에서, 얼굴이 늘 밝게) · 그늘 밝기 · 외곽선 두께(화면 px) · 색 */
+const TOON_LIGHT = new THREE.Vector3(-0.45, 0.55, 0.7).normalize();
+const TOON_SHADE = 0.8;
+const INK_PX = 1.3;
+const INK_COLOR = 0x3a2a3e;
+
+/** 8 방향(화면 기준) → 땅 위에서 보는 쪽 (라디안) */
+function faceOfDir(d: number): number {
+  const a = (d * Math.PI) / 4;
+  const [wx, wy] = fromScreen(Math.sin(a), -Math.cos(a));
+  return Math.atan2(wx, wy);
+}
+
+interface RigModel {
+  scene: THREE.Object3D;
+  clips: THREE.AnimationClip[];
+}
 
 export class TownEngine {
   private ctx: CanvasRenderingContext2D;
@@ -137,8 +175,14 @@ export class TownEngine {
   private hover: Building | null = null;
   private sent = { x: 0, y: 0, d: -1, m: -1 as number, at: 0 };
   private typing = false;
+  private walkRate = 1.15;
 
   private sheets = new Map<string, THREE.Texture>();
+  private models = new Map<string, RigModel>();
+  /** 3D 캐릭터 공용 재질 (툰 · 외곽선 · 가려졌을 때) — 캐릭터 종류마다 하나 */
+  private rigMats = new Map<string, { toon: THREE.Material; ink: THREE.Material; ghost: THREE.Material }>();
+  private toonU = { uLight: { value: new THREE.Vector3() }, uShade: { value: TOON_SHADE } };
+  private inkU = { uInk: { value: 0.004 } };
   private sheetGeo = new Map<string, THREE.BufferGeometry>();
   private shadowGeo = new THREE.CircleGeometry(0.42, 24);
   private shadowMat = new THREE.MeshBasicMaterial({
@@ -187,6 +231,21 @@ export class TownEngine {
           t.repeat.set(1 / sh.n, 1);
           this.sheets.set(`${c}/${sh.file}`, t);
         }
+    // 3D 캐릭터 (있는 것만, 못 받으면 판으로)
+    const gl = new GLTFLoader();
+    for (const [c, def] of Object.entries(CHARS))
+      if (def.model)
+        gl.loadAsync(def.model).then(
+          (g) => {
+            if (this.dead) return;
+            this.models.set(c, { scene: g.scene, clips: g.animations });
+            this.rigMats.set(c, this.makeRigMats(g.scene));
+            // 판으로 서 있던 사람들을 3D 로
+            for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])])
+              if (a.c === c) this.dropView(a);
+          },
+          (err) => console.error("[gmtown] 3D 캐릭터", err)
+        );
     buildTown().then(
       (s) => {
         if (this.dead) return s.dispose();
@@ -230,6 +289,17 @@ export class TownEngine {
     for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) this.dropView(a);
     for (const t of this.sheets.values()) t.dispose();
     for (const g of this.sheetGeo.values()) g.dispose();
+    for (const m of this.rigMats.values()) for (const x of Object.values(m)) x.dispose();
+    for (const m of this.models.values())
+      m.scene.traverse((o) => {
+        if (o instanceof THREE.Mesh) {
+          o.geometry.dispose();
+          for (const mt of [o.material].flat()) {
+            (mt as THREE.MeshStandardMaterial).map?.dispose();
+            mt.dispose();
+          }
+        }
+      });
     this.shadowGeo.dispose();
     this.shadowMat.dispose();
     this.town?.dispose();
@@ -738,6 +808,7 @@ export class TownEngine {
         }
       } else this.stuck = 0;
       me.d = dir8(...toCam(vx, vy));
+      me.faceTo = Math.atan2(vx, vy);
     }
     return { moving, speed };
   }
@@ -754,6 +825,7 @@ export class TownEngine {
         me.phase = 0;
       }
       me.phase += dt * 1000 * (moving ? Math.max(0.55, speed / SPEED) : 1);
+      this.walkRate = 1.15 * (moving ? Math.max(0.55, speed / SPEED) : 1);
       // 보내기 (0.1초마다, 바뀐 게 있을 때만)
       const m = moving ? 1 : 0;
       if (
@@ -822,6 +894,7 @@ export class TownEngine {
       }
       a.x = x;
       a.y = y;
+      if (d !== a.d || a.faceTo === undefined) a.faceTo = faceOfDir(d);
       a.d = d;
       a.phase += dt * 1000;
     }
@@ -874,6 +947,14 @@ export class TownEngine {
     return a.view;
   }
   private dropView(a: Avatar) {
+    const r = a.rig;
+    if (r) {
+      r.mixer.stopAllAction();
+      r.root.removeFromParent();
+      for (const g of r.ghosts) g.removeFromParent();
+      r.shadow.removeFromParent();
+      a.rig = undefined;
+    }
     const v = a.view;
     if (!v) return;
     v.mesh.removeFromParent();
@@ -884,7 +965,136 @@ export class TownEngine {
     for (const t of v.tex.values()) t.dispose();
     a.view = undefined;
   }
-  private placeAvatar(a: Avatar) {
+  // ───────────── 3D 캐릭터 ─────────────
+
+  /** 툰: 빛 방향으로 2단 (조명 계산 안 씀) · 외곽선: 뒤집은 껍데기를 법선 쪽으로 · 가려졌을 때: 반투명 위에 */
+  private makeRigMats(scene: THREE.Object3D) {
+    let map: THREE.Texture | null = null;
+    scene.traverse((o) => {
+      if (!map && o instanceof THREE.Mesh) map = (o.material as THREE.MeshStandardMaterial).map ?? null;
+    });
+    const tex = map as THREE.Texture | null;
+    if (tex) tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    const toon = new THREE.MeshToonMaterial({ map: tex });
+    toon.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.toonU);
+      sh.fragmentShader = sh.fragmentShader
+        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvoid main() {")
+        .replace(
+          "#include <opaque_fragment>",
+          `outgoingLight = diffuseColor.rgb * ( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade );
+#include <opaque_fragment>`
+        );
+    };
+    const ink = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
+    ink.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.inkU);
+      sh.vertexShader = sh.vertexShader
+        .replace("void main() {", "uniform float uInk;\nvoid main() {")
+        .replace(
+          "#include <skinning_vertex>",
+          "#include <skinning_vertex>\ntransformed += normalize( objectNormal ) * uInk;"
+        );
+    };
+    const ghost = new THREE.MeshBasicMaterial({
+      map: tex,
+      transparent: true,
+      opacity: 0.34,
+      depthTest: false,
+      depthWrite: false,
+    });
+    return { toon, ink, ghost };
+  }
+
+  private rigOf(a: Avatar): RigView | null {
+    if (a.rig) return a.rig;
+    const town = this.town,
+      model = this.models.get(a.c),
+      mats = this.rigMats.get(a.c);
+    if (!town || !model || !mats) return null;
+    if (a.view) this.dropView(a);
+    const root = cloneRig(model.scene);
+    root.scale.setScalar(RIG_SCALE);
+    const ghosts: THREE.Object3D[] = [];
+    const skinned: THREE.SkinnedMesh[] = [];
+    root.traverse((o) => {
+      if (o instanceof THREE.SkinnedMesh) skinned.push(o);
+      else if (o instanceof THREE.Mesh) o.visible = false; // 리깅 도구가 남긴 공 같은 것
+    });
+    for (const m of skinned) {
+      m.material = mats.toon;
+      m.frustumCulled = false;
+      m.renderOrder = 3;
+      for (const [mat, order] of [
+        [mats.ink, 3],
+        [mats.ghost, 10],
+      ] as const) {
+        const c = new THREE.SkinnedMesh(m.geometry, mat);
+        c.bind(m.skeleton, m.bindMatrix);
+        c.frustumCulled = false;
+        c.renderOrder = order;
+        c.position.copy(m.position);
+        c.quaternion.copy(m.quaternion);
+        c.scale.copy(m.scale);
+        m.parent!.add(c);
+        if (mat === mats.ghost) {
+          c.visible = false;
+          ghosts.push(c);
+        }
+      }
+    }
+    const mixer = new THREE.AnimationMixer(root);
+    const clip = (n: string) => model.clips.find((c) => c.name.startsWith(n));
+    const walk = clip("walk") ? mixer.clipAction(clip("walk")!) : null;
+    const idle = clip("idle") ? mixer.clipAction(clip("idle")!) : null;
+    // 사람마다 숨쉬기 박자를 조금씩 다르게
+    if (idle) {
+      idle.play();
+      idle.time = Math.random() * idle.getClip().duration;
+    }
+    walk?.play();
+    walk?.setEffectiveWeight(0);
+    const shadow = new THREE.Mesh(this.shadowGeo, this.shadowMat);
+    shadow.rotation.x = -Math.PI / 2;
+    shadow.scale.y = 0.62;
+    shadow.renderOrder = 1;
+    town.scene.add(root, shadow);
+    a.face = a.faceTo ?? faceOfDir(a.d);
+    a.rig = { root, mixer, walk, idle, ghosts, shadow, moving: false };
+    return a.rig;
+  }
+
+  private placeRig(a: Avatar, r: RigView, dt: number) {
+    // 걷기 ↔ 숨쉬기 (0.18초 섞기), 걷는 속도에 맞춰 발 박자
+    if (a.moving !== r.moving) {
+      r.moving = a.moving;
+      const [on, off] = a.moving ? [r.walk, r.idle] : [r.idle, r.walk];
+      if (on && off) {
+        on.reset().setEffectiveWeight(1).play();
+        off.crossFadeTo(on, 0.18, false);
+      }
+    }
+    if (r.walk) r.walk.timeScale = a === this.me ? this.walkRate : 1.15;
+    r.mixer.update(dt);
+    // 돌아서기 (짧은 쪽으로, 0.1초쯤)
+    const to = a.faceTo ?? a.face ?? 0;
+    let f = a.face ?? to;
+    let df = ((to - f + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    f += df * Math.min(1, dt * 14);
+    a.face = f;
+    r.root.position.set(a.x, 0.02, a.y);
+    r.root.rotation.y = f;
+    r.shadow.position.set(a.x, 0.06, a.y);
+    // 건물에 가려지면 반투명 몸을 위에
+    const hidden = !this.overview && this.town!.buildings.some((v) => hiddenBy(v.b, a.x, a.y, 0.9));
+    for (const g of r.ghosts) g.visible = hidden;
+  }
+
+  private placeAvatar(a: Avatar, dt = 0) {
+    if (this.models.has(a.c)) {
+      const r = this.rigOf(a);
+      if (r) return this.placeRig(a, r, dt);
+    }
     const v = this.viewOf(a);
     if (!v) return;
     const def = CHARS[a.c];
@@ -950,9 +1160,12 @@ export class TownEngine {
         });
         sun.shadow.camera.updateProjectionMatrix();
       }
+      // 3D 캐릭터: 빛 방향은 카메라 기준으로, 외곽선은 화면에서 INK_PX 두께가 되게 (모델 안 단위로)
+      this.toonU.uLight.value.copy(TOON_LIGHT);
+      this.inkU.uInk.value = (INK_PX * this.vw) / Math.max(1, this.cw) / RIG_SCALE;
       // 사람
-      for (const a of this.others.values()) this.placeAvatar(a);
-      if (this.me) this.placeAvatar(this.me);
+      for (const a of this.others.values()) this.placeAvatar(a, dt);
+      if (this.me) this.placeAvatar(this.me, dt);
       // 내가 건물 뒤면 그 건물을 비치게
       for (const v of town.buildings) {
         const hide = !!this.me && !this.overview && hiddenBy(v.b, this.me.x, this.me.y, 0.9);
@@ -998,7 +1211,8 @@ export class TownEngine {
     const people = [...this.others.values(), ...(this.me ? [this.me] : [])];
     // 앞(아래)에 있는 사람 이름표가 위에 오게
     people.sort((a, b) => a.x + a.y - (b.x + b.y));
-    const headH = CHAR_TALL / COS_P;
+    // 이름표 높이: 3D 는 머리 위 리본까지 키가 판보다 조금 큼
+    const headH = CHAR_TALL / COS_P + (this.models.size ? 0.22 : 0);
     for (const a of people) {
       if (this.overview && a !== this.me) continue;
       const s = this.screen(a.x, a.y, headH);
