@@ -421,7 +421,7 @@ export default function Coin({
             const r = result.result!;
             return (
               <div className={`flex flex-col items-center gap-[10px] p-[18px] text-center ${r.ret >= 0.5 ? "stk-shine" : r.liqs ? "stk-alarm" : ""}`}>
-                <Tip face={r.ret >= 0.5 ? "joy" : r.pnl > 0 ? "smile" : r.liqs ? "shock" : "sad"} text={r.ret >= 0.5 ? "코인으로 이기다니! 다음 판은 더 조심해요." : r.pnl > 0 ? "수익 마감. 코인은 익절이 반이에요." : r.liqs ? `청산 ${r.liqs}번… 배수를 낮추거나 증거금을 나눠요.` : "손실 마감. 코인은 안 하는 날이 버는 날이에요."} size={34} className="w-full text-left" />
+                <Tip face={r.ret >= 0.5 ? "joy" : r.pnl > 0 ? "smile" : r.liqs ? "shock" : "sad"} text={r.ret >= 0.5 ? "코인으로 떡상ㅋㅋ 근데 다음 판도 이럴 거라 믿으면 안 됨" : r.pnl > 0 ? "익절 마감 ㅇㅇ 코인은 익절이 반임" : r.liqs ? `청산 ${r.liqs}번 ㄷㄷ 배수 낮추든가 증거금 나눠 넣으셈` : "손절 마감. 코인은 안 하는 날이 버는 날임"} size={34} className="w-full text-left" />
                 <div className={`${TITLE} text-[26px] leading-none`}>
                   <span style={{ color: ACC }}>{r.sym}</span> {r.name}
                 </div>

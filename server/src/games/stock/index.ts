@@ -8,15 +8,18 @@ import { createBattle, type BattleOptions } from "./battle";
 import { createStkWallet, dropLegacyStock, member, monthStart, weekStart, type StkFields } from "./common";
 import { createSolo } from "./solo";
 import { createCoin } from "./coin";
+import { createExchange, type PokerLink } from "./exchange";
 
 /*
  * 주식게임 — 솔로(차트 50턴) · 코인(레버리지) · 대전(2~8명 7분) · 순위.
- * 돈은 이 게임 전용 지갑(users.stk) — 다른 게임과 섞이지 않음. 처음 1억, 판 끝 총자산 500만 밑이면 1천만으로 회생.
+ * 돈은 이 게임 전용 지갑(users.stk). 처음 1억, 판 끝 총자산 500만 밑이면 1천만으로 회생.
+ * 포커 칩과는 환전소로만 오감 (1:1).
  *
  * 요청
  *   stock.me      내 지갑(현금 · 들고 있는 주식 · 총자산) + 솔로 · 코인 · 대전 기록
  *   stock.hub     모드마다 상태 한 줄
  *   stock.rank    총자산 순위 · 주간 · 월간 손익 순위
+ *   stock.exchange · stock.exchange.view   환전소 — 주식게임 돈 ↔ 포커 칩 1:1 (exchange.ts)
  *   stock.solo.*  (solo.ts)   stock.coin.*  (coin.ts)   stock.room.* · stock.battle.*  (battle.ts)
  */
 
@@ -33,7 +36,7 @@ type MeDoc = UserDoc &
     };
   };
 
-export function registerStock({ db, gateway }: Deps, opts: StockOptions = {}) {
+export function registerStock({ db, gateway }: Deps, opts: StockOptions = {}, poker?: PokerLink) {
   const now = opts.now ?? Date.now;
   const users = db.col<UserDoc>("users");
   void dropLegacyStock(db);
@@ -41,6 +44,7 @@ export function registerStock({ db, gateway }: Deps, opts: StockOptions = {}) {
   const solo = createSolo(db, gateway, wallet, now);
   const coin = createCoin(db, gateway, wallet, now);
   const battle = createBattle(db, gateway, opts);
+  createExchange(db, gateway, wallet, poker, now);
 
   const soloStats = (d: MeDoc | null): SoloStats => {
     const s = d?.stats?.stk?.solo ?? {};

@@ -53,6 +53,23 @@ export interface BattleStats {
   top3: number;
 }
 
+/** 환전소 (주식게임 돈 ↔ 포커 칩 1:1) */
+export interface ExchangeView {
+  /** 주식게임 현금 · 총자산 */
+  cash: number;
+  stkTotal: number;
+  /** 포커 칩 · 금고 */
+  chips: number;
+  vault: number;
+  /** 포커 테이블에 앉아 있음 (그동안 못 바꿈) */
+  busy: boolean;
+  /** 환전소를 쓸 수 있음 */
+  open: boolean;
+  /** 지금 바꿀 수 있는 최대 금액 (바꾼 뒤 보내는 쪽이 500만은 남게) */
+  maxToPoker: number;
+  maxToStock: number;
+}
+
 /** 모드마다 지금 상태 한 줄 (첫 화면 카드에 표시) */
 export interface HubStatus {
   /** 솔로: 하던 판이 있으면 그 턴 */

@@ -10,6 +10,7 @@ import { battleGame, coinReview, getHub, getMe, joinRoom, leaveRoom, soloReview,
 import { Lobby, Room } from "./BattleLobby";
 import { Play, Result } from "./BattlePlay";
 import Coin, { CoinReviewView } from "./Coin";
+import Exchange from "./Exchange";
 import Hub, { type HubGo } from "./Hub";
 import Records, { type RecTab } from "./Records";
 import Solo, { Review } from "./Solo";
@@ -70,7 +71,10 @@ function Inner({ w, h }: { w: number; h: number }) {
   }, [member, screen, refresh]);
 
   const go = (s: Screen) => setScreen(s);
+  const [exOpen, setExOpen] = useState(false);
   const enter = useCallback((g: HubGo) => {
+    if (g === "exchange") return setExOpen(true);
+    setExOpen(false);
     if (g === "records") setRecTab("assets");
     setScreen(g);
   }, []);
@@ -157,6 +161,7 @@ function Inner({ w, h }: { w: number; h: number }) {
         {body}
       </div>
       {shown && <Result r={shown} myUid={uid} onClose={() => setShown(null)} />}
+      {exOpen && screen === "hub" && <Exchange onClose={() => setExOpen(false)} onDone={refresh} toast={toast} />}
       {toastMsg && <Toast key={toastMsg.k} text={toastMsg.text} tone={toastMsg.tone} />}
     </div>
   );

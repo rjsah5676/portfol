@@ -8,10 +8,10 @@ import { C, NUM, SoundToggle, TITLE, TopBar, WalletChip, pct, won } from "./ui";
 
 /*
  * 첫 화면 — 증권사 HTS 메인처럼: 위에 시세 띠, 가운데 모드 셋(솔로 · 코인 · 대전), 오른쪽 내 자산 · 순위.
- * PC 숫자키 1 솔로 · 2 코인 · 3 대전 · 4 순위.
+ * PC 숫자키 1 솔로 · 2 코인 · 3 대전 · 4 순위 · 5 환전소.
  */
 
-export type HubGo = "solo" | "coin" | "lobby" | "records";
+export type HubGo = "solo" | "coin" | "lobby" | "records" | "exchange";
 
 const TICKER: [string, number][] = [
   ["주식게임 지수", 1.25],
@@ -31,7 +31,7 @@ export default function Hub({ me, status, onGo }: { me: StockMe | null; status: 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      const m: Record<string, HubGo> = { "1": "solo", "2": "coin", "3": "lobby", "4": "records" };
+      const m: Record<string, HubGo> = { "1": "solo", "2": "coin", "3": "lobby", "4": "records", "5": "exchange" };
       if (m[e.key]) onGo(m[e.key]);
     };
     window.addEventListener("keydown", k);
@@ -80,6 +80,15 @@ export default function Hub({ me, status, onGo }: { me: StockMe | null; status: 
         right={
           <div className="flex items-center gap-[6px]">
             <SoundToggle />
+            <button
+              type="button"
+              onClick={() => onGo("exchange")}
+              title="환전소 — 포커 칩과 1:1 (5)"
+              className="stk-btn flex h-[28px] cursor-pointer items-center gap-[4px] rounded-full px-[10px] text-[12px] font-bold"
+              style={{ background: C.chip, border: `1px solid ${C.chipLine}`, color: C.cyan }}
+            >
+              ⇄ 환전소
+            </button>
             <WalletChip value={me?.total ?? null} />
           </div>
         }

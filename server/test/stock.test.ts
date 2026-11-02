@@ -5,7 +5,7 @@ import { botThink, newMind } from "../../web/src/lib/stock/bots";
 import { COIN_TURNS, LIQ, coinQty, genCoin, liqPrice, marginValue } from "../../web/src/lib/stock/coin";
 import { rngFrom } from "../../web/src/lib/stock/rng";
 import { HISTORY, TURNS, genSolo } from "../../web/src/lib/stock/solo";
-import type { BRecords, BResult, CoinView, SoloView, StockMe } from "../../web/src/lib/stock/types";
+import type { BRecords, BResult, CoinView, ExchangeView, SoloView, StockMe } from "../../web/src/lib/stock/types";
 import { dropLegacyStock } from "../src/games/stock/common";
 import { STRATS, playOnce } from "../scripts/stock-solo-sim";
 import { RpcError, sleep, startTestServer, type TestClient, type TestServer } from "./helpers";
@@ -253,6 +253,50 @@ describe("솔로", () => {
     const me = await c.rpc<StockMe>("stock.me");
     expect(me.money).toBe(START_CASH);
     expect(me.solo.games).toBe(0);
+  });
+});
+
+describe("환전소", () => {
+  it("게스트는 못 함", async () => {
+    const g = await srv.client("guest2");
+    expect(await code(g.rpc("stock.exchange.view"))).toBe("FORBIDDEN");
+  });
+
+  it("주식게임 돈 ↔ 포커 칩 1:1 · 한 문서에서 같이 바뀜 · 기록 남음", async () => {
+    const { uid, c } = await member();
+    await c.rpc<StockMe>("stock.me");
+    await users().updateOne({ _id: uid }, { $set: { money: 20_000_000 } });
+    let v = await c.rpc<ExchangeView>("stock.exchange.view");
+    expect(v).toMatchObject({ cash: START_CASH, chips: 20_000_000, open: true, busy: false });
+    expect(v.maxToPoker).toBe(START_CASH - REVIVE_UNDER);
+    expect(v.maxToStock).toBe(20_000_000 - 5_000_000);
+    v = await c.rpc<ExchangeView>("stock.exchange", { dir: "toPoker", amount: 30_000_000 });
+    expect(v.cash).toBe(START_CASH - 30_000_000);
+    expect(v.chips).toBe(50_000_000);
+    v = await c.rpc<ExchangeView>("stock.exchange", { dir: "toStock", amount: 10_000_000 });
+    const d = (await doc(uid))!;
+    expect(d.stk.cash).toBe(START_CASH - 20_000_000);
+    expect(d.money).toBe(40_000_000);
+    expect(await srv.db.col("stk_exchange").countDocuments({ uid } as never)).toBe(2);
+  });
+
+  it("바꾼 뒤 보내는 쪽이 500만 밑이면 안 됨 (회생 돈 복사 막기) · 만 단위만", async () => {
+    const { uid, c } = await member();
+    await c.rpc<StockMe>("stock.me");
+    await users().updateOne({ _id: uid }, { $set: { money: 10_000_000, "stk.cash": 8_000_000 } });
+    expect(await code(c.rpc("stock.exchange", { dir: "toPoker", amount: 4_000_000 }))).toBe("NOT_ENOUGH");
+    expect(await code(c.rpc("stock.exchange", { dir: "toStock", amount: 6_000_000 }))).toBe("NOT_ENOUGH");
+    expect(await code(c.rpc("stock.exchange", { dir: "toPoker", amount: 12_345 }))).not.toBe("OK");
+    // 금고에 넣어 둔 칩은 보유 칩이 아니라서 못 꺼내 바꿈 · 남는 돈 계산에는 들어감
+    await users().updateOne({ _id: uid }, { $set: { money: 3_000_000, "poker.vault": 50_000_000 } });
+    expect((await c.rpc<ExchangeView>("stock.exchange.view")).maxToStock).toBe(3_000_000);
+    expect(await code(c.rpc("stock.exchange", { dir: "toStock", amount: 3_000_000 }))).toBe("OK");
+    const d = (await doc(uid))!;
+    expect(d.money).toBe(0);
+    expect(d.stk.cash).toBe(11_000_000);
+    // 다 넘기고 나서 판 끝 회생을 받을 수 없게 — 3백만 남기는 환전은 거절
+    expect(await code(c.rpc("stock.exchange", { dir: "toPoker", amount: 8_000_000 }))).toBe("NOT_ENOUGH");
+    expect(await code(c.rpc("stock.exchange", { dir: "toPoker", amount: 6_000_000 }))).toBe("OK");
   });
 });
 

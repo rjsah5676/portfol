@@ -6,6 +6,9 @@ export const START_CASH = 100_000_000;
 export const REVIVE_UNDER = 5_000_000;
 /** 회생하면 현금을 이만큼으로 */
 export const REVIVE_TO = 10_000_000;
+/** 환전소 (주식게임 돈 ↔ 포커 칩 1:1): 1만 단위 · 한 번에 최대 1조 */
+export const EXCHANGE_UNIT = 10_000;
+export const EXCHANGE_MAX = 1_000_000_000_000;
 
 const EOK = 100_000_000;
 const MAN = 10_000;

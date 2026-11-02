@@ -576,7 +576,7 @@ function ResultSheet({ v, onNext, onBack }: { v: SoloView; onNext: () => void; o
   return (
     <Sheet width={440}>
       <div className={`flex flex-col items-center gap-[10px] p-[18px] text-center ${r.ret >= 0.3 ? "stk-shine" : r.ret <= -0.3 ? "stk-alarm" : ""}`}>
-        <Tip face={r.ret >= 0.3 ? "joy" : r.pnl > 0 ? "smile" : r.ret <= -0.3 ? "shock" : "sad"} text={r.ret >= 0.3 ? "대박! 이 차트는 복기해 둘 만해요." : r.pnl > 0 ? "수익 마감. 기록에 메모 남겨 두면 다음에 도움돼요." : r.ret <= -0.3 ? "크게 잃었어요… 어디서 꺾였는지 복기해 봐요." : "아쉽지만 수업료. 다음 판은 손절선부터!"} size={34} className="w-full text-left" />
+        <Tip face={r.ret >= 0.3 ? "joy" : r.pnl > 0 ? "smile" : r.ret <= -0.3 ? "shock" : "sad"} text={r.ret >= 0.3 ? "ㄹㅇ 개떡상ㅋㅋ 이 차트는 복기해둘 만함" : r.pnl > 0 ? "익절 마감 ㅇㅇ 기록에 메모 남겨두면 다음에 개꿀임" : r.ret <= -0.3 ? "계좌 녹았음ㅠ 어디서 꺾였는지 복기 ㄱㄱ" : "아쉽게 마이너스. 수업료 낸 셈 치고 다음 판은 손절선부터"} size={34} className="w-full text-left" />
         <div className={`${TITLE} text-[26px] leading-none`}>{r.name}</div>
         {r.period && (
           <div className={`text-[11px] ${NUM}`} style={{ color: C.mute }}>

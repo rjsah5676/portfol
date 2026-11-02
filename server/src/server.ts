@@ -59,8 +59,8 @@ export async function createAppServer(
   const sketch = registerSketch(deps);
   const fight = registerFight(deps);
   const poker = registerPoker(deps, overrides.poker);
-  // 주식게임: 전용 지갑 (다른 게임 돈과 따로)
-  const stock = registerStock(deps, overrides.stock);
+  // 주식게임: 전용 지갑 · 포커 칩과는 주식게임 환전소로만 1:1 교환
+  const stock = registerStock(deps, overrides.stock, { busy: poker.busy, refresh: poker.wallet.refresh });
   const rhythm = registerRhythmOnline(deps);
   const defense = registerDefense(deps);
   // 내린 게임 (메뉴에 없음 — 관리자 「내린 게임」 탭에서 들어가 해 보기만): 요청 · 구독을 관리자에게만 열어 둠

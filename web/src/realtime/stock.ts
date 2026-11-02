@@ -9,6 +9,7 @@ import type {
   BRecords,
   BResult,
   BRoomWire,
+  ExchangeView,
   HubStatus,
   SoloHistoryRow,
   SoloReview,
@@ -28,6 +29,9 @@ export const watchClock = () => watchServerTime();
 export const getMe = () => rpc<StockMe>("stock.me");
 export const getHub = () => rpc<HubStatus>("stock.hub");
 export const getRank = (kind: "assets" | "week" | "month") => rpc<StockRankRow[]>("stock.rank", { kind });
+/** 환전소 (주식게임 돈 ↔ 포커 칩 1:1) */
+export const exchangeView = () => rpc<ExchangeView>("stock.exchange.view");
+export const exchange = (dir: "toPoker" | "toStock", amount: number) => rpc<ExchangeView>("stock.exchange", { dir, amount });
 
 // ───────────── 솔로 ─────────────
 

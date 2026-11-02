@@ -1883,6 +1883,8 @@ export function registerPoker({ gateway, db, users, points }: Deps, opts: PokerO
   return {
     wallet,
     live,
+    /** 테이블에 앉아 있거나 정산이 아직 DB 에 쓰이는 중 — 이때는 칩을 밖으로 옮기면 안 됨 (주식게임 환전소가 씀) */
+    busy: (uid: string) => seatOf.has(uid) || settlingOf.has(uid),
     close() {
       clearInterval(sweep);
       for (const t of [...tables.values()]) {
