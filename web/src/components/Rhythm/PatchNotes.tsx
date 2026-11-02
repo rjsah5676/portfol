@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.21",
+    name: "새 곡 2곡",
+    date: "2026.11.02",
+    lines: [
+      "Aurora Ascent — 138 BPM 업리프팅 트랜스 (EASY 3 ~ ABYSS 19)",
+      "Rooftop BreakDown — 162 BPM 재즈 퓨전 (EASY 3 ~ ABYSS 20)",
+      "둘 다 AI 자작곡(tunee.ai), 2분 반 안팎으로 줄임 · 게임 안 RANKING 메뉴는 게임 화면 안 창으로",
+    ],
+  },
+  {
     ver: "v2.20",
     name: "ABYSS 19곡 · 난이도 이름 · 색",
     date: "2026.11.01",

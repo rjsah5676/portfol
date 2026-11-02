@@ -32,6 +32,8 @@ import neonseasideData from "@/data/rhythm/neonseaside.json";
 import riseofchampionsData from "@/data/rhythm/riseofchampions.json";
 import bladestormData from "@/data/rhythm/bladestorm.json";
 import venombloomData from "@/data/rhythm/venombloom.json";
+import auroraData from "@/data/rhythm/aurora.json";
+import rooftopData from "@/data/rhythm/rooftop.json";
 
 export type Kind =
   | "kick"
@@ -484,6 +486,18 @@ const VENOMBLOOM = audioSong("venombloom", "Venom Bloom", "/audio/venombloom.mp3
   desc: "140 BPM · GIRL-CRUSH K-POP TRAP · AI 자작곡 (tunee.ai)",
 });
 
+// 4분 7초 → 2분 29초: 1:46~2:56(40마디, 유사도 0.90)과 인트로 0:17~0:45(16마디, 0.85)를 덜어 냄
+const AURORA = audioSong("aurora", "Aurora Ascent", "/audio/aurora.mp3", auroraData, {
+  color: "#7C3AED",
+  desc: "138 BPM · UPLIFTING TRANCE · AI 자작곡 (tunee.ai)",
+});
+
+// 3분 51초 → 2분 39초: 2:48~3:36(32마디, 유사도 0.85)과 0:24~0:48(16마디, 0.81)을 덜어 냄
+const ROOFTOP = audioSong("rooftop", "Rooftop BreakDown", "/audio/rooftop.mp3", rooftopData, {
+  color: "#F97316",
+  desc: "162 BPM · JAZZ FUSION · AI 자작곡 (tunee.ai)",
+});
+
 // 3분 34초 → 2분 43초: 2:27~3:19(32마디)를 덜어 냄 (유사도 0.87)
 const RISEOFCHAMPIONS = audioSong(
   "riseofchampions",
@@ -566,6 +580,8 @@ const FREEDOMDIVE = audioSong(
  *   riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,14,17   (ULT 16 — NM 은 매우 어려움 12 위로 14 가 천장)   (ABYSS 20)
  *   bladestorm     --bpm-label 183 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,14,17,20   (NM 16 · ULT 17 — 183 BPM 천장 · ABYSS 19 스트림형)
  *   venombloom     --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 19 코드잭형)
+ *   aurora         --bpm-label 138 --boss '{}' --explus '{}' --abyss '{"p3":0.45,"share":0.85}' --levels 3,4,7,11,14,15   (NM 13 · ULT 14 · ABYSS 19 — 트랜스라 8분 하이햇이 꽉 차서 보통~EX 를 한 칸씩 낮춰야 osu 결에 가까움)
+ *   rooftop        --bpm-label 162 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}'   (자동 목표 3/5/8/13/15/16 · ABYSS 20 — 기본 코드잭은 22, 스트림형은 18)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -614,6 +630,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  AURORA,
+  ROOFTOP,
   BLADESTORM,
   VENOMBLOOM,
   RISEOFCHAMPIONS,

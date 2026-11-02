@@ -44,6 +44,8 @@ export const BUILTIN = {
   riseofchampions: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 8, 12, 14, 17] },
   bladestorm: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 9, 14, 17, 20] },
   venombloom: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 8, 12, 15, 17] },
+  aurora: { boss: {}, explus: {}, abyss: { p3: 0.45, share: 0.85 }, levels: [3, 4, 7, 11, 14, 15] },
+  rooftop: { boss: {}, explus: {}, abyss: { p3: 0.2, share: 0.6 } },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

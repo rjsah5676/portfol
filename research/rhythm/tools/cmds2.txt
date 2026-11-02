@@ -23,3 +23,5 @@ neonseaside --single --bpm-label 125 --boss '{}' --explus '{}' --abyss '{}' --le
 riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,14,17
 bladestorm --bpm-label 183 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,14,17,20
 venombloom --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,15,17
+aurora --bpm-label 138 --boss '{}' --explus '{}' --abyss '{"p3":0.45,"share":0.85}' --levels 3,4,7,11,14,15
+rooftop --bpm-label 162 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}'
