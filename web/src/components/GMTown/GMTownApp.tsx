@@ -472,8 +472,8 @@ function Town({ phone }: { phone: boolean }) {
             <b className="gmt-brand text-[17px]">GMTOWN 에 오신 걸 환영해요</b>
             <p className="mt-1 text-white/85">
               {phone
-                ? "왼쪽을 누른 채 끌면 걸어요 · 가고 싶은 곳을 누르면 거기로 가요 · 두 손가락으로 당겨요."
-                : "WASD · 방향키로 걷고, 가고 싶은 곳을 누르면 거기로 가요. 휠로 당기고, M 은 마을 전체 지도."}{" "}
+                ? "왼쪽을 누른 채 끌면 걸어요 · 가고 싶은 곳을 누르면 거기로 가요 · 두 손가락으로 당기고 돌려요."
+                : "WASD · 방향키로 걷고, 오른쪽 버튼으로 누른 곳으로 가요. 왼쪽 버튼으로 끌면 시점이 돌아가고, 휠로 당겨요. M 은 마을 전체 지도."}{" "}
               건물 문 앞에서 {phone ? "버튼" : "E"} 를 누르면 그 게임으로 들어가요. 같은 채널
               사람들끼리 보이고 말할 수 있어요.
             </p>
@@ -595,8 +595,8 @@ function Card({ near, onClose }: { near: Building | "board"; onClose: () => void
           <li>💬 같은 채널 사람들끼리 보이고 말할 수 있어요. 위의 채널 버튼으로 옮겨요.</li>
           <li>🏠 우리 집: GP 로 사고 꾸미고 친구를 부르는 내 집 — 곧 열려요.</li>
           <li>
-            ⌨ WASD · 방향키 걷기 · 누른 곳으로 걷기 · 휠 · +/− 당기기 · M 지도 · Enter 채팅 · Esc
-            닫기
+            ⌨ WASD · 방향키 걷기 · 오른쪽 버튼 = 누른 곳으로 · 왼쪽 끌기 = 시점 돌리기 · 휠 · +/− 당기기 · M
+            지도 · Enter 채팅 · Esc 닫기
           </li>
         </ul>
         <div className="mt-5 flex justify-end">

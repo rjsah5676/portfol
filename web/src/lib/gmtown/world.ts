@@ -713,29 +713,35 @@ export function dir8(dx: number, dy: number): number {
   const a = Math.atan2(dx, -dy); // 0 = 위, π/2 = 오른쪽
   return (Math.round(a / (Math.PI / 4)) + 8) % 8;
 }
-/** 땅 위 이동 (x, y) → 카메라 기준 (오른쪽, 카메라 쪽) — 스프라이트 방향 고르기 */
-export function toCam(vx: number, vy: number): [number, number] {
-  return [(vx - vy) * Math.SQRT1_2, (vx + vy) * Math.SQRT1_2];
+/** 땅 위 이동 (x, y) → 카메라 기준 (오른쪽, 카메라 쪽) — 스프라이트 방향 고르기. yaw = 카메라가 있는 쪽 (기본 남동) */
+export function toCam(vx: number, vy: number, yaw = YAW): [number, number] {
+  const c = Math.cos(yaw),
+    s = Math.sin(yaw);
+  return [vx * c - vy * s, vx * s + vy * c];
 }
 /** 화면 방향 (오른쪽 sx, 아래 sy — px 비율) → 땅 위 방향 (화면에서 그 방향으로 보이게, 세로는 sin35 로 눌린 것을 펴서) */
-export function fromScreen(sx: number, sy: number): [number, number] {
+export function fromScreen(sx: number, sy: number, yaw = YAW): [number, number] {
   const u = sx,
     v = sy / Math.sin(PITCH);
-  return [(u + v) * Math.SQRT1_2, (v - u) * Math.SQRT1_2];
+  const c = Math.cos(yaw),
+    s = Math.sin(yaw);
+  return [u * c + v * s, v * c - u * s];
 }
 
 /**
  * 이 점이 건물 b 에 가려지는지 (카메라 쪽으로 h/tan35 만큼 가는 동안 건물 안을 지나면)
  * — 문 · 길 배치 검사 · 내 캐릭터가 뒤에 있을 때 건물을 비치게 할 때 씀. lift = 점의 높이 (머리면 1.6)
  */
-export function hiddenBy(b: Building, x: number, y: number, lift = 0): boolean {
+export function hiddenBy(b: Building, x: number, y: number, lift = 0, yaw = YAW): boolean {
   if (isLot(b) || b.h <= lift) return false;
   const reach = (b.h - lift) / Math.tan(PITCH);
   const steps = Math.ceil(reach / 0.25);
+  const ux = Math.sin(yaw),
+    uy = Math.cos(yaw);
   for (let i = 1; i <= steps; i++) {
     const t = (reach * i) / steps;
-    const px = x + t * Math.SQRT1_2,
-      py = y + t * Math.SQRT1_2;
+    const px = x + t * ux,
+      py = y + t * uy;
     if (px > b.x && px < b.x + b.w && py > b.y && py < b.y + b.d) return true;
   }
   return false;

@@ -32,12 +32,15 @@ import { buildTown, type TownScene } from "./scene3d";
  * GMTOWN 엔진 — three.js 쿼터뷰 장면 위에 사람들을 세우고, 내 캐릭터를 움직이고, 다른 사람을 부드럽게 보여 줌.
  * React(GMTownApp)는 HUD(채널 · 채팅 · 건물 카드)만 맡고 여기 훅으로 주고받음.
  *
- * 카메라: 고정 쿼터뷰 (위 35° · 남동 45°) 직교. 내 캐릭터를 따라가고 휠 · 두 손가락으로 당기고 밀기, 「지도」는 마을 전체.
+ * 카메라: 쿼터뷰 (위 35°) 직교, 처음엔 남동 45° 에서. 내 캐릭터를 따라감.
+ *   마우스: 왼쪽 끌기 = 시점 돌리기 · 오른쪽 누르기 = 그곳으로 걷기 · 휠 = 당기기/밀기. 폰: 누르기 = 걷기 · 두 손가락 = 당기기 + 돌리기.
+ *   「지도」는 마을 전체.
  * 사람: 3D 모델이 있는 캐릭터는 리깅된 3D 로 (걷기 · 숨쉬기 동작, 가는 쪽을 보며 돌아섬, 툰 2단 명암 + 화면 두께가 같은 외곽선).
  *   모델이 없거나 못 받았으면 스프라이트를 카메라를 보는 세로 판에 (35° 로 눌린 만큼 세로로 늘려서 원래 비율).
  *   가려진 사람은 반투명으로 한 번 더 (어디 있는지는 보이게), 내가 건물 뒤에 들어가면 그 건물을 비치게.
  * 이름표 · 말풍선 · 조이스틱은 위에 겹친 2D 캔버스.
- * 움직이기: 키보드(WASD · 방향키 = 화면 방향) · 누른 곳으로 걸어가기(0.5m 격자 A* → 직선으로 펴기) · 폰은 왼쪽 손가락 조이스틱.
+ * 움직이기: 키보드(WASD · 방향키 = 화면 방향) · 오른쪽으로 누른 곳으로 걸어가기(0.5m 격자 A* → 직선으로 펴기) · 폰은 왼쪽 손가락 조이스틱.
+ *   보내는 방향 d 는 땅 기준 8방향 (0 = 북(-y), 시계 방향) — 사람마다 카메라가 달라서.
  *   부딪히면 벽을 따라 미끄러짐. 0.1초마다 바뀐 위치를 서버로.
  * 다른 사람: 받은 위치를 0.12초 늦게 보여 주며 사이를 이어 그림 (끊김 없이).
  */
@@ -110,28 +113,29 @@ const INTERP_MS = 120;
 /** 화면에 보이는 캐릭터 키 (px) — 화면 폭에서 보이는 너비(m)를 정함 */
 const TARGET_PX_WIDE = 70;
 const TARGET_PX_SMALL = 56;
-const ZOOM_MIN = 0.6;
+const ZOOM_MIN = 0.2;
 const ZOOM_MAX = 2.2;
 const COS_P = Math.cos(PITCH);
-const CAM_DIR = new THREE.Vector3(
-  Math.cos(PITCH) * Math.sin(YAW),
-  Math.sin(PITCH),
-  Math.cos(PITCH) * Math.cos(YAW)
-);
+/** 왼쪽 끌기 1px 에 돌아가는 각도 */
+const ROT_PER_PX = 0.0085;
 const SUN_OFF = new THREE.Vector3(-34, 52, 30);
 /** 3D 캐릭터: 키 1 짜리 모델을 판과 같은 화면 키로 (세운 키 h 는 화면에서 h·cos35 로 보임) */
 const RIG_SCALE = CHAR_TALL / Math.cos(PITCH);
 /** 툰 명암: 빛 방향 (화면 기준 — 보는 사람 왼쪽 위 앞에서, 얼굴이 늘 밝게) · 그늘 밝기 · 외곽선 두께(화면 px) · 색 */
 const TOON_LIGHT = new THREE.Vector3(-0.45, 0.55, 0.7).normalize();
 const TOON_SHADE = 0.8;
-const INK_PX = 1.3;
+const INK_PX = 1.0;
 const INK_COLOR = 0x3a2a3e;
 
-/** 8 방향(화면 기준) → 땅 위에서 보는 쪽 (라디안) */
-function faceOfDir(d: number): number {
+/** 땅 기준 8 방향 → 땅 위 방향 벡터 (0 = 북(-y), 시계 방향) */
+function dirVec(d: number): [number, number] {
   const a = (d * Math.PI) / 4;
-  const [wx, wy] = fromScreen(Math.sin(a), -Math.cos(a));
-  return Math.atan2(wx, wy);
+  return [Math.sin(a), -Math.cos(a)];
+}
+/** 땅 기준 8 방향 → 3D 가 보는 쪽 (라디안) */
+function faceOfDir(d: number): number {
+  const [x, y] = dirVec(d);
+  return Math.atan2(x, y);
 }
 
 interface RigModel {
@@ -154,6 +158,11 @@ export class TownEngine {
   private vw = 34;
   private baseVw = 34;
   private zoom = 1;
+  /** 카메라가 있는 쪽 (땅 위, 라디안 — +y 쪽이 0, 처음 남동 45°) */
+  private camYaw = YAW;
+  private camDir = new THREE.Vector3();
+  /** 마우스 왼쪽 끌기 (시점 돌리기) · 폰 두 손가락 각도 */
+  private drag: { x: number; yaw: number } | null = null;
   private overview = false;
   private shadowVw = 0;
   private raf = 0;
@@ -170,7 +179,7 @@ export class TownEngine {
   private joy: { id: number; ox: number; oy: number; x: number; y: number } | null = null;
   /** 조이스틱이 아닌 손가락 (누르기 · 두 손가락 확대) */
   private touches = new Map<number, { x: number; y: number; sx: number; sy: number }>();
-  private pinch: { d: number; zoom: number } | null = null;
+  private pinch: { d: number; zoom: number; ang: number; yaw: number } | null = null;
   private near: Building | "board" | null = null;
   private hover: Building | null = null;
   private sent = { x: 0, y: 0, d: -1, m: -1 as number, at: 0 };
@@ -270,6 +279,7 @@ export class TownEngine {
     canvas.addEventListener("pointercancel", this.onUp);
     canvas.addEventListener("pointerleave", this.onLeave);
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    canvas.addEventListener("contextmenu", this.onMenu);
     this.raf = requestAnimationFrame(this.frame);
   }
 
@@ -286,6 +296,7 @@ export class TownEngine {
     this.canvas.removeEventListener("pointercancel", this.onUp);
     this.canvas.removeEventListener("pointerleave", this.onLeave);
     this.canvas.removeEventListener("wheel", this.onWheel);
+    this.canvas.removeEventListener("contextmenu", this.onMenu);
     for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) this.dropView(a);
     for (const t of this.sheets.values()) t.dispose();
     for (const g of this.sheetGeo.values()) g.dispose();
@@ -521,15 +532,24 @@ export class TownEngine {
         this.touches.set(e.pointerId, { x: px, y: py, sx: px, sy: py });
         if (this.touches.size === 2) {
           const [a, b] = [...this.touches.values()];
-          this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), zoom: this.zoom };
+          this.pinch = {
+            d: Math.hypot(a.x - b.x, a.y - b.y),
+            zoom: this.zoom,
+            ang: Math.atan2(b.y - a.y, b.x - a.x),
+            yaw: this.camYaw,
+          };
         }
       }
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
-    if (e.button !== 0) return;
-    this.tap(px, py);
+    // 왼쪽 = 시점 돌리기 (끌기), 오른쪽 = 그곳으로 걷기 · 건물로 가기
+    if (e.button === 0 && !this.overview) {
+      this.drag = { x: px, yaw: this.camYaw };
+      this.canvas.setPointerCapture(e.pointerId);
+    } else if (e.button === 2 || (e.button === 0 && this.overview)) this.tap(px, py);
   };
+  private onMenu = (e: MouseEvent) => e.preventDefault();
   private onMove = (e: PointerEvent) => {
     const r = this.canvas.getBoundingClientRect();
     const px = e.clientX - r.left,
@@ -552,15 +572,27 @@ export class TownEngine {
           ZOOM_MIN,
           Math.min(ZOOM_MAX, (this.pinch.zoom * this.pinch.d) / Math.max(20, d))
         );
+        // 두 손가락을 돌리면 시점도 같이
+        if (!this.overview) this.camYaw = this.pinch.yaw - (Math.atan2(b.y - a.y, b.x - a.x) - this.pinch.ang);
       }
       return;
     }
     if (e.pointerType !== "mouse") return;
+    if (this.drag) {
+      if (Math.abs(px - this.drag.x) > 3) this.canvas.style.cursor = "grabbing";
+      this.camYaw = this.drag.yaw - (px - this.drag.x) * ROT_PER_PX;
+      return;
+    }
     const p = this.pickTarget(px, py);
     this.hover = p && p !== "board" ? p : null;
     this.canvas.style.cursor = p ? "pointer" : "default";
   };
   private onUp = (e: PointerEvent) => {
+    if (this.drag && e.pointerType === "mouse") {
+      this.drag = null;
+      this.canvas.style.cursor = "default";
+      return;
+    }
     if (this.joy && e.pointerId === this.joy.id) {
       this.joy = null;
       return;
@@ -765,7 +797,7 @@ export class TownEngine {
     }
     let vx = 0,
       vy = 0;
-    if (sx || sy) [vx, vy] = fromScreen(sx, sy);
+    if (sx || sy) [vx, vy] = fromScreen(sx, sy, this.camYaw);
     if (!vx && !vy && this.path.length) {
       const p = this.path[0];
       const dx = p.x - me.x,
@@ -807,7 +839,7 @@ export class TownEngine {
           this.goal = null;
         }
       } else this.stuck = 0;
-      me.d = dir8(...toCam(vx, vy));
+      me.d = dir8(vx, vy);
       me.faceTo = Math.atan2(vx, vy);
     }
     return { moving, speed };
@@ -857,8 +889,8 @@ export class TownEngine {
         this.near && this.near !== "board" && !isLot(this.near)
           ? Math.min(2.6, this.near.h * 0.4)
           : 0;
-      tx = Math.max(BOUNDS.x0 + 3, Math.min(BOUNDS.x1 - 3, me.x - lean * Math.SQRT1_2));
-      ty = Math.max(BOUNDS.y0 + 3, Math.min(BOUNDS.y1 - 3, me.y - lean * Math.SQRT1_2));
+      tx = Math.max(BOUNDS.x0 + 3, Math.min(BOUNDS.x1 - 3, me.x - lean * Math.sin(this.camYaw)));
+      ty = Math.max(BOUNDS.y0 + 3, Math.min(BOUNDS.y1 - 3, me.y - lean * Math.cos(this.camYaw)));
     }
     const k = Math.min(1, dt * (this.overview ? 4 : 7));
     this.cam.x += (tx - this.cam.x) * k;
@@ -935,7 +967,7 @@ export class TownEngine {
     });
     const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
     const ghost = new THREE.Mesh(new THREE.BufferGeometry(), gmat);
-    mesh.rotation.y = ghost.rotation.y = YAW;
+    mesh.rotation.y = ghost.rotation.y = this.camYaw;
     mesh.renderOrder = 3;
     ghost.renderOrder = 10;
     const shadow = new THREE.Mesh(this.shadowGeo, this.shadowMat);
@@ -1086,7 +1118,8 @@ export class TownEngine {
     r.root.rotation.y = f;
     r.shadow.position.set(a.x, 0.06, a.y);
     // 건물에 가려지면 반투명 몸을 위에
-    const hidden = !this.overview && this.town!.buildings.some((v) => hiddenBy(v.b, a.x, a.y, 0.9));
+    const hidden =
+      !this.overview && this.town!.buildings.some((v) => hiddenBy(v.b, a.x, a.y, 0.9, this.camYaw));
     for (const g of r.ghosts) g.visible = hidden;
   }
 
@@ -1098,7 +1131,9 @@ export class TownEngine {
     const v = this.viewOf(a);
     if (!v) return;
     const def = CHARS[a.c];
-    const { dir, flip } = sheetOf(a.d);
+    // 판: 땅 기준 방향 → 내 화면에서 보이는 방향으로
+    const { dir, flip } = sheetOf(dir8(...toCam(...dirVec(a.d), this.camYaw)));
+    v.mesh.rotation.y = v.ghost.rotation.y = this.camYaw;
     const ds = def.dirs[dir];
     const sh = a.moving ? ds.walk : ds.idle;
     const key = `${a.c}/${sh.file}`;
@@ -1138,7 +1173,8 @@ export class TownEngine {
     cam.bottom = -this.vw / 2 / aspect;
     cam.updateProjectionMatrix();
     const target = new THREE.Vector3(this.cam.x, 0, this.cam.y);
-    cam.position.copy(target).addScaledVector(CAM_DIR, 220);
+    this.camDir.set(COS_P * Math.sin(this.camYaw), Math.sin(PITCH), COS_P * Math.cos(this.camYaw));
+    cam.position.copy(target).addScaledVector(this.camDir, 220);
     cam.lookAt(target);
     cam.updateMatrixWorld();
 
@@ -1162,13 +1198,16 @@ export class TownEngine {
       }
       // 3D 캐릭터: 빛 방향은 카메라 기준으로, 외곽선은 화면에서 INK_PX 두께가 되게 (모델 안 단위로)
       this.toonU.uLight.value.copy(TOON_LIGHT);
-      this.inkU.uInk.value = (INK_PX * this.vw) / Math.max(1, this.cw) / RIG_SCALE;
+      //   멀리서 볼 때(지도 · 밀기)는 그만큼 얇게, 당기면 조금만 두껍게
+      const inkPx = INK_PX * Math.max(0.3, Math.min(1.25, this.baseVw / this.vw));
+      this.inkU.uInk.value = (inkPx * this.vw) / Math.max(1, this.cw) / RIG_SCALE;
       // 사람
       for (const a of this.others.values()) this.placeAvatar(a, dt);
       if (this.me) this.placeAvatar(this.me, dt);
       // 내가 건물 뒤면 그 건물을 비치게
       for (const v of town.buildings) {
-        const hide = !!this.me && !this.overview && hiddenBy(v.b, this.me.x, this.me.y, 0.9);
+        const hide =
+          !!this.me && !this.overview && hiddenBy(v.b, this.me.x, this.me.y, 0.9, this.camYaw);
         const nf = v.fade + ((hide ? 1 : 0) - v.fade) * Math.min(1, dt * 10);
         if (Math.abs(nf - v.fade) < 1e-4 && !hide && v.fade === 0) continue;
         v.fade = nf < 0.005 && !hide ? 0 : nf;
@@ -1302,13 +1341,15 @@ export class TownEngine {
     ctx.textAlign = "left";
   }
 
-  // ───────────── 작은 지도 (화면과 같은 방향 — 북서가 위) ─────────────
+  // ───────────── 작은 지도 (화면과 같은 방향 — 시점을 돌리면 같이 돎) ─────────────
 
   drawMinimap(m: CanvasRenderingContext2D, w: number, h: number) {
-    // 땅 (x, y) → 지도: 45° 돌리고 세로를 sin35 로 눌러서 (화면과 같은 모양)
+    // 땅 (x, y) → 지도: 카메라 쪽으로 돌리고 세로를 sin35 로 눌러서 (화면과 같은 모양)
     const SP = Math.sin(PITCH);
-    const U = (x: number, y: number) => (x - y) * Math.SQRT1_2,
-      V = (x: number, y: number) => (x + y) * Math.SQRT1_2 * SP;
+    const C = Math.cos(this.camYaw),
+      S = Math.sin(this.camYaw);
+    const U = (x: number, y: number) => x * C - y * S,
+      V = (x: number, y: number) => (x * S + y * C) * SP;
     const corners = [
       [BOUNDS.x0, BOUNDS.y0],
       [BOUNDS.x1, BOUNDS.y0],
@@ -1330,14 +1371,7 @@ export class TownEngine {
       m
         .getTransform()
         .multiply(
-          new DOMMatrix([
-            k * Math.SQRT1_2,
-            k * Math.SQRT1_2 * SP,
-            -k * Math.SQRT1_2,
-            k * Math.SQRT1_2 * SP,
-            ox,
-            oy,
-          ])
+          new DOMMatrix([k * C, k * S * SP, -k * S, k * C * SP, ox, oy])
         )
     );
     m.fillStyle = "#5f9e5a";
