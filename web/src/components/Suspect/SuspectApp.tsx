@@ -67,14 +67,18 @@ function prevDay(day: string): string {
   return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-const DOTS: Record<TierId, number> = { intro: 0, easy: 1, normal: 2, hard: 3, hell: 4 };
+const DOTS: Record<TierId, number> = { intro: 0, easy: 1, normal: 2, hard: 3, hell: 4, big: 3 };
 const TIER_COLOR: Record<TierId, string> = {
   intro: "var(--sky)",
   easy: "var(--inno)",
   normal: "var(--sky)",
   hard: "var(--grape)",
   hell: "var(--crim)",
+  // 놋쇠색(--brass)은 종이 위 글자로 흐려서 더 진하게
+  big: "#8a5f1f",
 };
+/** 5칸 넘는 판(대형 사건)은 무대를 넓혀서 카드가 4칸 판과 같은 폭이 되게 */
+const isWide = (t: TierId) => TIERS[t].cols >= 5;
 
 function useStore(ready: boolean): Store | null {
   const [s, setS] = useState<Store | null>(null);
@@ -399,7 +403,9 @@ export default function SuspectApp() {
               <p className="m-0 text-[13px] text-[var(--ink2)]">
                 {run.tier === "hell"
                   ? "지옥 난이도는 조건이 까다로워서 몇 초 걸릴 수 있어요"
-                  : "잠깐만요"}
+                  : run.tier === "big"
+                    ? "용의자 30명을 한자리에 모으는 중"
+                    : "잠깐만요"}
               </p>
             </>
           )}
@@ -473,6 +479,8 @@ export default function SuspectApp() {
     );
 
   const list = rows ?? [];
+  // 대형 사건을 푸는 · 다시 보는 중이면 무대 · 머리말을 넓게 (결과 화면은 그대로)
+  const wide = !!run && isWide(run.tier) && !!puzzle && phase !== "result";
   return (
     <>
       <GameHeader
@@ -481,8 +489,8 @@ export default function SuspectApp() {
         en="Daily Deduction Puzzle"
         accent="#C9A15B"
         desc="단서만으로 범인을 가려내는 하루 한 판 추리 퍼즐"
-        tags={["데일리 퍼즐", "논리 추리", "4단계 난이도", "날마다 랭킹"]}
-        className="w-full max-w-[560px]"
+        tags={["데일리 퍼즐", "논리 추리", "4단계 + 대형 사건", "날마다 랭킹"]}
+        className={`w-full ${wide ? "max-w-[680px]" : "max-w-[560px]"}`}
         guide={SUSPECT_GUIDE}
         rank={{
           top: list.slice(0, 3).map((r) => ({
@@ -548,8 +556,8 @@ export default function SuspectApp() {
           ),
         }}
       />
-      <div className="sp sp-stage mx-auto mt-3 w-full max-w-[560px]">
-        <div className="sp-inner">{body}</div>
+      <div className={`sp sp-stage mx-auto mt-3 w-full ${wide ? "max-w-[680px] is-wide" : "max-w-[560px]"}`}>
+        <div className={`sp-inner${wide ? " is-wide" : ""}`}>{body}</div>
       </div>
     </>
   );
@@ -652,12 +660,19 @@ function Home({
               <button
                 key={t}
                 type="button"
-                className="sp-card sp-tier cursor-pointer"
+                className={`sp-card sp-tier cursor-pointer${isWide(t) ? " is-big" : ""}`}
                 style={{ borderTopColor: TIER_COLOR[t] }}
                 onClick={() => onDaily(t)}
               >
                 <span className="sp-dots">{"●".repeat(DOTS[t]) + "○".repeat(4 - DOTS[t])}</span>
-                <h3 style={{ color: TIER_COLOR[t] }}>{T.label}</h3>
+                <h3 style={{ color: TIER_COLOR[t] }}>
+                  {isWide(t) ? `${T.label} 사건` : T.label}
+                  {isWide(t) && (
+                    <span className="sp-size">
+                      {T.cols}×{T.rows}
+                    </span>
+                  )}
+                </h3>
                 <p>{T.desc.includes("명") ? T.desc : `${n}명 · ${T.desc}`}</p>
                 {DAILY_GP[t] && <span className="sp-gp">회원 +{DAILY_GP[t]!.toLocaleString("ko-KR")} GP</span>}
                 <span className="st">

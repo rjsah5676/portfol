@@ -521,7 +521,11 @@ export default function CaseBoard({
   const hl = focus >= 0 ? puzzle.clues[focus].S : [];
   const shown = info ?? defaultInfo;
   const mm = `${Math.floor(shownSec / 60)}:${String(shownSec % 60).padStart(2, "0")}`;
-  const cols = { gridTemplateColumns: `repeat(${b.cols}, minmax(0, 1fr))` };
+  // --rows: 카드 높이를 줄 수에 맞춰 (5줄 · 6줄 판 모두 한 화면에 — suspect.css)
+  const cols = {
+    gridTemplateColumns: `repeat(${b.cols}, minmax(0, 1fr))`,
+    "--rows": b.rows,
+  } as CSSProperties;
   const left = N - known;
 
   return (
@@ -603,7 +607,10 @@ export default function CaseBoard({
               <span key={r}>{r + 1}</span>
             ))}
           </div>
-          <div className={`sp-board${hl.length ? " has-hl" : ""}`} style={cols}>
+          <div
+            className={`sp-board${hl.length ? " has-hl" : ""}${b.cols >= 5 ? " is-wide" : ""}`}
+            style={cols}
+          >
             {b.all.map((i) => {
               const p = P[i];
               const v = x[i];

@@ -14,7 +14,7 @@ const PATH = "/games/suspect/";
 const TITLE = "오늘의 용의자 - 매일 새로운 추리 퍼즐, 단서로 범인 찾기";
 const NAME = "오늘의 용의자";
 const DESCRIPTION =
-  "20명의 용의자 중 단서만으로 범인을 가려내는 무료 데일리 추리 퍼즐. 매일 자정 새 사건, 쉬움·보통·어려움·지옥 4단계 난이도, 찍기 없이 논리로만 풀리는 판, 연필 메모, 연습 사건 2단계 힌트, 2분 입문 튜토리얼, 난이도별 일일 랭킹. 설치 없이 PC·모바일 브라우저에서 바로.";
+  "20명의 용의자 중 단서만으로 범인을 가려내는 무료 데일리 추리 퍼즐. 매일 자정 새 사건, 쉬움·보통·어려움·지옥 4단계 난이도와 30명짜리 대형 사건, 찍기 없이 논리로만 풀리는 판, 연필 메모, 연습 사건 2단계 힌트, 2분 입문 튜토리얼, 난이도별 일일 랭킹. 설치 없이 PC·모바일 브라우저에서 바로.";
 
 export const metadata = pageMeta({
   title: TITLE,
@@ -51,6 +51,10 @@ const FAQ: { q: string; a: string }[] = [
   {
     q: "찍어서 맞히면 안 되나요?",
     a: `모든 사건은 찍지 않고 논리만으로 끝까지 풀리도록 만들어져 있습니다. 랭킹이 걸린 오늘의 사건에서는 아직 단서로 확정되지 않은 사람을 지목하면 맞든 틀리든 실수(+${penaltyLabel(PENALTY.miss)})로 치고, 정답 여부도 알려 주지 않습니다. 연습 사건과 입문 사건은 벌점 없이 '아직 근거가 없어요'라고만 알려 줍니다.`,
+  },
+  {
+    q: "대형 사건은 뭔가요?",
+    a: "용의자 30명이 5×6 칸에 앉은 큰 판입니다. 단서 규칙은 어려움 수준이지만 사람이 많아서 엮어야 할 단서도 그만큼 늘어납니다. 다른 난이도처럼 날마다 새 사건이 열리고 따로 랭킹이 있습니다.",
   },
   {
     q: "오늘의 사건은 언제 바뀌나요?",
@@ -101,7 +105,8 @@ export default function Page() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-[600px] flex-col items-center px-3 pt-6 pb-16 sm:px-6">
+    // 게임은 스스로 폭을 정함 (보통 560px, 대형 사건 680px) — 바깥은 넉넉히, 설명 글은 600px 그대로
+    <div className="mx-auto flex max-w-[720px] flex-col items-center px-3 pt-6 pb-16 sm:px-6">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -110,7 +115,7 @@ export default function Page() {
         <SuspectApp />
       </Faded>
 
-      <div className="mt-14 grid w-full grid-cols-[minmax(0,1fr)] gap-10">
+      <div className="mt-14 grid w-full max-w-[552px] grid-cols-[minmax(0,1fr)] gap-10">
         <section>
           <h2 className={h2}>오늘의 용의자는 어떤 게임인가요?</h2>
           <p className={p}>

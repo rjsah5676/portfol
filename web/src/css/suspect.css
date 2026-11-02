@@ -403,12 +403,24 @@
    * 큰 화면에선 100px, 낮은 화면(노트북)에선 76px 까지 줄고 초상 사진도 같이 줄어듦
    */
   .sp-board {
-    --cell-h: clamp(76px, calc((100svh - 330px) / 5 - 7px), 100px);
+    --cell-h: clamp(76px, calc((100svh - 330px) / var(--rows, 5) - 7px), 100px);
   }
   /* 폰: 위쪽 막대가 두 줄로 접혀서 더 뺌 */
   @media (max-width: 640px) {
     .sp-board {
-      --cell-h: clamp(72px, calc((100svh - 430px) / 5 - 7px), 100px);
+      --cell-h: clamp(72px, calc((100svh - 430px) / var(--rows, 5) - 7px), 100px);
+    }
+  }
+  /* 대형 사건(5×6): 무대가 넓어져서(560 → 680px) 카드 폭은 4칸 판과 같음. 6줄이라 높이 하한만 조금 낮춤 */
+  .sp-inner.is-wide {
+    max-width: 680px;
+  }
+  .sp-board.is-wide {
+    --cell-h: clamp(74px, calc((100svh - 330px) / var(--rows, 6) - 7px), 100px);
+  }
+  @media (max-width: 640px) {
+    .sp-board.is-wide {
+      --cell-h: clamp(76px, calc((100svh - 430px) / var(--rows, 6) - 7px), 96px);
     }
   }
   .sp-cell {
@@ -774,6 +786,38 @@
       height: 0;
     }
   }
+  /* 대형 사건(무대 680px): 옆에 세울 자리는 더 넓은 화면에서만 — 그 사이 폭에선 화면 아래 창 그대로 */
+  @media (min-width: 1340px) {
+    .sp-inner.is-wide .sp-pick-float {
+      left: calc(50% + 352px);
+    }
+  }
+  @media (min-width: 1180px) and (max-width: 1339px) {
+    .sp-inner.is-wide .sp-pick-float {
+      left: 0;
+      right: 0;
+      top: auto;
+      bottom: 8px;
+      transform: none;
+      margin: 0 auto;
+      width: min(576px, calc(100vw - 24px));
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .sp-inner.is-wide .sp-pick-float > :first-child {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .sp-inner.is-wide .sp-pick-float .row3 {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .sp-inner.is-wide .sp-pick-float .row {
+      grid-column: 1 / -1;
+    }
+    .sp-inner.is-wide .sp-pick-room {
+      height: 130px;
+    }
+  }
   /* 판으로 스크롤할 때 사이트 위쪽 메뉴(고정) 밑으로 */
   .sp-play {
     scroll-margin-top: 112px;
@@ -823,6 +867,49 @@
     font-family: var(--type);
     font-size: 13.5px;
     color: var(--ink);
+  }
+  /* 대형 사건 (5×6): 한 줄 통째로 — 왼쪽 이름 · 설명, 오른쪽 GP · 상태 */
+  .sp-tier.is-big {
+    grid-column: 1 / -1;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 12px;
+    background:
+      var(--grain),
+      linear-gradient(100deg, rgba(179, 139, 77, 0.18), transparent 60%),
+      var(--card);
+  }
+  .sp-tier.is-big > * {
+    grid-column: 1;
+  }
+  .sp-tier.is-big .sp-gp,
+  .sp-tier.is-big .st {
+    grid-column: 2;
+    justify-self: end;
+    text-align: right;
+  }
+  .sp-tier.is-big .sp-gp {
+    grid-row: 2;
+    align-self: start;
+  }
+  .sp-tier.is-big .st {
+    grid-row: 3;
+    align-self: end;
+  }
+  /* 해결 도장은 오른쪽 아래(상태 글자) 대신 오른쪽 위 */
+  .sp-tier.is-big .sp-solved {
+    top: 10px;
+    bottom: auto;
+  }
+  .sp-size {
+    margin-left: 6px;
+    padding: 1px 5px 0;
+    border: 1.5px solid currentColor;
+    border-radius: 3px;
+    font-family: var(--type);
+    font-size: 12px;
+    font-weight: 400;
+    vertical-align: 3px;
   }
   /* 오늘의 사건 GP 보상 딱지 */
   .sp-gp {
@@ -991,6 +1078,18 @@
     .sp-cell.known .sp-face {
       display: none;
     }
+    /*
+     * 폰: 사진이 빠져서 왼쪽 위 ✓ 가 이름을 가림 → 단서 다 쓴 카드는 도장 자리에 ✓
+     * (범인 · 무고는 카드 바탕색으로 그대로 보임)
+     */
+    .sp-cell.used .sp-stamp {
+      display: none;
+    }
+    .sp-cell.used::after {
+      left: auto;
+      right: 2px;
+      top: 2px;
+    }
     .sp-stamp {
       font-size: 10.5px;
       padding: 0 3px;
@@ -1026,6 +1125,60 @@
     }
     .sp-cv {
       font-size: 13.5px;
+    }
+  }
+  /*
+   * 폰 + 대형 사건(5칸): 카드 폭이 약 55px 로 좁아서 밝혀진 카드 글자를 한 단계씩 줄임
+   * (이름 · 도장이 한 줄에 겹치지 않게, 단서 두 줄이 카드 높이 안에 들게)
+   */
+  @media (max-width: 420px) {
+    .sp-board.is-wide {
+      gap: 5px;
+    }
+    .sp-board.is-wide .sp-cell {
+      padding: 4px 2px 3px;
+    }
+    .sp-board.is-wide .sp-face {
+      width: 34px;
+      height: 40px;
+      border-width: 2px;
+    }
+    .sp-board.is-wide .sp-name {
+      font-size: 12.5px;
+    }
+    .sp-board.is-wide .sp-job {
+      font-size: 9.5px;
+      padding: 1px 3px 0;
+    }
+    .sp-board.is-wide .sp-cell.known .sp-name {
+      font-size: 11.5px;
+    }
+    .sp-board.is-wide .sp-cell.known .sp-job {
+      font-size: 8.5px;
+    }
+    .sp-board.is-wide .sp-stamp {
+      top: 2px;
+      right: 1px;
+      font-size: 9px;
+      letter-spacing: 0;
+      padding: 0 2px;
+      border-width: 1.5px;
+    }
+    .sp-board.is-wide .sp-cs {
+      margin-top: 3px;
+      font-size: 9.5px;
+      line-height: 1.1;
+    }
+    .sp-board.is-wide .sp-cv {
+      font-size: 12.5px;
+    }
+    .sp-board.is-wide .sp-memo {
+      font-size: 10px;
+    }
+    /* 행 · 열 이름도 카드 간격에 맞춤 */
+    .sp-boardwrap:has(.sp-board.is-wide) .sp-collab,
+    .sp-boardwrap:has(.sp-board.is-wide) .sp-rowlab {
+      gap: 5px;
     }
   }
   @media (prefers-reduced-motion: reduce) {
