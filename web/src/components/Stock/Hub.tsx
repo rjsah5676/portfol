@@ -55,7 +55,7 @@ export default function Hub({ me, status, onGo }: { me: StockMe | null; status: 
       title: "코인",
       en: "LEVERAGE ×10",
       sub: "1시간봉 50턴 · 레버리지 1 · 3 · 10배 · 청산 주의",
-      status: s?.coinTurn != null ? `하던 판 ${s.coinTurn}/50턴` : s?.coinLast != null ? `지난 판 ${pct(s.coinLast)}` : "하이리스크 · 하이리턴",
+      status: s?.coinTurn != null ? `하던 판 ${s.coinTurn}/50턴` : s?.coinLast != null ? `지난 판 ${pct(s.coinLast)}` : "고위험 · 고수익",
       color: "#F7B32B",
     },
     {
@@ -122,14 +122,18 @@ export default function Hub({ me, status, onGo }: { me: StockMe | null; status: 
                 {m.sub}
               </div>
               <MiniChart color={m.color} seed={m.key.charCodeAt(0)} />
-              <div className={`mt-auto flex items-center justify-between rounded-[8px] px-[10px] py-[7px] text-[12px] font-bold ${NUM}`} style={{ background: "rgba(0,0,0,0.25)", border: `1px solid ${C.line}` }}>
-                <span style={{ color: m.status ? C.text : C.mute }}>{m.status ?? "…"}</span>
-                <span style={{ color: m.color }}>시작 ›</span>
+              <div className={`mt-auto flex items-center justify-between gap-[6px] rounded-[8px] px-[10px] py-[7px] text-[12px] font-bold whitespace-nowrap ${NUM}`} style={{ background: "rgba(0,0,0,0.25)", border: `1px solid ${C.line}` }}>
+                <span className="min-w-0 truncate" style={{ color: m.status ? C.text : C.mute }}>
+                  {m.status ?? "…"}
+                </span>
+                <span className="shrink-0" style={{ color: m.color }}>
+                  시작 ›
+                </span>
               </div>
             </button>
           ))}
         </div>
-        <div className="flex w-[230px] shrink-0 flex-col gap-[10px]">
+        <div className="flex min-h-0 w-[230px] shrink-0 flex-col gap-[10px] overflow-hidden">
           <div className="rounded-[12px] p-[12px]" style={{ background: C.panel2, border: `1px solid ${C.line}` }}>
             <div className="text-[10px] font-black tracking-[0.14em]" style={{ color: C.cyan }}>
               MY ACCOUNT
@@ -142,6 +146,9 @@ export default function Hub({ me, status, onGo }: { me: StockMe | null; status: 
               <Mini k="솔로" v={me ? `${me.solo.games}판` : "-"} />
               <Mini k="코인" v={me ? `${me.coin.games}판` : "-"} />
               <Mini k="대전" v={me ? `${me.battle.games}판` : "-"} />
+            </div>
+            <div className="mt-[6px] truncate text-[10px]" style={{ color: C.mute }} title="실제 돈이 오가지 않는 모의 투자 게임이에요.">
+              1억 시작 · {won(REVIVE_UNDER)} 밑이면 {won(REVIVE_TO)} 회생
             </div>
           </div>
           <button
@@ -157,15 +164,12 @@ export default function Hub({ me, status, onGo }: { me: StockMe | null; status: 
               <div className="text-[14px] font-bold" style={{ color: C.gold }}>
                 순위 · 기록
               </div>
-              <div className="text-[11px]" style={{ color: C.mute }}>
-                총자산 · 주간 · 월간 손익 · 내 전적
+              <div className="truncate text-[11px]" style={{ color: C.mute }}>
+                손익 순위 · 내 전적
               </div>
             </div>
             <span style={{ color: C.gold }}>›</span>
           </button>
-          <div className="mt-auto rounded-[10px] px-[10px] py-[8px] text-[11px] leading-relaxed" style={{ background: "rgba(0,0,0,0.2)", border: `1px solid ${C.line}`, color: C.mute }}>
-            처음 1억으로 시작해요. 판이 끝났을 때 총자산이 {won(REVIVE_UNDER)} 밑이면 {won(REVIVE_TO)}으로 다시 시작할 수 있어요. 실제 돈이 오가지 않는 게임이에요.
-          </div>
         </div>
       </div>
     </div>

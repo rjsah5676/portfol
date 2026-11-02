@@ -27,23 +27,23 @@ function quipFor(v: SoloView, candles: Candle[], ev: "start" | "buy" | "sell" | 
   const move = prev ? last.c / prev.c - 1 : 0;
   const avg = v.shares ? v.cost / v.shares : 0;
   const pnl = v.shares && avg ? last.c / avg - 1 : 0;
-  if (ev === "fill") return { face: "smile", text: "예약 체결! 계획대로 가고 있어요." };
-  if (ev === "order") return { face: "think", text: "예약은 봉이 열릴 때 가격이 닿으면 체결돼요." };
-  if (ev === "buy") return { face: "smile", text: v.shares && v.cash < last.c ? "몰빵! 손절선은 예약으로 걸어 둬요." : "들어갔어요. 손절선부터 정해 두는 게 좋아요." };
-  if (ev === "sell") return { face: v.trades.length ? "joy" : "idle", text: v.shares ? "일부 정리. 남은 건 흐름 보면서~" : "정리 완료. 다음 자리를 찾아봐요." };
-  if (ev === "start") return { face: "idle", text: `${v.name}, 일봉이에요. 「전체」로 큰 흐름부터 보고 들어가요.` };
+  if (ev === "fill") return { face: "smile", text: "예약 체결됨ㅋㅋ 계획대로 가는 중" };
+  if (ev === "order") return { face: "think", text: "예약 걸어둠. 봉 열릴 때 가격 닿으면 체결됨" };
+  if (ev === "buy") return { face: "smile", text: v.shares && v.cash < last.c ? "풀매수 ㄷㄷ 손절선은 예약으로 걸어두셈" : "탑승 완료. 손절선부터 정하고 가셈" };
+  if (ev === "sell") return { face: v.trades.length ? "joy" : "idle", text: v.shares ? "일부 정리함. 나머진 흐름 보고 ㄱㄱ" : "전량 정리 ㅇㅋ 다음 타점 찾으셈" };
+  if (ev === "start") return { face: "idle", text: `${v.name} 일봉임. 「전체」 눌러서 큰 그림부터 보고 들어가셈` };
   if (v.shares) {
-    if (move >= 0.07) return { face: "joy", text: `+${(move * 100).toFixed(1)}%! 오른다 올라~ 익절 자리도 생각해요.` };
-    if (move <= -0.07) return { face: "shock", text: `${(move * 100).toFixed(1)}%… 손절 기준은 지켰나요?` };
-    if (pnl >= 0.25) return { face: "joy", text: "수익 25% 넘었어요. 일부라도 챙기는 것도 실력!" };
-    if (pnl <= -0.15) return { face: "sad", text: "물타기는 신중하게… 추세가 꺾였는지 먼저 봐요." };
-    return { face: move >= 0 ? "smile" : "idle", text: move >= 0 ? "순조로워요. 이평선 위에 있으면 느긋하게." : "살짝 눌림. 거래량이 줄면 눌림, 늘면 꺾임이에요." };
+    if (move >= 0.07) return { face: "joy", text: `+${(move * 100).toFixed(1)}% 떡상 가즈아ㅋㅋ 익절 자리도 봐두셈` };
+    if (move <= -0.07) return { face: "shock", text: `${(move * 100).toFixed(1)}% 떡락 ㄷㄷ 손절 기준 지킨 거 맞음?` };
+    if (pnl >= 0.25) return { face: "joy", text: "수익 25% 넘음 ㄹㅇ 일부라도 챙기는 게 실력임" };
+    if (pnl <= -0.15) return { face: "sad", text: "제대로 물림ㅠ 물타기 전에 추세 꺾였는지부터 보셈" };
+    return { face: move >= 0 ? "smile" : "idle", text: move >= 0 ? "순항 중ㅇㅇ 이평선 위면 존버 ㄱㄴ" : "살짝 눌림. 거래량 줄면 눌림, 늘면 꺾임임" };
   }
-  if (move >= 0.07) return { face: "shock", text: "급등! 추격 매수는 신중하게, 눌림을 기다려 봐요." };
-  if (move <= -0.07) return { face: "think", text: "급락. 바닥은 잡는 게 아니라 확인하는 거예요." };
+  if (move >= 0.07) return { face: "shock", text: "급등 ㄷㄷ 지금 따라 타면 고점에 물림. 눌림 기다리셈" };
+  if (move <= -0.07) return { face: "think", text: "급락함. 바닥은 잡는 게 아니라 확인하는 거임" };
   const turnsLeft = TURNS - v.turn;
-  if (turnsLeft <= 10) return { face: "think", text: `${turnsLeft}턴 남았어요. 안 들어가는 것도 전략이에요.` };
-  return { face: "idle", text: "관망 중. 5일선이 20일선을 뚫는 자리를 노려 봐요." };
+  if (turnsLeft <= 10) return { face: "think", text: `${turnsLeft}턴 남음. 안 들어가는 것도 전략임` };
+  return { face: "idle", text: "관망 중ㅇㅇ 5일선이 20일선 뚫는 자리 노리셈" };
 }
 
 export default function Solo({
@@ -186,6 +186,8 @@ export default function Solo({
   const panelW = Math.round(Math.max(244, w * 0.29));
   const chartW = w - panelW;
   const chartH = h - 40;
+  /** 폰 가로(무대 높이 390)처럼 낮은 화면 — 버튼을 줄여 시세 · 보유 칸이 안 잘리게 */
+  const tight = h < 420;
   const lines: PriceLine[] = orders.map((o) => ({ price: o.price, label: `${ORDER_NAME[o.kind]} ${comma(o.qty)}주`, color: ORDER_COLOR[o.kind] }));
   if (shares && avg > 0) lines.push({ price: avg, label: `평단 ${comma(avg)}`, color: "rgba(139,149,171,0.9)" });
 
@@ -265,21 +267,28 @@ export default function Solo({
               )}
               <div className="flex-1" />
               <div className="flex gap-[8px]">
-                <Btn tone="buy" className="h-[50px] flex-1 text-[16px]" disabled={busy || !v || v.done} onClick={() => openOrder("buy")}>
+                <Btn tone="buy" className={`${tight ? "h-[46px]" : "h-[50px]"} flex-1 text-[16px]`} disabled={busy || !v || v.done} onClick={() => openOrder("buy")}>
                   매수
                 </Btn>
-                <Btn tone="sell" className="h-[50px] flex-1 text-[16px]" disabled={busy || !v || v.done || !shares} onClick={() => openOrder("sell")}>
+                <Btn tone="sell" className={`${tight ? "h-[46px]" : "h-[50px]"} flex-1 text-[16px]`} disabled={busy || !v || v.done || !shares} onClick={() => openOrder("sell")}>
                   매도
                 </Btn>
               </div>
-              <Btn className="h-[38px] text-[13px]" disabled={busy || !v || v.done} onClick={() => setMode("order")} title="예약 주문 (R)">
-                ⏱ 예약 {orders.length ? `(${orders.length})` : ""}
-              </Btn>
+              {!tight && (
+                <Btn className="h-[38px] text-[13px]" disabled={busy || !v || v.done} onClick={() => setMode("order")} title="예약 주문 (R)">
+                  ⏱ 예약 {orders.length ? `(${orders.length})` : ""}
+                </Btn>
+              )}
               <div className="flex gap-[8px]">
-                <Btn silent className="h-[46px] flex-1 text-[14px]" disabled={busy || !v || v.done} onClick={() => next(1)}>
+                {tight && (
+                  <Btn className="h-[42px] w-[64px] text-[12px]" disabled={busy || !v || v.done} onClick={() => setMode("order")} title="예약 주문 (R)">
+                    ⏱ 예약{orders.length ? ` ${orders.length}` : ""}
+                  </Btn>
+                )}
+                <Btn silent className={`${tight ? "h-[42px]" : "h-[46px]"} flex-1 text-[14px]`} disabled={busy || !v || v.done} onClick={() => next(1)}>
                   ▶ 다음
                 </Btn>
-                <Btn silent className="h-[46px] w-[72px] text-[14px]" disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
+                <Btn silent className={`${tight ? "h-[42px] w-[56px]" : "h-[46px] w-[72px]"} text-[14px]`} disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
                   ▶▶
                 </Btn>
               </div>

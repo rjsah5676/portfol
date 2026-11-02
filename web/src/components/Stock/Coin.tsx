@@ -26,22 +26,22 @@ function quipFor(v: CoinView, candles: Candle[], ev: "start" | "open" | "close" 
   const prev = candles[n - 2];
   const move = prev ? last.c / prev.c - 1 : 0;
   const pos = v.pos;
-  if (ev === "liq") return { face: "shock", text: "청산… 레버리지는 증거금이 전부 날아갈 수 있어요." };
-  if (ev === "start") return { face: "think", text: `${v.sym}, 1시간봉. 여긴 변동이 주식의 몇 배예요. 증거금은 잃어도 되는 만큼만.` };
-  if (ev === "open") return { face: pos && pos.lev >= 10 ? "shock" : "smile", text: pos && pos.lev >= 10 ? "10배! 9%만 빠져도 청산이에요. 청산가 선을 꼭 봐요." : "진입. 청산가(빨간 선)가 어디인지 기억해요." };
-  if (ev === "close") return { face: "joy", text: pos ? "일부 정리. 남은 건 청산가 여유가 더 생겼어요." : "정리 완료. 코인은 쉬는 것도 포지션이에요." };
+  if (ev === "liq") return { face: "shock", text: "청산ㅋㅋㅋ 레버리지는 증거금 통째로 증발함" };
+  if (ev === "start") return { face: "think", text: `${v.sym} 1시간봉임. 변동이 주식 몇 배라 증거금은 잃어도 되는 만큼만 넣으셈` };
+  if (ev === "open") return { face: pos && pos.lev >= 10 ? "shock" : "smile", text: pos && pos.lev >= 10 ? "10배 ㄷㄷ 9%만 빠져도 청산임. 빨간 선 꼭 보셈" : "진입 완료. 청산가(빨간 선) 어딘지 기억하셈" };
+  if (ev === "close") return { face: "joy", text: pos ? "일부 정리함. 청산가 여유 좀 생김" : "정리 끝. 코인은 쉬는 것도 포지션임" };
   if (pos) {
     const pnl = marginValue(pos.margin, pos.lev, pos.entry, last.c) / pos.margin - 1;
     const toLiq = last.c / liqPrice(pos.lev, pos.entry) - 1;
-    if (toLiq < 0.04) return { face: "shock", text: `청산가까지 ${(toLiq * 100).toFixed(1)}%… 일부라도 정리할까요?` };
-    if (pnl >= 0.5) return { face: "joy", text: `+${(pnl * 100).toFixed(0)}%! 여기서 반만 챙겨도 남는 장사예요.` };
-    if (move <= -0.08) return { face: "sad", text: `${(move * 100).toFixed(1)}% 급락. 코인은 되돌림이 없을 수도 있어요.` };
-    if (move >= 0.08) return { face: "joy", text: `+${(move * 100).toFixed(1)}% 펌핑! 욕심은 청산가 옆에 두고 와요.` };
-    return { face: move >= 0 ? "smile" : "think", text: move >= 0 ? "버티는 중. 청산가와의 거리를 보며 가요." : "흔들리네요. 추가 진입은 평단만 올릴 수 있어요." };
+    if (toLiq < 0.04) return { face: "shock", text: `청산가까지 ${(toLiq * 100).toFixed(1)}% 남음 ㄷㄷ 일부라도 던질 거임?` };
+    if (pnl >= 0.5) return { face: "joy", text: `+${(pnl * 100).toFixed(0)}% 개떡상ㅋㅋ 반만 챙겨도 남는 장사임` };
+    if (move <= -0.08) return { face: "sad", text: `${(move * 100).toFixed(1)}% 떡락… 코인은 되돌림 없을 수도 있음` };
+    if (move >= 0.08) return { face: "joy", text: `+${(move * 100).toFixed(1)}% 펌핑 가즈아ㅋㅋ 욕심은 청산가 옆에 두고 오셈` };
+    return { face: move >= 0 ? "smile" : "think", text: move >= 0 ? "존버 중. 청산가랑 거리 보면서 가셈" : "흔들리네 ㄷㄷ 추가 진입하면 평단만 올라갈 수도 있음" };
   }
-  if (move >= 0.1) return { face: "shock", text: "펌핑! 뒤늦게 올라타면 덤핑에 물려요." };
-  if (move <= -0.1) return { face: "think", text: "덤핑. 코인 바닥은 지하실이 있을 수 있어요." };
-  return { face: "idle", text: "관망 중. 변동이 줄어들 때가 진입 자리예요." };
+  if (move >= 0.1) return { face: "shock", text: "펌핑 ㄷㄷ 뒤늦게 타면 덤핑에 물림" };
+  if (move <= -0.1) return { face: "think", text: "덤핑함. 코인 바닥 밑엔 지하실 있을 수도 있음" };
+  return { face: "idle", text: "관망 중ㅇㅇ 변동 줄어들 때가 진입 자리임" };
 }
 
 function coinMarkers(trades: CoinTrade[]): Marker[] {
@@ -207,6 +207,8 @@ export default function Coin({
   const panelW = Math.round(Math.max(244, w * 0.29));
   const chartW = w - panelW;
   const chartH = h - 40;
+  /** 폰 가로(무대 높이 390)처럼 낮은 화면 — 시세 · 포지션 칸이 안 잘리게 줄임 */
+  const tight = h < 420;
   const lines: PriceLine[] = [];
   if (pos) {
     lines.push({ price: pos.entry, label: `진입 ${fmtPrice(pos.entry)}`, color: "rgba(139,149,171,0.9)" });
@@ -262,13 +264,13 @@ export default function Coin({
           {!mode ? (
             <>
               <Tip face={quip.face} text={quip.text} size={36} />
-              <Frame title="시세 · 포지션" accent={ACC} bodyClass="flex flex-col gap-[4px] px-[8px] py-[6px]">
+              <Frame title={tight && pos ? `시세 · 롱 ${pos.lev}배` : "시세 · 포지션"} accent={ACC} bodyClass="flex flex-col gap-[4px] px-[8px] py-[6px]">
                 <Row k="현재가" v={<Num value={price} className="text-[15px] font-black" style={{ color: candles.length > 1 && price < candles[candles.length - 2].c ? C.down : ACC }}>{fmtPrice(price)}</Num>} />
                 <Row k="현금" v={won(cash)} />
                 <div className="my-[1px] h-px" style={{ background: C.line }} />
                 {pos ? (
                   <>
-                    <Row k="포지션" v={<span style={{ color: ACC }}>롱 {pos.lev}배</span>} />
+                    {!tight && <Row k="포지션" v={<span style={{ color: ACC }}>롱 {pos.lev}배</span>} />}
                     <Row k="증거금" v={won(pos.margin)} />
                     <Row k="진입가" v={fmtPrice(pos.entry)} />
                     <Row
@@ -290,18 +292,18 @@ export default function Coin({
               </Frame>
               <div className="flex-1" />
               <div className="flex gap-[8px]">
-                <Btn className="h-[50px] flex-1 text-[16px]" style={{ background: `linear-gradient(180deg, #FFCC55, ${ACC})`, border: "1px solid #FFD97A", color: "#1A1408" }} disabled={busy || !v || v.done} onClick={openIt}>
+                <Btn className={`${tight ? "h-[46px]" : "h-[50px]"} flex-1 text-[16px]`} style={{ background: `linear-gradient(180deg, #FFCC55, ${ACC})`, border: "1px solid #FFD97A", color: "#1A1408" }} disabled={busy || !v || v.done} onClick={openIt}>
                   {pos ? "추가 진입" : "진입"}
                 </Btn>
-                <Btn tone="sell" className="h-[50px] flex-1 text-[16px]" disabled={busy || !v || v.done || !pos} onClick={closeIt}>
+                <Btn tone="sell" className={`${tight ? "h-[46px]" : "h-[50px]"} flex-1 text-[16px]`} disabled={busy || !v || v.done || !pos} onClick={closeIt}>
                   정리
                 </Btn>
               </div>
               <div className="flex gap-[8px]">
-                <Btn silent className="h-[46px] flex-1 text-[14px]" disabled={busy || !v || v.done} onClick={() => next(1)}>
+                <Btn silent className={`${tight ? "h-[42px]" : "h-[46px]"} flex-1 text-[14px]`} disabled={busy || !v || v.done} onClick={() => next(1)}>
                   ▶ 다음
                 </Btn>
-                <Btn silent className="h-[46px] w-[72px] text-[14px]" disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
+                <Btn silent className={`${tight ? "h-[42px]" : "h-[46px]"} w-[72px] text-[14px]`} disabled={busy || !v || v.done} onClick={() => next(5)} title="5봉 넘기기">
                   ▶▶
                 </Btn>
               </div>
