@@ -53,8 +53,6 @@ export interface Wallet {
   attended?: number;
   /** 포인트 (사이트 공용 — 캐릭터 · 스킨을 사고 칩과 환전) */
   points: number;
-  /** 주식 마을에 묶인 돈 (솔로 판 보유 주식 · 집) — 회생 판정에 합침 */
-  locked?: number;
 }
 
 /** 우편 (받기를 눌러야 칩이 들어옴) */

@@ -98,7 +98,7 @@ export default function Stage({ children }: { children: (s: StageSize) => ReactN
             </div>
             <p className={`${TITLE} text-[22px]`}>폰을 가로로 돌려 주세요</p>
             <p className="text-[13px]" style={{ color: C.mute }}>
-              애니메 차트는 가로 화면으로 해요
+              주식게임은 가로 화면으로 해요
             </p>
             <button type="button" onClick={lockLand} className="mt-2 cursor-pointer rounded-full px-5 py-2 text-[13px] font-bold" style={{ background: C.gold, color: "#1A1408" }}>
               전체화면 · 가로로

@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
-import { asset } from "@/lib/poker/assets";
-import { CHARS, fmtEok, fmtWon, lookChar, type Face, type Look } from "@/lib/poker/rules";
-import { sfx } from "@/lib/stock/sound";
+import { useEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from "react";
+import { fmtEok, fmtWon } from "@/lib/stock/money";
+import { getSound, onSound, setSound, sfx } from "@/lib/stock/sound";
 
 /*
- * 애니메 차트 공용 화면 조각.
+ * 주식게임 공용 화면 조각.
  *  분위기: 증권사 HTS — 짙은 남색 바탕에 가는 격자, 숫자는 Barlow, 창마다 작은 제목 띠(Frame), 오름 · 매수 = 빨강, 내림 · 매도 = 파랑.
- *  포커에서 가져온 것: 버튼의 입체감 · 금색 칩(지갑) · 캐릭터 얼굴(표정) · 누름 소리. 포커의 초록 · 금빛 카지노 느낌은 안 씀 — 강조색은 시안(전광판 색).
+ *  강조색은 시안(전광판 색) · 돈은 금색.
  */
 
 export const C = {
@@ -48,7 +47,7 @@ export function josa(word: string, withBatchim: string, without: string): string
   const has = c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 !== 0 : /[0-9LMNR]$/i.test(word) && !/[2459]$/.test(word);
   return word + (has ? withBatchim : without);
 }
-/** "~(으)로": 받침 없거나 ㄹ 받침이면 "로" (트레이딩 홀로 · 증권거래소로 · 부동산으로) */
+/** "~(으)로": 받침 없거나 ㄹ 받침이면 "로" (대전으로 · 솔로로) */
 export function ro(word: string): string {
   const c = word.charCodeAt(word.length - 1);
   const b = c >= 0xac00 && c <= 0xd7a3 ? (c - 0xac00) % 28 : 0;
@@ -66,7 +65,7 @@ const TONE: Record<BtnTone, CSSProperties> = {
   cyan: { background: "linear-gradient(180deg, #1A4D66, #0E2E40)", border: `1px solid ${C.cyan}66`, color: C.cyan },
 };
 
-/** 버튼 — 누르면 딸깍 소리 (silent 로 끔). 포커 버튼처럼 위가 밝고 아래가 어두운 입체감 */
+/** 버튼 — 누르면 딸깍 소리 (silent 로 끔). 위가 밝고 아래가 어두운 입체감 */
 export function Btn({
   tone = "plain",
   active,
@@ -94,25 +93,29 @@ export function Btn({
   );
 }
 
-/** 캐릭터 얼굴 (포커 캐릭터 · 표정) */
-export function Avatar({ look, size = 28, face, ring, className = "" }: { look: Look; size?: number; face?: Face; ring?: string; className?: string }) {
-  const ch = CHARS[lookChar(look)];
+/** 기분 (안내 줄 색 · 아이콘) */
+export type Face = "idle" | "think" | "smile" | "joy" | "sad" | "shock";
+
+const AV_COLORS = ["#3DD6FF", "#F2C14E", "#FF5C66", "#4D8DFF", "#4FD1A5", "#C77DFF", "#FF9F43", "#5BA8FF"];
+/** 이름 첫 글자 배지 (사진이 있으면 사진) · 봇은 성격 아이콘 */
+export function Avatar({ nick, src, bot, size = 28, ring, className = "" }: { nick: string; src?: string | null; bot?: string | null; size?: number; ring?: string; className?: string }) {
+  let h = 0;
+  for (const ch of nick) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const col = AV_COLORS[h % AV_COLORS.length];
+  const style: CSSProperties = { width: size, height: size, boxShadow: ring ? `0 0 0 2px ${ring}` : undefined };
+  if (src) return <img src={src} alt="" draggable={false} className={`shrink-0 rounded-full object-cover ${className}`} style={{ ...style, background: C.chip }} />;
   return (
-    <img
-      src={face ? asset.face(look, face) : asset.profile(look)}
-      alt={ch?.name ?? ""}
-      draggable={false}
-      className={`shrink-0 rounded-full object-cover ${className}`}
-      style={{ width: size, height: size, background: ch?.color ?? C.chip, boxShadow: ring ? `0 0 0 2px ${ring}` : undefined }}
-    />
+    <span className={`flex shrink-0 items-center justify-center rounded-full font-black ${className}`} style={{ ...style, background: `${col}22`, border: `1px solid ${col}88`, color: col, fontSize: size * 0.46 }}>
+      {bot ?? (nick.trim()[0] ?? "?")}
+    </span>
   );
 }
 
 /**
- * 안내 캐릭터 — 에이미가 상황에 맞는 표정으로 한마디 (매수 · 급등 · 급락 · 청산 …).
- * 글이 바뀔 때마다 톡 튀어나옴. 포커의 얼굴 · 표정 에셋을 그대로 씀.
+ * 안내 줄 — 상황에 맞는 한마디 (매수 · 급등 · 급락 · 청산 …). 글이 바뀔 때마다 톡 튀어나옴.
+ * 기분에 따라 왼쪽 아이콘 색이 바뀜 (좋음 = 빨강 ▲ · 나쁨 = 파랑 ▼ · 보통 = 시안 ●).
  */
-export function FaceBubble({ look = "amy", face = "idle", text, size = 40, className = "" }: { look?: Look; face?: Face; text: ReactNode; size?: number; className?: string }) {
+export function Tip({ face = "idle", text, className = "" }: { face?: Face; text: ReactNode; size?: number; className?: string }) {
   const [k, setK] = useState(0);
   const last = useRef(text);
   useEffect(() => {
@@ -121,13 +124,14 @@ export function FaceBubble({ look = "amy", face = "idle", text, size = 40, class
       setK((x) => x + 1);
     }
   }, [text]);
+  const col = face === "joy" || face === "smile" ? C.up : face === "sad" || face === "shock" ? C.down : C.cyan;
+  const icon = face === "joy" ? "▲▲" : face === "smile" ? "▲" : face === "shock" ? "▼▼" : face === "sad" ? "▼" : face === "think" ? "?" : "i";
   return (
-    <div className={`flex items-center gap-[8px] ${className}`}>
-      <Avatar look={look} face={face} size={size} ring={`${C.cyan}55`} />
-      <div key={k} className="stk-pop relative min-w-0 flex-1 rounded-[10px] px-[10px] py-[6px] text-[11px] leading-snug" style={{ background: C.panel2, border: `1px solid ${C.line}`, color: C.text }}>
-        <span className="absolute top-1/2 -left-[5px] h-[8px] w-[8px] -translate-y-1/2 rotate-45" style={{ background: C.panel2, borderLeft: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}` }} />
-        {text}
-      </div>
+    <div key={k} className={`stk-pop flex items-center gap-[8px] rounded-[8px] px-[8px] py-[6px] text-[11px] leading-snug ${className}`} style={{ background: C.panel2, border: `1px solid ${C.line}`, color: C.text }}>
+      <span className={`flex h-[22px] min-w-[22px] shrink-0 items-center justify-center rounded-[5px] px-[3px] text-[9px] font-black ${NUM}`} style={{ background: `${col}1f`, border: `1px solid ${col}66`, color: col }}>
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">{text}</span>
     </div>
   );
 }
@@ -150,7 +154,7 @@ export function Num({ value, children, className = "", style }: { value: number;
   );
 }
 
-/** 지갑 칩 (포커 금색 칩 + 금액) */
+/** 지갑 칩 (₩ + 금액) */
 export function WalletChip({ value, label, onClick }: { value: number | null; label?: string; onClick?: () => void }) {
   return (
     <button
@@ -160,7 +164,9 @@ export function WalletChip({ value, label, onClick }: { value: number | null; la
       className={`flex h-[28px] items-center gap-[6px] rounded-full px-[10px] pl-[4px] text-[12px] font-bold ${NUM}`}
       style={{ background: `linear-gradient(180deg, ${C.panel2}, ${C.bg})`, border: `1px solid ${C.chipLine}`, color: C.gold, cursor: onClick ? "pointer" : "default", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)" }}
     >
-      <img src="/poker/card/chip-gold-top.webp" alt="" draggable={false} className="h-[20px] w-[20px] object-contain" />
+      <span className="flex h-[20px] w-[20px] items-center justify-center rounded-full text-[11px] font-black" style={{ background: `linear-gradient(180deg, #FFD978, #C9971F)`, color: "#1A1408" }}>
+        ₩
+      </span>
       {value === null ? "…" : won(value)}
     </button>
   );
@@ -280,3 +286,30 @@ export const Empty = ({ children }: { children: ReactNode }) => (
     {children}
   </div>
 );
+
+/** 소리 켜고 끄기 (주식게임 전용 설정) */
+export function SoundToggle() {
+  const mute = useSyncExternalStore(
+    onSound,
+    () => getSound().mute,
+    () => false
+  );
+  return (
+    <button
+      type="button"
+      aria-label={mute ? "소리 켜기" : "소리 끄기"}
+      title={mute ? "소리 켜기" : "소리 끄기"}
+      onClick={() => {
+        setSound({ mute: !getSound().mute });
+        if (mute) sfx("press");
+      }}
+      className="flex h-[28px] w-[28px] cursor-pointer items-center justify-center rounded-full"
+      style={{ background: C.chip, border: `1px solid ${C.chipLine}`, color: mute ? C.mute : C.text }}
+    >
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M11 5L6 9H3v6h3l5 4V5z" />
+        {mute ? <path d="M22 9l-6 6M16 9l6 6" /> : <path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" />}
+      </svg>
+    </button>
+  );
+}

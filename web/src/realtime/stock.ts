@@ -1,18 +1,14 @@
 import { rpc, serverNow, subscribe, watchServerTime } from "@/lib/api/socket";
 import type { ApiError } from "@/lib/api/errors";
-import type { Wallet } from "@/lib/poker/types";
 import type {
-  AttendResult,
   BGameWire,
   CoinHistoryRow,
   CoinReview,
   CoinView,
-  HomeView,
   BLobbyRow,
   BRecords,
   BResult,
   BRoomWire,
-  EstateView,
   HubStatus,
   SoloHistoryRow,
   SoloReview,
@@ -22,7 +18,7 @@ import type {
 } from "@/lib/stock/types";
 
 /*
- * 주식 마을 — 서버(server/src/games/stock)와 소켓 통신.
+ * 주식게임 — 서버(server/src/games/stock)와 소켓 통신.
  * 화면은 "무엇을 할지"(사기 · 팔기 · 다음 봉 · 몇 주)만 보내고, 돈 · 차트 · 체결은 서버가 계산.
  */
 
@@ -32,14 +28,6 @@ export const watchClock = () => watchServerTime();
 export const getMe = () => rpc<StockMe>("stock.me");
 export const getHub = () => rpc<HubStatus>("stock.hub");
 export const getRank = (kind: "assets" | "week" | "month") => rpc<StockRankRow[]>("stock.rank", { kind });
-
-/** 지갑이 바뀌면 (포커 · 주식 어디서든) — 포커 지갑 채널을 같이 씀 */
-export const subscribeWallet = (cb: (w: Wallet | null) => void, onError?: (e: ApiError) => void) =>
-  subscribe<Wallet | null>("poker.wallet", null, {
-    onSnapshot: cb,
-    onEvent: (t, d) => t === "wallet" && cb(d as Wallet),
-    onError,
-  });
 
 // ───────────── 솔로 ─────────────
 
@@ -67,11 +55,6 @@ export const coinReview = (id: string) => rpc<CoinReview>("stock.coin.review", {
 
 // ───────────── 부동산 · 집 ─────────────
 
-export const getEstate = () => rpc<EstateView>("stock.estate");
-export const buyHome = (type: string, lot?: string) => rpc<EstateView>("stock.estate.buy", { type, lot });
-export const sellHome = (id: string) => rpc<EstateView>("stock.estate.sell", { id });
-export const attend = () => rpc<AttendResult | null>("stock.estate.attend");
-export const getHome = (uid?: string) => rpc<HomeView>("stock.home", uid ? { uid } : {});
 
 // ───────────── 대전 ─────────────
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { asset } from "@/lib/poker/assets";
 import { BATTLE, STOCKS, afterBuy, afterSell, buyCost, maxBuy, sellGain, shocksBy, untilShock } from "@/lib/stock/battle";
 import { BOT_STYLES } from "@/lib/stock/bots";
 import type { BGameWire, BResult, BRoomWire } from "@/lib/stock/types";
@@ -316,7 +315,7 @@ function RankList({ room, game, ranking, me }: { room: BRoomWire; game: BGameWir
             <span className={`w-[18px] text-center text-[13px] font-black ${NUM}`} style={{ color: k === 0 ? C.gold : C.mute }}>
               {k + 1}
             </span>
-            {s && <Avatar look={s.look} face={face} size={26} />}
+            {s && <Avatar nick={s.nick} bot={s.bot ? "🤖" : null} size={26} ring={face === "joy" ? C.up : face === "shock" ? C.down : undefined} />}
             <span className="min-w-0 flex-1 truncate text-[12px] font-bold">
               {s?.nick ?? "?"}
               {s?.bot && <span className="ml-[3px] text-[9px] font-normal" style={{ color: C.mute }}>봇</span>}
@@ -357,7 +356,9 @@ export function Result({ r, myUid, onClose }: { r: BResult; myUid: string; onClo
       <div className="relative flex gap-[12px] p-[14px]">
         {cut && (
           <div className="stk-cutin pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden rounded-[14px]" style={{ background: "linear-gradient(90deg, rgba(15,20,32,0.2), rgba(42,38,20,0.95), rgba(15,20,32,0.2))" }} onClick={() => setCut(false)}>
-            <img src={asset.cutin(top.look)} alt="" className="h-full max-h-[300px] object-contain" />
+            <div className={`${TITLE} text-[120px] leading-none`} style={{ color: C.gold, textShadow: "0 0 40px rgba(242,193,78,0.6)" }}>
+              1
+            </div>
             <div className="absolute bottom-[18px] left-0 w-full text-center">
               <div className={`${TITLE} text-[30px]`} style={{ color: C.gold, textShadow: "0 2px 12px rgba(0,0,0,0.8)" }}>
                 1위 {top.nick}
@@ -375,7 +376,7 @@ export function Result({ r, myUid, onClose }: { r: BResult; myUid: string; onClo
               <span className={`w-[18px] text-center text-[13px] font-black ${NUM}`} style={{ color: x.rank === 1 ? C.gold : C.mute }}>
                 {x.rank}
               </span>
-              <Avatar look={x.look} face={x.rank === 1 ? "joy" : x.mult < 0.6 ? "sad" : x.mult >= 1.5 ? "smile" : "idle"} size={26} />
+              <Avatar nick={x.nick} bot={x.bot ? "🤖" : null} size={26} ring={x.rank === 1 ? C.gold : undefined} />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[12px] font-bold">
                   {x.nick}

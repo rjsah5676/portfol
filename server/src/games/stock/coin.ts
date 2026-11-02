@@ -25,11 +25,11 @@ import {
 import { newSeed } from "../../../../web/src/lib/stock/rng";
 import type { CoinHistoryRow, CoinResult, CoinReview, CoinView } from "../../../../web/src/lib/stock/types";
 import type { Candle } from "../../../../web/src/lib/stock/solo";
-import { createLocks, materialize, member, noBuyWhileSeated, type PokerLink } from "./common";
+import { createLocks, member, type StkWallet } from "./common";
 
 /*
  * 코인 거래소 — 솔로와 같은 구조 (서버가 판을 들고 있음 · 미래 봉은 안 내려감).
- * 돈: 포커와 같은 users.money. 진입하면 증거금이 money 에서 빠지고, 포지션의 지금 평가액은 users.stock.coinHeld (회생 · 총자산).
+ * 돈: 주식게임 전용 지갑 users.stk.cash. 진입하면 증거금이 현금에서 빠지고, 포지션의 지금 평가액은 users.stk.coinHeld (회생 · 총자산).
  * 포지션은 한 판에 하나 (같은 배수면 추가 진입 = 평단 합침). 청산(봉 저가가 청산가 밑)이면 증거금은 사라짐.
  */
 
@@ -51,8 +51,8 @@ interface CoinDoc {
 const CACHE = 200;
 const MIN_MARGIN = 10_000;
 
-export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now: () => number = Date.now) {
-  const col = db.col<Omit<CoinDoc, "_id">>("stock_coin");
+export function createCoin(db: Database, gateway: Gateway, wallet: StkWallet, now: () => number = Date.now) {
+  const col = db.col<Omit<CoinDoc, "_id">>("stk_coin");
   const users = db.col<UserDoc>("users");
   const withLock = createLocks();
   void col.createIndex({ uid: 1, status: 1 }).catch(() => {});
@@ -71,8 +71,8 @@ export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now
     if (charts.size > CACHE) charts.delete(charts.keys().next().value!);
     return c;
   }
-  const moneyOf = async (uid: string) => ((await users.findOne({ _id: uid }, { projection: { money: 1 } })) as { money?: number } | null)?.money ?? 0;
-  const setHeld = (uid: string, v: number) => users.updateOne({ _id: uid }, { $set: { "stock.coinHeld": Math.max(0, Math.round(v)) } });
+  const moneyOf = (uid: string) => wallet.cash(uid);
+  const setHeld = (uid: string, v: number) => users.updateOne({ _id: uid }, { $set: { "stk.coinHeld": Math.max(0, Math.round(v)) } });
   const active = async (uid: string) => (await col.findOne({ uid, status: "play" })) as CoinDoc | null;
 
   async function view(d: CoinDoc, have = 0, liq?: CoinView["liq"]): Promise<CoinView> {
@@ -159,24 +159,23 @@ export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now
       { _id: d.uid },
       {
         $inc: {
-          money: back,
+          "stk.cash": back,
           ...(played && {
-            "stats.stock.coin.games": 1,
-            "stats.stock.coin.sumRet": ret,
-            "stats.stock.coin.liq": sm.liqs,
-            ...(sm.pnl > 0 && { "stats.stock.coin.wins": 1 }),
+            "stats.stk.coin.games": 1,
+            "stats.stk.coin.sumRet": ret,
+            "stats.stk.coin.liq": sm.liqs,
+            ...(sm.pnl > 0 && { "stats.stk.coin.wins": 1 }),
           }),
         },
-        $set: { "stock.coinHeld": 0 },
-        ...(played && { $max: { "stats.stock.coin.best": ret }, $min: { "stats.stock.coin.worst": ret } }),
+        $set: { "stk.coinHeld": 0 },
+        ...(played && { $max: { "stats.stk.coin.best": ret }, $min: { "stats.stk.coin.worst": ret } }),
       }
     );
-    const rv = await poker.autoRevive(d.uid).catch(() => null);
+    const rv = await wallet.revive(d.uid).catch(() => null);
     if (rv?.revived) {
       result.revived = rv.revived;
       await col.updateOne({ _id: d._id }, { $set: { "result.revived": rv.revived } });
     }
-    await poker.wallet.refresh(d.uid).catch(() => {});
     return { ...d, status: "done", pos: null, trades, result };
   }
 
@@ -194,7 +193,7 @@ export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now
     return withLock(uid, async () => {
       const cur = await active(uid);
       if (cur) return view(cur);
-      await materialize(db, uid);
+      await wallet.ensure(uid);
       const d: CoinDoc = { _id: newId(16), uid, seed: newSeed(), status: "play", turn: 0, pos: null, startCash: await moneyOf(uid), trades: [], createdAt: new Date(now()) };
       const { _id, ...rest } = d;
       await col.insertOne({ _id, ...rest } as never);
@@ -210,14 +209,13 @@ export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now
       const d = await active(uid);
       if (!d) throw new AppError("NO_GAME", "진행 중인 판이 없어요.", 409);
       if (d.turn >= COIN_TURNS) throw new AppError("GAME_OVER", "이미 끝난 판이에요.", 409);
-      noBuyWhileSeated(poker, uid);
       if (d.pos && d.pos.lev !== o.lev) throw new AppError("LEV", `지금 ${d.pos.lev}배 포지션이 있어요. 먼저 정리하거나 같은 배수로 추가해 주세요.`, 409);
       const ch = chartOf(d.seed);
       const price = coinPriceAt(ch.candles, d.turn);
       const cash = await moneyOf(uid);
       const margin = Math.min(o.margin, cash);
       if (margin < MIN_MARGIN) throw new AppError("NOT_ENOUGH", "증거금이 모자라요.", 409);
-      const m = await users.updateOne({ _id: uid, money: { $gte: margin } }, { $inc: { money: -margin } });
+      const m = await users.updateOne({ _id: uid, "stk.cash": { $gte: margin } }, { $inc: { "stk.cash": -margin } });
       if (!m.modifiedCount) throw new AppError("NOT_ENOUGH", "현금이 모자라요.", 409);
       const lev = o.lev as Leverage;
       let pos: CoinPos;
@@ -230,11 +228,10 @@ export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now
       const t: CoinTrade = { turn: d.turn, side: "open", margin, lev, price };
       const r = await col.updateOne({ _id: d._id, status: "play", turn: d.turn }, { $set: { pos }, $push: { trades: t } } as never);
       if (!r.modifiedCount) {
-        await users.updateOne({ _id: uid }, { $inc: { money: margin } });
+        await users.updateOne({ _id: uid }, { $inc: { "stk.cash": margin } });
         throw new AppError("BUSY", "판 상태가 바뀌었어요. 다시 시도해 주세요.", 409);
       }
       await setHeld(uid, marginValue(pos.margin, pos.lev, pos.entry, price));
-      void poker.wallet.refresh(uid).catch(() => {});
       return view({ ...d, pos, trades: [...d.trades, t] }, o.have);
     });
   });
@@ -257,8 +254,7 @@ export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now
       const t: CoinTrade = { turn: d.turn, side: "close", margin: keepMargin, lev: d.pos.lev, price, back };
       const r = await col.updateOne({ _id: d._id, status: "play", turn: d.turn }, { $set: { pos }, $push: { trades: t } } as never);
       if (!r.modifiedCount) throw new AppError("BUSY", "판 상태가 바뀌었어요. 다시 시도해 주세요.", 409);
-      await users.updateOne({ _id: uid }, { $inc: { money: back }, $set: { "stock.coinHeld": pos ? marginValue(pos.margin, pos.lev, pos.entry, price) : 0 } });
-      void poker.wallet.refresh(uid).catch(() => {});
+      await users.updateOne({ _id: uid }, { $inc: { "stk.cash": back }, $set: { "stk.coinHeld": pos ? marginValue(pos.margin, pos.lev, pos.entry, price) : 0 } });
       return view({ ...d, pos, trades: [...d.trades, t] }, o.have);
     });
   });
@@ -289,7 +285,6 @@ export function createCoin(db: Database, gateway: Gateway, poker: PokerLink, now
       }
       if (d.turn >= COIN_TURNS) return view(await finish(d, ch), o.have, liq);
       await setHeld(uid, d.pos ? marginValue(d.pos.margin, d.pos.lev, d.pos.entry, coinPriceAt(ch.candles, d.turn)) : 0);
-      void poker.wallet.refresh(uid).catch(() => {});
       return view(d, o.have, liq);
     });
   });

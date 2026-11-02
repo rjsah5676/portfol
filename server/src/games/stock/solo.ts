@@ -7,16 +7,16 @@ import { newId } from "../../ids";
 import { HISTORY, MAX_ORDERS, TURNS, dateAt, fillOrder, genSolo, maxBuy, priceAt, roundTick, roundTrips, soloDate0, visibleCount, type Candle, type Preset, type SoloChart, type SoloOrder, type SoloTrade } from "../../../../web/src/lib/stock/solo";
 import { newSeed } from "../../../../web/src/lib/stock/rng";
 import type { SoloHistoryRow, SoloResult, SoloReview, SoloView } from "../../../../web/src/lib/stock/types";
-import { createLocks, materialize, member, noBuyWhileSeated, type PokerLink } from "./common";
+import { createLocks, member, type StkWallet } from "./common";
 
 /*
  * 솔로(증권거래소) — 서버가 판을 들고 있음 (시드 · 미래 봉은 화면에 안 내려감).
  *
- * 돈: 포커와 같은 users.money 를 그대로 씀 (판마다 전액으로 거래 가능).
- *   매수 → money 에서 빠지고 판의 보유 주식이 늘어남 · 매도 → 반대. 판에 들고 있는 주식의 지금 값은 users.stock.held 에 적어 둠
- *   (회생 판정 · 총자산 순위에 합치려고). 판이 끝나면 마지막 종가로 전부 팔아 money 로.
- * 판(stock_solo 문서)과 돈(users)은 따로 쓰므로, 사람마다 하나씩 차례로 처리(locks)하고
- * 돈 쪽은 조건부 갱신(money ≥ 금액)으로 한 번 더 막음.
+ * 돈: 주식게임 전용 지갑 users.stk.cash (판마다 전액으로 거래 가능).
+ *   매수 → 현금에서 빠지고 판의 보유 주식이 늘어남 · 매도 → 반대. 판에 들고 있는 주식의 지금 값은 users.stk.held 에 적어 둠
+ *   (회생 판정 · 총자산 순위에 합치려고). 판이 끝나면 마지막 종가로 전부 팔아 현금으로.
+ * 판(stk_solo 문서)과 돈(users)은 따로 쓰므로, 사람마다 하나씩 차례로 처리(locks)하고
+ * 돈 쪽은 조건부 갱신(현금 ≥ 금액)으로 한 번 더 막음.
  */
 
 interface SoloDoc {
@@ -41,8 +41,8 @@ interface SoloDoc {
 
 const CACHE = 200;
 
-export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now: () => number = Date.now) {
-  const col = db.col<Omit<SoloDoc, "_id">>("stock_solo");
+export function createSolo(db: Database, gateway: Gateway, wallet: StkWallet, now: () => number = Date.now) {
+  const col = db.col<Omit<SoloDoc, "_id">>("stk_solo");
   const users = db.col<UserDoc>("users");
   const withLock = createLocks();
   void col.createIndex({ uid: 1, status: 1 }).catch(() => {});
@@ -64,7 +64,7 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
     return c;
   }
 
-  const moneyOf = async (uid: string) => ((await users.findOne({ _id: uid }, { projection: { money: 1 } })) as { money?: number } | null)?.money ?? 0;
+  const moneyOf = (uid: string) => wallet.cash(uid);
 
   async function view(d: SoloDoc, have = 0, filled?: SoloView["filled"]): Promise<SoloView> {
     const ch = chartOf(d.seed);
@@ -94,7 +94,7 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
   const active = async (uid: string) => (await col.findOne({ uid, status: "play" })) as SoloDoc | null;
 
   /** 들고 있는 주식의 지금 값을 users 에 (회생 · 총자산) */
-  const setHeld = (uid: string, v: number) => users.updateOne({ _id: uid }, { $set: { "stock.held": Math.max(0, Math.round(v)) } });
+  const setHeld = (uid: string, v: number) => users.updateOne({ _id: uid }, { $set: { "stk.held": Math.max(0, Math.round(v)) } });
 
   async function finish(d: SoloDoc, ch: SoloChart): Promise<SoloDoc> {
     const price = priceAt(ch.candles, d.turn);
@@ -127,27 +127,26 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
       { _id: d.uid },
       {
         $inc: {
-          money: proceeds,
+          "stk.cash": proceeds,
           ...(played && {
-            "stats.stock.solo.games": 1,
-            "stats.stock.solo.sumRet": ret,
-            "stats.stock.solo.turns": d.turn,
-            "stats.stock.solo.trips": trips,
-            [`stats.stock.solo.p.${ch.preset}.games`]: 1,
-            ...(pnl > 0 && { "stats.stock.solo.wins": 1, [`stats.stock.solo.p.${ch.preset}.wins`]: 1 }),
+            "stats.stk.solo.games": 1,
+            "stats.stk.solo.sumRet": ret,
+            "stats.stk.solo.turns": d.turn,
+            "stats.stk.solo.trips": trips,
+            [`stats.stk.solo.p.${ch.preset}.games`]: 1,
+            ...(pnl > 0 && { "stats.stk.solo.wins": 1, [`stats.stk.solo.p.${ch.preset}.wins`]: 1 }),
           }),
         },
-        $set: { "stock.held": 0 },
-        ...(played && { $max: { "stats.stock.solo.best": ret }, $min: { "stats.stock.solo.worst": ret } }),
+        $set: { "stk.held": 0 },
+        ...(played && { $max: { "stats.stk.solo.best": ret }, $min: { "stats.stk.solo.worst": ret } }),
       }
     );
-    // 판 끝에 총자산이 500만 밑이면 자동 회생 (포커와 같은 횟수)
-    const rv = await poker.autoRevive(d.uid).catch(() => null);
+    // 판 끝에 총자산이 500만 밑이면 1천만으로 회생
+    const rv = await wallet.revive(d.uid).catch(() => null);
     if (rv?.revived) {
       result.revived = rv.revived;
       await col.updateOne({ _id: d._id }, { $set: { "result.revived": rv.revived } });
     }
-    await poker.wallet.refresh(d.uid).catch(() => {});
     return { ...d, status: "done", shares: 0, cost: 0, trades, result };
   }
 
@@ -168,7 +167,7 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
     return withLock(uid, async () => {
       const cur = await active(uid);
       if (cur) return view(cur);
-      await materialize(db, uid);
+      await wallet.ensure(uid);
       const d: SoloDoc = { _id: newId(16), uid, seed: newSeed(), status: "play", turn: 0, shares: 0, cost: 0, startCash: await moneyOf(uid), trades: [], createdAt: new Date(now()) };
       const { _id, ...rest } = d;
       await col.insertOne({ _id, ...rest } as never);
@@ -195,21 +194,20 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
       const price = priceAt(ch.candles, d.turn);
       const trade = async (): Promise<SoloDoc> => {
         if (o.side === "buy") {
-          noBuyWhileSeated(poker, uid);
           const cash = await moneyOf(uid);
           const most = maxBuy(cash, price);
           const n = Math.min(most, o.qty ?? Math.floor((most * (o.pct ?? 100)) / 100));
           if (n <= 0) throw new AppError("NOT_ENOUGH", "현금이 모자라요.", 409);
           const amount = n * price;
           const m = await users.updateOne(
-            { _id: uid, money: { $gte: amount } },
-            { $inc: { money: -amount }, $set: { "stock.held": (d.shares + n) * price } }
+            { _id: uid, "stk.cash": { $gte: amount } },
+            { $inc: { "stk.cash": -amount }, $set: { "stk.held": (d.shares + n) * price } }
           );
           if (!m.modifiedCount) throw new AppError("NOT_ENOUGH", "현금이 모자라요.", 409);
           const t: SoloTrade = { turn: d.turn, side: "buy", qty: n, price };
           const r = await col.updateOne({ _id: d._id, status: "play", shares: d.shares }, { $inc: { shares: n, cost: amount }, $push: { trades: t } } as never);
           if (!r.modifiedCount) {
-            await users.updateOne({ _id: uid }, { $inc: { money: amount } });
+            await users.updateOne({ _id: uid }, { $inc: { "stk.cash": amount } });
             throw new AppError("BUSY", "판 상태가 바뀌었어요. 다시 시도해 주세요.", 409);
           }
           return { ...d, shares: d.shares + n, cost: d.cost + amount, trades: [...d.trades, t] };
@@ -222,11 +220,10 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
         const t: SoloTrade = { turn: d.turn, side: "sell", qty: n, price };
         const r = await col.updateOne({ _id: d._id, status: "play", shares: d.shares }, { $set: { shares: keep, cost }, $push: { trades: t } } as never);
         if (!r.modifiedCount) throw new AppError("BUSY", "판 상태가 바뀌었어요. 다시 시도해 주세요.", 409);
-        await users.updateOne({ _id: uid }, { $inc: { money: amount }, $set: { "stock.held": keep * price } });
+        await users.updateOne({ _id: uid }, { $inc: { "stk.cash": amount }, $set: { "stk.held": keep * price } });
         return { ...d, shares: keep, cost, trades: [...d.trades, t] };
       };
       const nd = await trade();
-      void poker.wallet.refresh(uid).catch(() => {});
       return view(nd, o.have);
     });
   });
@@ -256,7 +253,7 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
         const n = Math.min(o.qty, maxBuy(cash, p));
         if (n <= 0) continue; // 돈이 모자라면 예약은 사라짐
         const amount = n * p;
-        const m = await users.updateOne({ _id: d.uid, money: { $gte: amount } }, { $inc: { money: -amount } });
+        const m = await users.updateOne({ _id: d.uid, "stk.cash": { $gte: amount } }, { $inc: { "stk.cash": -amount } });
         if (!m.modifiedCount) continue;
         shares += n;
         cost += amount;
@@ -269,7 +266,7 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
         const keep = shares - n;
         cost = keep ? Math.round(cost * (keep / shares)) : 0;
         shares = keep;
-        await users.updateOne({ _id: d.uid }, { $inc: { money: amount } });
+        await users.updateOne({ _id: d.uid }, { $inc: { "stk.cash": amount } });
         trades.push({ turn, side: "sell", qty: n, price: p });
         filled.push({ kind: o.kind, qty: n, price: p, turn });
         // 같은 봉에서 손절이 나갔으면 남은 매도 예약은 팔 게 없으면 사라짐 (아래 shares 로 자연히)
@@ -304,7 +301,6 @@ export function createSolo(db: Database, gateway: Gateway, poker: PokerLink, now
       }
       if (d.turn >= TURNS) return view(await finish(d, ch), o.have, filled);
       await setHeld(uid, d.shares * priceAt(ch.candles, d.turn));
-      void poker.wallet.refresh(uid).catch(() => {});
       return view(d, o.have, filled);
     });
   });

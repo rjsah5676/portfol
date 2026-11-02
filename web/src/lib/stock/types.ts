@@ -1,8 +1,7 @@
 /*
- * 애니메 차트 — 서버 ↔ 화면 데이터 모양 (서버도 이 파일을 그대로 import).
+ * 주식게임 — 서버 ↔ 화면 데이터 모양 (서버도 이 파일을 그대로 import).
  */
 
-import type { CharId, Look } from "../poker/rules";
 import type { BotLevel, BotStyle } from "./bots";
 import type { CoinPos, CoinPreset, CoinTrade } from "./coin";
 import type { Candle, Preset, SoloOrder, SoloTrade } from "./solo";
@@ -11,21 +10,14 @@ import type { Candle, Preset, SoloOrder, SoloTrade } from "./solo";
 
 export interface StockMe {
   nick: string;
-  char: CharId;
-  look: Look;
-  /** 현금 (포커와 같은 돈) */
+  /** 현금 (주식게임 전용 지갑) */
   money: number;
-  /** 포커 금고 */
-  vault: number;
-  /** 솔로 판에서 들고 있는 주식 (지금 시세) */
+  /** 솔로 판 · 코인 포지션에 들고 있는 것 (지금 시세) */
   held: number;
-  /** 집 (되팔 때 받을 값) */
-  estate: number;
-  /** 총자산 = 위 넷의 합 */
+  /** 총자산 = 현금 + 들고 있는 것 */
   total: number;
-  reviveUsed: number;
-  /** 포커 테이블에 앉아 있으면 (그동안은 사기 · 입찰 불가) */
-  seated: boolean;
+  /** 회생 받은 횟수 */
+  revives: number;
   solo: SoloStats;
   coin: CoinStats;
   battle: BattleStats;
@@ -61,7 +53,7 @@ export interface BattleStats {
   top3: number;
 }
 
-/** 마을 건물마다 지금 상태 한 줄 (지도 · 바로가기에 표시) */
+/** 모드마다 지금 상태 한 줄 (첫 화면 카드에 표시) */
 export interface HubStatus {
   /** 솔로: 하던 판이 있으면 그 턴 */
   soloTurn: number | null;
@@ -72,11 +64,6 @@ export interface HubStatus {
   /** 대전: 열린 방 수 · 지금 대전 중인 방 수 */
   rooms: number;
   playing: number;
-  /** 아파트 입주 세대 수 */
-  residents: number;
-  /** 내 집 수 · 오늘 출석 보너스를 아직 안 받았으면 */
-  homes: number;
-  dailyLeft: boolean;
 }
 
 // ───────────── 솔로 ─────────────
@@ -96,7 +83,7 @@ export interface SoloView {
   shares: number;
   /** 들고 있는 주식의 원가 합 (평단 = cost / shares) */
   cost: number;
-  /** 지금 현금 (포커와 같은 돈) */
+  /** 지금 현금 */
   cash: number;
   /** 판을 시작할 때 현금 (수익률 기준) */
   startCash: number;
@@ -123,7 +110,7 @@ export interface SoloResult {
   /** 판 구간 (가상 날짜) */
   period?: [number, number];
   /** 판이 끝나서 자동 회생을 받았으면 */
-  revived?: { amount: number; left: number };
+  revived?: { amount: number };
 }
 
 export interface SoloHistoryRow {
@@ -187,7 +174,7 @@ export interface CoinResult {
   maxLev: number;
   turns: number;
   period?: [number, number];
-  revived?: { amount: number; left: number };
+  revived?: { amount: number };
 }
 
 export interface CoinHistoryRow {
@@ -217,8 +204,6 @@ export interface CoinReview {
 export interface BSeatWire {
   uid: string | null;
   nick: string;
-  char: CharId;
-  look: Look;
   bot: { style: BotStyle; level: BotLevel } | null;
   away: boolean;
 }
@@ -240,7 +225,7 @@ export interface BRoomWire {
 export interface BLobbyRow {
   id: string;
   title: string;
-  host: { nick: string; char: CharId; look: Look } | null;
+  host: { nick: string } | null;
   count: number;
   humans: number;
   max: number;
@@ -286,8 +271,6 @@ export interface BResultRow {
   seat: number;
   uid: string | null;
   nick: string;
-  char: CharId;
-  look: Look;
   bot: { style: BotStyle; level: BotLevel } | null;
   final: number;
   mult: number;
@@ -335,65 +318,10 @@ export interface BRecords {
 export interface StockRankRow {
   uid: string;
   nick: string;
-  char: CharId;
-  look: Look;
   avatar: string | null;
   /** 총자산 순위면 총자산, 주간 순위면 주간 손익 */
   value: number;
   games: number;
   /** 총자산 순위: 솔로 승률 · 주간: 판 수 */
   sub: number;
-}
-
-// ───────────── 부동산 ─────────────
-
-export interface EstateUnitWire {
-  id: string;
-  type: string;
-  /** 아파트형: 호수 (예: 1203) · 단독형: 0 */
-  no: number;
-  /** 단독형: 마을 자리 */
-  lot?: string;
-  at: number;
-}
-
-export interface EstateLotWire {
-  lot: string;
-  name: string;
-  /** 집 종류 (HOME_TYPES id) */
-  type: string;
-  owner: { uid: string; nick: string; char: CharId; look: Look } | null;
-}
-
-export interface EstateView {
-  units: EstateUnitWire[];
-  /** 단독형 자리 전부 (빈 자리 · 주인) */
-  lots: EstateLotWire[];
-  /** 아파트 입구 명패 TOP 5 (집값 합) */
-  plate: { uid: string; nick: string; char: CharId; look: Look; value: number; top: string }[];
-  residents: number;
-  /** 오늘 출석 보너스 (가진 집 기준) · 오늘 이미 받았으면 claimed */
-  daily: { amount: number; claimed: boolean };
-}
-
-/** 집 안 (내 집 · 남의 집 구경) */
-export interface HomeView {
-  owner: { uid: string; nick: string; char: CharId; look: Look };
-  mine: boolean;
-  homes: EstateUnitWire[];
-  /** 제일 좋은 집 (화면 배경 기준) */
-  best: EstateUnitWire | null;
-  /** 집값 합 · 하루 출석 보너스 */
-  value: number;
-  daily: number;
-  /** 구경 온 횟수 */
-  visits: number;
-  /** 가구 (아직 없음 · 나중에 상점) */
-  furniture: { id: string; x: number; y: number }[];
-}
-
-/** 출석 보너스 */
-export interface AttendResult {
-  amount: number;
-  homes: number;
 }

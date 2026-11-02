@@ -8,7 +8,7 @@ import { battleRecords, coinHistory, getRank, soloHistory } from "@/realtime/sto
 import { Avatar, Btn, C, Empty, NUM, TopBar, WalletChip, mult, pct, signColor, won } from "./ui";
 
 /*
- * 명예의 전당: 총자산 순위 · 주간 손익 순위 · 내 솔로 기록(복기) · 내 대전 전적.
+ * 순위 · 기록: 총자산 순위 · 주간 · 월간 손익 순위 · 내 솔로 · 코인 기록(복기) · 내 대전 전적.
  */
 
 export type RecTab = "assets" | "week" | "month" | "solo" | "coin" | "battle";
@@ -21,7 +21,6 @@ export default function Records({
   onReview,
   onCoinReview,
   onBattleGame,
-  onVisit,
 }: {
   me: StockMe | null;
   total: number | null;
@@ -30,7 +29,6 @@ export default function Records({
   onReview: (id: string) => void;
   onCoinReview: (id: string) => void;
   onBattleGame: (id: string) => void;
-  onVisit: (uid: string) => void;
 }) {
   const [tab, setTab] = useState<RecTab>(tab0 ?? "assets");
   const [rank, setRank] = useState<StockRankRow[] | null>(null);
@@ -54,7 +52,7 @@ export default function Records({
   ];
   return (
     <div className="flex h-full flex-col">
-      <TopBar onBack={onBack} title="명예의 전당" right={<WalletChip value={total} />}>
+      <TopBar onBack={onBack} title="순위 · 기록" right={<WalletChip value={total} />}>
         <div className="flex gap-[4px]">
           {TABS.map(([k, t]) => (
             <Btn key={k} active={tab === k} className="h-[26px] px-[10px] text-[12px]" onClick={() => setTab(k)}>
@@ -72,11 +70,11 @@ export default function Records({
           ) : (
             <div className="grid grid-cols-2 gap-[6px]">
               {rank.map((r, k) => (
-                <button key={k} type="button" onClick={() => r.uid && onVisit(r.uid)} className="flex cursor-pointer items-center gap-[8px] rounded-[8px] px-[8px] py-[6px] text-left" title="집 구경" style={{ background: r.nick === me?.nick ? C.goldBg : C.panel2, border: `1px solid ${r.nick === me?.nick ? C.gold : C.line}` }}>
+                <div key={k} className="flex items-center gap-[8px] rounded-[8px] px-[8px] py-[6px] text-left" style={{ background: r.nick === me?.nick ? C.goldBg : C.panel2, border: `1px solid ${r.nick === me?.nick ? C.gold : C.line}` }}>
                   <span className={`w-[22px] text-center text-[14px] font-black ${NUM}`} style={{ color: k < 3 ? C.gold : C.mute }}>
                     {k + 1}
                   </span>
-                  <Avatar look={r.look} size={28} />
+                  <Avatar nick={r.nick} src={r.avatar} size={28} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[12px] font-bold">{r.nick}</div>
                     <div className={`text-[10px] ${NUM}`} style={{ color: C.mute }}>
@@ -87,7 +85,7 @@ export default function Records({
                     {tab !== "assets" && r.value > 0 ? "+" : ""}
                     {won(r.value)}
                   </b>
-                </button>
+                </div>
               ))}
             </div>
           ))}

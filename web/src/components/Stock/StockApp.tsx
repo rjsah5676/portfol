@@ -1,42 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import NickForm from "@/components/Account/NickForm";
 import GameLoader from "@/components/GameLoader";
 import { useAuth } from "@/lib/AuthContext";
-import { asset } from "@/lib/poker/assets";
-import { CHAR_IDS } from "@/lib/poker/rules";
 import type { BGameWire, BResult, BRoomWire, CoinReview, HubStatus, SoloReview, StockMe } from "@/lib/stock/types";
-import type { Building, StockScreen } from "@/lib/stock/village";
-import { AMY_FILES } from "@/lib/stock/villageArt";
-import { attend, battleGame, coinReview, getHub, getMe, joinRoom, leaveRoom, soloReview, subscribeRoom, subscribeWallet, watchClock } from "@/realtime/stock";
+import { battleGame, coinReview, getHub, getMe, joinRoom, leaveRoom, soloReview, subscribeRoom, watchClock } from "@/realtime/stock";
 import { Lobby, Room } from "./BattleLobby";
 import { Play, Result } from "./BattlePlay";
 import Coin, { CoinReviewView } from "./Coin";
-import Estate from "./Estate";
-import Home from "./Home";
-import Hub from "./Hub";
+import Hub, { type HubGo } from "./Hub";
 import Records, { type RecTab } from "./Records";
 import Solo, { Review } from "./Solo";
 import Stage from "./Stage";
-import { sfx } from "@/lib/stock/sound";
-import { C, Empty, TITLE, Toast, won } from "./ui";
+import { C, Empty, Toast } from "./ui";
 
 /*
- * 애니메 차트 (ANIME CHART) — 화면 전환 · 지갑 · 로그인.
- *   마을(허브) → 증권거래소(솔로) · 트레이딩 홀(대전) · 부동산 · 명예의 전당 · 포커 하우스(애니메 포커로)
- * 회원만 (돈이 애니메 포커와 같은 지갑이라). 주소 ?r=방번호 로 대전 방에 바로 들어감.
+ * 주식게임 — 화면 전환 · 지갑 · 로그인.
+ *   첫 화면(Hub) → 솔로 · 코인 · 대전(로비 → 방) · 순위 · 기록
+ * 회원만 (주식게임 전용 지갑이 계정에 붙어서). 주소 ?r=방번호 로 대전 방에 바로 들어감.
  */
 
-type Screen = StockScreen | "review" | "coinReview" | "records";
+type Screen = "hub" | "solo" | "coin" | "lobby" | "room" | "records" | "review" | "coinReview";
 
-/** 처음 들어올 때 받아 둘 그림: 마을 · 에이미 스프라이트 · 캐릭터 얼굴 · 표정 · 1등 컷인 */
-const preload = () => ["/stock/village/day.webp", ...AMY_FILES, ...CHAR_IDS.flatMap((c) => [asset.profile(c), asset.face(c, "joy"), asset.face(c, "smile"), asset.face(c, "sad"), asset.face(c, "shock"), asset.face(c, "idle"), asset.cutin(c)])];
+/** 처음 들어올 때 받아 둘 것: 로그인 화면 그림 */
+const preload = () => ["/stock/cover.jpg"];
 
 export default function StockApp() {
   return (
-    <GameLoader tasks={preload} title="ANIME CHART" accent={C.gold} className="mx-auto aspect-[2.1] w-full max-w-[1280px] rounded-[14px]">
+    <GameLoader tasks={preload} title="주식게임" accent={C.gold} className="mx-auto aspect-[2.1] w-full max-w-[1280px] rounded-[14px]">
       <Stage>{(s) => <Inner w={s.w} h={s.h} />}</Stage>
     </GameLoader>
   );
@@ -44,7 +37,6 @@ export default function StockApp() {
 
 function Inner({ w, h }: { w: number; h: number }) {
   const { loading, account, profile, login } = useAuth();
-  const router = useRouter();
   const params = useSearchParams();
   const [screen, setScreen] = useState<Screen>(() => (params.get("r") ? "room" : "hub"));
   const [me, setMe] = useState<StockMe | null>(null);
@@ -52,8 +44,6 @@ function Inner({ w, h }: { w: number; h: number }) {
   const [roomId, setRoomId] = useState<string | null>(params.get("r"));
   const [review, setReview] = useState<SoloReview | null>(null);
   const [cReview, setCReview] = useState<CoinReview | null>(null);
-  const [homeUid, setHomeUid] = useState("");
-  const attended = useRef(false);
   const [recTab, setRecTab] = useState<RecTab>("assets");
   const [shown, setShown] = useState<BResult | null>(null);
   const [toastMsg, setToastMsg] = useState<{ text: string; tone: "plain" | "up" | "down" | "warn"; k: number } | null>(null);
@@ -72,36 +62,18 @@ function Inner({ w, h }: { w: number; h: number }) {
     if (!member) return;
     void getMe().then(setMe, () => {});
   }, [member]);
+  // 첫 화면으로 돌아올 때마다 지갑 · 상태를 새로
   useEffect(() => {
-    if (!member) return;
+    if (!member || screen !== "hub") return;
     refresh();
-    // 포커 · 다른 탭에서 돈이 바뀌어도 지갑 칩이 맞게
-    return subscribeWallet(() => refresh());
-  }, [member, refresh]);
-  useEffect(() => {
-    if (member && screen === "hub") void getHub().then(setHub, () => {});
-  }, [member, screen]);
-  // 마을에 들어오면 집 출석 보너스 (하루 한 번)
-  useEffect(() => {
-    if (!member || attended.current) return;
-    attended.current = true;
-    void attend().then(
-      (r) => {
-        if (r) {
-          sfx("cash");
-          toast(`🏠 출석 보너스 +${won(r.amount)} (집 ${r.homes}채)`, "up");
-          refresh();
-        }
-      },
-      () => {}
-    );
-  }, [member, refresh, toast]);
+    void getHub().then(setHub, () => {});
+  }, [member, screen, refresh]);
 
   const go = (s: Screen) => setScreen(s);
-  const enter = (b: Building) => {
-    if (b.action.type === "link") return router.push(`${b.action.href}?from=stock`);
-    if (b.action.type === "screen") go(b.action.screen);
-  };
+  const enter = useCallback((g: HubGo) => {
+    if (g === "records") setRecTab("assets");
+    setScreen(g);
+  }, []);
   const toHub = () => go("hub");
   const setRoom = (id: string | null) => {
     setRoomId(id);
@@ -116,16 +88,16 @@ function Inner({ w, h }: { w: number; h: number }) {
   if (loading) return <Empty>로그인 상태를 확인하는 중…</Empty>;
   if (!member)
     return (
-      <div className="relative flex h-full flex-col items-center justify-center gap-[12px] px-[20px] text-center" style={{ background: "radial-gradient(ellipse at 50% 30%, #1f2b45, #0f1420 70%)" }}>
-        <img src="/stock/keyart.jpg" alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover" style={{ opacity: 0.55 }} />
-        <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(9,13,22,0.2), rgba(9,13,22,0.85) 70%)" }} />
-        <div className="relative flex flex-col items-center gap-[12px]">
-        <div className={`${TITLE} text-[38px] leading-none`} style={{ color: C.gold, textShadow: "0 2px 12px rgba(0,0,0,0.8)" }}>
-          ANIME CHART
+      <div className="relative flex h-full flex-col items-center justify-end gap-[12px] px-[20px] pb-[7%] text-center" style={{ background: C.bg }}>
+        <img src="/stock/cover.jpg" alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
+        <div className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(9,13,22,0) 45%, rgba(9,13,22,0.9) 85%)" }} />
+        <div className="relative flex flex-col items-center gap-[10px]">
+        <h2 className="sr-only">주식게임</h2>
+        <div className="text-[14px] font-bold" style={{ textShadow: "0 1px 6px rgba(0,0,0,0.9)" }}>
+          차트 하나로 50턴 솔로 · 10배 코인 · 친구 · 봇과 7분 실시간 대전
         </div>
-        <div className="text-[14px]">애니메 차트 · 차트 하나로 50턴, 코인 레버리지, 친구 · 봇과 7분 대전</div>
         <div className="text-[11px]" style={{ color: C.mute }}>
-          애니메 포커와 같은 지갑을 써요 · 실제 돈이 오가지 않는 게임이에요
+          처음 1억으로 시작 · 실제 돈이 오가지 않는 모의 투자 게임이에요
         </div>
         {!account ? (
           <button type="button" onClick={() => void login().catch(() => toast("로그인하지 못했어요. 잠시 후 다시 시도해 주세요.", "warn"))} className="mt-[6px] cursor-pointer rounded-full px-[22px] py-[10px] text-[14px] font-bold" style={{ background: C.gold, color: "#1A1408" }}>
@@ -157,26 +129,18 @@ function Inner({ w, h }: { w: number; h: number }) {
     case "coin":
       body = <Coin w={w} h={h} total={total} onBack={toHub} onChanged={refresh} toast={toast} />;
       break;
-    case "estate":
-      body = <Estate total={total} cash={me?.money ?? 0} onBack={toHub} onChanged={refresh} onVisit={(u) => (setHomeUid(u), go("home"))} toast={toast} />;
-      break;
-    case "home":
-      body = <Home uid={homeUid} me={uid} total={total} w={w} onBack={() => (setHomeUid(""), toHub())} onEstate={() => go("estate")} toast={toast} />;
-      break;
     case "coinReview":
       body = cReview ? <CoinReviewView r={cReview} w={w} h={h} onBack={() => (setRecTab("coin"), go("records"))} /> : null;
       break;
-    case "rank":
     case "records":
       body = (
         <Records
           me={me}
           total={total}
-          tab={screen === "records" ? recTab : "assets"}
+          tab={recTab}
           onBack={toHub}
           onReview={(id) => void soloReview(id).then((r) => (setReview(r), go("review")), (e) => toast((e as Error).message, "warn"))}
           onCoinReview={(id) => void coinReview(id).then((r) => (setCReview(r), go("coinReview")), (e) => toast((e as Error).message, "warn"))}
-          onVisit={(u) => (setHomeUid(u), go("home"))}
           onBattleGame={(id) => void battleGame(id).then(setShown, (e) => toast((e as Error).message, "warn"))}
         />
       );
@@ -185,7 +149,7 @@ function Inner({ w, h }: { w: number; h: number }) {
       body = review ? <Review r={review} w={w} h={h} onBack={() => (setRecTab("solo"), go("records"))} toast={toast} /> : null;
       break;
     default:
-      body = <Hub w={w} h={h} me={me ? { nick: me.nick, look: me.look } : null} total={total} status={hub} onEnter={enter} />;
+      body = <Hub me={me} status={hub} onGo={enter} />;
   }
   return (
     <div className="relative h-full w-full">

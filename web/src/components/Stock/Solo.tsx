@@ -5,12 +5,11 @@ import { HISTORY, MAX_ORDERS, ORDER_NAME, TURNS, dateAt, fmtDate, maxBuy, roundT
 import type { SoloReview, SoloView } from "@/lib/stock/types";
 import { soloCancelOrder, soloMemo, soloNext, soloOrder, soloQuit, soloStart, soloState, soloTrade } from "@/realtime/stock";
 import { bgm, resultSound, sfx } from "@/lib/stock/sound";
-import type { Face } from "@/lib/poker/rules";
 import Chart, { tradeMarkers, type Ind, type PriceLine } from "./Chart";
-import { Btn, C, FaceBubble, Frame, NUM, Num, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
+import { Btn, C, Tip, type Face, Frame, NUM, Num, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
 
 /*
- * 증권거래소 (솔로) — 들어오면 차트 하나로 바로 시작. 종목명은 처음부터 보임. 턴 = 봉, 거래는 턴을 쓰지 않음.
+ * 솔로 — 들어오면 차트 하나로 바로 시작. 종목명은 처음부터 보임. 턴 = 봉, 거래는 턴을 쓰지 않음.
  * 주문은 모달 대신 오른쪽 패널이 바뀜 (가로 화면에서 차트를 가리지 않게). 예약(지정가 매수 · 익절 · 손절)은 봉이 열릴 때 서버가 체결.
  * PC 단축키: B 매수 · S 매도 · R 예약 · 1~4 수량 % · Enter 확인 · Space/→ 다음 봉 · Shift+→ 5봉 · Esc 취소
  */
@@ -19,7 +18,7 @@ const CHIPS = [10, 25, 50, 100] as const;
 const ORDER_COLOR: Record<OrderKind, string> = { buy: C.up, take: C.green, stop: "#FF9F43" };
 const dateOf = (v: SoloView | null, candles: Candle[]) => (v ? dateAt(v.date0, candles.length - 1) : 0);
 
-/** 에이미 한마디 — 상황(방금 봉 · 보유 손익 · 체결)에 맞춰 */
+/** 안내 한마디 — 상황(방금 봉 · 보유 손익 · 체결)에 맞춰 */
 type Quip = { face: Face; text: string };
 function quipFor(v: SoloView, candles: Candle[], ev: "start" | "buy" | "sell" | "next" | "fill" | "order"): Quip {
   const n = candles.length;
@@ -232,7 +231,7 @@ export default function Solo({
         <div className="flex flex-col gap-[8px] px-[10px] pt-[8px] pb-[10px]" style={{ width: panelW, background: C.panel, borderLeft: `1px solid ${C.line}` }}>
           {!mode ? (
             <>
-              <FaceBubble face={quip.face} text={quip.text} size={36} />
+              <Tip face={quip.face} text={quip.text} size={36} />
               <Frame title="시세 · 보유" bodyClass="flex flex-col gap-[4px] px-[8px] py-[6px]">
                 <Row k="현재가" v={<Num value={price} className="text-[15px] font-black" style={{ color: candles.length > 1 && price < candles[candles.length - 2].c ? C.down : C.up }}>{comma(price)}</Num>} />
                 <Row k="현금" v={won(cash)} />
@@ -568,7 +567,7 @@ function ResultSheet({ v, onNext, onBack }: { v: SoloView; onNext: () => void; o
   return (
     <Sheet width={440}>
       <div className={`flex flex-col items-center gap-[10px] p-[18px] text-center ${r.ret >= 0.3 ? "stk-shine" : r.ret <= -0.3 ? "stk-alarm" : ""}`}>
-        <FaceBubble face={r.ret >= 0.3 ? "joy" : r.pnl > 0 ? "smile" : r.ret <= -0.3 ? "shock" : "sad"} text={r.ret >= 0.3 ? "대박! 이 차트는 복기해 둘 만해요." : r.pnl > 0 ? "수익 마감. 기록에 메모 남겨 두면 다음에 도움돼요." : r.ret <= -0.3 ? "크게 잃었어요… 어디서 꺾였는지 복기해 봐요." : "아쉽지만 수업료. 다음 판은 손절선부터!"} size={34} className="w-full text-left" />
+        <Tip face={r.ret >= 0.3 ? "joy" : r.pnl > 0 ? "smile" : r.ret <= -0.3 ? "shock" : "sad"} text={r.ret >= 0.3 ? "대박! 이 차트는 복기해 둘 만해요." : r.pnl > 0 ? "수익 마감. 기록에 메모 남겨 두면 다음에 도움돼요." : r.ret <= -0.3 ? "크게 잃었어요… 어디서 꺾였는지 복기해 봐요." : "아쉽지만 수업료. 다음 판은 손절선부터!"} size={34} className="w-full text-left" />
         <div className={`${TITLE} text-[26px] leading-none`}>{r.name}</div>
         {r.period && (
           <div className={`text-[11px] ${NUM}`} style={{ color: C.mute }}>
@@ -594,7 +593,7 @@ function ResultSheet({ v, onNext, onBack }: { v: SoloView; onNext: () => void; o
         )}
         {r.revived && (
           <div className="rounded-[8px] px-[10px] py-[6px] text-[12px] font-bold" style={{ background: C.goldBg, color: C.gold }}>
-            회생 자금 {won(r.revived.amount)}을 받았어요 (오늘 {r.revived.left}번 남음)
+            총자산이 500만 밑으로 내려가서 회생 자금 {won(r.revived.amount)}을 받았어요
           </div>
         )}
         <div className="mt-[6px] flex w-full gap-[8px]">
@@ -602,7 +601,7 @@ function ResultSheet({ v, onNext, onBack }: { v: SoloView; onNext: () => void; o
             다음 판
           </Btn>
           <Btn tone="ghost" className="h-[46px] w-[110px] text-[13px]" onClick={onBack}>
-            {win ? "마을로" : "그만하기"}
+            {win ? "처음으로" : "그만하기"}
           </Btn>
         </div>
       </div>

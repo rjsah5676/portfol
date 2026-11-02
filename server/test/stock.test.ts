@@ -1,17 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { REVIVE, START_MONEY } from "../../web/src/lib/poker/rules";
+import { REVIVE_TO, REVIVE_UNDER, START_CASH } from "../../web/src/lib/stock/money";
 import { BATTLE, BattleGame, buyCost, maxBuy, sellGain } from "../../web/src/lib/stock/battle";
 import { botThink, newMind } from "../../web/src/lib/stock/bots";
 import { COIN_TURNS, LIQ, coinQty, genCoin, liqPrice, marginValue } from "../../web/src/lib/stock/coin";
-import { DAILY, HOME_TYPES, RESALE, dailyOf, resaleOf } from "../../web/src/lib/stock/estate";
 import { rngFrom } from "../../web/src/lib/stock/rng";
 import { HISTORY, TURNS, genSolo } from "../../web/src/lib/stock/solo";
-import type { AttendResult, BRecords, BResult, CoinView, EstateView, HomeView, SoloView, StockMe } from "../../web/src/lib/stock/types";
+import type { BRecords, BResult, CoinView, SoloView, StockMe } from "../../web/src/lib/stock/types";
+import { dropLegacyStock } from "../src/games/stock/common";
 import { STRATS, playOnce } from "../scripts/stock-solo-sim";
 import { RpcError, sleep, startTestServer, type TestClient, type TestServer } from "./helpers";
 
 /*
- * 주식 마을: 규칙 엔진(임팩트 · 생성기 기대수익) + 솔로 · 부동산 · 대전 통합 테스트.
+ * 주식게임: 규칙 엔진(임팩트 · 생성기 기대수익) + 솔로 · 코인 · 대전 · 전용 지갑 통합 테스트.
  * 대전은 시간 배율(timeScale)로 7분을 2초 남짓으로 돌림.
  */
 
@@ -147,17 +147,17 @@ describe("솔로", () => {
     expect(v.date0).toBeGreaterThan(0);
     expect(v.orders).toEqual([]);
     expect(v.preset).toBeNull();
-    expect(v.cash).toBe(START_MONEY);
+    expect(v.cash).toBe(START_CASH);
     const price = v.candles[HISTORY - 1].c;
     // 같은 판을 다시 시작하면 그 판 그대로
     expect((await c.rpc<SoloView>("stock.solo.start")).id).toBe(v.id);
 
     v = await c.rpc<SoloView>("stock.solo.trade", { side: "buy", pct: 100, have: HISTORY });
-    const qty = Math.floor(START_MONEY / price);
+    const qty = Math.floor(START_CASH / price);
     expect(v.shares).toBe(qty);
     expect(v.candles.length).toBe(0); // have 이후 새 봉 없음
-    expect((await doc(uid))!.money).toBe(START_MONEY - qty * price);
-    expect((await doc(uid))!.stock.held).toBe(qty * price);
+    expect((await doc(uid))!.stk.cash).toBe(START_CASH - qty * price);
+    expect((await doc(uid))!.stk.held).toBe(qty * price);
     // 돈보다 많이는 못 삼
     expect(await code(c.rpc("stock.solo.trade", { side: "buy", qty: 10_000_000 }))).toBe("NOT_ENOUGH");
 
@@ -174,13 +174,13 @@ describe("솔로", () => {
     expect(v.result!.period).toBeTruthy();
     const res = v.result!;
     const d = (await doc(uid))!;
-    expect(d.money).toBe(START_MONEY + res.pnl);
-    expect(d.stock.held).toBe(0);
-    expect(d.stats.stock.solo.games).toBe(1);
+    expect(d.stk.cash).toBe(START_CASH + res.pnl);
+    expect(d.stk.held).toBe(0);
+    expect(d.stats.stk.solo.games).toBe(1);
 
     const me = await c.rpc<StockMe>("stock.me");
     expect(me.solo.games).toBe(1);
-    expect(me.total).toBe(d.money);
+    expect(me.total).toBe(d.stk.cash);
     const hist = await c.rpc<{ id: string }[]>("stock.solo.history");
     expect(hist[0].id).toBe(v.id);
     // 끝난 판에 메모
@@ -213,78 +213,46 @@ describe("솔로", () => {
       expect(v.turn).toBeLessThan(TURNS);
       expect(v.shares).toBe(1);
       expect(v.orders.find((o) => o.id === id)).toBeUndefined();
-      expect((await doc(uid))!.money).toBeLessThan(START_MONEY);
+      expect((await doc(uid))!.stk.cash).toBeLessThan(START_CASH);
     } else expect(v.done).toBe(true);
     await c.rpc("stock.solo.quit");
   });
 
-  it("들고 있는 주식은 회생 판정에 합침 (주식에 다 넣고 회생 받기 막기)", async () => {
+  it("회생: 판 끝 총자산이 500만 밑이면 1천만 · 들고 있는 주식이 있으면 회생 안 함", async () => {
     const { uid, c } = await member();
+    await c.rpc<StockMe>("stock.me"); // 지갑 만들기
+    await users().updateOne({ _id: uid }, { $set: { "stk.cash": 3_000_000 } });
     await c.rpc<SoloView>("stock.solo.start");
-    await c.rpc<SoloView>("stock.solo.trade", { side: "buy", pct: 100 });
-    // 현금은 거의 0 이지만 주식이 있음
-    expect((await doc(uid))!.money).toBeLessThan(REVIVE.under);
-    expect(await code(c.rpc("poker.revive"))).toBe("NOT_BROKE");
-    await c.rpc("stock.solo.quit");
+    // 판 중간에 다 사도 회생 판정은 판이 끝날 때만
+    await code(c.rpc<SoloView>("stock.solo.trade", { side: "buy", pct: 100 }));
+    expect((await doc(uid))!.stk.cash).toBeLessThan(REVIVE_UNDER);
+    const v = await c.rpc<SoloView>("stock.solo.next", { n: TURNS });
+    expect(v.done).toBe(true);
+    const d = (await doc(uid))!;
+    if (v.result!.final < REVIVE_UNDER) {
+      expect(v.result!.revived!.amount).toBe(REVIVE_TO);
+      expect(d.stk.cash).toBe(REVIVE_TO);
+      expect(d.stk.revives).toBe(1);
+    } else {
+      expect(v.result!.revived).toBeUndefined();
+      expect(d.stk.cash).toBe(v.result!.final);
+    }
   });
-});
 
-describe("부동산", () => {
-  it("고시원 사고 팔기: 되팔면 50% · 집 값(되팔 값)은 총자산에 합침", async () => {
+  it("옛 주식 마을 데이터(포커 지갑 공유 · 부동산)는 지워지고 새 지갑으로 시작", async () => {
     const { uid, c } = await member();
-    const st = HOME_TYPES[0];
-    await users().updateOne({ _id: uid }, { $set: { money: st.price } });
-    let v = await c.rpc<EstateView>("stock.estate.buy", { type: st.id });
-    expect(v.units.length).toBe(1);
-    expect(v.units[0].no).toBeGreaterThan(0);
-    let d = (await doc(uid))!;
-    expect(d.money).toBe(0);
-    expect(d.estate.value).toBe(resaleOf(st.price));
-    expect(await code(c.rpc("poker.revive"))).toBe("NOT_BROKE");
-    expect(await code(c.rpc("stock.estate.buy", { type: st.id }))).toBe("NOT_ENOUGH");
-    v = await c.rpc<EstateView>("stock.estate.sell", { id: v.units[0].id });
-    d = (await doc(uid))!;
-    expect(v.units.length).toBe(0);
-    expect(d.money).toBe(st.price * RESALE);
-    expect(d.estate.value).toBe(0);
-  });
-
-  it("단독주택 자리: 선착순 · 팔면 자리가 비고 · 남의 집 구경하면 방문 수가 오름", async () => {
-    const a = await member(),
-      b = await member();
-    const ht = HOME_TYPES.find((h) => h.kind === "house")!;
-    await users().updateMany({ _id: { $in: [a.uid, b.uid] } }, { $set: { money: ht.price * 2 } });
-    const lot = ht.lots![0];
-    let v = await a.c.rpc<EstateView>("stock.estate.buy", { type: ht.id, lot });
-    expect(v.units[0].lot).toBe(lot);
-    expect(v.lots.find((l) => l.lot === lot)!.owner!.uid).toBe(a.uid);
-    expect(await code(b.c.rpc("stock.estate.buy", { type: ht.id, lot }))).toBe("SOLD_OUT");
-    // 남의 집 구경
-    const h = await b.c.rpc<HomeView>("stock.home", { uid: a.uid });
-    expect(h.mine).toBe(false);
-    expect(h.owner.uid).toBe(a.uid);
-    expect(h.visits).toBe(1);
-    expect(h.furniture).toEqual([]);
-    expect(await code(b.c.rpc("stock.home"))).toBe("NO_HOME");
-    // 팔면 자리가 빔
-    v = await a.c.rpc<EstateView>("stock.estate.sell", { id: v.units[0].id });
-    expect(v.lots.find((l) => l.lot === lot)!.owner).toBeNull();
-    expect((await doc(a.uid))!.money).toBe(ht.price * 2 - ht.price + resaleOf(ht.price));
-  });
-
-  it("출석 보너스: 집값의 0.2% · 하루 한 번", async () => {
-    const { uid, c } = await member();
-    expect(await c.rpc<AttendResult | null>("stock.estate.attend")).toBeNull();
-    const st = HOME_TYPES[1];
-    await users().updateOne({ _id: uid }, { $set: { money: st.price } });
-    await c.rpc<EstateView>("stock.estate.buy", { type: st.id });
-    const r = await c.rpc<AttendResult | null>("stock.estate.attend");
-    expect(r!.amount).toBe(dailyOf(st.price));
-    expect(r!.amount).toBe(Math.round(st.price * DAILY));
-    expect((await doc(uid))!.money).toBe(r!.amount);
-    expect(await c.rpc<AttendResult | null>("stock.estate.attend")).toBeNull();
-    const v = await c.rpc<EstateView>("stock.estate");
-    expect(v.daily.claimed).toBe(true);
+    await users().updateOne({ _id: uid }, { $set: { money: 777, stock: { held: 5 }, estate: { value: 9 }, "stats.stock.solo.games": 3 } });
+    await srv.db.col("stock_lots").insertOne({ _id: "x1", lot: "hill" } as never);
+    await dropLegacyStock(srv.db);
+    const d = (await doc(uid))!;
+    expect(d.stock).toBeUndefined();
+    expect(d.estate).toBeUndefined();
+    expect(d.stats?.stock).toBeUndefined();
+    expect(d.money).toBe(777); // 다른 게임 돈은 그대로
+    expect(await srv.db.col("stock_lots").countDocuments()).toBe(0);
+    const me = await c.rpc<StockMe>("stock.me");
+    expect(me.money).toBe(START_CASH);
+    expect(me.solo.games).toBe(0);
   });
 });
 
@@ -312,24 +280,24 @@ describe("코인", () => {
 
   it("진입 · 정리 · 넘기기 · 끝 → 기록", async () => {
     const { uid, c } = await member();
-    await users().updateOne({ _id: uid }, { $set: { money: 10_000_000 } });
+    await users().updateOne({ _id: uid }, { $set: { "stk.cash": 10_000_000 } });
     let v = await c.rpc<CoinView>("stock.coin.start");
     expect(v.turn).toBe(0);
     expect(v.pos).toBeNull();
     v = await c.rpc<CoinView>("stock.coin.open", { margin: 1_000_000, lev: 1 });
     expect(v.pos!.margin).toBe(1_000_000);
-    expect((await doc(uid))!.money).toBe(9_000_000);
+    expect((await doc(uid))!.stk.cash).toBe(9_000_000);
     expect(await code(c.rpc("stock.coin.open", { margin: 1_000_000, lev: 10 }))).toBe("LEV");
     v = await c.rpc<CoinView>("stock.coin.close", { pct: 50 });
     expect(v.pos!.margin).toBe(500_000);
-    expect((await doc(uid))!.money).toBe(9_500_000);
+    expect((await doc(uid))!.stk.cash).toBe(9_500_000);
     v = await c.rpc<CoinView>("stock.coin.next", { n: COIN_TURNS });
     expect(v.done).toBe(true);
     expect(v.result).not.toBeNull();
     const d = (await doc(uid))!;
-    expect(d.stock.coinHeld ?? 0).toBe(0);
+    expect(d.stk.coinHeld ?? 0).toBe(0);
     // 1배는 청산이 없으니 남은 증거금이 가격대로 돌아옴
-    expect(d.money).toBeGreaterThan(9_500_000);
+    expect(d.stk.cash).toBeGreaterThan(9_500_000);
     const hist = await c.rpc<{ id: string }[]>("stock.coin.history");
     expect(hist.length).toBe(1);
     const me = await c.rpc<StockMe>("stock.me");
@@ -363,8 +331,8 @@ describe("대전", () => {
     expect(rec.stats.games).toBe(1);
     expect(rec.list[0].id).toBe(res.id);
     expect((await c.rpc<BResult>("stock.battle.game", { id: res.id })).id).toBe(res.id);
-    // 대전 돈은 지갑과 따로
-    expect((await doc(uid))!.money).toBe(START_MONEY);
+    // 대전 돈은 지갑과 따로 (지갑을 안 만들었거나 그대로)
+    expect((await doc(uid))!.stk?.cash ?? START_CASH).toBe(START_CASH);
   }, 30_000);
 
   it("방장만 봇 추가 · 시작", async () => {

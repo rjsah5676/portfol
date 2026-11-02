@@ -7,15 +7,14 @@ import { RESTORED, RESTORE_GRACE_MS, type LiveGame } from "../../live";
 import type { Ctx, Gateway } from "../../realtime/gateway";
 import type { UserDoc } from "../../users";
 import { newId } from "../../ids";
-import { BOT_CHAR_IDS, CHAR_IDS, type CharId, type Look } from "../../../../web/src/lib/poker/rules";
 import { BATTLE, BattleGame, N_STOCKS } from "../../../../web/src/lib/stock/battle";
 import { BOT_STYLE_IDS, LEVEL_WEIGHT, botThink, newMind, type BotLevel, type BotMind, type BotStyle } from "../../../../web/src/lib/stock/bots";
 import { newSeed, rngFrom } from "../../../../web/src/lib/stock/rng";
 import type { BGameWire, BLobbyRow, BRecordRow, BRecords, BResult, BResultRow, BRoomWire, BSeatWire, BattleStats } from "../../../../web/src/lib/stock/types";
-import { faceOf, member } from "./common";
+import { member } from "./common";
 
 /*
- * 트레이딩 홀 (대전) — 방은 서버 메모리, 판 기록 · 전적은 DB(stock_battles · users.stats.stock.battle).
+ * 트레이딩 홀 (대전) — 방은 서버 메모리, 판 기록 · 전적은 DB(stk_battles · users.stats.stk.battle).
  * 대전 돈은 판마다 1억 고정 (지갑과 섞지 않음). 회원만.
  *
  * 구독
@@ -26,11 +25,6 @@ import { faceOf, member } from "./common";
  *   stock.battle.records · stock.battle.game
  */
 
-/** 성격마다 얼굴 (포커 캐릭터 — 무료 캐릭터 중에서) */
-const STYLE_CHAR: Record<BotStyle, CharId> = (() => {
-  const pool = BOT_CHAR_IDS.length >= 4 ? BOT_CHAR_IDS : CHAR_IDS;
-  return { chaser: pool[0], whale: pool[1 % pool.length], contra: pool[2 % pool.length], ant: pool[3 % pool.length] };
-})();
 const BOT_NICKS: Record<BotStyle, string[]> = {
   chaser: ["불나방", "따라쟁이", "급등헌터", "단타왕"],
   whale: ["큰손", "작전세력", "고래", "회장님"],
@@ -41,8 +35,6 @@ const BOT_NICKS: Record<BotStyle, string[]> = {
 interface BSeat {
   uid: string | null;
   nick: string;
-  char: CharId;
-  look: Look;
   bot: { style: BotStyle; level: BotLevel } | null;
 }
 interface ChatMsg {
@@ -114,7 +106,7 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
   const scale = opts.timeScale ?? 1;
   const tickMs = opts.tickMs ?? 250;
   const rooms = new Map<string, Room>();
-  const games = db.col<Omit<BattleDoc, "_id">>("stock_battles");
+  const games = db.col<Omit<BattleDoc, "_id">>("stk_battles");
   const users = db.col<UserDoc>("users");
   void games.createIndex({ uids: 1, at: -1 }).catch(() => {});
   let draining = false;
@@ -127,7 +119,7 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
 
   // ───────────── 화면으로 ─────────────
 
-  const seatWire = (r: Room, s: BSeat): BSeatWire => ({ uid: s.uid, nick: s.nick, char: s.char, look: s.look, bot: s.bot, away: !!s.uid && !r.owners.get(s.uid) });
+  const seatWire = (r: Room, s: BSeat): BSeatWire => ({ uid: s.uid, nick: s.nick, bot: s.bot, away: !!s.uid && !r.owners.get(s.uid) });
   const roomWire = (r: Room): BRoomWire => ({
     id: r.id,
     title: r.title,
@@ -148,7 +140,7 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
         return {
           id: r.id,
           title: r.title,
-          host: h ? { nick: h.nick, char: h.char, look: h.look } : null,
+          host: h ? { nick: h.nick } : null,
           count: r.seats.filter(Boolean).length,
           humans: humans(r).length,
           max: r.max,
@@ -215,8 +207,7 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
     const taken = new Set(r.seats.filter(Boolean).map((s) => s!.nick));
     const names = BOT_NICKS[style].filter((n) => !taken.has(n));
     const nick = names.length ? names[randomInt(names.length)] : `${BOT_NICKS[style][0]}${randomInt(2, 10)}`;
-    const char = STYLE_CHAR[style];
-    return { uid: null, nick, char, look: char, bot: { style, level } };
+    return { uid: null, nick, bot: { style, level } };
   }
 
   function removeRoom(r: Room) {
@@ -248,8 +239,7 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
   async function sit(ctx: Ctx, r: Room): Promise<number> {
     const { uid } = member(ctx);
     let i = seatOf(r, uid);
-    const face = await faceOf(db, uid);
-    const me: BSeat = { uid, nick: ctx.nick!, char: face.char, look: face.look, bot: null };
+    const me: BSeat = { uid, nick: ctx.nick!, bot: null };
     if (i < 0) {
       if (r.phase === "play") throw new AppError("PLAYING", "지금 대전 중인 방이에요. 끝나면 들어갈 수 있어요.", 409);
       i = r.seats.findIndex((s) => !s);
@@ -573,8 +563,6 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
         seat: seatIdx,
         uid: s.uid,
         nick: s.nick,
-        char: s.char,
-        look: s.look,
         bot: s.bot,
         final: g.players[pi].cash,
         mult: g.players[pi].cash / BATTLE.startCash,
@@ -618,8 +606,8 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
           updateOne: {
             filter: { _id: x.uid! },
             update: {
-              $inc: { "stats.stock.battle.games": 1, "stats.stock.battle.rankSum": x.rank, ...(x.rank === 1 && { "stats.stock.battle.wins": 1 }), ...(x.rank <= 3 && n >= 4 && { "stats.stock.battle.top3": 1 }) },
-              $max: { "stats.stock.battle.best": x.mult },
+              $inc: { "stats.stk.battle.games": 1, "stats.stk.battle.rankSum": x.rank, ...(x.rank === 1 && { "stats.stk.battle.wins": 1 }), ...(x.rank <= 3 && n >= 4 && { "stats.stk.battle.top3": 1 }) },
+              $max: { "stats.stk.battle.best": x.mult },
             },
           },
         })),
@@ -629,15 +617,15 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
 
   // ───────────── 전적 ─────────────
 
-  const statsOf = (d: { stats?: { stock?: { battle?: Partial<BattleStats> } } } | null): BattleStats => {
-    const b = d?.stats?.stock?.battle ?? {};
+  const statsOf = (d: { stats?: { stk?: { battle?: Partial<BattleStats> } } } | null): BattleStats => {
+    const b = d?.stats?.stk?.battle ?? {};
     return { games: b.games ?? 0, wins: b.wins ?? 0, rankSum: b.rankSum ?? 0, best: b.best ?? null, top3: b.top3 ?? 0 };
   };
 
   gateway.rpc("stock.battle.records", async (ctx): Promise<BRecords> => {
     const { uid } = member(ctx);
     const [u, docs] = await Promise.all([
-      users.findOne({ _id: uid }, { projection: { "stats.stock.battle": 1 } }),
+      users.findOne({ _id: uid }, { projection: { "stats.stk.battle": 1 } }),
       games.find({ uids: uid }, { projection: { "result.rows": 1, "result.humans": 1, "result.bots": 1, at: 1 } }).sort({ at: -1 }).limit(30).toArray(),
     ]);
     const list: BRecordRow[] = (docs as unknown as BattleDoc[]).map((d) => {

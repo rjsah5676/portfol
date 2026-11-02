@@ -19,5 +19,5 @@ export const SHOT_KEYS = new Set([
   "games/suspect",
   "games/rspeed",
 ]);
-export const SHOT_VERSION = 11;
+export const SHOT_VERSION = 12;
 export const shotFile = (key: string) => `${key.replace(/\//g, "__")}.jpg`;

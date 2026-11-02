@@ -7,8 +7,7 @@ import type { CoinReview, CoinView } from "@/lib/stock/types";
 import { coinClose, coinNext, coinOpen, coinQuit, coinStart, coinState } from "@/realtime/stock";
 import Chart, { type Ind, type Marker, type PriceLine } from "./Chart";
 import { bgm, resultSound, sfx } from "@/lib/stock/sound";
-import type { Face } from "@/lib/poker/rules";
-import { Btn, C, FaceBubble, Frame, NUM, Num, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
+import { Btn, C, Tip, type Face, Frame, NUM, Num, Pill, Sheet, TITLE, TopBar, WalletChip, comma, pct, signColor, won } from "./ui";
 
 /*
  * 코인 거래소 — 1턴 = 1시간봉 · 50턴 · 가격제한 없음 · 레버리지 1 · 3 · 10배 (롱) · 청산.
@@ -262,7 +261,7 @@ export default function Coin({
         <div className="flex flex-col gap-[8px] px-[10px] pt-[8px] pb-[10px]" style={{ width: panelW, background: C.panel, borderLeft: `1px solid ${C.line}` }}>
           {!mode ? (
             <>
-              <FaceBubble face={quip.face} text={quip.text} size={36} />
+              <Tip face={quip.face} text={quip.text} size={36} />
               <Frame title="시세 · 포지션" accent={ACC} bodyClass="flex flex-col gap-[4px] px-[8px] py-[6px]">
                 <Row k="현재가" v={<Num value={price} className="text-[15px] font-black" style={{ color: candles.length > 1 && price < candles[candles.length - 2].c ? C.down : ACC }}>{fmtPrice(price)}</Num>} />
                 <Row k="현금" v={won(cash)} />
@@ -420,7 +419,7 @@ export default function Coin({
             const r = result.result!;
             return (
               <div className={`flex flex-col items-center gap-[10px] p-[18px] text-center ${r.ret >= 0.5 ? "stk-shine" : r.liqs ? "stk-alarm" : ""}`}>
-                <FaceBubble face={r.ret >= 0.5 ? "joy" : r.pnl > 0 ? "smile" : r.liqs ? "shock" : "sad"} text={r.ret >= 0.5 ? "코인으로 이기다니! 다음 판은 더 조심해요." : r.pnl > 0 ? "수익 마감. 코인은 익절이 반이에요." : r.liqs ? `청산 ${r.liqs}번… 배수를 낮추거나 증거금을 나눠요.` : "손실 마감. 코인은 안 하는 날이 버는 날이에요."} size={34} className="w-full text-left" />
+                <Tip face={r.ret >= 0.5 ? "joy" : r.pnl > 0 ? "smile" : r.liqs ? "shock" : "sad"} text={r.ret >= 0.5 ? "코인으로 이기다니! 다음 판은 더 조심해요." : r.pnl > 0 ? "수익 마감. 코인은 익절이 반이에요." : r.liqs ? `청산 ${r.liqs}번… 배수를 낮추거나 증거금을 나눠요.` : "손실 마감. 코인은 안 하는 날이 버는 날이에요."} size={34} className="w-full text-left" />
                 <div className={`${TITLE} text-[26px] leading-none`}>
                   <span style={{ color: ACC }}>{r.sym}</span> {r.name}
                 </div>
@@ -443,7 +442,7 @@ export default function Coin({
                 </div>
                 {r.revived && (
                   <div className="rounded-[8px] px-[10px] py-[6px] text-[12px] font-bold" style={{ background: C.goldBg, color: C.gold }}>
-                    회생 자금 {won(r.revived.amount)}을 받았어요 (오늘 {r.revived.left}번 남음)
+                    총자산이 500만 밑으로 내려가서 회생 자금 {won(r.revived.amount)}을 받았어요
                   </div>
                 )}
                 <div className="mt-[6px] flex w-full gap-[8px]">
@@ -451,7 +450,7 @@ export default function Coin({
                     다음 판
                   </Btn>
                   <Btn tone="ghost" className="h-[46px] w-[110px] text-[13px]" onClick={onBack}>
-                    마을로
+                    처음으로
                   </Btn>
                 </div>
               </div>

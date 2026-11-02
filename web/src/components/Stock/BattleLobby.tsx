@@ -8,7 +8,7 @@ import { addBot, createRoom, joinRoom, kickSeat, quickRoom, roomChat, roomSettin
 import { Avatar, Btn, C, Empty, NUM, Sheet, TopBar, WalletChip } from "./ui";
 
 /*
- * 트레이딩 홀 로비 (방 목록 · 만들기 · 빠른 입장) 와 대기실 (자리 8칸 · 봇 추가/삭제 · 성격 · 난이도 · 시작).
+ * 대전 로비 (방 목록 · 만들기 · 빠른 입장) 와 대기실 (자리 8칸 · 봇 추가/삭제 · 성격 · 난이도 · 시작).
  */
 
 export function Lobby({
@@ -49,7 +49,7 @@ export function Lobby({
     <div className="flex h-full flex-col">
       <TopBar
         onBack={onBack}
-        title="트레이딩 홀"
+        title="대전"
         right={
           <>
             <Btn className="h-[28px] px-[10px] text-[12px]" onClick={onRecords}>
@@ -84,7 +84,7 @@ export function Lobby({
                   className="flex cursor-pointer items-center gap-[8px] rounded-[10px] px-[10px] py-[8px] text-left disabled:cursor-default disabled:opacity-60"
                   style={{ background: C.panel2, border: `1px solid ${C.line}` }}
                 >
-                  {r.host && <Avatar look={r.host.look} size={34} />}
+                  {r.host && <Avatar nick={r.host.nick} size={34} />}
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-bold">
                       {r.locked && "🔒 "}
@@ -251,7 +251,7 @@ export function Room({
             <div key={i} className="relative flex flex-col items-center justify-center gap-[4px] rounded-[12px] p-[6px] text-center" style={{ background: s ? C.panel2 : "transparent", border: `1px ${s ? "solid" : "dashed"} ${s?.uid === room.hostUid ? C.gold : C.line}` }}>
               {s ? (
                 <>
-                  <Avatar look={s.look} size={48} ring={s.uid === myUid ? C.gold : undefined} />
+                  <Avatar nick={s.nick} bot={s.bot ? "🤖" : null} size={48} ring={s.uid === myUid ? C.gold : undefined} />
                   <div className="max-w-full truncate text-[12px] font-bold">
                     {s.uid === room.hostUid && "👑 "}
                     {s.nick}

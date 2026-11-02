@@ -1,4 +1,4 @@
-/* 애니메 차트 (components/Stock) — 공용 스타일 · 애니메이션 */
+/* 주식게임 (components/Stock) — 공용 스타일 · 애니메이션 */
 .stk button { font-family: inherit; }
 /* 버튼: 위가 밝고 아래가 어두운 입체감, 누르면 살짝 꺼짐 */
 .stk-btn {
@@ -26,7 +26,7 @@
 @keyframes stk-ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .stk-enter { animation: stk-enter 0.28s ease-out both; }
 @keyframes stk-enter { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
-/* 건물에 들어갈 때 0.4초 줌인 */
+/* 화면 전환 줌인 */
 .stk-zoomin { animation: stk-zoomin 0.4s ease-in both; }
 @keyframes stk-zoomin { to { transform: scale(3.2); filter: brightness(1.4); } }
 .stk-fadeout { animation: stk-fade 0.4s ease-in both; }
@@ -55,10 +55,3 @@
 @media (prefers-reduced-motion: reduce) {
   .stk-enter, .stk-zoomin, .stk-fadeout, .stk-pop, .stk-cutin, .stk-rotate, .stk-blink, .stk-ticker, .stk-alarm, .stk-shine, .stk-num-up, .stk-num-down { animation: none; }
 }
-/* 마을: 문으로 줌인 · 어두워짐 · 밤 조명 일렁임 */
-.stk-doorzoom { animation: stk-doorzoom 0.48s ease-in both; }
-@keyframes stk-doorzoom { to { transform: scale(2.6); } }
-.stk-doorfade { animation: stk-doorfade 0.48s ease-in both; }
-@keyframes stk-doorfade { from { opacity: 0; } 50% { opacity: 0.1; } to { opacity: 1; } }
-.stk-glow { animation: stk-glow 2.4s ease-in-out infinite alternate; }
-@keyframes stk-glow { from { opacity: 0.85; transform: scale(0.97); } to { opacity: 1; transform: scale(1.04); } }

@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import Faded from "@/components/Faded";
 import GameHeader from "@/components/GameHeader";
@@ -21,10 +20,7 @@ const charPic = (look: string) =>
 function PokerPage() {
   const rank = useRank();
   const nick = useNick();
-  const params = useSearchParams();
-  const inTable = !!params.get("t");
-  // 주식 마을의 포커 하우스에서 들어왔으면 돌아가는 버튼
-  const fromStock = params.get("from") === "stock";
+  const inTable = !!useSearchParams().get("t");
   // 순위 창 탭: 제목이 같이 바뀜 (시상대는 PokerRanks 가 탭마다 그림)
   const [tab, setTab] = useState<PokerRankTab>("money");
   // 위 띠(TopTicker)는 늘 자금 순위
@@ -43,11 +39,6 @@ function PokerPage() {
   return (
     <>
       <div className="mx-auto max-w-5xl px-3 pt-6 sm:px-6">
-        {fromStock && (
-          <Link href="/games/stock/" className="mb-2 inline-flex items-center gap-1 rounded-full border border-[#F2C14E]/50 px-3 py-1 text-xs font-bold text-[#F2C14E] hover:bg-[#F2C14E]/10">
-            ← 주식 마을로
-          </Link>
-        )}
         <GameHeader
           icon="px:poker"
           title="ANIME POKER"
