@@ -1,0 +1,60 @@
+/*
+ * GMTOWN — HUD 유리판 · 글꼴 · 나타나는 움직임.
+ * 픽셀 간판 글꼴은 디펜스가 쓰는 갈무리(OFL, public/defense/fonts)를 같이 씀.
+ */
+
+@font-face {
+  font-family: "Galmuri11";
+  src: url("/defense/fonts/Galmuri11.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "Galmuri11";
+  src: url("/defense/fonts/Galmuri11-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+.gmt {
+  color: #fff;
+  font-family: "Nanum Gothic", sans-serif;
+}
+.gmt-glass {
+  background: rgba(16, 18, 34, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+}
+/* 카드 · 채널 고르기처럼 글이 많은 판은 뒤가 비치지 않게 */
+.gmt-sheet {
+  background: rgba(16, 18, 34, 0.95);
+}
+.gmt-brand {
+  font-family: "Black Han Sans", sans-serif;
+  background: linear-gradient(180deg, #fff1b8, #f2b33e);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: 0.02em;
+}
+@keyframes gmt-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Tailwind 4 의 -translate-x-1/2 는 transform 이 아니라 translate 속성이라 이 움직임과 겹치지 않음 */
+.gmt-pop {
+  animation: gmt-pop 0.18s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .gmt-pop {
+    animation: none;
+  }
+}
