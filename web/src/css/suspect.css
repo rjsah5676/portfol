@@ -467,11 +467,26 @@
     color: #f6ecd6;
     background: var(--job);
   }
+  /* 밝혀진 사람: 바탕을 진하게 물들이고 안쪽 테두리까지 (범인 붉은색 · 무고 청록색) — 미확인 종이 카드와 한눈에 갈리게 */
   .sp-cell.crim {
-    background: var(--grain), var(--crim-bg);
+    background:
+      var(--grain),
+      linear-gradient(180deg, rgba(142, 42, 42, 0.1), rgba(142, 42, 42, 0.26)),
+      #e6b7a3;
+    border-color: var(--crim);
+    box-shadow:
+      inset 0 0 0 2px rgba(142, 42, 42, 0.55),
+      0 2px 5px rgba(60, 40, 20, 0.3);
   }
   .sp-cell.inno {
-    background: var(--grain), var(--inno-bg);
+    background:
+      var(--grain),
+      linear-gradient(180deg, rgba(31, 92, 86, 0.08), rgba(31, 92, 86, 0.22)),
+      #bcd6c6;
+    border-color: var(--inno);
+    box-shadow:
+      inset 0 0 0 2px rgba(31, 92, 86, 0.5),
+      0 2px 5px rgba(60, 40, 20, 0.3);
   }
   .sp-cell.known {
     align-content: start;
@@ -522,7 +537,7 @@
     line-height: 1.15;
     letter-spacing: 0.08em;
     rotate: 10deg;
-    opacity: 0.88;
+    background: rgba(255, 250, 238, 0.55);
     mask-image: var(--worn);
     mask-size: 60px;
     -webkit-mask-image: var(--worn);
@@ -561,9 +576,45 @@
     font-size: 15px;
     line-height: 1.15;
   }
+  /*
+   * 단서를 다 쓴 사람 (단서가 가리키는 사람이 모두 밝혀짐): 카드 전체를 빛바래게 + 점선 테두리 + ✓ 표시
+   * → 아직 쓸 단서가 남은 밝혀진 사람만 진하게 남아서 볼 곳이 줄어듦
+   */
+  .sp-cell.used {
+    filter: saturate(0.6);
+    opacity: 0.66;
+    border-style: dashed;
+    box-shadow: none;
+  }
   .sp-cell.used .sp-cs,
   .sp-cell.used .sp-cv {
-    opacity: 0.38;
+    opacity: 0.45;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+  /* 얼굴 왼쪽 위 모서리에 ✓ (단서 글자를 가리지 않게) */
+  .sp-cell.used::after {
+    content: "✓";
+    position: absolute;
+    left: 2px;
+    top: 3px;
+    width: 15px;
+    height: 15px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--ink2);
+    color: #f6ecd6;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  /* 단서 대상으로 떠오르거나 고른 카드는 다 쓴 카드라도 또렷하게 */
+  .sp-cell.used.hl,
+  .sp-cell.used.sel,
+  .sp-cell.used.spk {
+    filter: none;
+    opacity: 1;
   }
   /*
    * 선택 · 단서 대상 · 말한 사람 · 힌트.

@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import {
@@ -332,6 +333,15 @@ export default function CaseBoard({
     setSel(i === sel ? -1 : i);
   }
 
+  /** 우클릭: 연필 메모 바로 돌리기 (범인? → 무고? → 지움) — 메모 모드를 켜지 않아도 됨 */
+  function memoClick(e: MouseEvent, i: number) {
+    e.preventDefault();
+    if (paused || doneRef.current || x[i] >= 0 || guideStep) return;
+    playSfx("sfx-tap");
+    setMemo((m) => m.map((v, k) => (k === i ? (v + 1) % 3 : v)));
+    if (sel === i) setSel(-1);
+  }
+
   function setMemoOf(i: number, v: number) {
     playSfx("sfx-tap");
     setMemo((m) => m.map((o, k) => (k === i ? v : o)));
@@ -548,6 +558,7 @@ export default function CaseBoard({
             }}
             aria-pressed={memoMode}
             disabled={!!guideStep}
+            title="PC 에선 카드를 우클릭해도 메모돼요"
           >
             ✎ 연필 메모 {memoMode ? "켜짐" : "꺼짐"}
           </button>
@@ -625,6 +636,7 @@ export default function CaseBoard({
                   className={cls}
                   style={{ "--job": JOB_COLOR[p.job] } as CSSProperties}
                   onClick={() => tapCell(i)}
+                  onContextMenu={(e) => memoClick(e, i)}
                   aria-label={`${b.code(i)} ${p.name} ${p.job} ${v === 1 ? "범인" : v === 0 ? "무고" : "미확인"}`}
                 >
                   {v >= 0 ? (
