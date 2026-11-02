@@ -14,7 +14,7 @@ export interface SuspectRankingRow {
   name: string;
   member?: boolean;
   avatar?: string | null;
-  /** 기록 (초) = 시간 + 실수 120초 + 힌트 60초 */
+  /** 기록 (초) = 시간 + 실수 120초 (오늘의 사건엔 힌트 없음 — hint 는 늘 0) */
   score: number;
   time: number;
   miss: number;

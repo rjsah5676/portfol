@@ -204,7 +204,7 @@ function useRankings(c: string | null) {
 
 const rankValue = (r: SuspectRanking) => fmtTime(r.score);
 const rankSub = (r: SuspectRanking) =>
-  `${fmtTime(r.time)} · 실수 ${r.miss} · 힌트 ${r.hint}${r.miss === 0 && r.hint === 0 ? " · 완벽" : ""}`;
+  `${fmtTime(r.time)} · 실수 ${r.miss}${r.hint ? ` · 힌트 ${r.hint}` : ""}${r.miss === 0 && r.hint === 0 ? " · 완벽" : ""}`;
 
 // ───────────────────────── 본체 ─────────────────────────
 
@@ -519,7 +519,7 @@ export default function SuspectApp() {
                 ))}
               </div>
               <p className="m-0 text-[11px] text-white/40">
-                기록 = 시간 + 실수×2분 + 힌트×1분 · 사건마다 첫 풀이만
+                기록 = 시간 + 실수×2분 · 힌트 없음 · 사건마다 첫 풀이만
               </p>
             </div>
           ),

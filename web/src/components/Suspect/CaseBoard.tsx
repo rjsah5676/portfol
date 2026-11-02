@@ -450,7 +450,8 @@ export default function CaseBoard({
   }
 
   function askHint() {
-    if (doneRef.current || guideStep) return;
+    // 오늘의 사건(랭킹)엔 힌트 없음
+    if (strict || doneRef.current || guideStep) return;
     playSfx("sfx-hint");
     setSel(-1);
     setHint((h) => h + 1);
@@ -535,22 +536,27 @@ export default function CaseBoard({
           <span>
             실수<b>{miss}</b>
           </span>
-          <span>
-            힌트<b>{hint}</b>
-          </span>
+          {!strict && (
+            <span>
+              힌트<b>{hint}</b>
+            </span>
+          )}
         </div>
       </div>
       {!review && (
         <div className="sp-bar">
-          <button
-            type="button"
-            className="sp-btn sp-btn-sm sp-btn-sun"
-            onClick={askHint}
-            disabled={!!guideStep || left === 0}
-            title={strict ? `힌트 (누를 때마다 +${penaltyLabel(PENALTY.hint)})` : "힌트"}
-          >
-            힌트{strict && <span className="text-[13px] opacity-70"> +{penaltyLabel(PENALTY.hint)}</span>}
-          </button>
+          {/* 힌트는 연습 · 입문 사건에만 (오늘의 사건은 랭킹이라 없음) */}
+          {!strict && (
+            <button
+              type="button"
+              className="sp-btn sp-btn-sm sp-btn-sun"
+              onClick={askHint}
+              disabled={!!guideStep || left === 0}
+              title="힌트"
+            >
+              힌트
+            </button>
+          )}
           <button
             type="button"
             className={`sp-btn sp-btn-sm ${memoMode ? "on" : ""}`}

@@ -34,7 +34,9 @@ function shareHead(tier: TierId, day: string | null) {
     ? `🕵️ 오늘의 용의자 #${caseNo(day)} · ${TIERS[tier].label}`
     : `🕵️ 오늘의 용의자 · 연습 ${TIERS[tier].label}`;
 }
-const shareStats = (r: FinishInfo) => `⏱ ${fmtTime(r.time)} · 실수 ${r.miss} · 힌트 ${r.hint}`;
+// 힌트는 연습 사건에만 있어서 쓴 경우만 적음
+const shareStats = (r: FinishInfo) =>
+  `⏱ ${fmtTime(r.time)} · 실수 ${r.miss}${r.hint ? ` · 힌트 ${r.hint}` : ""}`;
 
 function shareText(p: Puzzle, tier: TierId, day: string | null, r: FinishInfo) {
   // 정답이 드러나지 않게: 실수한 사람만 노란 칸, 나머지는 초록 칸
@@ -244,11 +246,12 @@ export default function Result({
       </p>
 
       <div className="sp-card w-full max-w-[400px] px-4 py-3">
-        <div className="grid grid-cols-3 gap-2">
+        <div className={`grid gap-2 ${daily ? "grid-cols-2" : "grid-cols-3"}`}>
           {[
             ["걸린 시간", fmtTime(result.time)],
             ["실수", `${result.miss}번`],
-            ["힌트", `${result.hint}번`],
+            // 오늘의 사건엔 힌트가 없음
+            ...(daily ? [] : [["힌트", `${result.hint}번`]]),
           ].map(([k, v]) => (
             <div key={k}>
               <div className="text-[12px] text-[var(--ink2)]">{k}</div>
@@ -262,7 +265,7 @@ export default function Result({
               <span className="text-[12px] text-[var(--ink2)]">랭킹 기록 (작을수록 좋아요)</span>
               <div className="sp-num text-[34px] leading-none">{fmtTime(score)}</div>
               <div className="text-[11.5px] text-[var(--ink3)]">
-                시간 + 실수×{penaltyLabel(PENALTY.miss)} + 힌트×{penaltyLabel(PENALTY.hint)}
+                시간 + 실수×{penaltyLabel(PENALTY.miss)}
               </div>
             </div>
             <div className="mt-2 text-[14px]">
