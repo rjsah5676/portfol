@@ -633,10 +633,12 @@ function makeClue(
       const S = isRow ? b.row(n) : b.col(n);
       const odd = countIn(S, truth) % 2 === 1;
       const lab = isRow ? `${n + 1}행` : `${b.colName(n)}열`;
+      // 「짝수」를 2명 이상으로 읽는 경우가 많아서 전체 문장엔 될 수 있는 수를 적음 (0명도 짝수) — 카드 짧은 글은 줄바꿈 때문에 그대로
+      const counts = Array.from({ length: S.length + 1 }, (_, k) => k).filter((k) => k % 2 === (odd ? 1 : 0));
       return {
         S,
         A: parityA(S.length, odd),
-        text: `${lab}의 범인 수는 ${odd ? "홀수" : "짝수"}야`,
+        text: `${lab}의 범인 수는 ${odd ? "홀수" : "짝수"}야 (${counts.join("·")}명)`,
         short: [lab, `범인 ${odd ? "홀수" : "짝수"}`],
         type: "parity",
       };
