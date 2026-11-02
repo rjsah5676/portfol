@@ -129,6 +129,22 @@ const TOON_LIGHT = new THREE.Vector3(-0.45, 0.55, 0.7).normalize();
 const TOON_SHADE = 0.8;
 const INK_PX = 1.0;
 const INK_COLOR = 0x3a2a3e;
+/** 눈 조각: 얼굴 위에 살짝 띄움 · 앞머리 위로 한 번 더 그릴 때 당기는 거리 (모델 키 1 기준, 앞머리~눈 틈 0.07) */
+const EYE_LIFT = 0.004 * RIG_SCALE;
+const EYE_OVER = 0.12 * RIG_SCALE;
+
+type RigMats = {
+  toon: THREE.Material;
+  ink: THREE.Material;
+  ghost: THREE.Material;
+  eyeBase?: THREE.Material;
+  eyeOver?: THREE.Material;
+};
+
+/** GLB 안의 눈 조각 (bake 에서 "eyes" 로 만든 것) */
+function isEyes(o: THREE.Object3D) {
+  return o.name.startsWith("eyes") || (o.parent?.name.startsWith("eyes") ?? false);
+}
 
 /** 땅 기준 8 방향 → 땅 위 방향 벡터 (0 = 북(-y), 시계 방향) */
 function dirVec(d: number): [number, number] {
@@ -201,7 +217,7 @@ export class TownEngine {
   private sheets = new Map<string, THREE.Texture>();
   private models = new Map<string, RigModel>();
   /** 3D 캐릭터 공용 재질 (툰 · 외곽선 · 가려졌을 때) — 캐릭터 종류마다 하나 */
-  private rigMats = new Map<string, { toon: THREE.Material; ink: THREE.Material; ghost: THREE.Material }>();
+  private rigMats = new Map<string, RigMats>();
   private toonU = { uLight: { value: new THREE.Vector3() }, uShade: { value: TOON_SHADE } };
   private inkU = { uInk: { value: 0.004 } };
   private sheetGeo = new Map<string, THREE.BufferGeometry>();
@@ -312,7 +328,7 @@ export class TownEngine {
     for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) this.dropView(a);
     for (const t of this.sheets.values()) t.dispose();
     for (const g of this.sheetGeo.values()) g.dispose();
-    for (const m of this.rigMats.values()) for (const x of Object.values(m)) x.dispose();
+    for (const m of this.rigMats.values()) for (const x of Object.values(m)) x?.dispose();
     for (const m of this.models.values())
       m.scene.traverse((o) => {
         if (o instanceof THREE.Mesh) {
@@ -1025,12 +1041,19 @@ export class TownEngine {
 
   /** 툰: 빛 방향으로 2단 (조명 계산 안 씀) · 외곽선: 뒤집은 껍데기를 법선 쪽으로 · 가려졌을 때: 반투명 위에 */
   private makeRigMats(scene: THREE.Object3D) {
-    let map: THREE.Texture | null = null;
+    let map: THREE.Texture | null = null,
+      eyeMap: THREE.Texture | null = null;
     scene.traverse((o) => {
-      if (!map && o instanceof THREE.Mesh) map = (o.material as THREE.MeshStandardMaterial).map ?? null;
+      if (!(o instanceof THREE.Mesh)) return;
+      const t = (o.material as THREE.MeshStandardMaterial).map ?? null;
+      if (isEyes(o)) eyeMap ??= t;
+      else map ??= t;
     });
-    const tex = map as THREE.Texture | null;
-    if (tex) tex.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    const tex = map as THREE.Texture | null,
+      etex = eyeMap as THREE.Texture | null;
+    const aniso = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    if (tex) tex.anisotropy = aniso;
+    if (etex) etex.anisotropy = aniso;
     const toon = new THREE.MeshToonMaterial({ map: tex });
     toon.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU);
@@ -1059,7 +1082,56 @@ export class TownEngine {
       depthTest: false,
       depthWrite: false,
     });
-    return { toon, ink, ghost };
+    const mats: RigMats = { toon, ink, ghost };
+    if (etex) {
+      mats.eyeBase = this.eyeMat(etex, false);
+      mats.eyeOver = this.eyeMat(etex, true);
+    }
+    return mats;
+  }
+
+  /**
+   * 눈 조각 재질 — 그림은 멀리서도 또렷하게 (밉맵 한 단계 덜 흐리게).
+   * over: 카메라 쪽으로 당겨서 앞머리 위로 한 번 더. 속눈썹(아주 어두운 곳)·흰자·눈동자(푸른 곳)만, 정면에서만 (뒤·옆에선 안 비침)
+   */
+  private eyeMat(map: THREE.Texture, over: boolean) {
+    const m = new THREE.MeshToonMaterial({
+      map,
+      transparent: true,
+      depthWrite: false,
+      side: THREE.FrontSide,
+      alphaTest: over ? 0 : 0.01,
+    });
+    m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.toonU, {
+        uBias: { value: over ? EYE_OVER : EYE_LIFT },
+      });
+      sh.vertexShader = sh.vertexShader
+        .replace("void main() {", "uniform float uBias;\nvoid main() {")
+        .replace(
+          "#include <project_vertex>",
+          "#include <project_vertex>\ngl_Position = projectionMatrix * ( mvPosition + vec4( 0.0, 0.0, uBias, 0.0 ) );"
+        );
+      sh.fragmentShader = sh.fragmentShader
+        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvoid main() {")
+        .replace(
+          "#include <map_fragment>",
+          `vec4 sampledDiffuseColor = texture2D( map, vMapUv, -0.8 );
+diffuseColor *= sampledDiffuseColor;` +
+            (over
+              ? `
+float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( -0.06, 0.0, sampledDiffuseColor.b - sampledDiffuseColor.r ) )
+  * smoothstep( 0.35, 0.7, normalize( vNormal ).z );`
+              : "")
+        )
+        .replace(
+          "#include <opaque_fragment>",
+          `outgoingLight = diffuseColor.rgb * ( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade );
+#include <opaque_fragment>`
+        );
+    };
+    return m;
   }
 
   private rigOf(a: Avatar): RigView | null {
@@ -1078,6 +1150,24 @@ export class TownEngine {
       else if (o instanceof THREE.Mesh) o.visible = false; // 리깅 도구가 남긴 공 같은 것
     });
     for (const m of skinned) {
+      if (isEyes(m)) {
+        if (!mats.eyeBase || !mats.eyeOver) {
+          m.visible = false;
+          continue;
+        }
+        m.material = mats.eyeBase;
+        m.frustumCulled = false;
+        m.renderOrder = 4;
+        const o = new THREE.SkinnedMesh(m.geometry, mats.eyeOver);
+        o.bind(m.skeleton, m.bindMatrix);
+        o.frustumCulled = false;
+        o.renderOrder = 6;
+        o.position.copy(m.position);
+        o.quaternion.copy(m.quaternion);
+        o.scale.copy(m.scale);
+        m.parent!.add(o);
+        continue;
+      }
       m.material = mats.toon;
       m.frustumCulled = false;
       m.renderOrder = 3;
