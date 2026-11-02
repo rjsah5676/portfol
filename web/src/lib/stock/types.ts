@@ -3,6 +3,7 @@
  */
 
 import type { BotLevel, BotStyle } from "./bots";
+import type { BNews } from "./news";
 import type { CoinPos, CoinPreset, CoinTrade } from "./coin";
 import type { Candle, Preset, SoloOrder, SoloTrade } from "./solo";
 
@@ -281,6 +282,8 @@ export interface BGameWire {
   feed: BFillWire[];
   /** 방금 일어난 변동 (그 상태에만 실림) */
   shock: { k: number; mult: number[]; ev: number[] } | null;
+  /** 최근 속보 (변동 3초 전에 뜸 · 변동 뒤 hit 로 적중 여부) */
+  news: BNews[];
   over: boolean;
 }
 

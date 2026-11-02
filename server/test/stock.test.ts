@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { REVIVE_TO, REVIVE_UNDER, START_CASH } from "../../web/src/lib/stock/money";
-import { BATTLE, BattleGame, buyCost, maxBuy, sellGain } from "../../web/src/lib/stock/battle";
+import { BATTLE, BattleGame, buyCost, maxBuy, sellGain, shockAt } from "../../web/src/lib/stock/battle";
+import { NEWS } from "../../web/src/lib/stock/news";
 import { botThink, newMind } from "../../web/src/lib/stock/bots";
 import { COIN_TURNS, LIQ, coinQty, genCoin, liqPrice, marginValue } from "../../web/src/lib/stock/coin";
 import { rngFrom } from "../../web/src/lib/stock/rng";
@@ -59,6 +60,46 @@ describe("규칙 엔진", () => {
     expect(g.curve.length).toBe(BATTLE.shocks + 2);
     expect(g.players.every((p) => p.hold.every((h) => h === 0))).toBe(true);
     expect(g.order(1, 0, "buy", 1, BATTLE.durationMs - 1)).toBeNull();
+  });
+
+  it("대전 속보: 변동 3초 전에 뜨고, 뜨기 전엔 없음 · 변동 뒤 적중 표시 · [속보]가 [찌라시]보다 잘 맞음", () => {
+    const g = new BattleGame(2, "news1");
+    g.advance(shockAt(0) - NEWS.leadMs - 1);
+    expect(g.news.length).toBe(0);
+    const hits: Record<string, [number, number]> = { 속보: [0, 0], 단독: [0, 0], 찌라시: [0, 0] };
+    for (let k = 0; k < 150; k++) {
+      const h = new BattleGame(2, `news${k}`);
+      for (let t = 0; t <= BATTLE.durationMs; t += 1000) {
+        h.advance(t);
+        if (k >= 5) continue;
+        for (const n of h.news) {
+          expect(n.at).toBe(shockAt(n.k) - NEWS.leadMs);
+          expect(n.at).toBeLessThanOrEqual(t);
+          // 아직 안 일어난 변동의 뉴스는 결과를 모름
+          expect(n.hit === undefined).toBe(n.k >= h.shocks);
+        }
+      }
+      for (const n of h.news) {
+        hits[n.tag][0] += n.hit ? 1 : 0;
+        hits[n.tag][1]++;
+      }
+    }
+    const rate = (t: string) => hits[t][0] / hits[t][1];
+    expect(hits.속보[1]).toBeGreaterThan(200);
+    expect(rate("속보")).toBeGreaterThan(0.65);
+    expect(rate("단독")).toBeGreaterThan(0.55);
+    expect(rate("찌라시")).toBeLessThan(0.62);
+    expect(rate("속보")).toBeGreaterThan(rate("찌라시"));
+  });
+
+  it("속보 때문에 변동을 미리 뽑아도 같은 시드의 시세는 그대로 (뉴스 난수 따로)", () => {
+    // a: 0.5초마다 진행 → 변동 3초 전에 미리 뽑고 속보를 냄 / b: 한 번에 끝까지 → 변동 순간에 뽑음
+    const a = new BattleGame(2, "same");
+    for (let t = 0; t <= BATTLE.durationMs; t += 500) a.advance(t);
+    const b = new BattleGame(2, "same");
+    b.advance(BATTLE.durationMs);
+    expect(a.news.length).toBeGreaterThan(0);
+    expect(a.priceCurve).toEqual(b.priceCurve);
   });
 
   it("봇: 봇끼리 한 판이 문제없이 돌고 돈이 음수가 되지 않음", () => {

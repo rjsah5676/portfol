@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BATTLE, STOCKS, afterBuy, afterSell, buyCost, maxBuy, sellGain, shocksBy, untilShock } from "@/lib/stock/battle";
+import { BATTLE, STOCKS, afterBuy, afterSell, buyCost, maxBuy, sellGain, shockAt, shocksBy, untilShock } from "@/lib/stock/battle";
 import { BOT_STYLES } from "@/lib/stock/bots";
+import { NEWS, type BNews, type NewsTag } from "@/lib/stock/news";
 import type { BGameWire, BResult, BRoomWire } from "@/lib/stock/types";
 import { order, sellAll, serverNow } from "@/realtime/stock";
 import { bgm, sfx } from "@/lib/stock/sound";
 import { Avatar, Btn, C, NUM, Sheet, TITLE, josa, mult, pct, signColor, won } from "./ui";
 
 /*
- * 대전 화면: 위 시계 · 남은 시간 · 내 자산 · 순위 / 왼쪽 시세판(2열 × 5) / 오른쪽 거래 패널 / 아래 거래 피드.
+ * 대전 화면: 위 시계 · 남은 시간 · 내 자산 · 순위 / 왼쪽 시세판(2열 × 5) / 오른쪽 거래 패널 / 아래 거래 피드 (속보가 뜨면 그 자리에 속보).
  * 플레이 중엔 캐릭터 컷인 · 말풍선 없음 (10초 사이클에서 한눈에 보이는 게 먼저). 큰 연출은 결과 화면 1등 발표에서만.
  * PC 단축키: 1~0 종목 · Q/W/E/R 매수 1/5/10/MAX · A/S/D/F 매도 1/5/10/전부 · Shift+A 전부 매각
  */
@@ -69,6 +70,13 @@ export function Play({
   const ranking = useMemo(() => game.players.map((p, i) => ({ i, a: p.assets })).sort((a, b) => b.a - a.a), [game.players]);
   const myRank = ranking.findIndex((r) => r.i === me) + 1;
   const hot = game.flows.map((f) => f >= BATTLE.hotShares);
+  // 속보: 뜬 뒤 변동 3초 뒤까지 아래 띠에 (변동 전엔 방향만, 변동 뒤엔 적중 · 오보)
+  const live = (game.news ?? []).filter((n) => t >= n.at && t < shockAt(n.k) + NEWS.afterMs);
+  const pendingNews = (s: number) => live.find((n) => n.stock === s && n.hit === undefined);
+  const lastNewsAt = game.news?.length ? game.news[game.news.length - 1].at : -1;
+  useEffect(() => {
+    if (lastNewsAt >= 0) sfx("warn");
+  }, [lastNewsAt]);
   const busy = useRef(false);
 
   const send = (stock: number, side: "buy" | "sell", qty: number) => {
@@ -178,6 +186,11 @@ export function Play({
                   {held}주
                 </span>
                 {hot[i] && <span className="absolute top-[1px] right-[3px] text-[10px]">🔥</span>}
+                {pendingNews(i) && (
+                  <span className="stk-blink absolute top-[1px] left-[20px] rounded-[3px] px-[3px] text-[9px] font-black" style={{ background: pendingNews(i)!.dir > 0 ? C.upBg : C.downBg, color: "#fff" }}>
+                    📰 {pendingNews(i)!.dir > 0 ? "호재" : "악재"}
+                  </span>
+                )}
                 {ev !== 0 && (
                   <span className="stk-pop absolute inset-0 flex items-center justify-center text-[18px] font-black" style={{ background: ev > 0 ? "rgba(217,48,59,0.75)" : "rgba(36,99,217,0.75)", color: "#fff" }}>
                     {ev > 0 ? "대박!" : "폭락!"} ×{(fl ?? 1).toFixed(2)}
@@ -209,9 +222,9 @@ export function Play({
 
       {/* 거래 피드 */}
       <div className="flex h-[30px] shrink-0 items-center gap-[8px] overflow-hidden px-[10px] text-[11px]" style={{ borderTop: `1px solid ${C.line}`, background: C.bg }}>
-        <span aria-hidden>📣</span>
+        <span aria-hidden>{live.length ? "📰" : "📣"}</span>
         <div className="flex min-w-0 flex-1 gap-[12px] overflow-hidden whitespace-nowrap">
-          {[...game.feed].reverse().slice(0, 6).map((f, k) => {
+          {live.length > 0 ? live.map((n) => <NewsLine key={`${n.k}-${n.stock}`} n={n} />) : [...game.feed].reverse().slice(0, 6).map((f, k) => {
             const s = room.seats[f.seat];
             return (
               <span key={`${f.at}-${k}`} style={{ color: f.side === "buy" ? C.up : C.down, opacity: 1 - k * 0.12 }}>
@@ -225,6 +238,34 @@ export function Play({
         </Btn>
       </div>
     </div>
+  );
+}
+
+const TAG_BG: Record<NewsTag, string> = { 속보: C.upBg, 단독: "#C8761A", 찌라시: "#4A5470" };
+
+/** 속보 한 줄: [속보] 게임 · 신작 사전예약 500만 돌파 ▲호재 (변동 뒤: ✔ 적중 / ✘ 오보) */
+function NewsLine({ n }: { n: BNews }) {
+  const s = STOCKS[n.stock];
+  return (
+    <span className="stk-pop flex min-w-0 items-center gap-[6px] text-[12px]">
+      <b className="shrink-0 rounded-[3px] px-[4px] text-[10px]" style={{ background: TAG_BG[n.tag], color: "#fff" }}>
+        {n.tag}
+      </b>
+      <b className="shrink-0" style={{ color: s.color }}>
+        {s.name}
+      </b>
+      <span className="min-w-0 truncate font-bold" style={{ color: C.text }}>
+        {n.text}
+      </span>
+      <b className="shrink-0" style={{ color: n.dir > 0 ? C.up : C.down }}>
+        {n.dir > 0 ? "▲호재" : "▼악재"}
+      </b>
+      {n.hit !== undefined && (
+        <b className="stk-pop shrink-0" style={{ color: n.hit ? C.green : C.mute }}>
+          {n.hit ? "✔ 적중" : "✘ 오보ㅋㅋ"}
+        </b>
+      )}
+    </span>
   );
 }
 

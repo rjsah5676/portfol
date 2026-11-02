@@ -181,6 +181,8 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
       map: r.map,
       feed,
       shock: r.lastShock,
+      // 아직 안 뜬 속보는 안 보냄 (주문 처리 중 미리 만들어졌어도 뜬 시각 전이면 숨김)
+      news: g.news.filter((n) => n.at <= t).slice(-4),
       over: g.over,
     };
   }
@@ -522,6 +524,8 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
 
   // ───────────── 틱 · 끝 ─────────────
 
+  /** 방마다 내보낸 속보 수 (주문 처리 중에 뜬 속보도 다음 틱에 내보내게) */
+  const newsSent = new WeakMap<Room, number>();
   function tick() {
     for (const r of rooms.values()) {
       const g = r.game;
@@ -531,6 +535,10 @@ export function createBattle(db: Database, gateway: Gateway, opts: BattleOptions
       if (sh.length) {
         const e = sh[sh.length - 1];
         r.lastShock = { k: e.k, mult: e.mult, ev: e.ev };
+        r.dirty = true;
+      }
+      if (g.news.length !== (newsSent.get(r) ?? 0)) {
+        newsSent.set(r, g.news.length);
         r.dirty = true;
       }
       if (!g.over)

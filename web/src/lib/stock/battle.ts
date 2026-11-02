@@ -7,12 +7,14 @@
  *   → 사고 바로 되팔면 시세는 제자리 · 돈은 1주마다 1%쯤 손해 (사고팔기를 반복해서 돈을 찍어 내는 구멍 없음)
  *   (처음 안 "체결 = 움직이기 전 시세 · 매도 ×0.99"는 1.01 × 0.99 < 1 이라 왕복할 때마다 돈이 생겨서 바꿈, 11.01)
  *   수수료 없음 · 체결은 서버 도착 순서.
+ * 변동 3초 전에 속보가 뜸 (news.ts — 맞을 때도 틀릴 때도 있음).
  * 끝나면 보유 주식을 그 순간 시세(임팩트 없이)로 현금화 → 돈이 제일 많은 사람이 1등.
  *
  * 금액은 원 단위 정수(현금 · 체결 금액), 시세는 실수(표시할 때 반올림).
  */
 
 import { normal, rngFrom, uniform, type Rng } from "./rng";
+import { NEWS, makeNews, type BNews } from "./news";
 
 export const BATTLE = {
   minPlayers: 2,
@@ -174,11 +176,19 @@ export class BattleGame {
   priceCurve: number[][] = [];
   over = false;
   readonly liquidate: Liquidate;
+  /** 속보 (news.ts) — 시세와 다른 난수 */
+  news: BNews[] = [];
+  private newsK = -1;
+  private readonly newsRng: Rng;
+  private readonly newsUsed = new Set<string>();
+  /** 미리 뽑아 둔 다음 변동 */
+  private pending: { m: number; e: number }[] | null = null;
 
   constructor(n: number, seed: string, opts: { liquidate?: Liquidate } = {}) {
     this.n = n;
     this.liquidate = opts.liquidate ?? BATTLE.liquidate;
     this.rng = rngFrom(`battle:${seed}`);
+    this.newsRng = rngFrom(`battle-news:${seed}`);
     this.prices = Array(N_STOCKS).fill(BATTLE.startPrice);
     this.base = [...this.prices];
     this.last = Array(N_STOCKS).fill(1);
@@ -270,6 +280,19 @@ export class BattleGame {
     return { m: Math.exp(x), e: 0 };
   }
 
+  /** 다음 변동을 미리 뽑아 둠 (속보가 보고 만들게). 뽑는 순서는 예전과 같아서 같은 시드면 시세도 같음 */
+  private peek(): { m: number; e: number }[] {
+    if (!this.pending) this.pending = STOCKS.map(() => this.draw());
+    return this.pending;
+  }
+
+  /** k 번째 변동의 속보를 (아직 안 냈으면) 냄 */
+  private publish(k: number) {
+    if (k <= this.newsK || k >= BATTLE.shocks) return;
+    this.newsK = k;
+    this.news.push(...makeNews(k, this.peek(), this.newsRng, shockAt(k) - NEWS.leadMs, this.newsUsed));
+  }
+
   /** 시간을 at(판 시작부터 ms)까지 진행: 지난 변동을 적용하고, 끝났으면 over. 일어난 변동들을 돌려줌 */
   advance(at: number): ShockEv[] {
     const out: ShockEv[] = [];
@@ -277,15 +300,19 @@ export class BattleGame {
     const due = shocksBy(at);
     while (this.shocks < due) {
       const k = this.shocks;
+      this.publish(k);
+      const draws = this.peek();
+      this.pending = null;
       const mult: number[] = [],
         ev: number[] = [];
       for (let s = 0; s < N_STOCKS; s++) {
-        const d = this.draw();
+        const d = draws[s];
         const np = Math.max(BATTLE.floor, this.prices[s] * d.m);
         mult.push(np / this.prices[s]);
         ev.push(d.e);
         this.prices[s] = np;
       }
+      for (const n of this.news) if (n.k === k) n.hit = n.dir > 0 ? mult[n.stock] > 1 : mult[n.stock] < 1;
       this.base = [...this.prices];
       this.last = mult;
       this.lastEv = ev;
@@ -296,6 +323,8 @@ export class BattleGame {
       this.priceCurve.push([...this.prices]);
       out.push(e);
     }
+    // 다음 변동 3초 전이면 속보
+    if (this.shocks < BATTLE.shocks && at >= shockAt(this.shocks) - NEWS.leadMs) this.publish(this.shocks);
     if (at >= BATTLE.durationMs) this.finish();
     return out;
   }
