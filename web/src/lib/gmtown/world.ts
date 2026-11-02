@@ -720,9 +720,9 @@ export function toCam(vx: number, vy: number, yaw = YAW): [number, number] {
   return [vx * c - vy * s, vx * s + vy * c];
 }
 /** 화면 방향 (오른쪽 sx, 아래 sy — px 비율) → 땅 위 방향 (화면에서 그 방향으로 보이게, 세로는 sin35 로 눌린 것을 펴서) */
-export function fromScreen(sx: number, sy: number, yaw = YAW): [number, number] {
+export function fromScreen(sx: number, sy: number, yaw = YAW, pitch = PITCH): [number, number] {
   const u = sx,
-    v = sy / Math.sin(PITCH);
+    v = sy / Math.sin(pitch);
   const c = Math.cos(yaw),
     s = Math.sin(yaw);
   return [u * c + v * s, v * c - u * s];
@@ -732,9 +732,16 @@ export function fromScreen(sx: number, sy: number, yaw = YAW): [number, number] 
  * 이 점이 건물 b 에 가려지는지 (카메라 쪽으로 h/tan35 만큼 가는 동안 건물 안을 지나면)
  * — 문 · 길 배치 검사 · 내 캐릭터가 뒤에 있을 때 건물을 비치게 할 때 씀. lift = 점의 높이 (머리면 1.6)
  */
-export function hiddenBy(b: Building, x: number, y: number, lift = 0, yaw = YAW): boolean {
+export function hiddenBy(
+  b: Building,
+  x: number,
+  y: number,
+  lift = 0,
+  yaw = YAW,
+  pitch = PITCH
+): boolean {
   if (isLot(b) || b.h <= lift) return false;
-  const reach = (b.h - lift) / Math.tan(PITCH);
+  const reach = (b.h - lift) / Math.tan(pitch);
   const steps = Math.ceil(reach / 0.25);
   const ux = Math.sin(yaw),
     uy = Math.cos(yaw);
