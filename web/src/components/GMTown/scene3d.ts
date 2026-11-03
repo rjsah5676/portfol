@@ -1,10 +1,11 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
   ARCH,
   BENCHES,
   BOARD,
+  BOUNDS,
   BRIDGES,
   BRIDGE_H,
   BUILDINGS,
@@ -54,6 +55,8 @@ export const TOWN_FILES = {
     "/gmtown/props/props3.glb",
     "/gmtown/props/fountain.glb",
     "/gmtown/props/arch.glb",
+    "/gmtown/props/props4.glb",
+    "/gmtown/props/trees.glb",
   ],
   tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand" | "rail") => `/gmtown/tex/${n}.webp`,
 };
@@ -836,11 +839,23 @@ diffuseColor.rgb *= col;`
   // ── 소품 (Meshy 소품 시트 한 장 → 바위 · 덤불 · 우체통 · 쓰레기통 · 통 · 상자 …) ──
   /** 모델로 그린 것 (가로등 · 벤치 · 분수 · 아치는 모델이 있으면 예전 코드 모양을 안 그림) */
   const modeled = new Set<string>();
+  /** 소품 GLB 에서 꺼낸 모델 (이름 → 메시) — 나무도 여기서 꺼내 씀 */
+  const propSrc = new Map<string, THREE.Mesh>();
+  /** 소품 외곽선 재질: 법선 방향으로 2cm (크기 배수만큼) */
+  const propInk = own(new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
+  propInk.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace(
+      "#include <begin_vertex>",
+      "#include <begin_vertex>\ntransformed += normalize( normal ) * 0.02;"
+    );
+  };
   try {
-    const src = new Map<string, THREE.Mesh>();
-    const gls = await Promise.all(TOWN_FILES.props.map((u) => new GLTFLoader().loadAsync(u)));
+    const src = propSrc;
+    const gls = await Promise.all(
+      TOWN_FILES.props.map((u) => new GLTFLoader().loadAsync(u).catch(() => null))
+    );
     for (const gl of gls)
-      gl.scene.traverse((o) => {
+      gl?.scene.traverse((o) => {
         if ((o as THREE.Mesh).isMesh) src.set(o.name, o as THREE.Mesh);
       });
     // 소화전은 단순해서 코드로 (Meshy 가 시트에서 빠뜨림)
@@ -894,8 +909,25 @@ diffuseColor.rgb *= col;`
       all.push({ kind: "lamp", x: l.x, y: l.y, a: Math.atan2(-dy, dx), s: 1 });
     }
     for (const bn of BENCHES) all.push({ kind: "bench", x: bn.x, y: bn.y, a: Math.PI / 2 - bn.a, s: 1.15 });
-    all.push({ kind: "fountain", x: FOUNTAIN.x, y: FOUNTAIN.y, a: 0, s: 1 });
+    all.push({ kind: "fountain", x: FOUNTAIN.x, y: FOUNTAIN.y, a: 0, s: 1.11 });
     all.push({ kind: "arch", x: ARCH.x, y: ARCH.y, a: 0, s: 1 });
+    all.push({ kind: "notice", x: BOARD.x, y: BOARD.y, a: 0.3, s: 0.95 });
+    // 꽃밭: 꽃 덤불 모델을 고르게 (예전 꽃잎 공 대신)
+    if (src.has("flowers"))
+      FLOWERS.forEach((f, fi) => {
+        const n = Math.max(3, Math.round(f.r * f.r * 1.7));
+        for (let i = 0; i < n; i++) {
+          const ang = (i * 137.5 + fi * 11) * (Math.PI / 180),
+            rr = Math.sqrt((i + 0.5) / n) * (f.r - 0.25);
+          all.push({
+            kind: "flowers",
+            x: f.x + Math.cos(ang) * rr,
+            y: f.y + Math.sin(ang) * rr * 0.8,
+            a: (i * 2.3 + fi) % 6.28,
+            s: 1.15 + ((i * 7 + fi) % 5) * 0.08,
+          });
+        }
+      });
     const kinds = [...new Set(all.map((p) => p.kind))];
     for (const kind of kinds) {
       const mesh = src.get(kind);
@@ -909,22 +941,21 @@ diffuseColor.rgb *= col;`
         new THREE.MeshToonMaterial({ map: old.map ?? null, gradientMap: grad, vertexColors: !!old.vertexColors })
       );
       old.dispose();
-      geo.computeBoundingBox();
-      const c = geo.boundingBox!.getCenter(new THREE.Vector3());
-      // 외곽선: 가운데 기준으로 조금 키운 뒤집은 껍데기
-      const inkM = new THREE.Matrix4()
-        .makeTranslation(c.x, c.y, c.z)
-        .multiply(new THREE.Matrix4().makeScale(1.035, 1.035, 1.035))
-        .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+      // 외곽선: 겉면을 (꼭짓점 평균) 법선 방향으로 밀어낸 뒤집은 껍데기 — 오목한 곳에서도 안 뚫고 나옴
+      const shell = new THREE.BufferGeometry();
+      shell.setAttribute("position", geo.getAttribute("position"));
+      if (geo.index) shell.setIndex(geo.index);
+      const inkGeo = own(mergeVertices(shell, 1e-4));
+      inkGeo.computeVertexNormals();
       const body = new THREE.InstancedMesh(geo, mat, list.length);
-      const ink = new THREE.InstancedMesh(geo, inkShared, list.length);
+      const ink = new THREE.InstancedMesh(inkGeo, propInk, list.length);
       list.forEach((p, i) => {
         q.setFromAxisAngle(up, p.a);
         v.set(p.x, (kind === "fountain" ? 0 : heightAt(p.x, p.y)) - 0.02, p.y);
         sc.setScalar(p.s);
         m4.compose(v, q, sc);
         body.setMatrixAt(i, m4);
-        ink.setMatrixAt(i, m4.clone().multiply(inkM));
+        ink.setMatrixAt(i, m4);
       });
       body.castShadow = body.receiveShadow = true;
       body.computeBoundingSphere();
@@ -1132,7 +1163,7 @@ diffuseColor.rgb *= col;`
     }
     const dropG = own(new THREE.SphereGeometry(0.13, 8, 6));
     const dropM = own(new THREE.MeshBasicMaterial({ color: 0xe6f7ff }));
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < (old ? 8 : 0); i++) {
       const j = new THREE.Mesh(dropG, dropM);
       j.userData.a = (i / 8) * Math.PI * 2;
       scene.add(j);
@@ -1232,20 +1263,45 @@ if ( vFade > 0.01 ) {
 }`
         );
     };
+    // 걸어 다니는 마을 안 (+6m) 나무는 Meshy 나무 모델로, 바깥 숲 · 산은 가벼운 코드 나무로
+    const modelTree = (k: string) => propSrc.get("tree_" + k);
+    const near = (t: (typeof TREES)[number]) =>
+      t.x > BOUNDS.x0 - 6 && t.y > BOUNDS.y0 - 6 && t.x < BOUNDS.x1 + 6 && t.y < BOUNDS.y1 + 6;
+    const tMats = new Map<string, THREE.MeshToonMaterial>();
     const C = 24;
     const buckets = new Map<string, typeof TREES>();
     for (const t of TREES) {
-      const k = `${t.kind}:${Math.floor(t.x / C)}:${Math.floor(t.y / C)}`;
+      const useModel = near(t) && !!modelTree(t.kind);
+      const k = `${useModel ? "m_" : ""}${t.kind}:${Math.floor(t.x / C)}:${Math.floor(t.y / C)}`;
       let l = buckets.get(k);
       if (!l) buckets.set(k, (l = []));
       l.push(t);
     }
     const o = new THREE.Object3D();
     for (const [k, list] of buckets) {
-      const kind = k.split(":")[0] as keyof typeof kinds;
-      const im = new THREE.InstancedMesh(kinds[kind], treeM, list.length);
+      const key = k.split(":")[0];
+      const isM = key.startsWith("m_");
+      const kind = (isM ? key.slice(2) : key) as keyof typeof kinds;
+      let geo = kinds[kind],
+        mat: THREE.Material = treeM;
+      if (isM) {
+        const mm = modelTree(kind)!;
+        geo = mm.geometry;
+        let tm = tMats.get(kind);
+        if (!tm) {
+          const old = mm.material as THREE.MeshStandardMaterial;
+          own(mm.geometry);
+          if (old.map) own(old.map);
+          tm = own(new THREE.MeshToonMaterial({ map: old.map ?? null, gradientMap: grad }));
+          tm.onBeforeCompile = treeM.onBeforeCompile;
+          tm.customProgramCacheKey = () => "tree-fade-map";
+          tMats.set(kind, tm);
+        }
+        mat = tm;
+      }
+      const im = new THREE.InstancedMesh(geo, mat, list.length);
       list.forEach((t, i) => {
-        o.position.set(t.x, heightAt(t.x, t.y) - 0.08, t.y);
+        o.position.set(t.x, heightAt(t.x, t.y) - (isM ? 0.05 : 0.08), t.y);
         o.rotation.set(0, (t.x * 7 + t.y * 3) % 6.28, 0);
         o.scale.setScalar(t.s);
         o.updateMatrix();
@@ -1331,7 +1387,7 @@ if ( vFade > 0.01 ) {
       }
     });
     const fg = new THREE.IcosahedronGeometry(0.15, 0);
-    for (const [c, list] of byCol) inst(fg.clone(), toon(c), list, 0.17, false);
+    if (!modeled.has("flowers")) for (const [c, list] of byCol) inst(fg.clone(), toon(c), list, 0.17, false);
     fg.dispose();
     // 꽃밭 잎사귀 바닥
     const leaf = toon(0x4f9a46);
@@ -1396,19 +1452,25 @@ if ( vFade > 0.01 ) {
 
     // 안내판
     const bd = new THREE.Group();
-    const post = new THREE.Mesh(own(new THREE.BoxGeometry(0.14, 1.5, 0.14)), toon(0x8a5a3b));
-    post.position.y = 0.75;
-    bd.add(post);
     const tex = own(woodSign("마을 안내", "눌러서 보기"));
-    const board = new THREE.Mesh(own(new THREE.BoxGeometry(1.6, 0.67, 0.08)), toon(0x8a5a3b));
-    board.position.y = 1.55;
-    board.castShadow = true;
-    withInk(bd, board, 0.06);
     const face = new THREE.Mesh(
       own(new THREE.PlaneGeometry(1.5, 0.62)),
       own(new THREE.MeshBasicMaterial({ map: tex }))
     );
-    face.position.set(0, 1.55, 0.045);
+    if (modeled.has("notice")) {
+      // 모델 게시판 판 위에 안내 글 (판 앞면 · 크기 0.95)
+      face.scale.setScalar(0.72);
+      face.position.set(0, 1.2 * 0.95, 0.2 * 0.95);
+    } else {
+      const post = new THREE.Mesh(own(new THREE.BoxGeometry(0.14, 1.5, 0.14)), toon(0x8a5a3b));
+      post.position.y = 0.75;
+      bd.add(post);
+      const board = new THREE.Mesh(own(new THREE.BoxGeometry(1.6, 0.67, 0.08)), toon(0x8a5a3b));
+      board.position.y = 1.55;
+      board.castShadow = true;
+      withInk(bd, board, 0.06);
+      face.position.set(0, 1.55, 0.045);
+    }
     bd.add(face);
     bd.position.set(BOARD.x, heightAt(BOARD.x, BOARD.y), BOARD.y);
     bd.rotation.y = 0.3;
@@ -1488,11 +1550,13 @@ if ( vFade > 0.01 ) {
         local.z + 0.045
       );
       const cone = mt(0xff7a2f);
-      for (const [x, z] of [
-        [-W / 2 + 1.5, D / 2 - 1.4],
-        [W / 2 - 1.6, D / 2 - 1.2],
-        [W / 2 - 2.6, -D / 2 + 1.8],
-      ]) {
+      for (const [x, z] of modeled.has("cone")
+        ? []
+        : [
+            [-W / 2 + 1.5, D / 2 - 1.4],
+            [W / 2 - 1.6, D / 2 - 1.2],
+            [W / 2 - 2.6, -D / 2 + 1.8],
+          ]) {
         const c = new THREE.Mesh(own(new THREE.ConeGeometry(0.28, 0.7, 12)), cone);
         c.position.set(x, 0.35, z);
         c.castShadow = true;

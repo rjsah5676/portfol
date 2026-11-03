@@ -727,7 +727,10 @@ export type PropKind =
   | "picnic"
   | "topiary"
   | "cart"
-  | "plight";
+  | "plight"
+  | "well"
+  | "busstop"
+  | "cone";
 export interface Prop {
   kind: PropKind;
   x: number;
@@ -752,9 +755,12 @@ export const PROP_R: Record<PropKind, number> = {
   topiary: 0.42,
   cart: 0.6,
   plight: 0.13,
+  well: 1.0,
+  busstop: 0.75,
+  cone: 0.24,
 };
 /** 길쭉한 소품: 모델 x 축으로 이만큼(크기 1) 늘어난 캡슐로 부딪힘 */
-export const PROP_LEN: Partial<Record<PropKind, number>> = { planter: 0.6, vending: 0.2, picnic: 0.3, cart: 0.5 };
+export const PROP_LEN: Partial<Record<PropKind, number>> = { planter: 0.6, vending: 0.2, picnic: 0.3, cart: 0.5, busstop: 1.8 };
 /** 소품 부딪힘 캡슐 양 끝 (모델 x 축 = 땅 (cos a, −sin a)) */
 export function propSeg(p: Prop): [number, number, number, number] {
   const h = ((PROP_LEN[p.kind] ?? 0) * p.s) / 2,
@@ -802,7 +808,7 @@ function makeProps(): Prop[] {
     }
     const x = (a + c) / 2 + dx * 1.15 + nx * 0.45,
       y = (b + d) / 2 + dy * 1.15 + ny * 0.45;
-    out.push({ kind: "mailbox", x, y, a: Math.atan2(nx, ny), s: 0.85 });
+    out.push({ kind: "mailbox", x, y, a: Math.atan2(nx, ny), s: 1 });
   }
   // 쓰레기통: 벤치 옆 (광장은 하나 건너 하나)
   BENCHES.forEach((bn, i) => {
@@ -826,6 +832,14 @@ function makeProps(): Prop[] {
       cy = b.y + b.d / 2;
     const P = (lx: number, lz: number) => ({ x: cx + lx * c + lz * sn, y: cy - lx * sn + lz * c });
     const k = hash01(b.x, b.y);
+    for (const [lx, lz] of [
+      [-W / 2 + 1.5, D / 2 - 1.4],
+      [W / 2 - 1.6, D / 2 - 1.2],
+      [W / 2 - 2.6, -D / 2 + 1.8],
+    ]) {
+      const cp = P(lx, lz);
+      out.push({ kind: "cone", x: cp.x, y: cp.y, a: k * 6.28 + lx, s: 1 });
+    }
     const cr = P(-W / 2 + 1.3, -D / 2 + 1.3);
     out.push({ kind: "crates", x: cr.x, y: cr.y, a: th + k * 0.6, s: 1 });
     const br = P(W / 2 - 1.15, -D / 2 + 1.1);
@@ -919,6 +933,42 @@ function makeProps(): Prop[] {
       const y = 100 + sd * 4.9;
       if (offRoad(x, y, 0.9)) out.push({ kind: "planter", x, y, a: 0, s: 1.2 });
     }
+  // 버스 정류장: 중앙대로 동쪽 · 상점가 남쪽 · 강 건너 길 (길을 봄). 자리가 막히면 길 따라 조금씩 옮겨 봄
+  const stop = (x0: number, y0: number, ax: number, ay: number, fx: number, fy: number) => {
+    for (let k = 0; k < 12; k++) {
+      const d = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 1.5;
+      const x = x0 + ax * d,
+        y = y0 + ay * d;
+      const p: Prop = { kind: "busstop", x, y, a: Math.atan2(fx, fy), s: 1 };
+      const [sx, sy, ex, ey] = propSeg(p);
+      if (
+        clear(sx, sy, 0.9) &&
+        clear(ex, ey, 0.9) &&
+        !nearBuilding(x, y, 0.3) &&
+        pathDist(sx, sy) > 0.2 &&
+        pathDist(ex, ey) > 0.2
+      )
+        return void out.push(p);
+    }
+  };
+  stop(100 + 5 + 1.6, 134, 0, 1, -1, 0);
+  stop(64, 100 + 3.5 + 1.6, 1, 0, 0, -1);
+  stop(100 - 5 - 1.6, 122, 0, 1, 1, 0);
+  stop(176, 100 + 3.5 + 1.6, 1, 0, 0, -1);
+  // 우물: 주택가 가운데 · 호수 공원 (빈 풀밭을 찾아서)
+  const well = (cx: number, cy: number) => {
+    for (let k = 0; k < 120; k++) {
+      const a = k * 2.4,
+        r = 0.4 * k ** 0.5 * 1.6;
+      const x = cx + Math.cos(a) * r,
+        y = cy + Math.sin(a) * r;
+      if (clear(x, y, 1.3) && pathDist(x, y) > 1.4 && !inYard(x, y, 1.0) && !nearBuilding(x, y, 0.5) && !nearRiver(x, y, 1))
+        return void out.push({ kind: "well", x, y, a: 0.4, s: 1 });
+    }
+  };
+  well(40, 131);
+  if (!out.some((p) => p.kind === "well")) well(22, 150);
+  well(LAKE.x + 2, LAKE.y - LAKE.ry - 4);
   // 정원등: 계단길 양옆 (5m 마다 번갈아) · 공원 계단 입구
   for (const p of PATHS) {
     if (!p.stairs) continue;
