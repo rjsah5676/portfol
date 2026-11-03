@@ -164,7 +164,7 @@ const TOON_SHADE = 0.8;
 const INK_PX = 0.75;
 const INK_COLOR = 0x3a2a3e;
 /** 눈 조각: 얼굴 위에 살짝 띄움 · 앞머리 위로 한 번 더 그릴 때 카메라 쪽으로 당기는 거리 (모델 키 1 기준, 앞머리~눈 틈 0.07) */
-const EYE_LIFT = 0.004 * RIG_SCALE;
+const EYE_LIFT = 0.0015 * RIG_SCALE;
 const EYE_OVER = 0.12 * RIG_SCALE;
 /** 트윈테일 흔들림: 원래 자세로 당기는 힘 · 흔들림 남는 정도(60fps 한 프레임 기준) · 처짐 · 원래 자세에서 최대 벌어짐 */
 const TAIL_PULL = 0.08;
@@ -290,7 +290,8 @@ export class TownEngine {
   /** 3D 캐릭터 공용 재질 (툰 · 외곽선 · 가려졌을 때) — 캐릭터 종류마다 하나 */
   private rigMats = new Map<string, RigMats>();
   private toonU = { uLight: { value: new THREE.Vector3() }, uShade: { value: TOON_SHADE } };
-  private inkU = { uInk: { value: 1 }, uRes: { value: new THREE.Vector2(1, 1) } };
+  /** 외곽선: 깊이 1m 에서의 두께(m) — 화면 px × (그 깊이에서 1px 의 크기) */
+  private inkU = { uInk: { value: 0.001 } };
   private sky: THREE.Mesh | null = null;
   private sheetGeo = new Map<string, THREE.BufferGeometry>();
   private shadowGeo = new THREE.CircleGeometry(0.42, 24);
@@ -548,7 +549,6 @@ export class TownEngine {
     this.camera.updateProjectionMatrix();
     const halfW = Math.tan((fov * DEG) / 2) * aspect;
     this.baseDist = CAM_DIST * Math.max(1, Math.min(1.7, 11 / (2 * CAM_DIST * halfW)));
-    this.inkU.uRes.value.set(cw * dpr, ch * dpr);
   }
 
   /** 화면 px → 땅 위 점 */
@@ -1166,7 +1166,8 @@ export class TownEngine {
     const aniso = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     if (tex) tex.anisotropy = aniso;
     if (etex) etex.anisotropy = aniso;
-    const toon = new THREE.MeshToonMaterial({ map: tex });
+    // 양면: Tripo 메시에 뒤집힌 면이 섞여 있어서 한 면만 그리면 그 자리로 외곽선 껍데기가 비쳐 검은 점이 됨
+    const toon = new THREE.MeshToonMaterial({ map: tex, side: THREE.DoubleSide });
     toon.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU);
       sh.fragmentShader = sh.fragmentShader
@@ -1181,13 +1182,24 @@ export class TownEngine {
     ink.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.inkU);
       sh.vertexShader = sh.vertexShader
-        .replace("void main() {", "uniform float uInk;\nuniform vec2 uRes;\nvoid main() {")
+        .replace("void main() {", "uniform float uInk;\nvarying float vInkZ;\nvoid main() {")
         .replace(
           "#include <project_vertex>",
+          // 법선 방향(3D)으로, 그 깊이에서 화면 uInk px 만큼 + 카메라 반대쪽으로 2.5cm 더 (화면 위치는 그대로, 깊이만)
+          // → 옷 · 머리 겹 사이가 얇은 곳에서 안쪽 겹의 껍데기가 바깥 겹을 뚫고 검은 점으로 보이지 않게
           `#include <project_vertex>
-vec2 inkN = ( projectionMatrix * vec4( transformedNormal, 0.0 ) ).xy;
-gl_Position.xy += normalize( inkN + 1e-6 ) * uInk * 2.0 / uRes * gl_Position.w;`
+float inkW = uInk * max( -mvPosition.z, 0.05 );
+vec3 inkP = mvPosition.xyz + normalize( transformedNormal ) * inkW;
+inkP += normalize( mvPosition.xyz ) * ( inkW * 2.0 + 0.025 );
+gl_Position = projectionMatrix * vec4( inkP, 1.0 );
+vInkZ = normalize( transformedNormal ).z;`
         );
+      // 껍데기 중 정반대(뒤쪽)를 보는 면은 버림: 외곽선은 옆을 보는 면에서만 생김.
+      // 뒤쪽 면은 몸 · 옷의 작은 틈이나 얇은 겹을 지나 앞으로 비쳐서 검은 점 · 머리끝 찌꺼기가 됐음
+      sh.fragmentShader = sh.fragmentShader.replace(
+        "void main() {",
+        "varying float vInkZ;\nvoid main() {\nif ( vInkZ < -0.5 ) discard;"
+      );
     };
     const ghost = new THREE.MeshBasicMaterial({
       map: tex,
@@ -1232,11 +1244,15 @@ gl_Position.xy += normalize( inkN + 1e-6 ) * uInk * 2.0 / uRes * gl_Position.w;`
           "#include <map_fragment>",
           `vec4 sampledDiffuseColor = texture2D( map, vMapUv, -0.8 );
 diffuseColor *= sampledDiffuseColor;` +
+            (!over
+              ? `
+diffuseColor.a *= smoothstep( 0.05, 0.3, normalize( vNormal ).z );`
+              : "") +
             (over
               ? `
 float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
 diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ) )
-  * smoothstep( 0.35, 0.7, normalize( vNormal ).z );`
+  * smoothstep( 0.6, 0.85, normalize( vNormal ).z );`
               : "")
         )
         .replace(
@@ -1544,7 +1560,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
       // 3D 캐릭터: 빛 방향은 카메라 기준으로, 외곽선은 화면에서 INK_PX 두께 (밀면 얇게, 당기면 조금만 두껍게)
       this.toonU.uLight.value.copy(TOON_LIGHT);
       const inkPx = INK_PX * Math.max(0.35, Math.min(1.15, this.baseDist / this.dist));
-      this.inkU.uInk.value = inkPx * this.dpr;
+      this.inkU.uInk.value = (inkPx * 2 * Math.tan((cam.fov * DEG) / 2)) / Math.max(1, this.ch);
       // 사람
       for (const a of this.others.values()) this.placeAvatar(a, dt);
       if (this.me) this.placeAvatar(this.me, dt);
