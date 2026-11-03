@@ -1239,7 +1239,7 @@ export class TownEngine {
           `#include <project_vertex>
 float inkW = uInk * max( -mvPosition.z, 0.05 );
 vec3 inkP = mvPosition.xyz + normalize( transformedNormal ) * inkW;
-inkP += normalize( mvPosition.xyz ) * ( inkW * 2.0 + 0.025 );
+inkP += normalize( mvPosition.xyz ) * ( inkW * 2.0 + 0.05 );
 gl_Position = projectionMatrix * vec4( inkP, 1.0 );
 vInkZ = normalize( transformedNormal ).z;`
         );
