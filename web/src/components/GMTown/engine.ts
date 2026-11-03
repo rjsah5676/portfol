@@ -219,62 +219,6 @@ function isEyes(o: THREE.Object3D) {
   return o.name.startsWith("eyes") || (o.parent?.name.startsWith("eyes") ?? false);
 }
 
-/**
- * 얼굴 살 표시 (aFlat = 1): 머리 뼈를 주로 따르는 점 중 텍스처가 피부색인 곳 → 툰 그늘을 안 넣음 (얼굴이 반쪽만 어두워지지 않게).
- * 머리카락(금발 · 분홍 · 파랑)은 색으로 빠짐. 모델마다 한 번, 복제본은 같은 geometry 를 씀
- */
-function markFlatFace(scene: THREE.Object3D, tex: THREE.Texture | null) {
-  const img = tex?.image as CanvasImageSource | undefined;
-  let px: Uint8ClampedArray | null = null;
-  const S = 1024;
-  if (img) {
-    try {
-      const cv = document.createElement("canvas");
-      cv.width = cv.height = S;
-      const cx = cv.getContext("2d", { willReadFrequently: true });
-      if (cx) {
-        cx.drawImage(img, 0, 0, S, S);
-        px = cx.getImageData(0, 0, S, S).data;
-      }
-    } catch {
-      px = null;
-    }
-  }
-  scene.traverse((o) => {
-    if (!(o instanceof THREE.SkinnedMesh) || isEyes(o)) return;
-    if (((o.material as THREE.MeshStandardMaterial).map ?? null) !== tex) return;
-    const g = o.geometry as THREE.BufferGeometry;
-    if (g.getAttribute("aFlat")) return;
-    const n = g.getAttribute("position").count;
-    const flat = new Float32Array(n);
-    const uv = g.getAttribute("uv"),
-      si = g.getAttribute("skinIndex"),
-      sw = g.getAttribute("skinWeight");
-    const head = o.skeleton.bones.findIndex((b) => /Head$/.test(b.name));
-    if (px && uv && si && sw && head >= 0)
-      for (let i = 0; i < n; i++) {
-        let best = 0,
-          bw = -1;
-        for (let k = 0; k < 4; k++) {
-          const w = sw.getComponent(i, k);
-          if (w > bw) {
-            bw = w;
-            best = si.getComponent(i, k);
-          }
-        }
-        if (best !== head) continue;
-        const x = Math.min(S - 1, Math.max(0, Math.floor(uv.getX(i) * S))),
-          y = Math.min(S - 1, Math.max(0, Math.floor(uv.getY(i) * S)));
-        const j = (y * S + x) * 4,
-          r = px[j],
-          gg = px[j + 1],
-          b = px[j + 2];
-        if (r > 215 && gg > 170 && b > 160 && r >= gg && gg >= b - 10 && r - gg < 58) flat[i] = 1;
-      }
-    g.setAttribute("aFlat", new THREE.BufferAttribute(flat, 1));
-  });
-}
-
 /** 뛰기로 바뀌는 거리 (누른 곳까지 길 길이, m) */
 const RUN_FAR = 5;
 /** 걷기 · 뛰기 동작이 발이 안 미끄러지는 속도 (동작 1배속일 때 m/초) */
@@ -1298,7 +1242,6 @@ export class TownEngine {
     if (etex) etex.anisotropy = aniso;
     const byMap: RigMats["byMap"] = new Map();
     for (const t of maps) {
-      markFlatFace(scene, t);
       byMap.set(t, { toon: this.toonMat(t), ghost: this.ghostMat(t) });
     }
     const first = byMap.get(maps[0] ?? null) ?? { toon: this.toonMat(null), ghost: this.ghostMat(null) };
@@ -1348,13 +1291,11 @@ vInkZ = normalize( transformedNormal ).z;`
     });
     toon.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU);
-      sh.vertexShader = sh.vertexShader
-        .replace("void main() {", "attribute float aFlat;\nvarying float vFlat;\nvoid main() {\nvFlat = aFlat;");
       sh.fragmentShader = sh.fragmentShader
-        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvarying float vFlat;\nvoid main() {")
+        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvoid main() {")
         .replace(
           "#include <opaque_fragment>",
-          `outgoingLight = diffuseColor.rgb * mix( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade, 1.0, step( 0.5, vFlat ) );
+          `outgoingLight = diffuseColor.rgb * ( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade );
 #include <opaque_fragment>`
         );
     };
