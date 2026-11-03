@@ -108,6 +108,8 @@ interface Tail {
   root0: THREE.Vector3;
   vel: THREE.Vector3;
   ready: boolean;
+  /** 흔들림 성질 (트윈테일 · 긴 뒷머리 가닥) */
+  k: TailK;
 }
 
 interface Avatar {
@@ -188,6 +190,14 @@ const TAIL_G = 2.0;
 const TAIL_MAX = (30 * Math.PI) / 180;
 /** 머리의 출렁임(걸음마다 위아래 · 좌우 흔들림)을 꼬리가 이만큼 크게 느낌 — 꾸준히 가는 속도는 빼고 */
 const TAIL_BOUNCE = 3;
+type TailK = { pull: number; damp: number; g: number; max: number; bounce: number; noFwd: boolean };
+const TWIN_K: TailK = { pull: TAIL_PULL, damp: TAIL_DAMP, g: TAIL_G, max: TAIL_MAX, bounce: TAIL_BOUNCE, noFwd: false };
+/** 긴 뒷머리 가닥: 덩어리라 덜 휘고 빨리 돌아옴 · 몸 앞쪽(원래 자세보다 앞)으로는 못 넘어감 — 멈출 때 몸 뚫기 막음 */
+const BACK_K: TailK = { pull: 0.2, damp: 0.84, g: 1.2, max: (13 * Math.PI) / 180, bounce: 1.6, noFwd: true };
+const TAIL_NAMES: [string, TailK][] = [
+  ...["TailA", "TailB", "TailC", "TailD"].map((n) => [n, TWIN_K] as [string, TailK]),
+  ..."ABCDEFGH".split("").map((c) => ["Back" + c, BACK_K] as [string, TailK]),
+];
 
 type RigMats = {
   toon: THREE.Material;
@@ -1390,7 +1400,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
     town.scene.add(root, shadow);
     a.face = a.faceTo ?? faceOfDir(a.d);
     const tails: Tail[] = [];
-    for (const nm of ["TailA", "TailB", "TailC", "TailD"]) {
+    for (const [nm, k] of TAIL_NAMES) {
       const bones = [0, 1, 2, 3, 4].map((i) => root.getObjectByName(nm + i));
       if (bones.every(Boolean))
         tails.push({
@@ -1401,6 +1411,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
           root0: new THREE.Vector3(),
           vel: new THREE.Vector3(),
           ready: false,
+          k,
         });
     }
     a.rig = { root, mixer, walk, idle, run, cur: idle, ghosts, shadow, tails };
@@ -1430,6 +1441,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
     r.shadow.position.set(a.x, gh + 0.015, a.y);
     if (r.tails.length && dt > 0) {
       r.root.updateMatrixWorld(true);
+      this.fwd.set(Math.sin(f), 0, Math.cos(f));
       for (const t of r.tails) this.swingTail(t, dt);
     }
     // 건물에 가려지면 반투명 몸을 위에
@@ -1453,6 +1465,8 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
     return null;
   }
   private bv = new THREE.Vector3();
+  /** 지금 흔드는 사람이 보는 쪽 (세계) */
+  private fwd = new THREE.Vector3();
 
   private tv = [0, 1, 2, 3, 4].map(() => new THREE.Vector3());
   private tq = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
@@ -1482,13 +1496,14 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
     }
     const h = Math.min(dt, 1 / 30),
       n = h * 60;
-    const damp = Math.pow(TAIL_DAMP, n),
-      pull = 1 - Math.pow(1 - TAIL_PULL, n);
+    const K = t.k;
+    const damp = Math.pow(K.damp, n),
+      pull = 1 - Math.pow(1 - K.pull, n);
     const [vel, dir, adir] = this.tw;
     // 뿌리 출렁임 = 이번 이동 - 평균 속도만큼 이동 → 꼬리를 그 반대로 더 밀어 크게 출렁이게
     vel.subVectors(A[0], t.root0);
     t.vel.lerp(dir.copy(vel).divideScalar(h), 1 - Math.pow(0.9, n));
-    vel.addScaledVector(t.vel, -h).multiplyScalar(TAIL_BOUNCE - 1);
+    vel.addScaledVector(t.vel, -h).multiplyScalar(K.bounce - 1);
     for (let k = 1; k < 5; k++) S[k].sub(vel);
     t.root0.copy(A[0]);
     S[0].copy(A[0]);
@@ -1497,14 +1512,18 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
       vel.subVectors(S[k], P[k]).multiplyScalar(damp);
       P[k].copy(S[k]);
       S[k].add(vel);
-      S[k].y -= TAIL_G * h * h;
+      S[k].y -= K.g * h * h;
       S[k].lerp(A[k], pull);
+      if (K.noFwd) {
+        const c = dir.subVectors(S[k], A[k]).dot(this.fwd);
+        if (c > 0) S[k].addScaledVector(this.fwd, -c);
+      }
       // 마디 길이 그대로, 원래 방향에서 너무 벌어지지 않게
       const len = A[k].distanceTo(A[k - 1]);
       dir.subVectors(S[k], S[k - 1]).normalize();
       adir.subVectors(A[k], A[k - 1]).normalize();
       const ang = dir.angleTo(adir);
-      if (ang > TAIL_MAX) dir.lerp(adir, 1 - TAIL_MAX / ang).normalize();
+      if (ang > K.max) dir.lerp(adir, 1 - K.max / ang).normalize();
       S[k].copy(S[k - 1]).addScaledVector(dir, len);
     }
     const [qd, qw, qp] = this.tq;
