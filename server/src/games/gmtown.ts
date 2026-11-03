@@ -11,7 +11,7 @@ import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } fr
  * 상태는 전부 메모리 (위치 · 채팅은 남길 필요 없음). 게스트(익명 로그인)도 들어옴 — 이름은 「◦손님1234」.
  * 위치는 화면이 정하고 서버는 검사만 함:
  *   - 걸을 수 있는 거리 예산(초당 속도 × 1.4, 최대 2.5칸)을 넘게 움직이면 예산만큼만 → 그 사람에게 snap 으로 바로잡기
- *   - 건물 · 분수 · 나무 안이면 그대로 둠 (world.ts 의 blocked — 화면과 같은 판정, 반지름만 조금 너그럽게)
+ *   - 건물 · 분수 · 나무 안이면 그대로 둠 (world.ts 의 blocked loose — 화면보다 항상 너그럽게: 반지름 작게 · 비탈 안 봄 · 문 앞 선 바깥까지)
  * 바뀐 위치는 0.1초마다 채널별로 모아서 한 번에 보냄 (mv).
  * 한 연결 = 한 사람 (같은 계정으로 탭 두 개면 두 명으로 보임).
  */
@@ -170,7 +170,7 @@ export function registerGmtown({ gateway }: Deps, opts: GmtownOptions = {}) {
       y = p.y + (a.y - p.y) * k;
       snap = true;
     }
-    if (blocked(x, y, RADIUS * 0.6)) {
+    if (blocked(x, y, RADIUS * 0.6, true)) {
       x = p.x;
       y = p.y;
       snap = true;

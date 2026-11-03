@@ -931,10 +931,14 @@ diffuseColor.rgb *= col;`
         for (let i = 0; i < n; i++) {
           const ang = (i * 137.5 + fi * 11) * (Math.PI / 180),
             rr = Math.sqrt((i + 0.5) / n) * (f.r - 0.25);
+          const x = f.x + Math.cos(ang) * rr,
+            y = f.y + Math.sin(ang) * rr * 0.8;
+          // 가로등 기둥에 걸치는 덤불은 뺌
+          if (LAMPS.some((l) => Math.hypot(l.x - x, l.y - y) < 1.0)) continue;
           all.push({
             kind: "flowers",
-            x: f.x + Math.cos(ang) * rr,
-            y: f.y + Math.sin(ang) * rr * 0.8,
+            x,
+            y,
             a: (i * 2.3 + fi) % 6.28,
             s: 1.45 + ((i * 7 + fi) % 5) * 0.1,
           });
@@ -1401,13 +1405,34 @@ if ( vFade > 0.01 ) {
     const fg = new THREE.IcosahedronGeometry(0.15, 0);
     if (!modeled.has("flowers")) for (const [c, list] of byCol) inst(fg.clone(), toon(c), list, 0.17, false);
     fg.dispose();
-    // 꽃밭 잎사귀 바닥
-    const leaf = toon(0x4f9a46);
-    for (const f of FLOWERS) {
-      const m = new THREE.Mesh(own(new THREE.CircleGeometry(1, 20)), leaf);
-      m.scale.set(f.r + 0.3, (f.r + 0.3) * 0.8, 1);
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(f.x, heightAt(f.x, f.y) + 0.012, f.y);
+    // 꽃밭 잎사귀 바닥: 땅 높이를 점마다 따라감 (비탈에서 평평한 판이 덤불 중간에 떠 보이지 않게)
+    {
+      const RINGS = 5,
+        SEG = 24,
+        pos: number[] = [],
+        idx: number[] = [];
+      for (const f of FLOWERS) {
+        const rx = f.r + 0.3,
+          rz = rx * 0.8,
+          o = pos.length / 3;
+        pos.push(f.x, heightAt(f.x, f.y) + 0.03, f.y);
+        for (let r = 1; r <= RINGS; r++)
+          for (let k = 0; k < SEG; k++) {
+            const a = (k / SEG) * Math.PI * 2,
+              x = f.x + Math.cos(a) * rx * (r / RINGS),
+              z = f.y + Math.sin(a) * rz * (r / RINGS);
+            pos.push(x, heightAt(x, z) + 0.03, z);
+          }
+        const at = (r: number, k: number) => o + 1 + (r - 1) * SEG + (k % SEG);
+        for (let k = 0; k < SEG; k++) idx.push(o, at(1, k + 1), at(1, k));
+        for (let r = 1; r < RINGS; r++)
+          for (let k = 0; k < SEG; k++) idx.push(at(r, k), at(r, k + 1), at(r + 1, k + 1), at(r, k), at(r + 1, k + 1), at(r + 1, k));
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      const m = new THREE.Mesh(own(g), toon(0x4f9a46));
       m.receiveShadow = true;
       scene.add(m);
     }

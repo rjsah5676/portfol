@@ -1253,9 +1253,13 @@ for (const p of PROPS) {
   l.push(p);
 }
 
-/** (x, y) 에 반지름 r 인 몸이 들어갈 수 있는지 */
-export function blocked(x: number, y: number, r = RADIUS): boolean {
-  if (blockedStatic(x, y, r)) return true;
+/**
+ * (x, y) 에 반지름 r 인 몸이 들어갈 수 있는지.
+ * loose: 서버가 받은 위치를 볼 때 — 화면 판정보다 항상 너그러워야 함 (아니면 반올림 · 경계에서 되돌려져 왔다갔다 순간이동).
+ * 비탈은 안 보고(땅 높이가 계단처럼 끊기는 곳에서 0.01 차이로 결과가 바뀜), 문 앞 선은 조금 더 바깥까지 허용.
+ */
+export function blocked(x: number, y: number, r = RADIUS, loose = false): boolean {
+  if (blockedStatic(x, y, r, loose)) return true;
   const gx = Math.floor(x / TG),
     gy = Math.floor(y / TG);
   for (let i = -1; i <= 1; i++)
@@ -1270,10 +1274,10 @@ export function blocked(x: number, y: number, r = RADIUS): boolean {
   return false;
 }
 /** 소품 빼고 부딪힘 (소품 자리 고를 때도 씀) */
-function blockedStatic(x: number, y: number, r = RADIUS): boolean {
+function blockedStatic(x: number, y: number, r = RADIUS, loose = false): boolean {
   if (x < BOUNDS.x0 + r || y < BOUNDS.y0 + r || x > BOUNDS.x1 - r || y > BOUNDS.y1 - r) return true;
   // 너무 가파른 곳 (기울기 1 넘게 — 강가 벼랑 같은 곳)
-  if (!onBridge(x, y) && !onStairs(x, y)) {
+  if (!loose && !onBridge(x, y) && !onStairs(x, y)) {
     const e = 0.5;
     const gx = heightAt(x + e, y) - heightAt(x - e, y),
       gy = heightAt(x, y + e) - heightAt(x, y - e);
@@ -1299,7 +1303,7 @@ function blockedStatic(x: number, y: number, r = RADIUS): boolean {
       // 앞면 쪽은 조금 너그럽게 (문 앞까지 붙어 설 수 있게)
       const p = doorPoint(b),
         f = faceDir(b);
-      if ((x - p.x) * f.x + (y - p.y) * f.y > -r * 0.6) continue;
+      if ((x - p.x) * f.x + (y - p.y) * f.y > (loose ? -RADIUS * 0.6 - 0.15 : -r * 0.6)) continue;
       return true;
     }
   }
