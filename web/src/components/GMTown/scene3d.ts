@@ -16,6 +16,7 @@ import {
   PATHS,
   PLAZA,
   PROPS,
+  pathDist,
   onBridge,
   onStairs,
   stairTop,
@@ -47,7 +48,13 @@ export const TOWN_FILES = {
   stockGlb: "/gmtown/bld/stock.glb",
   stockPaint: "/gmtown/bld/stock_paint.webp",
   stockJson: "/gmtown/bld/stock.json",
-  props: ["/gmtown/props/props1.glb", "/gmtown/props/props2.glb"],
+  props: [
+    "/gmtown/props/props1.glb",
+    "/gmtown/props/props2.glb",
+    "/gmtown/props/props3.glb",
+    "/gmtown/props/fountain.glb",
+    "/gmtown/props/arch.glb",
+  ],
   tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand" | "rail") => `/gmtown/tex/${n}.webp`,
 };
 /** 미리 받을 파일 (건물을 다시 지을 때 그 건물 파일을 더함) */
@@ -826,7 +833,9 @@ diffuseColor.rgb *= col;`
     }
   }
 
-  // ── 소품 (Meshy 소품 시트 한 장 → 바위 · 덤불 · 우체통 · 쓰레기통 · 통 · 상자) ──
+  // ── 소품 (Meshy 소품 시트 한 장 → 바위 · 덤불 · 우체통 · 쓰레기통 · 통 · 상자 …) ──
+  /** 모델로 그린 것 (가로등 · 벤치 · 분수 · 아치는 모델이 있으면 예전 코드 모양을 안 그림) */
+  const modeled = new Set<string>();
   try {
     const src = new Map<string, THREE.Mesh>();
     const gls = await Promise.all(TOWN_FILES.props.map((u) => new GLTFLoader().loadAsync(u)));
@@ -870,11 +879,29 @@ diffuseColor.rgb *= col;`
       up = new THREE.Vector3(0, 1, 0),
       v = new THREE.Vector3(),
       sc = new THREE.Vector3();
-    const kinds = [...new Set(PROPS.map((p) => p.kind))];
+    // 가로등 (팔이 길 쪽으로) · 벤치 · 분수 · 아치도 같은 길로
+    type Inst = { kind: string; x: number; y: number; a: number; s: number };
+    const all: Inst[] = [...PROPS];
+    const toRoad = (x: number, y: number) => {
+      const e = 0.4;
+      const gx = pathDist(x + e, y) - pathDist(x - e, y),
+        gy = pathDist(x, y + e) - pathDist(x, y - e);
+      const L = Math.hypot(gx, gy) || 1;
+      return [-gx / L, -gy / L] as const;
+    };
+    for (const l of LAMPS) {
+      const [dx, dy] = toRoad(l.x, l.y);
+      all.push({ kind: "lamp", x: l.x, y: l.y, a: Math.atan2(-dy, dx), s: 1 });
+    }
+    for (const bn of BENCHES) all.push({ kind: "bench", x: bn.x, y: bn.y, a: Math.PI / 2 - bn.a, s: 1.15 });
+    all.push({ kind: "fountain", x: FOUNTAIN.x, y: FOUNTAIN.y, a: 0, s: 1 });
+    all.push({ kind: "arch", x: ARCH.x, y: ARCH.y, a: 0, s: 1 });
+    const kinds = [...new Set(all.map((p) => p.kind))];
     for (const kind of kinds) {
       const mesh = src.get(kind);
       if (!mesh) continue;
-      const list = PROPS.filter((p) => p.kind === kind);
+      modeled.add(kind);
+      const list = all.filter((p) => p.kind === kind);
       const geo = own(mesh.geometry);
       const old = mesh.material as THREE.MeshStandardMaterial;
       if (old.map) own(old.map);
@@ -893,7 +920,7 @@ diffuseColor.rgb *= col;`
       const ink = new THREE.InstancedMesh(geo, inkShared, list.length);
       list.forEach((p, i) => {
         q.setFromAxisAngle(up, p.a);
-        v.set(p.x, heightAt(p.x, p.y) - 0.02, p.y);
+        v.set(p.x, (kind === "fountain" ? 0 : heightAt(p.x, p.y)) - 0.02, p.y);
         sc.setScalar(p.s);
         m4.compose(v, q, sc);
         body.setMatrixAt(i, m4);
@@ -1070,7 +1097,9 @@ diffuseColor.rgb *= col;`
       m.castShadow = m.receiveShadow = true;
       return withInk(scene, m, ink);
     };
-    at(new THREE.Mesh(own(new THREE.CylinderGeometry(3.3, 3.5, 0.32, 48)), stone), 0.16, 0.1);
+    const old = !modeled.has("fountain");
+    if (old) at(new THREE.Mesh(own(new THREE.CylinderGeometry(3.3, 3.5, 0.32, 48)), stone), 0.16, 0.1);
+    if (old) {
     const water = toon(0x58b8e8);
     const w = new THREE.Mesh(own(new THREE.CircleGeometry(3.05, 48)), water);
     w.rotation.x = -Math.PI / 2;
@@ -1091,13 +1120,16 @@ diffuseColor.rgb *= col;`
     w2.rotation.x = -Math.PI / 2;
     w2.position.set(FOUNTAIN.x, 1.97, FOUNTAIN.y);
     scene.add(w2);
+    }
     const spm = own(
       new THREE.MeshBasicMaterial({ color: 0xd8f3ff, transparent: true, opacity: 0.85 })
     );
     const sp = new THREE.Mesh(own(new THREE.ConeGeometry(0.22, 0.9, 12)), spm);
     sp.position.set(FOUNTAIN.x, 2.4, FOUNTAIN.y);
-    scene.add(sp);
-    spray.push(sp);
+    if (old) {
+      scene.add(sp);
+      spray.push(sp);
+    }
     const dropG = own(new THREE.SphereGeometry(0.13, 8, 6));
     const dropM = own(new THREE.MeshBasicMaterial({ color: 0xe6f7ff }));
     for (let i = 0; i < 8; i++) {
@@ -1247,6 +1279,7 @@ if ( vFade > 0.01 ) {
       im.computeBoundingSphere();
       scene.add(im);
     };
+    if (!modeled.has("lamp")) {
     inst(new THREE.CylinderGeometry(0.07, 0.1, 3.4, 8), toon(0x3b4256), LAMPS, 1.7);
     inst(
       new THREE.BoxGeometry(0.42, 0.36, 0.42),
@@ -1255,8 +1288,9 @@ if ( vFade > 0.01 ) {
       3.5
     );
     inst(new THREE.BoxGeometry(0.5, 0.44, 0.5), inkShared, LAMPS, 3.5, false);
+    }
 
-    for (const bn of BENCHES) {
+    for (const bn of modeled.has("bench") ? [] : BENCHES) {
       const g = new THREE.Group();
       const wood = toon(0xb07a4a);
       const s = new THREE.Mesh(own(new THREE.BoxGeometry(1.8, 0.12, 0.55)), wood);
@@ -1316,7 +1350,8 @@ if ( vFade > 0.01 ) {
     const g = new THREE.Group();
     const stone = toon(0xf3e6cf),
       gold = toon(0xf2c14e);
-    for (const p of archPosts()) {
+    const oldArch = !modeled.has("arch");
+    for (const p of oldArch ? archPosts() : []) {
       const ah = heightAt(p.x, p.y);
       const m = new THREE.Mesh(own(new THREE.BoxGeometry(0.8, ARCH.h, 0.8)), stone);
       m.position.set(p.x, ah + ARCH.h / 2, p.y);
@@ -1329,10 +1364,12 @@ if ( vFade > 0.01 ) {
     const beam = new THREE.Mesh(own(new THREE.BoxGeometry(ARCH.w + 1.4, 1.1, 0.5)), toon(0x1b2a66));
     beam.position.y = ARCH.h - 0.25;
     beam.castShadow = true;
-    withInk(g, beam, 0.1);
+    if (oldArch) withInk(g, beam, 0.1);
     const sign = canvasTex(640, 110, (c, W, H) => {
-      c.fillStyle = "#1b2a66";
-      c.fillRect(0, 0, W, H);
+      if (oldArch) {
+        c.fillStyle = "#1b2a66";
+        c.fillRect(0, 0, W, H);
+      }
       c.font = '400 78px "Black Han Sans", sans-serif';
       c.textAlign = "center";
       c.textBaseline = "middle";
@@ -1346,11 +1383,13 @@ if ( vFade > 0.01 ) {
       c.fillText("GMTOWN", W / 2, H / 2 + 4);
     });
     own(sign);
+    // 모델 아치는 간판 판이 더 크고 높음 (남색 판 가운데 · 앞면)
     const sp = new THREE.Mesh(
-      own(new THREE.PlaneGeometry(ARCH.w, 1.0)),
-      own(new THREE.MeshBasicMaterial({ map: sign }))
+      own(oldArch ? new THREE.PlaneGeometry(ARCH.w, 1.0) : new THREE.PlaneGeometry(8.6, 8.6 * (110 / 640))),
+      own(new THREE.MeshBasicMaterial({ map: sign, transparent: !oldArch }))
     );
-    sp.position.set(0, ARCH.h - 0.25, 0.26);
+    if (oldArch) sp.position.set(0, ARCH.h - 0.25, 0.26);
+    else sp.position.set(0, 4.86, 0.42);
     g.add(sp);
     g.position.set(ARCH.x, heightAt(ARCH.x, ARCH.y), ARCH.y);
     scene.add(g);

@@ -461,7 +461,7 @@ export interface Yard {
 }
 
 /** 역 앞 아치 (중앙대로를 가로지름, 기둥 둘 · 위에 간판) */
-export const ARCH = { x: 100, y: 150.5, w: 11.6, h: 5.6 } as const;
+export const ARCH = { x: 100, y: 150.5, w: 12.0, h: 5.6 } as const;
 /** 아치 기둥 위치 (동서로) */
 export const archPosts = () => [
   { x: ARCH.x - ARCH.w / 2, y: ARCH.y },
@@ -726,7 +726,8 @@ export type PropKind =
   | "hydrant"
   | "picnic"
   | "topiary"
-  | "cart";
+  | "cart"
+  | "plight";
 export interface Prop {
   kind: PropKind;
   x: number;
@@ -750,6 +751,7 @@ export const PROP_R: Record<PropKind, number> = {
   picnic: 0.56,
   topiary: 0.42,
   cart: 0.6,
+  plight: 0.13,
 };
 /** 길쭉한 소품: 모델 x 축으로 이만큼(크기 1) 늘어난 캡슐로 부딪힘 */
 export const PROP_LEN: Partial<Record<PropKind, number>> = { planter: 0.6, vending: 0.2, picnic: 0.3, cart: 0.5 };
@@ -874,7 +876,7 @@ function makeProps(): Prop[] {
   }
   // 역 앞 아치 양옆 화분 나무
   for (const p of archPosts()) {
-    const x = p.x + Math.sign(p.x - ARCH.x) * 1.6,
+    const x = p.x + Math.sign(p.x - ARCH.x) * 2.0,
       y = p.y - 1.2;
     if (clear(x, y, PROP_R.topiary)) out.push({ kind: "topiary", x, y, a: 0, s: 1 });
   }
@@ -917,6 +919,24 @@ function makeProps(): Prop[] {
       const y = 100 + sd * 4.9;
       if (offRoad(x, y, 0.9)) out.push({ kind: "planter", x, y, a: 0, s: 1.2 });
     }
+  // 정원등: 계단길 양옆 (5m 마다 번갈아) · 공원 계단 입구
+  for (const p of PATHS) {
+    if (!p.stairs) continue;
+    let n = 0;
+    for (let i = 0; i < p.pts.length - 1; i++) {
+      const [ax, ay] = p.pts[i],
+        [bx, by] = p.pts[i + 1];
+      const L = Math.hypot(bx - ax, by - ay),
+        dx = (bx - ax) / L,
+        dy = (by - ay) / L;
+      for (let t = 2.5; t < L - 1; t += 5) {
+        const sd = n++ % 2 ? 1 : -1;
+        const x = ax + dx * t - dy * sd * (p.w / 2 + 0.35),
+          y = ay + dy * t + dx * sd * (p.w / 2 + 0.35);
+        if (pathDist(x, y) > 0.2 && clear(x, y, 0.15)) out.push({ kind: "plight", x, y, a: Math.atan2(dy * sd, -dx * sd), s: 1 });
+      }
+    }
+  }
   // 소화전 · 자판기: 돌길 가장자리 (자판기는 길을 봄)
   let hy = 0,
     vd = 0;
@@ -1057,7 +1077,7 @@ function blockedStatic(x: number, y: number, r = RADIUS): boolean {
   if (fl) for (const f of fl) if (segDist(x, y, f.ax, f.ay, f.bx, f.by) < FENCE_HALF + r) return true;
   for (const l of LAMPS) if ((x - l.x) ** 2 + (y - l.y) ** 2 < (0.15 + r) ** 2) return true;
   for (const bn of BENCHES) if ((x - bn.x) ** 2 + (y - bn.y) ** 2 < (0.72 + r) ** 2) return true;
-  for (const p of archPosts()) if ((x - p.x) ** 2 + (y - p.y) ** 2 < (0.5 + r) ** 2) return true;
+  for (const p of archPosts()) if ((x - p.x) ** 2 + (y - p.y) ** 2 < (0.95 + r) ** 2) return true;
   if ((x - BOARD.x) ** 2 + (y - BOARD.y) ** 2 < (0.45 + r) ** 2) return true;
   return false;
 }
