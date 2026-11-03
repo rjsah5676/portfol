@@ -150,13 +150,8 @@ const OV_PITCH = 60 * DEG;
 const ROT_PER_PX = 0.0085;
 const PITCH_MIN = 8 * DEG;
 const PITCH_MAX = 72 * DEG;
-/** 거리에 따라 높이각을 같이 바꿈: 기본보다 4m 가까우면 −11° · 8m 멀면 +26° */
-function pitchOfDist(d: number) {
-  return d <= CAM_DIST
-    ? -11 * DEG * Math.min(1, (CAM_DIST - d) / 4)
-    : 26 * DEG * Math.min(1, (d - CAM_DIST) / 8);
-}
 const SUN_OFF = new THREE.Vector3(-34, 52, 30);
+const FAR_AWAY = new THREE.Vector3(0, 1e4, -1e4);
 /** 동그란 그림자 알파 (가운데 1 → 끝 0) */
 function blobTex(): THREE.Texture {
   const c = document.createElement("canvas");
@@ -716,10 +711,9 @@ export class TownEngine {
     } else if (e.button === 2 || (e.button === 0 && this.overview)) this.tap(px, py);
   };
   private onMenu = (e: MouseEvent) => e.preventDefault();
-  /** 끌어서 정하는 높이각 + 거리에 따른 높이각 = 실제 높이각 이 PITCH_MIN~MAX 안에 들게 (멀리서도 낮게 눕힐 수 있게) */
+  /** 높이각은 끌어서만 바뀜 (줌은 거리만) */
   private clampPitch(p: number) {
-    const o = pitchOfDist(this.dist);
-    return Math.max(PITCH_MIN - o, Math.min(PITCH_MAX - o, p));
+    return Math.max(PITCH_MIN, Math.min(PITCH_MAX, p));
   }
   private onMove = (e: PointerEvent) => {
     const r = this.canvas.getBoundingClientRect();
@@ -1565,8 +1559,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     // 카메라
     const cam = this.camera;
     const k = this.ovK;
-    if (!this.drag) this.camPitch = this.clampPitch(this.camPitch);
-    const near = Math.max(3 * DEG, Math.min(78 * DEG, this.camPitch + pitchOfDist(this.dist)));
+    const near = this.clampPitch(this.camPitch);
     const pitch = near + (OV_PITCH - near) * k;
     // 보는 점: 서 있는 땅 높이 + 가슴 (언덕을 오르면 같이 올라감, 부드럽게)
     const gh = heightAt(this.cam.x, this.cam.y);
@@ -1585,6 +1578,9 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     cam.far = this.dist + 300;
     cam.updateProjectionMatrix();
     cam.lookAt(target);
+    // 카메라와 보는 점 사이 나무는 성기게 (지도 볼 땐 끔)
+    if (k < 0.5) town?.setView(cam.position, target);
+    else town?.setView(FAR_AWAY, FAR_AWAY);
     cam.updateMatrixWorld();
     this.vw = 2 * this.dist * Math.tan((cam.fov * DEG) / 2) * cam.aspect;
 

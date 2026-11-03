@@ -75,6 +75,8 @@ export interface TownScene {
   /** 가는 곳 표시 */
   goalRing: THREE.Mesh;
   tick(t: number): void;
+  /** 카메라 ↔ 보는 점 사이 나무를 성기게 (매 프레임) */
+  setView(eye: THREE.Vector3, focus: THREE.Vector3): void;
   dispose(): void;
 }
 
@@ -298,6 +300,7 @@ export async function buildTown(): Promise<TownScene> {
   const grad = gradientMap();
   const disposables: { dispose(): void }[] = [grad];
   const own = <T extends { dispose(): void }>(x: T) => (disposables.push(x), x);
+  const treeView = { uEye: { value: new THREE.Vector3(0, 1e4, 0) }, uFocus: { value: new THREE.Vector3(0, 1e4, 0) } };
   const shared = new Map<string, THREE.MeshToonMaterial>();
   const toon = (c: THREE.ColorRepresentation, o: THREE.MeshToonMaterialParameters = {}) => {
     const k = String(c) + JSON.stringify(o, (_k, v) => (v instanceof THREE.Texture ? v.uuid : v));
@@ -726,6 +729,45 @@ diffuseColor.rgb *= col;`
     };
     for (const g of Object.values(kinds)) own(g);
     const treeM = own(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: grad }));
+    // 카메라와 캐릭터 사이(또는 카메라 바로 앞) 나무는 점무늬로 성기게 → 가려도 캐릭터가 보임
+    treeM.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, treeView);
+      sh.vertexShader = sh.vertexShader
+        .replace(
+          "void main() {",
+          `uniform vec3 uEye;
+uniform vec3 uFocus;
+varying float vFade;
+void main() {`
+        )
+        .replace(
+          "#include <project_vertex>",
+          `#include <project_vertex>
+{
+  vec4 o4 = modelMatrix * instanceMatrix * vec4( 0.0, 0.0, 0.0, 1.0 );
+  vec2 o = o4.xz, e = uEye.xz, fo = uFocus.xz, d = fo - e;
+  float L2 = max( dot( d, d ), 1e-4 );
+  float t = dot( o - e, d ) / L2;
+  vec2 q = e + d * clamp( t, 0.0, 1.0 );
+  float r = 1.7 * length( instanceMatrix[ 0 ].xyz ) + 0.5;
+  float side = 1.0 - smoothstep( r, r + 1.2, distance( o, q ) );
+  float between = smoothstep( -0.05, 0.08, t ) * ( 1.0 - smoothstep( 0.92, 1.02, t ) );
+  float nearCam = 1.0 - smoothstep( 2.5, 4.5, distance( o, e ) );
+  vFade = max( side * between, nearCam );
+}`
+        );
+      sh.fragmentShader = sh.fragmentShader
+        .replace("void main() {", "varying float vFade;\nvoid main() {")
+        .replace(
+          "#include <clipping_planes_fragment>",
+          `#include <clipping_planes_fragment>
+if ( vFade > 0.01 ) {
+  vec2 b1 = floor( gl_FragCoord.xy ), b2 = floor( b1 * 0.5 );
+  float th = fract( dot( b2, vec2( 0.5, b2.y * 0.75 ) ) ) * 0.25 + fract( dot( b1, vec2( 0.5, b1.y * 0.75 ) ) ) + 0.03;
+  if ( vFade * 0.82 > th ) discard;
+}`
+        );
+    };
     const C = 24;
     const buckets = new Map<string, typeof TREES>();
     for (const t of TREES) {
@@ -1307,6 +1349,10 @@ diffuseColor.rgb *= col;`
     buildings: views,
     doorRing,
     goalRing,
+    setView(eye: THREE.Vector3, focus: THREE.Vector3) {
+      treeView.uEye.value.copy(eye);
+      treeView.uFocus.value.copy(focus);
+    },
     tick(t: number) {
       if (ticker) ticker.offset.x = (t * 0.035) % 1;
       // 분수: 물줄기 출렁 · 물방울 둥글게
