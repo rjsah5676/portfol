@@ -21,7 +21,11 @@ import {
   doorAt,
   doorFront,
   fromScreen,
+  BRIDGES,
+  heightAt,
   isLot,
+  riverX,
+  RIVER,
   toCam,
   type Building,
 } from "@/lib/gmtown/world";
@@ -140,7 +144,7 @@ const LOOK_H = 0.9;
 const ZOOM_MIN = 5 / CAM_DIST;
 const ZOOM_MAX = 17 / CAM_DIST;
 /** 지도(마을 전체): 거리 · 높이각 */
-const OV_DIST = 118;
+const OV_DIST = 235;
 const OV_PITCH = 60 * DEG;
 /** 왼쪽 끌기 1px 에 돌아가는 각도 · 끌어서 정하는 높이 범위 (줌에 따른 높이는 따로 더함) */
 const ROT_PER_PX = 0.0085;
@@ -203,12 +207,12 @@ function faceOfDir(d: number): number {
 
 /** 하늘 공: 위는 파랑, 지평선 아래로는 안개 색 (카메라를 따라다님) */
 function skyDome() {
-  const g = new THREE.SphereGeometry(300, 32, 16);
+  const g = new THREE.SphereGeometry(240, 32, 16);
   const pos = g.attributes.position as THREE.BufferAttribute;
   const col = new Float32Array(pos.count * 3);
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i) / 300;
+    const y = pos.getY(i) / 240;
     c.copy(SKY_HORIZON).lerp(SKY_TOP, Math.pow(Math.max(0, y), 0.55));
     c.toArray(col, i * 3);
   }
@@ -245,6 +249,9 @@ export class TownEngine {
   private zoom = 1;
   /** 지도로 넘어가는 정도 (0 ~ 1, 부드럽게) */
   private ovK = 0;
+  /** 보는 점의 땅 높이 (부드럽게 따라감) */
+  private camH = 0;
+  private camHSet = false;
   /** 카메라가 있는 쪽 (땅 위, 라디안 — +y 쪽이 0, 처음 남동 45°) */
   private camYaw = YAW;
   /** 끌어서 정한 높이 각 (처음 26°, 실제 높이는 여기에 줌에 따른 각을 더함) */
@@ -559,13 +566,26 @@ export class TownEngine {
     );
     const o = this.ray.ray.origin,
       d = this.ray.ray.direction;
-    if (Math.abs(d.y) < 1e-6) return null;
-    const t = -o.y / d.y;
-    return { x: o.x + d.x * t, y: o.z + d.z * t };
+    // 땅까지 걸어가며 찾기 (0.6m 씩 → 넘으면 반으로 나눠 좁힘). 지평선 위를 누르면 없음
+    const above = (t: number) => o.y + d.y * t - heightAt(o.x + d.x * t, o.z + d.z * t);
+    let a = 0,
+      b = -1;
+    for (let t = 0.6; t < 500; t += 0.6)
+      if (above(t) <= 0) {
+        b = t;
+        break;
+      } else a = t;
+    if (b < 0) return null;
+    for (let i = 0; i < 12; i++) {
+      const m = (a + b) / 2;
+      if (above(m) > 0) a = m;
+      else b = m;
+    }
+    return { x: o.x + d.x * b, y: o.z + d.z * b };
   }
   /** 땅 위 점 (높이 h) → 화면 px */
   private screen(x: number, y: number, h = 0): { x: number; y: number } {
-    const v = new THREE.Vector3(x, h, y).project(this.camera);
+    const v = new THREE.Vector3(x, heightAt(x, y) + h, y).project(this.camera);
     return { x: ((v.x + 1) / 2) * this.cw, y: ((1 - v.y) / 2) * this.ch };
   }
 
@@ -1374,9 +1394,10 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     let df = ((to - f + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     f += df * Math.min(1, dt * 14);
     a.face = f;
-    r.root.position.set(a.x, 0.02, a.y);
+    const gh = heightAt(a.x, a.y);
+    r.root.position.set(a.x, gh + 0.02, a.y);
     r.root.rotation.y = f;
-    r.shadow.position.set(a.x, 0.06, a.y);
+    r.shadow.position.set(a.x, gh + 0.06, a.y);
     if (r.tails.length && dt > 0) {
       r.root.updateMatrixWorld(true);
       for (const t of r.tails) this.swingTail(t, dt);
@@ -1392,7 +1413,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     if (!town) return null;
     const o = this.camera.position;
     for (const h of [0.9, 1.6]) {
-      const d = this.bv.set(x - o.x, h - o.y, y - o.z);
+      const d = this.bv.set(x - o.x, heightAt(x, y) + h - o.y, y - o.z);
       const far = d.length() - 0.3;
       if (far <= 0) continue;
       this.ray.set(o, d.normalize());
@@ -1503,10 +1524,10 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
         m.material.map = t;
         m.material.needsUpdate = true;
       }
-      m.position.set(a.x, 0.05, a.y);
+      m.position.set(a.x, heightAt(a.x, a.y) + 0.05, a.y);
       m.scale.x = flip ? -1 : 1;
     }
-    v.shadow.position.set(a.x, 0.06, a.y);
+    v.shadow.position.set(a.x, heightAt(a.x, a.y) + 0.06, a.y);
   }
 
   private render(now: number, dt: number) {
@@ -1517,11 +1538,21 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     const k = this.ovK;
     const near = Math.max(3 * DEG, Math.min(78 * DEG, this.camPitch + pitchOfDist(this.dist)));
     const pitch = near + (OV_PITCH - near) * k;
-    const target = new THREE.Vector3(this.cam.x, LOOK_H * (1 - k), this.cam.y);
+    // 보는 점: 서 있는 땅 높이 + 가슴 (언덕을 오르면 같이 올라감, 부드럽게)
+    const gh = heightAt(this.cam.x, this.cam.y);
+    this.camH += (gh - this.camH) * Math.min(1, dt * 8);
+    if (!this.camHSet) {
+      this.camH = gh;
+      this.camHSet = true;
+    }
+    const target = new THREE.Vector3(this.cam.x, (this.camH + LOOK_H) * (1 - k), this.cam.y);
     const cp = Math.cos(pitch);
     this.camDir.set(cp * Math.sin(this.camYaw), Math.sin(pitch), cp * Math.cos(this.camYaw));
     cam.position.copy(target).addScaledVector(this.camDir, this.dist);
-    cam.far = this.dist + 260;
+    // 카메라가 언덕 속으로 들어가지 않게
+    const floor = heightAt(cam.position.x, cam.position.z) + 0.8;
+    if (cam.position.y < floor) cam.position.y = floor;
+    cam.far = this.dist + 300;
     cam.updateProjectionMatrix();
     cam.lookAt(target);
     cam.updateMatrixWorld();
@@ -1583,7 +1614,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
       town.doorRing.visible = !!ring;
       if (ring) {
         const f = doorFront(ring);
-        town.doorRing.position.set(f.x, 0.05, f.y);
+        town.doorRing.position.set(f.x, heightAt(f.x, f.y) + 0.05, f.y);
         town.doorRing.scale.setScalar(1 + Math.sin(t * 5) * 0.08);
         (town.doorRing.material as THREE.MeshBasicMaterial).color.set(ring.accent);
       }
@@ -1591,7 +1622,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
       const g = this.me && this.path.length ? this.path[this.path.length - 1] : null;
       town.goalRing.visible = !!g;
       if (g) {
-        town.goalRing.position.set(g.x, 0.05, g.y);
+        town.goalRing.position.set(g.x, heightAt(g.x, g.y) + 0.05, g.y);
         town.goalRing.scale.setScalar(1 + Math.sin(t * 8) * 0.12);
       }
       town.tick(t);
@@ -1759,6 +1790,13 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     m.beginPath();
     m.arc(PLAZA.x, PLAZA.y, PLAZA.r, 0, Math.PI * 2);
     m.fill();
+    m.strokeStyle = "#5fc3e8";
+    m.lineWidth = RIVER.half * 2;
+    m.beginPath();
+    for (let y = BOUNDS.y0; y <= BOUNDS.y1; y += 4) (y === BOUNDS.y0 ? m.moveTo : m.lineTo).call(m, riverX(y), y);
+    m.stroke();
+    m.fillStyle = "#c98f5a";
+    for (const br of BRIDGES) m.fillRect(riverX(br.y) - RIVER.bank - 1.5, br.y - br.w / 2, (RIVER.bank + 1.5) * 2, br.w);
     m.fillStyle = "#5fc3e8";
     m.beginPath();
     m.arc(FOUNTAIN.x, FOUNTAIN.y, FOUNTAIN.r, 0, Math.PI * 2);

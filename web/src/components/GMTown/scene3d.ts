@@ -5,6 +5,8 @@ import {
   ARCH,
   BENCHES,
   BOARD,
+  BRIDGES,
+  BRIDGE_H,
   BUILDINGS,
   FLOWERS,
   FOUNTAIN,
@@ -12,14 +14,19 @@ import {
   LAMPS,
   PATHS,
   PLAZA,
+  RIVER,
   TREES,
   WORLD,
+  YARDS,
   archPosts,
   doorFront,
   doorW,
+  faceRot,
   frontLen,
+  heightAt,
   isLot,
-  lotSign,
+  riverX,
+  terrainH,
   type Building,
 } from "@/lib/gmtown/world";
 
@@ -28,7 +35,7 @@ import {
  * 툰 재질(3단 명암) + 검은 외곽선(뒤집은 껍데기) — 기존 증권거래소 덧칠 그림과 같은 느낌.
  * 건물은 게임마다 화풍대로: 픽셀(저해상도 벽돌 · 도트 간판) · 애니(차양 · 전구 간판) · 누아르 · 우리 집.
  * 증권거래소만 3D 모델 + 그 카메라로 찍은 덧칠 그림을 모델 표면에 투사 (나머지도 같은 길로 바꿈).
- * 좌표: 땅 (x, y) → 3D (x, 높이, y).
+ * 좌표: 땅 (x, y) → 3D (x, 높이, y). 땅은 높이 지형 한 장 + 길 · 광장 · 부지를 칠한 그림(splat)으로 잔디 · 돌 · 흙 · 모래를 섞음.
  */
 
 export const TOWN_FILES = {
@@ -37,11 +44,8 @@ export const TOWN_FILES = {
   stockJson: "/gmtown/bld/stock.json",
   tex: (n: "grass" | "paving" | "dirt") => `/gmtown/tex/${n}.webp`,
 };
-/** 미리 받을 파일 */
+/** 미리 받을 파일 (건물을 다시 지을 때 그 건물 파일을 더함) */
 export const townFiles = () => [
-  TOWN_FILES.stockGlb,
-  TOWN_FILES.stockPaint,
-  TOWN_FILES.stockJson,
   TOWN_FILES.tex("grass"),
   TOWN_FILES.tex("paving"),
   TOWN_FILES.tex("dirt"),
@@ -59,6 +63,8 @@ export interface BuildingView {
 
 export interface TownScene {
   scene: THREE.Scene;
+  /** 지형 (그림자 받기 · 누르기는 엔진이 heightAt 으로) */
+  ground: THREE.Mesh;
   sun: THREE.DirectionalLight;
   buildings: BuildingView[];
   /** 문 앞 표시 고리 */
@@ -190,7 +196,9 @@ function woodSign(text: string, sub?: string) {
     g.textAlign = "center";
     g.textBaseline = "middle";
     g.fillStyle = "#6b3a22";
-    g.font = '400 54px "Black Han Sans", sans-serif';
+    let fs = 54;
+    g.font = `400 ${fs}px "Black Han Sans", sans-serif`;
+    while (fs > 26 && g.measureText(text).width > W - 44) g.font = `400 ${(fs -= 2)}px "Black Han Sans", sans-serif`;
     g.fillText(text, W / 2, sub ? H / 2 - 12 : H / 2 + 4);
     if (sub) {
       g.font = '700 22px "Nanum Gothic", sans-serif';
@@ -317,152 +325,142 @@ export async function buildTown(): Promise<TownScene> {
     return t;
   };
   const [gTex, pTex, dTex] = await Promise.all([load("grass"), load("paving"), load("dirt")]);
-  const groundMat = (t: THREE.Texture) =>
-    own(new THREE.MeshToonMaterial({ map: t, gradientMap: grad }));
-  const grassM = groundMat(gTex),
-    pavingM = groundMat(pTex),
-    dirtM = groundMat(dTex);
-
-  /** 땅에 붙는 판 (UV = 땅 좌표 / 타일 크기 → 이음매 없이) */
-  const flatGeo = (pts: [number, number][], tile: number) => {
-    // pts 는 부채꼴(첫 점 = 가운데) 또는 네모 두 삼각형
-    const pos: number[] = [],
-      uv: number[] = [];
-    for (const [x, y] of pts) {
-      pos.push(x, 0, y);
-      uv.push(x / tile, -y / tile);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
-    g.setAttribute(
-      "normal",
-      new THREE.Float32BufferAttribute(
-        pts.flatMap(() => [0, 1, 0]),
-        3
-      )
-    );
-    return g;
-  };
-  const quad = (
-    a: [number, number],
-    b: [number, number],
-    c: [number, number],
-    d: [number, number]
-  ): [number, number][] => [a, b, c, a, c, d];
-  const disc = (cx: number, cy: number, r: number, n = 24): [number, number][] => {
-    const out: [number, number][] = [];
-    for (let i = 0; i < n; i++) {
-      const a0 = (i / n) * Math.PI * 2,
-        a1 = ((i + 1) / n) * Math.PI * 2;
-      out.push(
-        [cx, cy],
-        [cx + Math.cos(a1) * r, cy + Math.sin(a1) * r],
-        [cx + Math.cos(a0) * r, cy + Math.sin(a0) * r]
-      );
-    }
-    return out;
-  };
-  const addFlat = (pts: [number, number][], tile: number, mat: THREE.Material, y: number) => {
-    const m = new THREE.Mesh(own(flatGeo(pts, tile)), mat);
-    m.position.y = y;
-    m.receiveShadow = true;
-    scene.add(m);
-    return m;
-  };
-
-  // 잔디 (마을보다 훨씬 넓게 — 멀리 봐도 끝이 안 보이게)
-  {
-    const S = 420,
-      cx = WORLD.w / 2,
-      cy = WORLD.h / 2;
-    addFlat(
-      quad(
-        [cx - S / 2, cy - S / 2],
-        [cx - S / 2, cy + S / 2],
-        [cx + S / 2, cy + S / 2],
-        [cx + S / 2, cy - S / 2]
-      ),
-      TILE.grass,
-      grassM,
-      0
-    );
-  }
-  // 길: 선분은 네모, 꺾이는 곳은 원 (둥글게 이어짐)
-  for (const kind of ["dirt", "stone"] as const) {
-    const pts: [number, number][] = [];
-    for (const p of PATHS.filter((q) => q.kind === kind)) {
-      const r = p.w / 2;
-      for (let i = 0; i < p.pts.length - 1; i++) {
-        const [ax, ay] = p.pts[i],
-          [bx, by] = p.pts[i + 1];
-        const L = Math.hypot(bx - ax, by - ay);
-        const nx = (-(by - ay) / L) * r,
-          ny = ((bx - ax) / L) * r;
-        pts.push(
-          ...quad([ax + nx, ay + ny], [bx + nx, by + ny], [bx - nx, by - ny], [ax - nx, ay - ny])
+  // ── 지형: 높이 그대로 한 장 (마을 밖 산까지) ──
+  const ground = buildGround();
+  scene.add(ground);
+  function buildGround(): THREE.Mesh {
+    const X0 = -70,
+      Y0 = -70,
+      X1 = WORLD.w + 70,
+      Y1 = WORLD.h + 70,
+      step = 1.25;
+    const nx = Math.round((X1 - X0) / step) + 1,
+      ny = Math.round((Y1 - Y0) / step) + 1;
+    const g = own(new THREE.PlaneGeometry(X1 - X0, Y1 - Y0, nx - 1, ny - 1));
+    g.rotateX(-Math.PI / 2);
+    g.translate((X0 + X1) / 2, 0, (Y0 + Y1) / 2);
+    const pos = g.attributes.position as THREE.BufferAttribute;
+    for (let i = 0; i < pos.count; i++) pos.setY(i, terrainH(pos.getX(i), pos.getZ(i)));
+    g.computeVertexNormals();
+    // 칠하기 그림: R = 돌(큰길 · 광장) · G = 흙(흙길 · 부지 · 마당 · 철길) · B = 모래(강가 · 호숫가)
+    const PX = 8;
+    const cv = document.createElement("canvas");
+    cv.width = WORLD.w * PX;
+    cv.height = WORLD.h * PX;
+    const c = cv.getContext("2d")!;
+    c.fillStyle = "#000";
+    c.fillRect(0, 0, cv.width, cv.height);
+    c.scale(PX, PX);
+    c.globalCompositeOperation = "lighter";
+    c.lineCap = c.lineJoin = "round";
+    const stroke = (pts: [number, number][], w: number, col: string) => {
+      c.strokeStyle = col;
+      c.lineWidth = w;
+      c.beginPath();
+      pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y)));
+      c.stroke();
+    };
+    // 강가 · 호숫가 모래
+    c.filter = `blur(${PX * 1.2}px)`;
+    const rv: [number, number][] = [];
+    for (let y = -4; y <= WORLD.h + 4; y += 2) rv.push([riverX(y), y]);
+    stroke(rv, RIVER.bank * 2 + 1, "#0000ff");
+    c.fillStyle = "#0000ff";
+    c.beginPath();
+    c.ellipse(LAKE.x, LAKE.y, LAKE.rx * 1.35, LAKE.ry * 1.35, 0, 0, Math.PI * 2);
+    c.fill();
+    c.filter = `blur(${PX * 0.25}px)`;
+    // 흙: 부지 · 마당 · 흙길 · 철길
+    c.fillStyle = "#00ff00";
+    for (const b of BUILDINGS) c.fillRect(b.x, b.y, b.w, b.d);
+    c.fillStyle = "#008000";
+    for (const q of YARDS) c.fillRect(q.x, q.y, q.w, q.d);
+    for (const pth of PATHS) if (pth.kind !== "stone") stroke(pth.pts, pth.w, "#00ff00");
+    // 돌: 큰길 · 광장 (흙 위를 덮게 흙 값을 지움)
+    c.globalCompositeOperation = "source-over";
+    const stoneCol = "#ff0000";
+    for (const pth of PATHS) if (pth.kind === "stone") stroke(pth.pts, pth.w, stoneCol);
+    c.fillStyle = stoneCol;
+    c.beginPath();
+    c.arc(PLAZA.x, PLAZA.y, PLAZA.r, 0, Math.PI * 2);
+    c.fill();
+    const splat = own(new THREE.CanvasTexture(cv));
+    splat.colorSpace = THREE.NoColorSpace;
+    splat.flipY = false;
+    splat.wrapS = splat.wrapT = THREE.ClampToEdgeWrapping;
+    splat.anisotropy = 4;
+    const mat = own(new THREE.MeshToonMaterial({ map: gTex, gradientMap: grad }));
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, {
+        tStone: { value: pTex },
+        tDirt: { value: dTex },
+        tSplat: { value: splat },
+        uWorld: { value: new THREE.Vector2(WORLD.w, WORLD.h) },
+        uTile: { value: new THREE.Vector3(TILE.grass, TILE.paving, TILE.dirt) },
+      });
+      sh.vertexShader = sh.vertexShader
+        .replace("void main() {", "varying vec3 vWP;\nvarying float vUp;\nvoid main() {")
+        .replace(
+          "#include <worldpos_vertex>",
+          "#include <worldpos_vertex>\nvWP = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;\nvUp = normalize( mat3( modelMatrix ) * objectNormal ).y;"
         );
-      }
-      for (const [x, y] of p.pts) pts.push(...disc(x, y, r, 16));
-    }
-    if (pts.length)
-      addFlat(
-        pts,
-        kind === "stone" ? TILE.paving : TILE.dirt,
-        kind === "stone" ? pavingM : dirtM,
-        kind === "stone" ? 0.02 : 0.015
-      );
+      sh.fragmentShader = sh.fragmentShader
+        .replace(
+          "void main() {",
+          `uniform sampler2D tStone;
+uniform sampler2D tDirt;
+uniform sampler2D tSplat;
+uniform vec2 uWorld;
+uniform vec3 uTile;
+varying vec3 vWP;
+varying float vUp;
+void main() {`
+        )
+        .replace(
+          "#include <map_fragment>",
+          `vec2 wuv = vWP.xz;
+vec4 cG = texture2D( map, wuv / uTile.x );
+vec4 cS = texture2D( tStone, wuv / uTile.y );
+vec4 cD = texture2D( tDirt, wuv / uTile.z );
+vec3 cSand = cD.rgb * vec3( 1.18, 1.12, 0.9 ) + 0.06;
+vec2 suv = wuv / uWorld;
+vec3 sp = ( suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0 ) ? vec3( 0.0 ) : texture2D( tSplat, suv ).rgb;
+vec3 col = mix( cG.rgb, cSand, sp.b );
+col = mix( col, cD.rgb, sp.g );
+col = mix( col, cS.rgb, sp.r );
+// 가파른 산비탈은 바위색, 물에 잠기는 곳은 어둡게
+col = mix( col, vec3( 0.55, 0.52, 0.46 ), smoothstep( 0.78, 0.6, vUp ) );
+col *= mix( 0.72, 1.0, smoothstep( -1.4, -0.4, vWP.y ) );
+diffuseColor.rgb *= col;`
+        );
+    };
+    const m = new THREE.Mesh(g, mat);
+    m.receiveShadow = true;
+    return m;
   }
-  // 광장
-  addFlat(disc(PLAZA.x, PLAZA.y, PLAZA.r, 72), TILE.paving, pavingM, 0.03);
+
+  // ── 광장 테두리 ──
   {
     const ring = new THREE.Mesh(
-      own(new THREE.RingGeometry(PLAZA.r - 0.06, PLAZA.r + 0.07, 96)),
+      own(new THREE.RingGeometry(PLAZA.r - 0.06, PLAZA.r + 0.07, 128)),
       own(new THREE.MeshBasicMaterial({ color: INK }))
     );
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(PLAZA.x, 0.035, PLAZA.y);
     scene.add(ring);
     const r2 = new THREE.Mesh(
-      own(new THREE.RingGeometry(PLAZA.r - 2.4, PLAZA.r - 2.0, 96)),
+      own(new THREE.RingGeometry(PLAZA.r - 2.6, PLAZA.r - 2.2, 128)),
       toon(0xd9c9a8)
     );
     r2.rotation.x = -Math.PI / 2;
     r2.position.set(PLAZA.x, 0.034, PLAZA.y);
     r2.receiveShadow = true;
     scene.add(r2);
-  }
-  // 건물 앞마당 (보도블록) · 빈 터 (흙)
-  for (const b of BUILDINGS) {
-    if (isLot(b)) {
-      addFlat(
-        quad([b.x, b.y], [b.x, b.y + b.d], [b.x + b.w, b.y + b.d], [b.x + b.w, b.y]),
-        TILE.dirt,
-        dirtM,
-        0.012
-      );
-      continue;
-    }
-    const L = frontLen(b) + 1.2;
-    if (b.face === "y") {
-      const cx = b.x + b.w / 2,
-        y0 = b.y + b.d - 0.2;
-      addFlat(
-        quad([cx - L / 2, y0], [cx - L / 2, y0 + 3], [cx + L / 2, y0 + 3], [cx + L / 2, y0]),
-        TILE.paving,
-        pavingM,
-        0.022
-      );
-    } else {
-      const cy = b.y + b.d / 2,
-        x0 = b.x + b.w - 0.2;
-      addFlat(
-        quad([x0, cy - L / 2], [x0, cy + L / 2], [x0 + 3, cy + L / 2], [x0 + 3, cy - L / 2]),
-        TILE.paving,
-        pavingM,
-        0.022
-      );
-    }
+    const r3 = new THREE.Mesh(own(new THREE.RingGeometry(6.2, 6.6, 96)), toon(0xd9c9a8));
+    r3.rotation.x = -Math.PI / 2;
+    r3.position.set(PLAZA.x, 0.034, PLAZA.y);
+    r3.receiveShadow = true;
+    scene.add(r3);
   }
 
   // 외곽선 붙여 넣기 (뒤집은 껍데기)
@@ -489,6 +487,56 @@ export async function buildTown(): Promise<TownScene> {
     parent.add(k);
     return m;
   };
+
+  // ── 강 · 다리 ──
+  {
+    const pts: number[] = [],
+      idx: number[] = [];
+    let n = 0;
+    for (let y = -70; y <= WORLD.h + 70; y += 2) {
+      const x = riverX(y);
+      pts.push(x - RIVER.half - 1.5, -0.95, y, x + RIVER.half + 1.5, -0.95, y);
+      if (n) idx.push(n * 2 - 2, n * 2, n * 2 - 1, n * 2 - 1, n * 2, n * 2 + 1);
+      n++;
+    }
+    const wg = own(new THREE.BufferGeometry());
+    wg.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    wg.setIndex(idx);
+    wg.computeVertexNormals();
+    const water = new THREE.Mesh(
+      wg,
+      own(new THREE.MeshToonMaterial({ color: 0x5cb6e0, gradientMap: grad, transparent: true, opacity: 0.9 }))
+    );
+    water.receiveShadow = true;
+    scene.add(water);
+    const wood = toon(0xc98f5a),
+      dark = toon(0x7a5230);
+    for (const br of BRIDGES) {
+      const cx = riverX(br.y),
+        L = (RIVER.bank + 1.5) * 2;
+      const deck = new THREE.Mesh(own(new THREE.BoxGeometry(L, 0.5, br.w)), wood);
+      deck.position.set(cx, BRIDGE_H - 0.25, br.y);
+      deck.castShadow = deck.receiveShadow = true;
+      withInk(scene, deck, 0.1);
+      for (const side of [-1, 1]) {
+        const rail = new THREE.Mesh(own(new THREE.BoxGeometry(L, 0.12, 0.14)), dark);
+        rail.position.set(cx, BRIDGE_H + 0.9, br.y + side * (br.w / 2 - 0.1));
+        withInk(scene, rail, 0.05);
+        for (let k = 0; k <= 8; k++) {
+          const post = new THREE.Mesh(own(new THREE.BoxGeometry(0.16, 0.95, 0.16)), dark);
+          post.position.set(cx - L / 2 + (k * L) / 8, BRIDGE_H + 0.45, br.y + side * (br.w / 2 - 0.1));
+          post.castShadow = true;
+          withInk(scene, post, 0.05);
+        }
+      }
+      // 다리 기둥
+      for (const dx of [-RIVER.half + 1, 0, RIVER.half - 1]) {
+        const pier = new THREE.Mesh(own(new THREE.BoxGeometry(0.8, 2.4, br.w - 0.6)), toon(0xb9ab92));
+        pier.position.set(cx + dx, BRIDGE_H - 1.6, br.y);
+        scene.add(pier);
+      }
+    }
+  }
 
   // ── 분수 ──
   const spray: THREE.Mesh[] = [];
@@ -537,42 +585,20 @@ export async function buildTown(): Promise<TownScene> {
     }
   }
 
-  // ── 호수 ──
+  // ── 호수 (땅에 파인 곳에 물) ──
   {
-    const shore = new THREE.Mesh(own(new THREE.CircleGeometry(1, 64)), toon(0xe9dcb0));
-    shore.scale.set(LAKE.rx + 1.3, LAKE.ry + 1.3, 1);
-    shore.rotation.x = -Math.PI / 2;
-    shore.position.set(LAKE.x, 0.018, LAKE.y);
-    shore.receiveShadow = true;
-    scene.add(shore);
     const water = new THREE.Mesh(own(new THREE.CircleGeometry(1, 64)), toon(0x5cb6e0));
-    water.scale.set(LAKE.rx, LAKE.ry, 1);
+    water.scale.set(LAKE.rx + 1.2, LAKE.ry + 1.2, 1);
     water.rotation.x = -Math.PI / 2;
-    water.position.set(LAKE.x, 0.03, LAKE.y);
+    water.position.set(LAKE.x, -0.55, LAKE.y);
     water.receiveShadow = true;
     scene.add(water);
-    const edge = new THREE.Mesh(
-      own(new THREE.RingGeometry(0.985, 1.0, 96)),
-      own(new THREE.MeshBasicMaterial({ color: 0x3d8cb8 }))
-    );
-    edge.scale.set(LAKE.rx, LAKE.ry, 1);
-    edge.rotation.x = -Math.PI / 2;
-    edge.position.set(LAKE.x, 0.032, LAKE.y);
-    scene.add(edge);
-    // 물결 몇 줄
-    const wv = own(new THREE.MeshBasicMaterial({ color: 0xbfe8fa }));
-    for (let i = 0; i < 7; i++) {
-      const m = new THREE.Mesh(own(new THREE.PlaneGeometry(1.4 + (i % 3) * 0.5, 0.09)), wv);
-      m.rotation.x = -Math.PI / 2;
-      m.position.set(LAKE.x - 5 + ((i * 37) % 10), 0.035, LAKE.y - 2.5 + ((i * 23) % 5));
-      scene.add(m);
-    }
     // 연잎
     const pad = toon(0x4f9a46);
-    for (let i = 0; i < 6; i++) {
+    for (let i = 0; i < 7; i++) {
       const m = new THREE.Mesh(own(new THREE.CircleGeometry(0.45, 12, 0.3, Math.PI * 1.8)), pad);
       m.rotation.x = -Math.PI / 2;
-      m.position.set(LAKE.x + 3 + ((i * 29) % 5), 0.04, LAKE.y - 1.5 + ((i * 17) % 4));
+      m.position.set(LAKE.x + 2 + ((i * 29) % 5), -0.53, LAKE.y - 2 + ((i * 17) % 4));
       scene.add(m);
     }
   }
@@ -625,7 +651,7 @@ export async function buildTown(): Promise<TownScene> {
       const kind = k.split(":")[0] as keyof typeof kinds;
       const im = new THREE.InstancedMesh(kinds[kind], treeM, list.length);
       list.forEach((t, i) => {
-        o.position.set(t.x, 0, t.y);
+        o.position.set(t.x, heightAt(t.x, t.y) - 0.08, t.y);
         o.rotation.set(0, (t.x * 7 + t.y * 3) % 6.28, 0);
         o.scale.setScalar(t.s);
         o.updateMatrix();
@@ -649,7 +675,7 @@ export async function buildTown(): Promise<TownScene> {
     ) => {
       const im = new THREE.InstancedMesh(own(g), m, list.length);
       list.forEach((p, i) => {
-        o.position.set(p.x, y, p.y);
+        o.position.set(p.x, y + heightAt(p.x, p.y), p.y);
         o.rotation.set(0, 0, 0);
         o.scale.setScalar(1);
         o.updateMatrix();
@@ -684,7 +710,7 @@ export async function buildTown(): Promise<TownScene> {
         l.position.set(lx, 0.25, 0);
         g.add(l);
       }
-      g.position.set(bn.x, 0, bn.y);
+      g.position.set(bn.x, heightAt(bn.x, bn.y), bn.y);
       // 로컬 +z(앉는 쪽 앞) 가 a 방향을 보게
       g.rotation.y = Math.PI / 2 - bn.a;
       scene.add(g);
@@ -717,7 +743,7 @@ export async function buildTown(): Promise<TownScene> {
       const m = new THREE.Mesh(own(new THREE.CircleGeometry(1, 20)), leaf);
       m.scale.set(f.r + 0.3, (f.r + 0.3) * 0.8, 1);
       m.rotation.x = -Math.PI / 2;
-      m.position.set(f.x, 0.012, f.y);
+      m.position.set(f.x, heightAt(f.x, f.y) + 0.012, f.y);
       m.receiveShadow = true;
       scene.add(m);
     }
@@ -729,12 +755,13 @@ export async function buildTown(): Promise<TownScene> {
     const stone = toon(0xf3e6cf),
       gold = toon(0xf2c14e);
     for (const p of archPosts()) {
+      const ah = heightAt(p.x, p.y);
       const m = new THREE.Mesh(own(new THREE.BoxGeometry(0.8, ARCH.h, 0.8)), stone);
-      m.position.set(p.x, ARCH.h / 2, p.y);
+      m.position.set(p.x, ah + ARCH.h / 2, p.y);
       m.castShadow = true;
       withInk(scene, m, 0.1);
       const cap = new THREE.Mesh(own(new THREE.BoxGeometry(1.05, 0.3, 1.05)), gold);
-      cap.position.set(p.x, ARCH.h + 0.15, p.y);
+      cap.position.set(p.x, ah + ARCH.h + 0.15, p.y);
       withInk(scene, cap, 0.08);
     }
     const beam = new THREE.Mesh(own(new THREE.BoxGeometry(ARCH.w + 1.4, 1.1, 0.5)), toon(0x1b2a66));
@@ -763,8 +790,7 @@ export async function buildTown(): Promise<TownScene> {
     );
     sp.position.set(0, ARCH.h - 0.25, 0.26);
     g.add(sp);
-    g.position.set(ARCH.x, 0, ARCH.y);
-    g.rotation.y = Math.PI / 4;
+    g.position.set(ARCH.x, heightAt(ARCH.x, ARCH.y), ARCH.y);
     scene.add(g);
 
     // 안내판
@@ -783,8 +809,8 @@ export async function buildTown(): Promise<TownScene> {
     );
     face.position.set(0, 1.55, 0.045);
     bd.add(face);
-    bd.position.set(BOARD.x, 0, BOARD.y);
-    bd.rotation.y = Math.PI / 4;
+    bd.position.set(BOARD.x, heightAt(BOARD.x, BOARD.y), BOARD.y);
+    bd.rotation.y = 0.3;
     scene.add(bd);
   }
 
@@ -795,7 +821,7 @@ export async function buildTown(): Promise<TownScene> {
     const v = b.model === "stock" ? await stockBuilding(b) : codeBuilding(b);
     const ph = Math.max(2.2, b.h);
     const pick = new THREE.Mesh(own(new THREE.BoxGeometry(b.w, ph, b.d)), pickMat);
-    pick.position.set(b.x + b.w / 2, ph / 2, b.y + b.d / 2);
+    pick.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2) + ph / 2, b.y + b.d / 2);
     pick.updateMatrixWorld();
     views.push({ b, group: v.group, mats: v.mats, fade: 0, pick });
     scene.add(v.group);
@@ -806,7 +832,7 @@ export async function buildTown(): Promise<TownScene> {
     const G = new THREE.Group();
     const mats: THREE.Material[] = [];
     const W = frontLen(b),
-      D = b.face === "y" ? b.d : b.w,
+      D = b.face === "y" || b.face === "-y" ? b.d : b.w,
       h = b.h;
     const mine = <T extends THREE.Material>(m: T) => (mats.push(own(m)), m);
     const mt = (c: THREE.ColorRepresentation, o: THREE.MeshToonMaterialParameters = {}) =>
@@ -846,14 +872,11 @@ export async function buildTown(): Promise<TownScene> {
       for (const [x, z] of posts) box(0.14, 0.8, 0.14, wood, x, 0.4, z, 0.05);
       box(W, 0.1, 0.06, wood, 0, 0.62, -D / 2, 0.04);
       for (const x of [-W / 2, W / 2]) box(0.06, 0.1, D, wood, x, 0.62, 0, 0.04);
-      const s = lotSign(b);
-      const local =
-        b.face === "y"
-          ? { x: s.x - (b.x + b.w / 2), z: s.y - (b.y + b.d / 2) }
-          : { x: -(s.y - (b.y + b.d / 2)), z: s.x - (b.x + b.w / 2) };
+      // 팻말: 앞면 가운데에서 1.2m 안 (lotSign 과 같은 자리)
+      const local = { x: 0, z: D / 2 - 1.2 };
       for (const dx of [-0.9, 0.9])
         box(0.12, 1.3, 0.12, mt(0x8a5a3b), local.x + dx, 0.65, local.z, 0.04);
-      const tex = own(woodSign("새 게임 자리", "COMING SOON"));
+      const tex = own(woodSign(b.sign, b.sub));
       box(2.5, 1.08, 0.08, mt(0x8a5a3b), local.x, 1.6, local.z, 0.06);
       plane(
         2.4,
@@ -1058,8 +1081,8 @@ export async function buildTown(): Promise<TownScene> {
         }
       }
     }
-    G.position.set(b.x + b.w / 2, 0, b.y + b.d / 2);
-    G.rotation.y = b.face === "x" ? Math.PI / 2 : 0;
+    G.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2), b.y + b.d / 2);
+    G.rotation.y = faceRot(b);
     return { group: G, mats };
   }
 
@@ -1191,6 +1214,7 @@ export async function buildTown(): Promise<TownScene> {
 
   return {
     scene,
+    ground,
     sun,
     buildings: views,
     doorRing,

@@ -452,7 +452,7 @@ function Town({ phone }: { phone: boolean }) {
                   : near.href
                     ? "들어가기"
                     : isLot(near)
-                      ? "새 게임 준비 중"
+                      ? near.sub
                       : "준비 중"}
               </span>
             </span>
@@ -633,8 +633,8 @@ function Card({ near, onClose }: { near: Building | "board"; onClose: () => void
         <p className="mt-4 text-[13px] leading-relaxed text-white/85">{nav?.desc ?? b.sub}</p>
       ) : isLot(b) ? (
         <p className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-[13px] leading-relaxed text-white/85">
-          <b className="text-[#FFD36B]">새 게임 자리</b> — 다음 게임이 나오면 이 빈 터에 그 게임
-          화풍의 건물이 들어서요.
+          <b className="text-[#FFD36B]">{b.sub}</b> — 마을을 새로 짓는 중이에요. 곧 이 부지에 그
+          게임 화풍의 건물이 들어서요.
         </p>
       ) : (
         <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-[13px] leading-relaxed text-white/85">

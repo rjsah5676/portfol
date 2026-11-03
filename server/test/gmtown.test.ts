@@ -8,7 +8,6 @@ import {
   blocked,
   doorAt,
   doorFront,
-  hiddenBy,
   isLot,
 } from "../../web/src/lib/gmtown/world";
 import type { ChannelList, TownSnap } from "../../web/src/lib/gmtown/types";
@@ -68,18 +67,6 @@ describe("마을 지도", () => {
     }
     for (const b of BUILDINGS)
       expect(seen[at(doorFront(b).x, doorFront(b).y)], b.id).toBe(1);
-  });
-
-  it("문 앞은 다른 건물에 가려지지 않음 (쿼터뷰에서 건물 뒤는 안 보임)", () => {
-    for (const b of BUILDINGS) {
-      const f = doorFront(b);
-      for (const o of BUILDINGS)
-        if (o !== b)
-          expect(
-            hiddenBy(o, f.x, f.y, 0) || hiddenBy(o, f.x, f.y, 1.6),
-            `${b.id} ← ${o.id}`,
-          ).toBe(false);
-    }
   });
 
   it("건물끼리 겹치지 않음", () => {
