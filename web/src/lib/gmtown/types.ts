@@ -6,7 +6,7 @@
  * 요청 gmtown.move { x, y, d, m } · gmtown.chat { text } · gmtown.channels
  */
 
-export type CharId = "amy";
+export type CharId = "amy" | "mio" | "sera";
 
 export interface PlayerWire {
   /** 이 마을에서만 쓰는 짧은 id (uid 아님) */

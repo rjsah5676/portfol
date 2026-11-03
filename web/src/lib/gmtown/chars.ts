@@ -28,20 +28,19 @@ export interface CharDef {
   dirs: Record<SheetDir, { walk: Sheet; idle: Sheet; start: number }>;
 }
 
+/** 에이미 판 그림 (3D 를 못 받을 때 · 미오 · 세라도 판은 일단 이걸로) */
+const AMY_DIRS: CharDef["dirs"] = {
+  front: { walk: { file: "amy_front_walk.webp", n: 20, w: 110, h: 178, ax: 55.2, ay: 168 }, idle: { file: "amy_front_idle.webp", n: 23, w: 111, h: 169, ax: 55.3, ay: 166 }, start: 15 },
+  frontdiag: { walk: { file: "amy_frontdiag_walk.webp", n: 20, w: 116, h: 180, ax: 72.6, ay: 171 }, idle: { file: "amy_frontdiag_idle.webp", n: 26, w: 97, h: 172, ax: 62.6, ay: 169 }, start: 5 },
+  side: { walk: { file: "amy_side_walk.webp", n: 20, w: 113, h: 176, ax: 54.4, ay: 170 }, idle: { file: "amy_side_idle.webp", n: 21, w: 82, h: 172, ax: 50.6, ay: 169 }, start: 14 },
+  backdiag: { walk: { file: "amy_backdiag_walk.webp", n: 20, w: 128, h: 172, ax: 78.4, ay: 160 }, idle: { file: "amy_backdiag_idle.webp", n: 42, w: 101, h: 161, ax: 66.6, ay: 158 }, start: 17 },
+  back: { walk: { file: "amy_back_walk.webp", n: 20, w: 113, h: 167, ax: 56.7, ay: 160 }, idle: { file: "amy_back_idle.webp", n: 59, w: 118, h: 160, ax: 58.3, ay: 157 }, start: 10 },
+};
+
 export const CHARS: Record<CharId, CharDef> = {
-  amy: {
-    name: "에이미",
-    base: "/gmtown/char/amy",
-    tall: 168,
-    model: "/gmtown/char/amy3d.glb",
-    dirs: {
-      front: { walk: { file: "amy_front_walk.webp", n: 20, w: 110, h: 178, ax: 55.2, ay: 168 }, idle: { file: "amy_front_idle.webp", n: 23, w: 111, h: 169, ax: 55.3, ay: 166 }, start: 15 },
-      frontdiag: { walk: { file: "amy_frontdiag_walk.webp", n: 20, w: 116, h: 180, ax: 72.6, ay: 171 }, idle: { file: "amy_frontdiag_idle.webp", n: 26, w: 97, h: 172, ax: 62.6, ay: 169 }, start: 5 },
-      side: { walk: { file: "amy_side_walk.webp", n: 20, w: 113, h: 176, ax: 54.4, ay: 170 }, idle: { file: "amy_side_idle.webp", n: 21, w: 82, h: 172, ax: 50.6, ay: 169 }, start: 14 },
-      backdiag: { walk: { file: "amy_backdiag_walk.webp", n: 20, w: 128, h: 172, ax: 78.4, ay: 160 }, idle: { file: "amy_backdiag_idle.webp", n: 42, w: 101, h: 161, ax: 66.6, ay: 158 }, start: 17 },
-      back: { walk: { file: "amy_back_walk.webp", n: 20, w: 113, h: 167, ax: 56.7, ay: 160 }, idle: { file: "amy_back_idle.webp", n: 59, w: 118, h: 160, ax: 58.3, ay: 157 }, start: 10 },
-    },
-  },
+  amy: { name: "에이미", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/amy3d.glb", dirs: AMY_DIRS },
+  mio: { name: "미오", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/mio3d.glb", dirs: AMY_DIRS },
+  sera: { name: "세라", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/sera3d.glb", dirs: AMY_DIRS },
 };
 
 /** 방향 0~7 → 시트 · 반전 */

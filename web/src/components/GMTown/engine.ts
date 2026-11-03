@@ -367,21 +367,8 @@ export class TownEngine {
           t.repeat.set(1 / sh.n, 1);
           this.sheets.set(`${c}/${sh.file}`, t);
         }
-    // 3D 캐릭터 (있는 것만, 못 받으면 판으로)
-    const gl = new GLTFLoader();
-    for (const [c, def] of Object.entries(CHARS))
-      if (def.model)
-        gl.loadAsync(def.model).then(
-          (g) => {
-            if (this.dead) return;
-            this.models.set(c, { scene: g.scene, clips: g.animations });
-            this.rigMats.set(c, this.makeRigMats(g.scene));
-            // 판으로 서 있던 사람들을 3D 로
-            for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])])
-              if (a.c === c) this.dropView(a);
-          },
-          (err) => console.error("[gmtown] 3D 캐릭터", err)
-        );
+    // 3D 캐릭터: 마을에 그 캐릭터가 처음 나올 때 받음 (에이미는 바로) — 못 받으면 판으로
+    this.needModel("amy");
     buildTown().then(
       (s) => {
         if (this.dead) return s.dispose();
@@ -535,7 +522,26 @@ export class TownEngine {
     this.hooks.onOverview(on);
   }
 
+  /** 이 캐릭터 3D 모델을 아직 안 받았으면 받기 시작 (다 받으면 판으로 서 있던 사람들을 3D 로) */
+  private needModel(c: string) {
+    const def = CHARS[c as keyof typeof CHARS];
+    if (!def?.model || this.modelLoading.has(c)) return;
+    this.modelLoading.add(c);
+    this.gltf.loadAsync(def.model).then(
+      (g) => {
+        if (this.dead) return;
+        this.models.set(c, { scene: g.scene, clips: g.animations });
+        this.rigMats.set(c, this.makeRigMats(g.scene));
+        for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) if (a.c === c) this.dropView(a);
+      },
+      (err) => console.error("[gmtown] 3D 캐릭터", c, err)
+    );
+  }
+  private modelLoading = new Set<string>();
+  private gltf = new GLTFLoader();
+
   private avatarOf(p: PlayerWire): Avatar {
+    this.needModel(p.c);
     return {
       id: p.id,
       name: p.name,
@@ -1294,7 +1300,7 @@ diffuseColor.a *= smoothstep( 0.05, 0.3, normalize( vNormal ).z );`
             (over
               ? `
 float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
-diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ) )
+diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ), smoothstep( 0.3, 0.42, sampledDiffuseColor.r - sampledDiffuseColor.g ) ) )
   * smoothstep( 0.6, 0.85, normalize( vNormal ).z );`
               : "")
         )
@@ -1384,7 +1390,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     town.scene.add(root, shadow);
     a.face = a.faceTo ?? faceOfDir(a.d);
     const tails: Tail[] = [];
-    for (const nm of ["TailA", "TailB"]) {
+    for (const nm of ["TailA", "TailB", "TailC", "TailD"]) {
       const bones = [0, 1, 2, 3, 4].map((i) => root.getObjectByName(nm + i));
       if (bones.every(Boolean))
         tails.push({

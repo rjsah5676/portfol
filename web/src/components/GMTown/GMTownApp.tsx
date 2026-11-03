@@ -9,7 +9,7 @@ import GameLoader from "@/components/GameLoader";
 import { NAV_GROUPS } from "@/data/navMenu";
 import { rpc, subscribe } from "@/lib/api/socket";
 import { charFiles } from "@/lib/gmtown/chars";
-import type { ChannelList, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
+import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
 import { BUILDINGS, CHAT_MAX, isLot, type BStyle, type Building } from "@/lib/gmtown/world";
 import { TownEngine } from "./engine";
 import { townFiles } from "./scene3d";
@@ -47,6 +47,23 @@ const STYLE_NAME: Record<BStyle, string> = {
   home: "우리 집",
   lot: "빈 터",
 };
+/** 고른 캐릭터: 주소 ?c=mio 로 바꾸면 기억해 둠 (고르는 화면은 나중에) */
+const CHAR_PICK: CharId[] = ["amy", "mio", "sera"];
+function pickedChar(): CharId {
+  try {
+    const q = new URLSearchParams(location.search).get("c") as CharId | null;
+    if (q && CHAR_PICK.includes(q)) {
+      localStorage.setItem("gmtown:c", q);
+      return q;
+    }
+    const s = localStorage.getItem("gmtown:c") as CharId | null;
+    if (s && CHAR_PICK.includes(s)) return s;
+  } catch {
+    /* 저장소 못 쓰면 기본 */
+  }
+  return "amy";
+}
+
 const navItem = (href: string | null) =>
   href ? (NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === href) ?? null) : null;
 
@@ -204,7 +221,7 @@ function Town({ phone }: { phone: boolean }) {
       const at = engine.pos();
       off = subscribe<TownSnap>(
         "gmtown.ch",
-        { ch: want, ...(at ?? {}) },
+        { ch: want, c: pickedChar(), ...(at ?? {}) },
         {
           onSnapshot: (s) => {
             engine.reset(s);

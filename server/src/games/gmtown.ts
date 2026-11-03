@@ -3,7 +3,7 @@ import type { Deps } from "../deps";
 import { AppError, bad } from "../errors";
 import { newId } from "../ids";
 import { CHANNEL_CAP, CHAT_MAX, MAX_CHANNELS, RADIUS, RUN_SPEED, SPAWN, blocked } from "../../../web/src/lib/gmtown/world";
-import type { ChannelList, ChatWire, MoveWire, PlayerWire, TownSnap } from "../../../web/src/lib/gmtown/types";
+import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "../../../web/src/lib/gmtown/types";
 
 /*
  * GMTOWN — 사이트 마을 광장. 채널(최대 40명)마다 서로 보이고 · 걷고 · 말함.
@@ -27,7 +27,7 @@ interface P {
   uid: string;
   name: string;
   guest: boolean;
-  c: "amy";
+  c: CharId;
   x: number;
   y: number;
   d: number;
@@ -112,6 +112,8 @@ export function registerGmtown({ gateway }: Deps, opts: GmtownOptions = {}) {
     ch: z.number().int().min(1).max(MAX_CHANNELS).nullable().optional(),
     x: z.number().finite().optional(),
     y: z.number().finite().optional(),
+    /** 고른 캐릭터 (없으면 에이미) */
+    c: z.enum(["amy", "mio", "sera"]).optional(),
   });
 
   gateway.channel("gmtown.ch", {
@@ -135,7 +137,7 @@ export function registerGmtown({ gateway }: Deps, opts: GmtownOptions = {}) {
         const uid = ctx.uid;
         const guest = !ctx.nick;
         const at = args.x !== undefined && args.y !== undefined && !blocked(args.x, args.y) ? { x: args.x, y: args.y } : spawnAt();
-        p = { id: newId(8), sock, uid, name: ctx.name(`손님${guestNo(uid)}`, 10), guest, c: "amy", x: at.x, y: at.y, d: 0, m: 0, ch: n, bank: BANK_MAX, at: now(), chatAt: 0 };
+        p = { id: newId(8), sock, uid, name: ctx.name(`손님${guestNo(uid)}`, 10), guest, c: args.c ?? "amy", x: at.x, y: at.y, d: 0, m: 0, ch: n, bank: BANK_MAX, at: now(), chatAt: 0 };
         c.players.set(sock, p);
         bySock.set(sock, p);
         gateway.emit(keyOf(n), "join", wire(p));
