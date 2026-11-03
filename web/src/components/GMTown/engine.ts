@@ -87,6 +87,17 @@ interface RigView {
   ghosts: THREE.Object3D[];
   shadow: THREE.Mesh;
   moving: boolean;
+  tails: Tail[];
+}
+
+/** 트윈테일 한 줄기: 뼈 5개(4마디 + 끝점), 흔들리는 점(세계 좌표)과 한 프레임 전 점 */
+interface Tail {
+  bones: THREE.Object3D[];
+  /** 머리 기준 쉬는 자세 (매 프레임 여기서 다시 시작 — 동작에 꼬리 뼈가 없어도 쌓이지 않게) */
+  rest: THREE.Quaternion[];
+  sim: THREE.Vector3[];
+  prev: THREE.Vector3[];
+  ready: boolean;
 }
 
 interface Avatar {
@@ -132,6 +143,11 @@ const INK_COLOR = 0x3a2a3e;
 /** 눈 조각: 얼굴 위에 살짝 띄움 · 앞머리 위로 한 번 더 그릴 때 당기는 거리 (모델 키 1 기준, 앞머리~눈 틈 0.07) */
 const EYE_LIFT = 0.004 * RIG_SCALE;
 const EYE_OVER = 0.12 * RIG_SCALE;
+/** 트윈테일 흔들림: 원래 자세로 당기는 힘 · 흔들림 남는 정도(60fps 한 프레임 기준) · 처짐 · 원래 자세에서 최대 벌어짐 */
+const TAIL_PULL = 0.12;
+const TAIL_DAMP = 0.86;
+const TAIL_G = 2.0;
+const TAIL_MAX = (30 * Math.PI) / 180;
 
 type RigMats = {
   toon: THREE.Material;
@@ -1206,7 +1222,19 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     shadow.renderOrder = 1;
     town.scene.add(root, shadow);
     a.face = a.faceTo ?? faceOfDir(a.d);
-    a.rig = { root, mixer, walk, idle, ghosts, shadow, moving: false };
+    const tails: Tail[] = [];
+    for (const nm of ["TailA", "TailB"]) {
+      const bones = [0, 1, 2, 3, 4].map((i) => root.getObjectByName(nm + i));
+      if (bones.every(Boolean))
+        tails.push({
+          bones: bones as THREE.Object3D[],
+          rest: bones.map((b) => b!.quaternion.clone()),
+          sim: bones.map(() => new THREE.Vector3()),
+          prev: bones.map(() => new THREE.Vector3()),
+          ready: false,
+        });
+    }
+    a.rig = { root, mixer, walk, idle, ghosts, shadow, moving: false, tails };
     return a.rig;
   }
 
@@ -1231,11 +1259,75 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     r.root.position.set(a.x, 0.02, a.y);
     r.root.rotation.y = f;
     r.shadow.position.set(a.x, 0.06, a.y);
+    if (r.tails.length && dt > 0) {
+      r.root.updateMatrixWorld(true);
+      for (const t of r.tails) this.swingTail(t, dt);
+    }
     // 건물에 가려지면 반투명 몸을 위에
     const hidden =
       !this.overview &&
       this.town!.buildings.some((v) => hiddenBy(v.b, a.x, a.y, 0.9, this.camYaw, this.camPitch));
     for (const g of r.ghosts) g.visible = hidden;
+  }
+
+  private tv = [0, 1, 2, 3, 4].map(() => new THREE.Vector3());
+  private tq = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  private tw = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+
+  /**
+   * 트윈테일 스프링: 동작이 정한 자세(A)를 따라가되 관성으로 늦게 · 출렁이게.
+   * 점을 움직이고(관성 + 처짐 + 원래 자세로 당김) 마디 길이를 지킨 뒤, 뼈를 그 점 쪽으로 돌림
+   */
+  private swingTail(t: Tail, dt: number) {
+    const B = t.bones,
+      A = this.tv,
+      S = t.sim,
+      P = t.prev;
+    for (let k = 0; k < 5; k++) B[k].quaternion.copy(t.rest[k]);
+    B[0].updateMatrixWorld(true);
+    for (let k = 0; k < 5; k++) A[k].setFromMatrixPosition(B[k].matrixWorld);
+    if (!t.ready || S[0].distanceToSquared(A[0]) > 4) {
+      for (let k = 0; k < 5; k++) {
+        S[k].copy(A[k]);
+        P[k].copy(A[k]);
+      }
+      t.ready = true;
+      return;
+    }
+    const h = Math.min(dt, 1 / 30),
+      n = h * 60;
+    const damp = Math.pow(TAIL_DAMP, n),
+      pull = 1 - Math.pow(1 - TAIL_PULL, n);
+    const [vel, dir, adir] = this.tw;
+    S[0].copy(A[0]);
+    P[0].copy(A[0]);
+    for (let k = 1; k < 5; k++) {
+      vel.subVectors(S[k], P[k]).multiplyScalar(damp);
+      P[k].copy(S[k]);
+      S[k].add(vel);
+      S[k].y -= TAIL_G * h * h;
+      S[k].lerp(A[k], pull);
+      // 마디 길이 그대로, 원래 방향에서 너무 벌어지지 않게
+      const len = A[k].distanceTo(A[k - 1]);
+      dir.subVectors(S[k], S[k - 1]).normalize();
+      adir.subVectors(A[k], A[k - 1]).normalize();
+      const ang = dir.angleTo(adir);
+      if (ang > TAIL_MAX) dir.lerp(adir, 1 - TAIL_MAX / ang).normalize();
+      S[k].copy(S[k - 1]).addScaledVector(dir, len);
+    }
+    const [qd, qw, qp] = this.tq;
+    for (let k = 0; k < 4; k++) {
+      const b = B[k],
+        sc = this.tw[3];
+      // 방금 갱신된 세계 행렬에서 바로 (조상을 다시 계산하지 않게)
+      b.matrixWorld.decompose(vel, qw, sc);
+      dir.setFromMatrixPosition(B[k + 1].matrixWorld).sub(vel).normalize();
+      adir.subVectors(S[k + 1], vel).normalize();
+      qd.setFromUnitVectors(dir, adir);
+      b.parent!.matrixWorld.decompose(sc, qp, sc);
+      b.quaternion.copy(qp.invert().multiply(qd.multiply(qw)));
+      b.updateMatrixWorld(true);
+    }
   }
 
   private placeAvatar(a: Avatar, dt = 0) {
