@@ -36,3 +36,8 @@ yarn-error.log*
 
 # Claude가 만든 스샷·원본 시트 (작업용, 커밋 안 함)
 /Claude outputs/
+/.cleanup-tmp/
+
+# 파이썬 스크립트 캐시
+__pycache__/
+*.pyc
