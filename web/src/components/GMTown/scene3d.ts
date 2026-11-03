@@ -1513,6 +1513,78 @@ if ( vFade > 0.01 ) {
     views.push({ b, group: v.group, mats: v.mats, fade: 0, pick });
     scene.add(v.group);
   }
+  bakeStatic(views.map((v) => v.group));
+
+  /**
+   * 건물마다 안 움직이는 조각을 재질별로 한 덩어리로 합침 (그리기 호출 수천 → 수백)
+   * 움직이는 조각은 anims 를 몇 번 돌려 보고 바뀐 것 (자리 · 재질 · 보임 · 꼭짓점) + userData.dyn 으로 골라 그대로 둠
+   */
+  function bakeStatic(groups: THREE.Group[]) {
+    const all: THREE.Mesh[] = [];
+    for (const g of groups) g.traverse((o) => (o as THREE.Mesh).isMesh && all.push(o as THREE.Mesh));
+    const snap = () => {
+      for (const g of groups) g.updateMatrixWorld(true);
+      return all.map((m) => ({
+        e: Array.from(m.matrixWorld.elements),
+        mat: m.material,
+        vis: m.visible,
+        ver: Object.values(m.geometry.attributes)
+          .map((a) => (a as THREE.BufferAttribute).version)
+          .join(),
+      }));
+    };
+    const s0 = snap();
+    const moving = new Set<THREE.Mesh>();
+    for (const t of [0.37, 2.9, 7.3, 13.1]) {
+      for (const f of anims) f(t);
+      snap().forEach((x, i) => {
+        const a = s0[i];
+        if (x.mat !== a.mat || x.vis !== a.vis || x.ver !== a.ver || x.e.some((v, j) => Math.abs(v - a.e[j]) > 1e-6)) moving.add(all[i]);
+      });
+    }
+    const pinned = (o: THREE.Object3D | null) => {
+      for (let p = o; p; p = p.parent) if (p.userData.dyn || p.userData.flag) return true;
+      return false;
+    };
+    const inv = new THREE.Matrix4(),
+      rel = new THREE.Matrix4();
+    for (const G of groups) {
+      G.updateMatrixWorld(true);
+      inv.copy(G.matrixWorld).invert();
+      const bins = new Map<string, { mat: THREE.Material; cast: boolean; recv: boolean; geos: THREE.BufferGeometry[]; srcs: THREE.Mesh[] }>();
+      G.traverse((o) => {
+        const m = o as THREE.Mesh;
+        if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh || (m as THREE.SkinnedMesh).isSkinnedMesh) return;
+        if (Array.isArray(m.material) || !m.visible || moving.has(m) || pinned(m)) return;
+        if (m.geometry.morphAttributes.position) return;
+        rel.multiplyMatrices(inv, m.matrixWorld);
+        if (rel.determinant() < 0) return;
+        const g = m.geometry;
+        const key = [m.material.uuid, m.castShadow, m.receiveShadow, !!g.index, Object.keys(g.attributes).sort().join()].join("|");
+        let bin = bins.get(key);
+        if (!bin) bins.set(key, (bin = { mat: m.material, cast: m.castShadow, recv: m.receiveShadow, geos: [], srcs: [] }));
+        const c = g.clone();
+        c.clearGroups();
+        c.applyMatrix4(rel);
+        bin.geos.push(c);
+        bin.srcs.push(m);
+      });
+      for (const bin of bins.values()) {
+        if (bin.srcs.length < 2) {
+          bin.geos.forEach((g) => g.dispose());
+          continue;
+        }
+        const merged = mergeGeometries(bin.geos, false);
+        bin.geos.forEach((g) => g.dispose());
+        if (!merged) continue;
+        for (const m of bin.srcs) m.parent?.remove(m);
+        const mm = new THREE.Mesh(own(merged), bin.mat);
+        mm.castShadow = bin.cast;
+        mm.receiveShadow = bin.recv;
+        G.add(mm);
+      }
+    }
+  }
 
   /** 코드 뼈대 건물 (앞면 = 로컬 +z, 앞면 길이 = 로컬 x) */
   function codeBuilding(b: Building): { group: THREE.Group; mats: THREE.Material[] } {
@@ -2121,10 +2193,12 @@ if ( vFade > 0.01 ) {
         win(side, u, BASE + F1 + BAND + 1.35, 1.6, 1.8);
       }
     for (const u of [-3.0, 0, 3.0]) win(2, u, BASE + F1 + BAND + 1.35, 1.7, 1.8);
+    for (const u of [-3.0, 3.0]) win(2, u, BASE + 1.75, 1.7, 2.0);
     // 층 사이 무늬 판 (클로버 · 다이아 · 하트) — 앞 · 뒤
     [2, 1, 0].forEach((k, i) => {
       const m = texM(panelTex(k));
-      plane(2.3, 0.62, m, (i - 1) * 3.4, BASE + F1 + BAND / 2 + 0.05, zf + 0.03);
+      // 앞 가운데는 이름판 (차양에 안 가리게 층 띠 위로)
+      if (i !== 1) plane(2.3, 0.62, m, (i - 1) * 3.4, BASE + F1 + BAND / 2 + 0.05, zf + 0.03);
       plane(2.3, 0.62, m, (1 - i) * 3.4, BASE + F1 + BAND / 2 + 0.05, -zf - 0.03, Math.PI);
     });
     // 문: 젖빛 유리 나무 쌍문 + 반달 채광창 + 문틀 + 돌 계단
@@ -2135,7 +2209,7 @@ if ( vFade > 0.01 ) {
     box(3.4, 0.25, 1.5, mt(0xb8ab92), 0, BASE - 0.47, zf + 0.75, 0.03);
     box(3.8, 0.5, 1.9, mt(0xa89c84), 0, 0, zf + 0.95, 0.03);
     // 이름 판 (문 위 · 차양 위)
-    plane(2.9, 0.5, texM(nameTex, true), 0, BASE + F1 + BAND / 2 - 0.62, zf + 0.06);
+    plane(2.9, 0.5, texM(nameTex, true), 0, BASE + F1 + BAND / 2 + 0.05, zf + 0.06);
     // 줄무늬 차양 (기울어진 천 + 물결 끝단)
     const aw = new THREE.Group();
     aw.position.set(0, BASE + 3.25, zf + 0.15);
@@ -2335,6 +2409,14 @@ if ( vFade > 0.01 ) {
       plane(2.5, 1.7, room, sx * 3.3, 5.4, zf + 0.21);
       for (let i = 0; i < 3; i++) plane(0.45, 0.25, yellow, sx * (2.75 + i * 0.55), 4.05, zf + 0.31);
     }
+    // 뒤: 창 둘 (보라 방) + 청록 줄 둘 + 건전지 뚜껑
+    for (const sx of [-1, 1]) {
+      box(3.0, 2.2, 0.3, deepM, sx * 2.7, 3.7, -zf - 0.05, 0.04);
+      plane(2.5, 1.7, room, sx * 2.7, 4.8, -zf - 0.21, Math.PI);
+    }
+    for (const y of [2.4, 3.0]) plane(W - 1.4, 0.3, cyan, 0, y, -zf - 0.01, Math.PI);
+    box(3.4, 1.2, 0.2, deepM, 0, 0.9, -zf - 0.02, 0.04);
+    for (let i = 0; i < 4; i++) plane(0.5, 0.12, cyan, -1.05 + i * 0.7, 1.5, -zf - 0.13, Math.PI);
     // 스피커 둘 (분홍 틀 · 콘 · 청록 링 · 가운데 캡) — 쿵쿵
     const BEAT = 2; // 초당 박자 (120bpm)
     for (const sx of [-1, 1]) {
@@ -2475,7 +2557,7 @@ if ( vFade > 0.01 ) {
           g.fillRect(0, 0, w, h);
           g.textAlign = "center";
           g.textBaseline = "middle";
-          g.font = "bold 15px monospace";
+          g.font = '700 12px "Galmuri11", monospace';
           g.fillStyle = "#3df0ff";
           g.fillText(b.sign, w / 2 + 1, h / 2 + 1);
           g.fillStyle = "#c9388a";
@@ -2613,6 +2695,9 @@ if ( vFade > 0.01 ) {
       plane(D - 2, 1.9, room, sx * (W / 2 - 0.14), 6.65, 0, (sx * Math.PI) / 2);
       plane(D - 2.4, 2.2, room, sx * (W / 2 + 0.01), 2.5, 0, (sx * Math.PI) / 2);
     }
+    // 뒤 (비어 보이지 않게 1 · 2층 창)
+    plane(W - 2.4, 2.2, room, 0, 2.5, -zf - 0.01, Math.PI);
+    plane(W - 1.6, 1.7, room, 0, 6.55, -zf + 0.14, Math.PI);
     // 모서리 기둥 (블록 + 노란 등 줄)
     for (const sx of [-1, 1])
       for (const sz of [-1, 1]) {
@@ -2659,7 +2744,7 @@ if ( vFade > 0.01 ) {
           g.fillRect(0, h - 5, w, 5);
           g.textAlign = "center";
           g.textBaseline = "middle";
-          g.font = "bold 15px monospace";
+          g.font = '700 12px "Galmuri11", monospace';
           g.fillStyle = "#8e2a2a";
           g.fillText(b.sign, w / 2 + 1, h / 2 + 1);
           g.fillStyle = "#e9402e";

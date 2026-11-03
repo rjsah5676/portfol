@@ -464,6 +464,7 @@ function kit(ctx: LotCtx, b: Building) {
     };
     const hh = mk(r * 0.48, r * 0.1, 0.01),
       mm = mk(r * 0.72, r * 0.07, 0.02);
+    hh.userData.dyn = mm.userData.dyn = true;
     ball(r * 0.08, handM, x, y, z + 0.03, 0, p, 0);
     anims.push(() => {
       const d = new Date(),
@@ -601,7 +602,7 @@ export function codeLove(ctx: LotCtx, b: Building): Out {
   box(2.4, 0.18, 0.9, mt(0xd8cbb8), 0, 0, zf + 0.5, 0.03);
   tilt(2.2, 0.12, 0.75, mt(0xd8665a), 0, 2.9, zf + 0.36, 0.5, 0, 0.04);
   // 이름판 (문 위)
-  plane(2.0, 0.45, cut(textTex("올인 러브", { w: 320, h: 72, bg: "#fff6ea", fg: "#d0566a", border: "#e0806c", font: '800 38px "Nanum Gothic", sans-serif', r: 26 }), true), 0, F1 - 0.3, zf + 0.06);
+  plane(2.0, 0.45, cut(textTex("올인 러브", { w: 320, h: 72, bg: "#fff6ea", fg: "#d0566a", border: "#e0806c", font: '400 40px "Black Han Sans", sans-serif', r: 26 }), true), 0, F1 - 0.3, zf + 0.06);
   // 줄무늬 차양 둘 (진열창 위) + 물결 끝단 + 전구 줄
   const awT = stripeTex("#f08c7a", "#fff1e4", 10),
     scT = scallopTex("#f08c7a", "#fff1e4", 10);
@@ -1940,7 +1941,7 @@ export function codeStation(ctx: LotCtx, b: Building): Out {
     g.fillRect(0, h - 14, w, 14);
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.font = '800 40px "Nanum Gothic", sans-serif';
+    g.font = '400 42px "Black Han Sans", sans-serif';
     g.fillStyle = "#2b2433";
     g.fillText(STATION_NAME, w / 2, h / 2 - 6);
   })), nb.x, 1.82, nb.z + 0.06);
