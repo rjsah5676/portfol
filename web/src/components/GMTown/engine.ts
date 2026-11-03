@@ -148,7 +148,8 @@ const OV_DIST = 235;
 const OV_PITCH = 60 * DEG;
 /** 왼쪽 끌기 1px 에 돌아가는 각도 · 끌어서 정하는 높이 범위 (줌에 따른 높이는 따로 더함) */
 const ROT_PER_PX = 0.0085;
-const PITCH_MIN = 8 * DEG;
+/** 음수면 땅에 붙은 카메라가 캐릭터를 올려다봄 */
+const PITCH_MIN = -30 * DEG;
 const PITCH_MAX = 72 * DEG;
 const SUN_OFF = new THREE.Vector3(-34, 52, 30);
 const FAR_AWAY = new THREE.Vector3(0, 1e4, -1e4);
@@ -1571,13 +1572,27 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     const target = new THREE.Vector3(this.cam.x, (this.camH + LOOK_H) * (1 - k), this.cam.y);
     const cp = Math.cos(pitch);
     this.camDir.set(cp * Math.sin(this.camYaw), Math.sin(pitch), cp * Math.cos(this.camYaw));
-    cam.position.copy(target).addScaledVector(this.camDir, this.dist);
+    // 올려다보기(음수 각도): 카메라는 땅 높이 그대로 뒤에 두고, 보는 방향만 위로 꺾음
+    const up = Math.min(0, pitch);
+    const flatDir = new THREE.Vector3(Math.sin(this.camYaw), Math.max(0, Math.sin(pitch)), Math.cos(this.camYaw));
+    if (up < 0) cam.position.copy(target).addScaledVector(flatDir.setY(0).normalize(), this.dist * Math.cos(up));
+    else cam.position.copy(target).addScaledVector(this.camDir, this.dist);
     // 카메라가 언덕 속으로 들어가지 않게
-    const floor = heightAt(cam.position.x, cam.position.z) + 0.8;
+    const floor = heightAt(cam.position.x, cam.position.z) + (up < 0 ? 0.45 : 0.8);
+    if (up < 0) cam.position.y = Math.max(floor, target.y - 0.3);
     if (cam.position.y < floor) cam.position.y = floor;
     cam.far = this.dist + 300;
     cam.updateProjectionMatrix();
-    cam.lookAt(target);
+    if (up < 0) {
+      // 캐릭터가 화면 아래쪽에 오게, 위로 |각도| 만큼 올려다봄
+      // 화면 밖으로 캐릭터가 안 나가게 실제 꺾는 각도는 절반쯤 (−30° → 위로 약 16°)
+      const lu = up * 0.55;
+      const look = cam.position.clone().addScaledVector(
+        new THREE.Vector3(-Math.sin(this.camYaw) * Math.cos(lu), -Math.sin(lu), -Math.cos(this.camYaw) * Math.cos(lu)),
+        this.dist
+      );
+      cam.lookAt(look);
+    } else cam.lookAt(target);
     // 카메라와 보는 점 사이 나무는 성기게 (지도 볼 땐 끔)
     if (k < 0.5) town?.setView(cam.position, target);
     else town?.setView(FAR_AWAY, FAR_AWAY);
