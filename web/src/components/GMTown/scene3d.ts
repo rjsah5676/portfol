@@ -915,7 +915,7 @@ diffuseColor.rgb *= col;`
     // 꽃밭: 꽃 덤불 모델을 고르게 (예전 꽃잎 공 대신)
     if (src.has("flowers"))
       FLOWERS.forEach((f, fi) => {
-        const n = Math.max(3, Math.round(f.r * f.r * 1.7));
+        const n = Math.max(3, Math.round(f.r * f.r * 1.05));
         for (let i = 0; i < n; i++) {
           const ang = (i * 137.5 + fi * 11) * (Math.PI / 180),
             rr = Math.sqrt((i + 0.5) / n) * (f.r - 0.25);
@@ -924,7 +924,7 @@ diffuseColor.rgb *= col;`
             x: f.x + Math.cos(ang) * rr,
             y: f.y + Math.sin(ang) * rr * 0.8,
             a: (i * 2.3 + fi) % 6.28,
-            s: 1.15 + ((i * 7 + fi) % 5) * 0.08,
+            s: 1.45 + ((i * 7 + fi) % 5) * 0.1,
           });
         }
       });
