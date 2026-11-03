@@ -2144,6 +2144,8 @@ if ( vFade > 0.01 ) {
     box(0.34, 0.5, 0.34, iron, 0, -0.25, 0.42, 0.03, lamp);
     box(0.26, 0.38, 0.36, mine(new THREE.MeshBasicMaterial({ color: 0xffd58a })), 0, -0.2, 0.42, 0, lamp);
     box(0.42, 0.1, 0.42, iron, 0, 0.25, 0.42, 0.02, lamp);
+    // 문 위 황동 띠
+    box(2.1, 0.08, 0.06, brass, 0, BASE + 2.42, zf + 0.2, 0.02);
     // 화분 둘 (문 양옆)
     for (const sx of [-1, 1]) {
       box(0.75, 0.7, 0.75, walnutDark, sx * 2.35, 0, zf + 0.85, 0.04);
