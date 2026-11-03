@@ -361,7 +361,7 @@ export async function buildTown(): Promise<TownScene> {
       c.stroke();
     };
     // 강가 · 호숫가 모래
-    c.filter = `blur(${PX * 1.2}px)`;
+    c.filter = "blur(6px)";
     const rv: [number, number][] = [];
     for (let y = -4; y <= WORLD.h + 4; y += 2) rv.push([riverX(y), y]);
     stroke(rv, RIVER.bank * 2 + 1, "#0000ff");
@@ -369,7 +369,7 @@ export async function buildTown(): Promise<TownScene> {
     c.beginPath();
     c.ellipse(LAKE.x, LAKE.y, LAKE.rx * 1.35, LAKE.ry * 1.35, 0, 0, Math.PI * 2);
     c.fill();
-    c.filter = `blur(${PX * 0.25}px)`;
+    c.filter = "none";
     // 흙: 부지 · 마당 · 흙길 · 철길
     c.fillStyle = "#00ff00";
     for (const b of BUILDINGS) c.fillRect(b.x, b.y, b.w, b.d);
