@@ -253,7 +253,26 @@ export const BUILDINGS: Building[] = [
     top: "#1B2A66",
     model: "stock",
   },
-  lot("lot-fight", "PIXEL FIGHT 자리", 74, 119, 14, 12, "x"),
+  // PIXEL FIGHT: 복셀(블록) 오락실 · 지붕 뚫고 나온 주먹 — 앞면이 중앙대로(동쪽)를 봄
+  {
+    id: "fight",
+    sign: "PIXEL FIGHT",
+    sub: "1:1 격투 아레나",
+    href: "/games/fight",
+    icon: "px:fight",
+    style: "pixel",
+    roof: "flat",
+    x: 78,
+    y: 119.5,
+    w: 9,
+    d: 11,
+    h: 8.6,
+    face: "x",
+    wall: "#8E2A2A",
+    accent: "#FFC43D",
+    top: "#3A3440",
+    model: "fight",
+  },
   lot("lot-rhythm", "RHYTHM UP 자리", 112, 119, 14, 12, "-x"),
   lot("lot-poker", "포커 자리", 74, 133, 14, 11, "x"),
   lot("lot-love", "올인 러브 자리", 112, 133, 14, 11, "-x"),
@@ -973,7 +992,6 @@ function makeProps(): Prop[] {
   };
   stop(100 + 5 + 1.6, 134, 0, 1, -1, 0);
   stop(64, 100 + 3.5 + 1.6, 1, 0, 0, -1);
-  stop(100 - 5 - 1.6, 122, 0, 1, 1, 0);
   stop(176, 100 + 3.5 + 1.6, 1, 0, 0, -1);
   // 우물: 주택가 가운데 · 호수 공원 (빈 풀밭을 찾아서)
   const well = (cx: number, cy: number) => {

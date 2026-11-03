@@ -55,6 +55,7 @@ export const TOWN_FILES = {
     "/gmtown/props/arch.glb",
     "/gmtown/props/props4.glb",
     "/gmtown/props/trees.glb",
+    "/gmtown/props/fist.glb",
   ],
   tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand" | "rail") => `/gmtown/tex/${n}.webp`,
 };
@@ -1479,7 +1480,7 @@ if ( vFade > 0.01 ) {
   const views: BuildingView[] = [];
   const pickMat = own(new THREE.MeshBasicMaterial({ visible: false }));
   for (const b of BUILDINGS) {
-    const v = b.model === "stock" ? codeStock(b) : codeBuilding(b);
+    const v = b.model === "stock" ? codeStock(b) : b.model === "fight" ? codeFight(b) : codeBuilding(b);
     const ph = Math.max(2.2, b.h);
     const pick = new THREE.Mesh(own(new THREE.BoxGeometry(b.w, ph, b.d)), pickMat);
     pick.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2) + ph / 2, b.y + b.d / 2);
@@ -1750,6 +1751,181 @@ if ( vFade > 0.01 ) {
   }
 
   /** 증권거래소: 3D 모델 + 덧칠 그림 투사 + 전광판 · 간판 (글씨는 코드) */
+  /** PIXEL FIGHT 오락실: 복셀 블록 건물 + 지붕 위 주먹(모델) */
+  function codeFight(b: Building): { group: THREE.Group; mats: THREE.Material[] } {
+    const G = new THREE.Group();
+    const mats: THREE.Material[] = [];
+    const mine = <T extends THREE.Material>(m: T) => (mats.push(own(m)), m);
+    const mt = (c: THREE.ColorRepresentation, o: THREE.MeshToonMaterialParameters = {}) =>
+      mine(new THREE.MeshToonMaterial({ color: c, gradientMap: grad, ...o }));
+    const ink = mine(new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
+    const W = frontLen(b),
+      D = b.face === "y" || b.face === "-y" ? b.d : b.w,
+      zf = D / 2;
+    /** 블록 무늬 (픽셀 벽돌) — 크기에 맞춰 반복 */
+    const brickMat = (base: string, w: number, h: number) => {
+      const t = own(brick(base, shade(base, -0.3), shade(base, 0.18)));
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(w / 2, h / 2);
+      return mine(new THREE.MeshToonMaterial({ map: t, gradientMap: grad }));
+    };
+    const red = "#8e2a2a",
+      char = "#3a3440";
+    const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, k = 0.06) => {
+      const mesh = new THREE.Mesh(own(new THREE.BoxGeometry(w, h, d)), m);
+      mesh.position.set(x, y + h / 2, z);
+      mesh.castShadow = mesh.receiveShadow = true;
+      return withInk(G, mesh, k, ink);
+    };
+    const glow = (c: number) => mine(new THREE.MeshBasicMaterial({ color: c }));
+    const plane = (w: number, h: number, m: THREE.Material, x: number, y: number, z: number, ry = 0) => {
+      const p = new THREE.Mesh(own(new THREE.PlaneGeometry(w, h)), m);
+      p.position.set(x, y, z);
+      p.rotation.y = ry;
+      G.add(p);
+      return p;
+    };
+    const yellow = glow(0xffd34d),
+      orange = mt(0xff9a2e),
+      gold = mt(0xffc43d),
+      charM = brickMat(char, W, 1),
+      darkM = mt(0x2a2530);
+    // 창 안 (보라 불빛 + 오락기 실루엣) — 픽셀
+    const roomTex = own(
+      canvasTex(
+        64,
+        32,
+        (g, w, h) => {
+          const gr = g.createLinearGradient(0, 0, 0, h);
+          gr.addColorStop(0, "#4b2a8a");
+          gr.addColorStop(1, "#1d1238");
+          g.fillStyle = gr;
+          g.fillRect(0, 0, w, h);
+          g.fillStyle = "#c98bff";
+          for (let x = 4; x < w; x += 16) g.fillRect(x, 2, 9, 1);
+          for (let x = 3; x < w; x += 12) {
+            g.fillStyle = "#2a1f55";
+            g.fillRect(x, 12, 8, 20);
+            g.fillStyle = ["#3df0ff", "#ff5fa8", "#8dff5a"][(x / 12) % 3 | 0];
+            g.fillRect(x + 1, 14, 6, 5);
+            g.fillStyle = "#ffd34d";
+            g.fillRect(x + 2, 22, 1, 2);
+            g.fillRect(x + 5, 22, 1, 1);
+          }
+          g.fillStyle = "rgba(255,255,255,0.18)";
+          g.fillRect(0, 0, 2, h);
+          g.fillRect(w - 2, 0, 2, h);
+        },
+        true
+      )
+    );
+    const room = mine(new THREE.MeshBasicMaterial({ map: roomTex }));
+    // 받침 (짙은 블록 + 노란 등)
+    box(W + 0.6, 0.8, D + 0.6, charM, 0, 0, 0, 0.08);
+    for (const sx of [-1, 1])
+      for (let i = 0; i < 4; i++) plane(0.42, 0.32, yellow, sx * (W / 2 - 0.7 - i * 0.62), 0.42, zf + 0.31);
+    // 1층 · 2층 벽
+    box(W, 3.8, D, brickMat(red, W, 3.8), 0, 0.8, 0);
+    box(W + 0.5, 0.6, D + 0.5, charM, 0, 4.6, 0, 0.07);
+    box(W - 0.3, 3.0, D - 0.3, brickMat(red, W, 3), 0, 5.2, 0);
+    // 창: 1층 앞 양옆 · 2층 앞 · 옆
+    for (const sx of [-1, 1]) {
+      plane(2.5, 2.4, room, sx * (W / 2 - 1.9), 2.3, zf + 0.01);
+      box(2.8, 0.2, 0.25, gold, sx * (W / 2 - 1.9), 0.95, zf + 0.05, 0.03);
+    }
+    plane(W - 1.6, 1.7, room, 0, 6.55, zf - 0.14);
+    for (const sx of [-1, 1]) {
+      plane(D - 2, 1.9, room, sx * (W / 2 - 0.14), 6.65, 0, (sx * Math.PI) / 2);
+      plane(D - 2.4, 2.2, room, sx * (W / 2 + 0.01), 2.5, 0, (sx * Math.PI) / 2);
+    }
+    // 모서리 기둥 (블록 + 노란 등 줄)
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        box(1.0, 7.6, 1.0, brickMat(red, 1, 7.6), sx * (W / 2), 0.8, sz * zf, 0.07);
+        plane(0.3, 1.2, yellow, sx * (W / 2), 6.6, sz * (zf + 0.51), sz > 0 ? 0 : Math.PI);
+        plane(0.3, 1.2, yellow, sx * (W / 2), 2.6, sz * (zf + 0.51), sz > 0 ? 0 : Math.PI);
+      }
+    // 지붕 (짙은 판 + 블록 난간 + 모서리 등)
+    box(W + 0.8, 0.6, D + 0.8, charM, 0, 8.2, 0, 0.08);
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) {
+        box(0.9, 0.9, 0.9, darkM, sx * (W / 2 + 0.05), 8.8, sz * (zf + 0.05), 0.06);
+        plane(0.6, 0.6, yellow, sx * (W / 2 + 0.05), 9.25, sz * (zf + 0.51), sz > 0 ? 0 : Math.PI);
+      }
+    for (let x = -W / 2 + 1.2; x < W / 2 - 0.8; x += 1.1)
+      for (const sz of [-1, 1]) box(0.7, 0.4, 0.5, charM, x, 8.8, sz * (zf + 0.15), 0.04);
+    // 체력바 (초록 → 빨강) — 간판 양옆
+    const hp = [0x45e04a, 0x45e04a, 0x9be03c, 0xe7e03a, 0xf6b52e, 0xf5792b, 0xe9402e];
+    // 격투게임 화면 위처럼: 2층 지붕 밑에 두 체력바가 가운데 VS 를 두고 마주 봄 (바깥이 초록)
+    box(W - 1.4, 0.55, 0.3, darkM, 0, 7.75, zf - 0.02, 0.03);
+    for (const sx of [-1, 1])
+      hp.forEach((c, i) => plane(0.52, 0.36, glow(c), sx * (W / 2 - 1.05 - i * 0.6), 8.02, zf + 0.14));
+    box(0.7, 0.7, 0.36, gold, 0, 7.67, zf + 0.02, 0.04);
+    // 입구: 노란 기둥 · 파란 문 · 빨간 계단
+    for (const sx of [-1, 1]) box(0.6, 3.0, 0.6, gold, sx * 1.45, 0.8, zf + 0.25, 0.05);
+    box(3.5, 0.4, 0.8, gold, 0, 3.8, zf + 0.25, 0.05);
+    box(2.3, 2.7, 0.12, mt(0x2f55b8), 0, 0.85, zf + 0.02, 0.03);
+    for (const sx of [-1, 1]) box(0.12, 0.7, 0.08, gold, sx * 0.22, 2.0, zf + 0.1, 0);
+    for (let i = 0; i < 3; i++) {
+      box(3.6 + i * 0.5, 0.27, 0.5, mt(0xc83a3a), 0, 0.53 - i * 0.27, zf + 0.55 + i * 0.5, 0.04);
+      for (const sx of [-1, 1]) box(0.3, 0.27, 0.5, gold, sx * (1.95 + i * 0.25), 0.53 - i * 0.27, zf + 0.55 + i * 0.5, 0);
+    }
+    // 큰 블록 간판 (노랑 · 주황 테 + 빛나는 판 + 픽셀 글자)
+    box(6.4, 2.3, 0.5, orange, 0, 4.0, zf + 0.5, 0.06);
+    box(5.8, 1.8, 0.52, gold, 0, 4.25, zf + 0.5, 0);
+    const signTex = own(
+      canvasTex(
+        96,
+        28,
+        (g, w, h) => {
+          g.fillStyle = "#fff3c4";
+          g.fillRect(0, 0, w, h);
+          g.fillStyle = "#ffe08a";
+          g.fillRect(0, h - 5, w, 5);
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.font = "bold 15px monospace";
+          g.fillStyle = "#8e2a2a";
+          g.fillText(b.sign, w / 2 + 1, h / 2 + 1);
+          g.fillStyle = "#e9402e";
+          g.fillText(b.sign, w / 2, h / 2);
+        },
+        true
+      )
+    );
+    plane(5.4, 1.5, mine(new THREE.MeshBasicMaterial({ map: signTex })), 0, 5.15, zf + 0.77);
+    // 지붕 위 주먹 (Meshy 모델) — 없으면 블록 주먹
+    const fist = propSrc.get("fist");
+    if (fist) {
+      const old = fist.material as THREE.MeshStandardMaterial;
+      const fm = mine(new THREE.MeshToonMaterial({ map: old.map ?? null, gradientMap: grad }));
+      const geo = own(fist.geometry);
+      const m = new THREE.Mesh(geo, fm);
+      // 주먹이 앞(+z)으로 지르게 · 지붕 가운데에서 조금 뒤
+      m.position.set(0, 8.75, 0.2);
+      m.rotation.y = Math.PI / 2;
+      m.scale.setScalar(1.55);
+      m.castShadow = true;
+      G.add(m);
+      const shell = new THREE.BufferGeometry();
+      shell.setAttribute("position", geo.getAttribute("position"));
+      if (geo.index) shell.setIndex(geo.index);
+      const ig = own(mergeVertices(shell, 1e-4));
+      ig.computeVertexNormals();
+      const k = new THREE.Mesh(ig, propInk);
+      k.position.copy(m.position);
+      k.rotation.copy(m.rotation);
+      k.scale.copy(m.scale);
+      G.add(k);
+    } else {
+      box(2.2, 2.6, 2.2, mt(0xf2c49b), 0, 9.6, -0.6, 0.08);
+      box(1.6, 1.2, 1.6, mt(0xc83a3a), 0, 8.8, -0.6, 0.06);
+    }
+    G.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2), b.y + b.d / 2);
+    G.rotation.y = faceRot(b);
+    return { group: G, mats };
+  }
+
   /** 증권거래소 (예전 덧칠 모델과 같은 생김새를 코드로 — 어느 쪽에서 봐도 깨끗하게) */
   function codeStock(b: Building): { group: THREE.Group; mats: THREE.Material[] } {
     const G = new THREE.Group();
