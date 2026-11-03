@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
+import { type LotCtx, codeDefense, codeHome, codeLove, codeSchool, codeStation, codeSuspect } from "./lotBuildings";
 import {
   ARCH,
   BENCHES,
@@ -97,6 +98,15 @@ export interface TownScene {
 }
 
 const INK = 0x2b2433;
+/** 새로 지은 빈 터 건물 (lotBuildings.ts) */
+const LOT_BUILDERS: Record<string, (c: LotCtx, b: Building) => { group: THREE.Group; mats: THREE.Material[] }> = {
+  love: codeLove,
+  suspect: codeSuspect,
+  defense: codeDefense,
+  home: codeHome,
+  school: codeSchool,
+  station: codeStation,
+};
 const TILE = { grass: 7, paving: 3.2, dirt: 5, plaza: 3, sand: 6, rail: 2.5 } as const;
 
 function gradientMap(): THREE.DataTexture {
@@ -442,7 +452,8 @@ export async function buildTown(): Promise<TownScene> {
     // 흙: 부지 · 마당 · 흙길 · 철길 (살짝 흐리게 — 경계에서 섞일 폭)
     c.filter = "blur(3px)";
     c.fillStyle = "#00ff00";
-    for (const b of BUILDINGS) c.fillRect(b.x, b.y, b.w, b.d);
+    // 흙은 빈 터(공사장)만 — 지은 건물 둘레 · 우리 집 마당은 잔디
+    for (const b of BUILDINGS) if (isLot(b)) c.fillRect(b.x, b.y, b.w, b.d);
     c.fillStyle = "#008000";
     for (const q of YARDS) c.fillRect(q.x, q.y, q.w, q.d);
     for (const pth of PATHS) if (pth.kind === "dirt") stroke(pth.pts, pth.w, "#00ff00");
@@ -1481,12 +1492,20 @@ if ( vFade > 0.01 ) {
   // ── 건물 ──
   const views: BuildingView[] = [];
   const pickMat = own(new THREE.MeshBasicMaterial({ visible: false }));
+  const lotCtx: LotCtx = { grad, own, withInk, anims };
   for (const b of BUILDINGS) {
-    const v = b.model === "stock" ? codeStock(b) : b.model === "fight" ? codeFight(b) : b.model === "rhythm"
-          ? codeRhythm(b)
-          : b.model === "poker"
-            ? codePoker(b)
-            : codeBuilding(b);
+    const lotB = b.model ? LOT_BUILDERS[b.model] : undefined;
+    const v = lotB
+      ? lotB(lotCtx, b)
+      : b.model === "stock"
+        ? codeStock(b)
+        : b.model === "fight"
+          ? codeFight(b)
+          : b.model === "rhythm"
+            ? codeRhythm(b)
+            : b.model === "poker"
+              ? codePoker(b)
+              : codeBuilding(b);
     const ph = Math.max(2.2, b.h);
     const pick = new THREE.Mesh(own(new THREE.BoxGeometry(b.w, ph, b.d)), pickMat);
     pick.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2) + ph / 2, b.y + b.d / 2);
