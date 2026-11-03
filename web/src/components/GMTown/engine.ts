@@ -93,6 +93,8 @@ interface RigView {
   cur: THREE.AnimationAction | null;
   /** 가려졌을 때만 보이는 반투명 몸 */
   ghosts: THREE.Object3D[];
+  /** 앞머리 위로 덧그리는 눈 (깊이 안 봄 → 건물에 가려지면 끔) */
+  overs: THREE.Object3D[];
   shadow: THREE.Mesh;
   tails: Tail[];
 }
@@ -194,7 +196,10 @@ type TailK = { pull: number; damp: number; g: number; max: number; bounce: numbe
 const TWIN_K: TailK = { pull: TAIL_PULL, damp: TAIL_DAMP, g: TAIL_G, max: TAIL_MAX, bounce: TAIL_BOUNCE, noFwd: false };
 /** 긴 뒷머리 가닥: 덩어리라 덜 휘고 빨리 돌아옴 · 몸 앞쪽(원래 자세보다 앞)으로는 못 넘어감 — 멈출 때 몸 뚫기 막음 */
 const BACK_K: TailK = { pull: 0.2, damp: 0.84, g: 1.2, max: (13 * Math.PI) / 180, bounce: 1.6, noFwd: true };
+/** 얼굴 옆 짧은 옆머리: 뛸 때 과하게 날리지 않게 */
+const SIDE_K: TailK = { pull: 0.16, damp: 0.86, g: 1.6, max: (14 * Math.PI) / 180, bounce: 1.6, noFwd: false };
 const TAIL_NAMES: [string, TailK][] = [
+  ...["SideA", "SideB"].map((n) => [n, SIDE_K] as [string, TailK]),
   ...["TailA", "TailB", "TailC", "TailD"].map((n) => [n, TWIN_K] as [string, TailK]),
   ..."ABCDEFGH".split("").map((c) => ["Back" + c, BACK_K] as [string, TailK]),
 ];
@@ -210,6 +215,61 @@ type RigMats = {
 /** GLB 안의 눈 조각 (bake 에서 "eyes" 로 만든 것) */
 function isEyes(o: THREE.Object3D) {
   return o.name.startsWith("eyes") || (o.parent?.name.startsWith("eyes") ?? false);
+}
+
+/**
+ * 얼굴 살 표시 (aFlat = 1): 머리 뼈를 주로 따르는 점 중 텍스처가 피부색인 곳 → 툰 그늘을 안 넣음 (얼굴이 반쪽만 어두워지지 않게).
+ * 머리카락(금발 · 분홍 · 파랑)은 색으로 빠짐. 모델마다 한 번, 복제본은 같은 geometry 를 씀
+ */
+function markFlatFace(scene: THREE.Object3D, tex: THREE.Texture | null) {
+  const img = tex?.image as CanvasImageSource | undefined;
+  let px: Uint8ClampedArray | null = null;
+  const S = 1024;
+  if (img) {
+    try {
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = S;
+      const cx = cv.getContext("2d", { willReadFrequently: true });
+      if (cx) {
+        cx.drawImage(img, 0, 0, S, S);
+        px = cx.getImageData(0, 0, S, S).data;
+      }
+    } catch {
+      px = null;
+    }
+  }
+  scene.traverse((o) => {
+    if (!(o instanceof THREE.SkinnedMesh) || isEyes(o)) return;
+    const g = o.geometry as THREE.BufferGeometry;
+    if (g.getAttribute("aFlat")) return;
+    const n = g.getAttribute("position").count;
+    const flat = new Float32Array(n);
+    const uv = g.getAttribute("uv"),
+      si = g.getAttribute("skinIndex"),
+      sw = g.getAttribute("skinWeight");
+    const head = o.skeleton.bones.findIndex((b) => /Head$/.test(b.name));
+    if (px && uv && si && sw && head >= 0)
+      for (let i = 0; i < n; i++) {
+        let best = 0,
+          bw = -1;
+        for (let k = 0; k < 4; k++) {
+          const w = sw.getComponent(i, k);
+          if (w > bw) {
+            bw = w;
+            best = si.getComponent(i, k);
+          }
+        }
+        if (best !== head) continue;
+        const x = Math.min(S - 1, Math.max(0, Math.floor(uv.getX(i) * S))),
+          y = Math.min(S - 1, Math.max(0, Math.floor(uv.getY(i) * S)));
+        const j = (y * S + x) * 4,
+          r = px[j],
+          gg = px[j + 1],
+          b = px[j + 2];
+        if (r > 215 && gg > 170 && b > 160 && r >= gg && gg >= b - 10 && r - gg < 58) flat[i] = 1;
+      }
+    g.setAttribute("aFlat", new THREE.BufferAttribute(flat, 1));
+  });
 }
 
 /** 뛰기로 바뀌는 거리 (누른 곳까지 길 길이, m) */
@@ -1227,13 +1287,16 @@ export class TownEngine {
     if (etex) etex.anisotropy = aniso;
     // 양면: Tripo 메시에 뒤집힌 면이 섞여 있어서 한 면만 그리면 그 자리로 외곽선 껍데기가 비쳐 검은 점이 됨
     const toon = new THREE.MeshToonMaterial({ map: tex, side: THREE.DoubleSide });
+    markFlatFace(scene, tex);
     toon.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU);
+      sh.vertexShader = sh.vertexShader
+        .replace("void main() {", "attribute float aFlat;\nvarying float vFlat;\nvoid main() {\nvFlat = aFlat;");
       sh.fragmentShader = sh.fragmentShader
-        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvoid main() {")
+        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvarying float vFlat;\nvoid main() {")
         .replace(
           "#include <opaque_fragment>",
-          `outgoingLight = diffuseColor.rgb * ( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade );
+          `outgoingLight = diffuseColor.rgb * mix( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade, 1.0, step( 0.5, vFlat ) );
 #include <opaque_fragment>`
         );
     };
@@ -1286,6 +1349,8 @@ vInkZ = normalize( transformedNormal ).z;`
       depthWrite: false,
       side: THREE.FrontSide,
       alphaTest: over ? 0 : 0.01,
+      // 덧그림은 깊이를 안 봄: 위에서 내려다보면 앞머리가 눈 앞으로 두껍게 와서 당겨도 가려졌음 (건물에 가려질 땐 끔)
+      depthTest: !over,
     });
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU, {
@@ -1310,13 +1375,14 @@ diffuseColor.a *= smoothstep( 0.05, 0.3, normalize( vNormal ).z );`
             (over
               ? `
 float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
-diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ), smoothstep( 0.3, 0.42, sampledDiffuseColor.r - sampledDiffuseColor.g ) ) )
-  * smoothstep( 0.6, 0.85, normalize( vNormal ).z );`
+float eWhite = smoothstep( 0.72, 0.82, eLum ) * smoothstep( -0.04, 0.01, sampledDiffuseColor.b - sampledDiffuseColor.r );
+diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite ), max( smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ), smoothstep( 0.3, 0.42, sampledDiffuseColor.r - sampledDiffuseColor.g ) ) )
+  * smoothstep( 0.02, 0.2, normalize( vNormal ).z );`
               : "")
         )
         .replace(
           "#include <opaque_fragment>",
-          `outgoingLight = diffuseColor.rgb * ( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade );
+          `outgoingLight = diffuseColor.rgb;
 #include <opaque_fragment>`
         );
     };
@@ -1333,6 +1399,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
     const root = cloneRig(model.scene);
     root.scale.setScalar(RIG_SCALE);
     const ghosts: THREE.Object3D[] = [];
+    const overs: THREE.Object3D[] = [];
     const skinned: THREE.SkinnedMesh[] = [];
     root.traverse((o) => {
       if (o instanceof THREE.SkinnedMesh) skinned.push(o);
@@ -1351,6 +1418,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
         o.bind(m.skeleton, m.bindMatrix);
         o.frustumCulled = false;
         o.renderOrder = 6;
+        overs.push(o);
         o.position.copy(m.position);
         o.quaternion.copy(m.quaternion);
         o.scale.copy(m.scale);
@@ -1414,7 +1482,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
           k,
         });
     }
-    a.rig = { root, mixer, walk, idle, run, cur: idle, ghosts, shadow, tails };
+    a.rig = { root, mixer, walk, idle, run, cur: idle, ghosts, overs, shadow, tails };
     return a.rig;
   }
 
@@ -1447,6 +1515,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), max( smooths
     // 건물에 가려지면 반투명 몸을 위에
     const hidden = !this.overview && !!this.blocker(a.x, a.y);
     for (const g of r.ghosts) g.visible = hidden;
+    for (const o of r.overs) o.visible = !hidden;
   }
 
   /** 카메라에서 이 사람(가슴 · 머리)까지 사이를 막는 건물 */
