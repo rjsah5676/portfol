@@ -42,11 +42,12 @@ export const TOWN_FILES = {
   stockGlb: "/gmtown/bld/stock.glb",
   stockPaint: "/gmtown/bld/stock_paint.webp",
   stockJson: "/gmtown/bld/stock.json",
-  tex: (n: "grass" | "paving" | "dirt") => `/gmtown/tex/${n}.webp`,
+  tex: (n: "grass" | "paving" | "dirt" | "plaza") => `/gmtown/tex/${n}.webp`,
 };
 /** 미리 받을 파일 (건물을 다시 지을 때 그 건물 파일을 더함) */
 export const townFiles = () => [
   TOWN_FILES.tex("grass"),
+  TOWN_FILES.tex("plaza"),
   TOWN_FILES.tex("paving"),
   TOWN_FILES.tex("dirt"),
 ];
@@ -76,7 +77,7 @@ export interface TownScene {
 }
 
 const INK = 0x2b2433;
-const TILE = { grass: 7, paving: 3.2, dirt: 5 } as const;
+const TILE = { grass: 7, paving: 3.2, dirt: 5, plaza: 3 } as const;
 
 function gradientMap(): THREE.DataTexture {
   const d = new Uint8Array([150, 150, 150, 255, 205, 205, 205, 255, 255, 255, 255, 255]);
@@ -317,14 +318,19 @@ export async function buildTown(): Promise<TownScene> {
 
   // 땅 그림
   const tl = new THREE.TextureLoader();
-  const load = async (n: "grass" | "paving" | "dirt") => {
+  const load = async (n: "grass" | "paving" | "dirt" | "plaza") => {
     const t = own(await tl.loadAsync(TOWN_FILES.tex(n)));
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = 8;
     return t;
   };
-  const [gTex, pTex, dTex] = await Promise.all([load("grass"), load("paving"), load("dirt")]);
+  const [gTex, pTex, dTex, plTex] = await Promise.all([
+    load("grass"),
+    load("paving"),
+    load("dirt"),
+    load("plaza"),
+  ]);
   // ── 지형: 높이 그대로 한 장 (마을 밖 산까지) ──
   const ground = buildGround();
   scene.add(ground);
@@ -393,6 +399,8 @@ export async function buildTown(): Promise<TownScene> {
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, {
         tStone: { value: pTex },
+        tPlaza: { value: plTex },
+        uPlaza: { value: new THREE.Vector4(PLAZA.x, PLAZA.y, PLAZA.r, TILE.plaza) },
         tDirt: { value: dTex },
         tSplat: { value: splat },
         uWorld: { value: new THREE.Vector2(WORLD.w, WORLD.h) },
@@ -410,6 +418,8 @@ export async function buildTown(): Promise<TownScene> {
           `uniform sampler2D tStone;
 uniform sampler2D tDirt;
 uniform sampler2D tSplat;
+uniform sampler2D tPlaza;
+uniform vec4 uPlaza;
 uniform vec2 uWorld;
 uniform vec3 uTile;
 varying vec3 vWP;
@@ -427,7 +437,10 @@ vec2 suv = wuv / uWorld;
 vec3 sp = ( suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0 ) ? vec3( 0.0 ) : texture2D( tSplat, suv ).rgb;
 vec3 col = mix( cG.rgb, cSand, sp.b );
 col = mix( col, cD.rgb, sp.g );
-col = mix( col, cS.rgb, sp.r );
+// 광장은 벽돌 (헤링본), 나머지 돌길은 보도블록
+vec3 cP = texture2D( tPlaza, wuv / uPlaza.w ).rgb;
+float inPlaza = 1.0 - smoothstep( uPlaza.z - 0.05, uPlaza.z + 0.05, distance( wuv, uPlaza.xy ) );
+col = mix( col, mix( cS.rgb, cP, inPlaza ), sp.r );
 // 가파른 산비탈은 바위색, 물에 잠기는 곳은 어둡게
 col = mix( col, vec3( 0.55, 0.52, 0.46 ), smoothstep( 0.78, 0.6, vUp ) );
 col *= mix( 0.72, 1.0, smoothstep( -1.4, -0.4, vWP.y ) );
