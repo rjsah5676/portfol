@@ -2221,9 +2221,13 @@ if ( vFade > 0.01 ) {
       withInk(G, cap, 0.04, ink);
     }
     // 낡은 카드 간판 (앞 비탈 가운데)
-    const cy0 = TOP + 1.45;
-    box(3.6, 0.15, 0.4, walnutDark, 0, TOP + 0.4, slopeZ(TOP + 0.5) - 0.25, 0.03);
-    plane(3.9, 2.2, texM(cardsTex), 0, cy0, slopeZ(cy0) + 0.12);
+    // 처마 바로 위 앞 가장자리에 세워서 비탈에 안 묻힘 (뒤에 나무 받침대 둘)
+    const cy0 = TOP + 1.75,
+      cz = zf + 0.32;
+    box(3.8, 0.2, 0.5, walnutDark, 0, TOP + 0.35, cz - 0.1, 0.03);
+    for (const sx of [-1, 1]) box(0.14, 1.6, 0.14, walnutDark, sx * 1.1, TOP + 0.45, cz - 0.32, 0.02);
+    const cards = plane(4.4, 2.5, texM(cardsTex), 0, cy0, cz);
+    (cards.material as THREE.Material).side = THREE.DoubleSide;
     G.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2), b.y + b.d / 2);
     G.rotation.y = faceRot(b);
     return { group: G, mats };
