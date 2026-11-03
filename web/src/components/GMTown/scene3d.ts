@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import {
   ARCH,
   BENCHES,
@@ -46,9 +47,6 @@ import {
  */
 
 export const TOWN_FILES = {
-  stockGlb: "/gmtown/bld/stock.glb",
-  stockPaint: "/gmtown/bld/stock_paint.webp",
-  stockJson: "/gmtown/bld/stock.json",
   props: [
     "/gmtown/props/props1.glb",
     "/gmtown/props/props2.glb",
@@ -1481,7 +1479,7 @@ if ( vFade > 0.01 ) {
   const views: BuildingView[] = [];
   const pickMat = own(new THREE.MeshBasicMaterial({ visible: false }));
   for (const b of BUILDINGS) {
-    const v = b.model === "stock" ? await stockBuilding(b) : codeBuilding(b);
+    const v = b.model === "stock" ? codeStock(b) : codeBuilding(b);
     const ph = Math.max(2.2, b.h);
     const pick = new THREE.Mesh(own(new THREE.BoxGeometry(b.w, ph, b.d)), pickMat);
     pick.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2) + ph / 2, b.y + b.d / 2);
@@ -1752,93 +1750,133 @@ if ( vFade > 0.01 ) {
   }
 
   /** 증권거래소: 3D 모델 + 덧칠 그림 투사 + 전광판 · 간판 (글씨는 코드) */
-  async function stockBuilding(
-    b: Building
-  ): Promise<{ group: THREE.Group; mats: THREE.Material[] }> {
-    const [gl, paint, meta] = await Promise.all([
-      new GLTFLoader().loadAsync(TOWN_FILES.stockGlb),
-      tl.loadAsync(TOWN_FILES.stockPaint),
-      fetch(TOWN_FILES.stockJson).then((r) => r.json() as Promise<StockMeta>),
-    ]);
-    own(paint);
-    paint.colorSpace = THREE.SRGBColorSpace;
-    paint.anisotropy = 8;
+  /** 증권거래소 (예전 덧칠 모델과 같은 생김새를 코드로 — 어느 쪽에서 봐도 깨끗하게) */
+  function codeStock(b: Building): { group: THREE.Group; mats: THREE.Material[] } {
     const G = new THREE.Group();
-    const model = gl.scene;
-    G.add(model);
-    G.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2), b.y + b.d / 2);
-    G.updateMatrixWorld(true);
-    // 덧칠 그림을 찍은 직교 카메라 (모델 공간) → 지금 놓인 자리 기준으로
-    const r = meta.ref;
-    const rc = new THREE.OrthographicCamera(r.left, r.right, r.top, r.bottom, 0.1, 500);
-    rc.position.fromArray(r.camPos);
-    rc.lookAt(new THREE.Vector3().fromArray(r.center));
-    rc.updateMatrixWorld();
-    rc.updateProjectionMatrix();
-    const P = new THREE.Matrix4()
-      .multiplyMatrices(rc.projectionMatrix, rc.matrixWorldInverse)
-      .multiply(G.matrixWorld.clone().invert());
-    const mat = own(
-      new THREE.ShaderMaterial({
-        uniforms: {
-          map: { value: paint },
-          P: { value: P },
-          inflate: { value: 0.06 },
-          alpha: { value: 1 },
-        },
-        vertexShader:
-          "uniform mat4 P; uniform float inflate; varying vec4 vp;\nvoid main(){ vec3 p = position + normal * inflate; vec4 w = modelMatrix * vec4(p, 1.0); vp = P * w; gl_Position = projectionMatrix * viewMatrix * w; }",
-        fragmentShader:
-          "uniform sampler2D map; uniform float alpha; varying vec4 vp;\nvoid main(){ vec2 uv = vp.xy / vp.w * 0.5 + 0.5; vec4 c = texture2D(map, uv); if (c.a < 0.5) discard; gl_FragColor = vec4(c.rgb, alpha);\n#include <colorspace_fragment>\n}",
+    const S = new THREE.Group();
+    G.add(S);
+    // 원래 모델 크기(14.07 × 9.1 × 6m) 기준으로 짓고 통째로 키움
+    const K = b.w / 14.07;
+    S.scale.setScalar(K);
+    const mats: THREE.Material[] = [];
+    const mine = <T extends THREE.Material>(m: T) => (mats.push(own(m)), m);
+    const mt = (c: THREE.ColorRepresentation, o: THREE.MeshToonMaterialParameters = {}) =>
+      mine(new THREE.MeshToonMaterial({ color: c, gradientMap: grad, ...o }));
+    const ink = mine(new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
+    const cream = mt(0xf6e9d6),
+      navy = mt(0x1b2a66),
+      navyDark = mt(0x14204f),
+      door = mt(0x2f63c9);
+    const glassTex = own(
+      canvasTex(128, 128, (g, W, H) => {
+        g.fillStyle = "#2f6fd1";
+        g.fillRect(0, 0, W, H);
+        g.fillStyle = "#5fa4ee";
+        g.beginPath();
+        g.moveTo(W * 0.15, H);
+        g.lineTo(W * 0.45, H);
+        g.lineTo(W * 0.85, 0);
+        g.lineTo(W * 0.55, 0);
+        g.fill();
+        g.fillStyle = "#4b8ee3";
+        g.beginPath();
+        g.moveTo(W * 0.55, H);
+        g.lineTo(W * 0.65, H);
+        g.lineTo(W * 1.0, H * 0.2);
+        g.lineTo(W * 1.0, 0);
+        g.fill();
       })
     );
-    model.traverse((o) => {
-      const m = o as THREE.Mesh;
-      if (m.isMesh) {
-        own(m.geometry);
-        m.material = mat;
-        m.castShadow = true;
-      }
-    });
-    const mats: THREE.Material[] = [mat];
-    const panel = (q: number[][], tex: THREE.Texture) => {
-      const geo = own(new THREE.BufferGeometry());
-      geo.setAttribute("position", new THREE.Float32BufferAttribute(q.flat(), 3));
-      geo.setAttribute("uv", new THREE.Float32BufferAttribute([0, 1, 1, 1, 1, 0, 0, 0], 2));
-      geo.setIndex([0, 3, 1, 1, 3, 2]);
-      const m = own(new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
-      mats.push(m);
-      model.add(new THREE.Mesh(geo, m));
+    glassTex.wrapS = THREE.RepeatWrapping;
+    const glass = (rep: number) => {
+      const t = glassTex.clone();
+      t.repeat.set(rep, 1);
+      t.needsUpdate = true;
+      own(t);
+      return mine(new THREE.MeshBasicMaterial({ map: t }));
     };
-    const L = (a: number[], b2: number[]) => Math.hypot(a[0] - b2[0], a[1] - b2[1], a[2] - b2[2]);
+    const put = (g: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z: number, k = 0.07) => {
+      const mesh = new THREE.Mesh(own(g), m);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = mesh.receiveShadow = true;
+      return withInk(S, mesh, k, ink);
+    };
+    const rbox = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, r = 0.16, k = 0.07) =>
+      put(new RoundedBoxGeometry(w, h, d, 3, Math.min(r, w / 2 - 0.01, h / 2 - 0.01, d / 2 - 0.01)), m, x, y, z, k);
+    const plane = (w: number, h: number, m: THREE.Material, x: number, y: number, z: number, ry = 0) => {
+      const p = new THREE.Mesh(own(new THREE.PlaneGeometry(w, h)), m);
+      p.position.set(x, y, z);
+      p.rotation.y = ry;
+      S.add(p);
+      return p;
+    };
+    // 몸통 (가로 11 · 깊이 5.3)
+    const BW = 11,
+      BD = 5.3,
+      zf = BD / 2;
+    rbox(BW + 0.5, 0.45, BD + 0.5, cream, 0, 0.225, 0, 0.14); // 받침
+    put(new THREE.BoxGeometry(BW - 0.4, 4.4, BD - 0.4), navyDark, 0, 2.6, 0, 0);
+    // 1층 · 2층 유리창 (앞 · 뒤 · 양옆)
+    for (const [y0, y1] of [
+      [0.6, 2.35],
+      [2.95, 4.35],
+    ] as const) {
+      const hh = y1 - y0,
+        ym = (y0 + y1) / 2;
+      for (const sg of [-1, 1]) plane(BW - 0.5, hh, glass(5), 0, ym, sg * (zf - 0.19), sg > 0 ? 0 : Math.PI);
+      for (const sg of [-1, 1]) plane(BD - 0.5, hh, glass(2.5), sg * (BW / 2 - 0.19), ym, 0, (sg * Math.PI) / 2);
+    }
+    // 층 사이 · 꼭대기 두툼한 크림 띠
+    rbox(BW + 0.3, 0.5, BD + 0.3, cream, 0, 2.62, 0, 0.18);
+    rbox(BW + 0.4, 0.55, BD + 0.4, cream, 0, 4.62, 0, 0.2);
+    // 모서리 · 사이 기둥
+    for (const sx of [-1, 1])
+      for (const sz of [-1, 1]) rbox(0.95, 4.5, 0.95, cream, sx * (BW / 2), 2.55, sz * zf, 0.22);
+    for (const x of [-2.9, 2.9]) for (const sz of [-1, 1]) rbox(0.6, 4.3, 0.5, cream, x, 2.5, sz * zf, 0.16);
+    for (const sx of [-1, 1]) rbox(0.5, 4.3, 0.6, cream, sx * (BW / 2), 2.5, 0, 0.16);
+    // 지붕: 남색 판 + 크림 테두리
+    rbox(BW, 0.3, BD, navy, 0, 5.0, 0, 0.1);
+    for (const sz of [-1, 1]) rbox(BW + 0.4, 0.5, 0.7, cream, 0, 5.2, sz * (zf - 0.15), 0.22);
+    for (const sx of [-1, 1]) rbox(0.7, 0.5, BD + 0.4, cream, sx * (BW / 2 - 0.15), 5.2, 0, 0.22);
+    // 지붕 위 간판 (남색 판 · 크림 테)
+    rbox(9.6, 1.05, 0.5, cream, 0, 5.7, zf - 0.1, 0.22);
+    rbox(9.2, 0.8, 0.52, navy, 0, 5.7, zf - 0.08, 0.12, 0);
+    // 현관: 기둥 둘 + 지붕 + 문 + 계단
+    for (const x of [-1.55, 1.55]) rbox(0.75, 2.4, 0.75, cream, x, 1.65, zf + 0.75, 0.2);
+    rbox(4.2, 0.55, 1.9, cream, 0, 3.0, zf + 0.6, 0.2);
+    put(new THREE.BoxGeometry(2.2, 2.0, 0.12), door, 0, 1.45, zf - 0.1, 0.04);
+    for (const x of [-0.25, 0.25]) put(new THREE.BoxGeometry(0.1, 0.55, 0.06), mt(0xffffff), x, 1.5, zf - 0.02, 0);
+    for (let i = 0; i < 3; i++) rbox(3.4 + i * 0.6, 0.18, 0.6 + i * 0.55, cream, 0, 0.36 - i * 0.12, zf + 1.2 + i * 0.3, 0.06);
+    // 시세판 (앞 · 뒤, 2층 창 위로 흐름) · 간판 글자
     ticker = own(tickerTex());
-    ticker.repeat.set(
-      L(meta.band[0], meta.band[1]) / L(meta.band[0], meta.band[3]) / (2048 / 160),
-      1
+    const TW = BW - 1.4,
+      TH = 1.05;
+    ticker.repeat.set(TW / TH / (2048 / 160), 1);
+    const tm = mine(new THREE.MeshBasicMaterial({ map: ticker }));
+    plane(TW, TH, tm, 0, 3.65, zf + 0.04);
+    plane(TW, TH, tm, 0, 3.65, -zf - 0.04, Math.PI);
+    const signW = 8.9,
+      signH = 0.74;
+    const st = own(
+      canvasTex(Math.round((160 * signW) / signH), 160, (g, W, H) => {
+        g.fillStyle = "#1b2a66";
+        g.fillRect(0, 0, W, H);
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        const fs = Math.round(H * 0.74);
+        g.font = `400 ${fs}px "Black Han Sans", sans-serif`;
+        g.lineWidth = fs * 0.16;
+        g.strokeStyle = "#0b1030";
+        g.strokeText(b.sign, W / 2, H / 2 + 4);
+        g.fillStyle = "#ffe08a";
+        g.fillText(b.sign, W / 2, H / 2 + 4);
+      })
     );
-    panel(meta.band, ticker);
-    panel(
-      meta.sign,
-      own(
-        canvasTex(
-          Math.round((160 * L(meta.sign[0], meta.sign[1])) / L(meta.sign[0], meta.sign[3])),
-          160,
-          (g, W, H) => {
-            g.fillStyle = "#1b2a66";
-            g.fillRect(0, 0, W, H);
-            g.textAlign = "center";
-            g.textBaseline = "middle";
-            const fs = Math.round(H * 0.74);
-            g.font = `400 ${fs}px "Black Han Sans", sans-serif`;
-            g.lineWidth = fs * 0.16;
-            g.strokeStyle = "#0b1030";
-            g.strokeText(b.sign, W / 2, H / 2 + 4);
-            g.fillStyle = "#ffe08a";
-            g.fillText(b.sign, W / 2, H / 2 + 4);
-          }
-        )
-      )
-    );
+    plane(signW, signH, mine(new THREE.MeshBasicMaterial({ map: st })), 0, 5.7, zf + 0.19);
+    // 땅 위 놓기 (뒤는 북쪽, 앞은 남쪽 = 광장) — 몸통 가운데가 부지 가운데보다 조금 뒤
+    S.position.z = (-(9.1 / 2) + zf) * K;
+    G.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2), b.y + b.d / 2);
+    G.rotation.y = faceRot(b);
     return { group: G, mats };
   }
 
@@ -1909,19 +1947,6 @@ if ( vFade > 0.01 ) {
       scene.clear();
     },
   };
-}
-
-interface StockMeta {
-  ref: {
-    left: number;
-    right: number;
-    top: number;
-    bottom: number;
-    camPos: number[];
-    center: number[];
-  };
-  band: number[][];
-  sign: number[][];
 }
 
 /** 색 밝게(+) · 어둡게(−) */
