@@ -8,11 +8,11 @@ import {
   BRIDGES,
   BRIDGE_H,
   BUILDINGS,
+  FENCES,
   FLOWERS,
   FOUNTAIN,
   LAKE,
   LAMPS,
-  PARK,
   PATHS,
   PLAZA,
   onBridge,
@@ -850,23 +850,6 @@ diffuseColor.rgb *= col;`
         scene.add(mk(new THREE.BoxGeometry(p.width + inkGrow, p.height + inkGrow, p.depth + inkGrow), inkShared, inkGrow));
       }
     };
-    const pathSegs = PATHS.flatMap((p) =>
-      p.pts.slice(1).map((b, i) => ({ a: p.pts[i], b, w: p.w, stairs: !!p.stairs }))
-    );
-    const pDist = (x: number, y: number, only?: (s: (typeof pathSegs)[number]) => boolean) => {
-      let m = Infinity;
-      for (const s of pathSegs) {
-        if (only && !only(s)) continue;
-        const [ax, ay] = s.a,
-          [bx, by] = s.b;
-        const L = Math.hypot(bx - ax, by - ay),
-          dx = (bx - ax) / L,
-          dy = (by - ay) / L;
-        const t = Math.max(0, Math.min(L, (x - ax) * dx + (y - ay) * dy));
-        m = Math.min(m, Math.hypot(x - ax - dx * t, y - ay - dy * t) - s.w / 2);
-      }
-      return m;
-    };
     /** 두 점 사이 울타리 (기둥 간격 step · 가로대 높이 rails) — 가운데 gap(m) 만큼 비우면 문 */
     const fence = (
       ax: number,
@@ -907,21 +890,7 @@ diffuseColor.rgb *= col;`
     {
       const posts: P[] = [],
         rails: P[] = [];
-      for (const q of YARDS) {
-        const x0 = q.x - 0.3,
-          y0 = q.y - 0.3,
-          x1 = q.x + q.w + 0.3,
-          y1 = q.y + q.d + 0.3;
-        const sides: [number, number, number, number][] = [
-          [x0, y0, x1, y0],
-          [x1, y0, x1, y1],
-          [x1, y1, x0, y1],
-          [x0, y1, x0, y0],
-        ];
-        const near = sides.map(([a, b, c, d]) => pDist((a + c) / 2, (b + d) / 2));
-        const door = near.indexOf(Math.min(...near));
-        sides.forEach(([a, b, c, d], i) => fence(a, b, c, d, 0.42, posts, rails, [0.22, 0.46], i === door ? 1.3 : 0));
-      }
+      for (const f of FENCES) if (f.kind === "yard") fence(f.ax, f.ay, f.bx, f.by, 0.42, posts, rails, [0.22, 0.46]);
       // 뾰족 말뚝 (위가 세모)
       const picket = mergeGeometries([
         new THREE.BoxGeometry(0.09, 0.55, 0.05).translate(0, 0.275, 0),
@@ -935,19 +904,7 @@ diffuseColor.rgb *= col;`
     {
       const posts: P[] = [],
         rails: P[] = [];
-      const R = PARK.r - 0.4,
-        N = 48;
-      const pt = (i: number) => {
-        const a = (i / N) * Math.PI * 2;
-        return [PARK.x + Math.cos(a) * R, PARK.y + Math.sin(a) * R] as const;
-      };
-      for (let i = 0; i < N; i++) {
-        const [ax, ay] = pt(i),
-          [bx, by] = pt(i + 1);
-        const open = (x: number, y: number) => pDist(x, y, (s) => s.stairs || s.w >= 3) < 1.2;
-        if (open(ax, ay) || open(bx, by) || open((ax + bx) / 2, (ay + by) / 2)) continue;
-        fence(ax, ay, bx, by, 99, posts, rails, [0.5, 0.95]);
-      }
+      for (const f of FENCES) if (f.kind === "park") fence(f.ax, f.ay, f.bx, f.by, 99, posts, rails, [0.5, 0.95]);
       many(new THREE.BoxGeometry(0.14, 1.05, 0.14).translate(0, 0.525, 0), toon(0x8a5a3b), posts, 1, 0.05);
       many(new THREE.BoxGeometry(1, 0.08, 0.08), toon(0xa06a42), rails, 1, 0.03, false);
     }

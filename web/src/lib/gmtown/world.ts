@@ -620,6 +620,83 @@ export const BENCHES: Bench[] = [
   { x: LAKE.x - LAKE.rx - 2.2, y: LAKE.y, a: 0 },
 ];
 
+/** 울타리 한 토막 (부딪힘 · 그리기 같이 씀) — lot = 빈 터 둘레, yard = 주택가 마당, park = 전망 공원 난간 */
+export interface FenceSeg {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+  kind: "lot" | "yard" | "park";
+}
+/** 울타리 두께 반 (m) */
+export const FENCE_HALF = 0.08;
+function makeFences(): FenceSeg[] {
+  const out: FenceSeg[] = [];
+  const add = (ax: number, ay: number, bx: number, by: number, kind: FenceSeg["kind"], gap = 0) => {
+    if (!gap) return void out.push({ ax, ay, bx, by, kind });
+    const L = Math.hypot(bx - ax, by - ay),
+      dx = (bx - ax) / L,
+      dy = (by - ay) / L,
+      g0 = (L - gap) / 2,
+      g1 = (L + gap) / 2;
+    out.push({ ax, ay, bx: ax + dx * g0, by: ay + dy * g0, kind });
+    out.push({ ax: ax + dx * g1, ay: ay + dy * g1, bx, by, kind });
+  };
+  // 빈 터: 뒤 · 양옆 (앞면은 열림) — 그림의 울타리와 같은 자리
+  for (const b of BUILDINGS) {
+    if (!isLot(b)) continue;
+    const W = frontLen(b),
+      D = b.face === "y" || b.face === "-y" ? b.d : b.w;
+    const th = faceRot(b),
+      c = Math.cos(th),
+      sn = Math.sin(th);
+    const cx = b.x + b.w / 2,
+      cy = b.y + b.d / 2;
+    const P = (lx: number, lz: number) => [cx + lx * c + lz * sn, cy - lx * sn + lz * c] as const;
+    const corners = [P(-W / 2, D / 2), P(-W / 2, -D / 2), P(W / 2, -D / 2), P(W / 2, D / 2)];
+    for (let i = 0; i < 3; i++) add(corners[i][0], corners[i][1], corners[i + 1][0], corners[i + 1][1], "lot");
+  }
+  // 주택가 마당: 네 변, 길에서 가장 가까운 변 가운데에 문 (1.3m)
+  for (const q of YARDS) {
+    const x0 = q.x - 0.3,
+      y0 = q.y - 0.3,
+      x1 = q.x + q.w + 0.3,
+      y1 = q.y + q.d + 0.3;
+    const sides: [number, number, number, number][] = [
+      [x0, y0, x1, y0],
+      [x1, y0, x1, y1],
+      [x1, y1, x0, y1],
+      [x0, y1, x0, y0],
+    ];
+    const near = sides.map(([a, b, c, d]) => pathDist((a + c) / 2, (b + d) / 2));
+    const door = near.indexOf(Math.min(...near));
+    sides.forEach(([a, b, c, d], i) => add(a, b, c, d, "yard", i === door ? 1.3 : 0));
+  }
+  // 전망 공원 둘레 (계단 · 길이 들어오는 곳은 비움)
+  const R = PARK.r - 0.4,
+    N = 48;
+  const open = (x: number, y: number) => {
+    for (const p of PATHS) {
+      if (!(p.stairs || p.w >= 3)) continue;
+      for (let i = 0; i < p.pts.length - 1; i++)
+        if (segDist(x, y, p.pts[i][0], p.pts[i][1], p.pts[i + 1][0], p.pts[i + 1][1]) - p.w / 2 < 1.2) return true;
+    }
+    return false;
+  };
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2,
+      a1 = ((i + 1) / N) * Math.PI * 2;
+    const ax = PARK.x + Math.cos(a0) * R,
+      ay = PARK.y + Math.sin(a0) * R,
+      bx = PARK.x + Math.cos(a1) * R,
+      by = PARK.y + Math.sin(a1) * R;
+    if (open(ax, ay) || open(bx, by) || open((ax + bx) / 2, (ay + by) / 2)) continue;
+    add(ax, ay, bx, by, "park");
+  }
+  return out;
+}
+export const FENCES: FenceSeg[] = makeFences();
+
 /** 꽃밭 (밟고 지나갈 수 있음) */
 function makeFlowers(): Flower[] {
   const out: Flower[] = [];
@@ -651,6 +728,19 @@ for (const t of TREES) {
   let l = treeGrid.get(k);
   if (!l) treeGrid.set(k, (l = []));
   l.push(t);
+}
+
+// 울타리도 4m 칸으로 (토막이 걸치는 칸마다)
+const fenceGrid = new Map<number, FenceSeg[]>();
+for (const f of FENCES) {
+  const pad = 1;
+  for (let gx = Math.floor((Math.min(f.ax, f.bx) - pad) / TG); gx <= Math.floor((Math.max(f.ax, f.bx) + pad) / TG); gx++)
+    for (let gy = Math.floor((Math.min(f.ay, f.by) - pad) / TG); gy <= Math.floor((Math.max(f.ay, f.by) + pad) / TG); gy++) {
+      const k = gx * 1000 + gy;
+      let l = fenceGrid.get(k);
+      if (!l) fenceGrid.set(k, (l = []));
+      l.push(f);
+    }
 }
 
 /** (x, y) 에 반지름 r 인 몸이 들어갈 수 있는지 */
@@ -697,6 +787,8 @@ export function blocked(x: number, y: number, r = RADIUS): boolean {
       if (l)
         for (const t of l) if ((x - t.x) ** 2 + (y - t.y) ** 2 < (0.4 * t.s + r) ** 2) return true;
     }
+  const fl = fenceGrid.get(gx * 1000 + gy);
+  if (fl) for (const f of fl) if (segDist(x, y, f.ax, f.ay, f.bx, f.by) < FENCE_HALF + r) return true;
   for (const l of LAMPS) if ((x - l.x) ** 2 + (y - l.y) ** 2 < (0.15 + r) ** 2) return true;
   for (const bn of BENCHES) if ((x - bn.x) ** 2 + (y - bn.y) ** 2 < (0.72 + r) ** 2) return true;
   for (const p of archPosts()) if ((x - p.x) ** 2 + (y - p.y) ** 2 < (0.5 + r) ** 2) return true;
