@@ -47,12 +47,12 @@ export const TOWN_FILES = {
   stockGlb: "/gmtown/bld/stock.glb",
   stockPaint: "/gmtown/bld/stock_paint.webp",
   stockJson: "/gmtown/bld/stock.json",
-  props: "/gmtown/props/props1.glb",
+  props: ["/gmtown/props/props1.glb", "/gmtown/props/props2.glb"],
   tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand" | "rail") => `/gmtown/tex/${n}.webp`,
 };
 /** 미리 받을 파일 (건물을 다시 지을 때 그 건물 파일을 더함) */
 export const townFiles = () => [
-  TOWN_FILES.props,
+  ...TOWN_FILES.props,
   TOWN_FILES.tex("grass"),
   TOWN_FILES.tex("plaza"),
   TOWN_FILES.tex("paving"),
@@ -828,11 +828,43 @@ diffuseColor.rgb *= col;`
 
   // ── 소품 (Meshy 소품 시트 한 장 → 바위 · 덤불 · 우체통 · 쓰레기통 · 통 · 상자) ──
   try {
-    const gl = await new GLTFLoader().loadAsync(TOWN_FILES.props);
     const src = new Map<string, THREE.Mesh>();
-    gl.scene.traverse((o) => {
-      if ((o as THREE.Mesh).isMesh) src.set(o.name, o as THREE.Mesh);
-    });
+    const gls = await Promise.all(TOWN_FILES.props.map((u) => new GLTFLoader().loadAsync(u)));
+    for (const gl of gls)
+      gl.scene.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) src.set(o.name, o as THREE.Mesh);
+      });
+    // 소화전은 단순해서 코드로 (Meshy 가 시트에서 빠뜨림)
+    if (!src.has("hydrant")) {
+      const col = (g: THREE.BufferGeometry, c: number) => {
+        const ng = g.index ? g.toNonIndexed() : g;
+        if (ng !== g) g.dispose();
+        const cc = new THREE.Color(c);
+        const n = ng.attributes.position.count;
+        const a = new Float32Array(n * 3);
+        for (let i = 0; i < n; i++) a.set([cc.r, cc.g, cc.b], i * 3);
+        ng.setAttribute("color", new THREE.BufferAttribute(a, 3));
+        ng.deleteAttribute("uv");
+        return ng;
+      };
+      const red = 0xe2463c,
+        dk = 0xb8322c,
+        metal = 0xc9ccd3;
+      const g = mergeGeometries([
+        col(new THREE.CylinderGeometry(0.21, 0.23, 0.09, 14).translate(0, 0.045, 0), dk),
+        col(new THREE.CylinderGeometry(0.14, 0.15, 0.5, 14).translate(0, 0.34, 0), red),
+        col(new THREE.CylinderGeometry(0.18, 0.18, 0.06, 14).translate(0, 0.6, 0), dk),
+        col(new THREE.SphereGeometry(0.15, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2).translate(0, 0.63, 0), red),
+        col(new THREE.CylinderGeometry(0.04, 0.05, 0.08, 6).translate(0, 0.8, 0), metal),
+        col(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 10).rotateZ(Math.PI / 2).translate(0.18, 0.4, 0), red),
+        col(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 10).rotateZ(Math.PI / 2).translate(-0.18, 0.4, 0), red),
+        col(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 6).rotateZ(Math.PI / 2).translate(0.25, 0.4, 0), metal),
+        col(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 6).rotateZ(Math.PI / 2).translate(-0.25, 0.4, 0), metal),
+        col(new THREE.CylinderGeometry(0.08, 0.08, 0.1, 10).rotateX(Math.PI / 2).translate(0, 0.42, 0.17), red),
+        col(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 6).rotateX(Math.PI / 2).translate(0, 0.42, 0.235), metal),
+      ])!;
+      src.set("hydrant", new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true })));
+    }
     const m4 = new THREE.Matrix4(),
       q = new THREE.Quaternion(),
       up = new THREE.Vector3(0, 1, 0),
@@ -846,7 +878,9 @@ diffuseColor.rgb *= col;`
       const geo = own(mesh.geometry);
       const old = mesh.material as THREE.MeshStandardMaterial;
       if (old.map) own(old.map);
-      const mat = own(new THREE.MeshToonMaterial({ map: old.map ?? null, gradientMap: grad }));
+      const mat = own(
+        new THREE.MeshToonMaterial({ map: old.map ?? null, gradientMap: grad, vertexColors: !!old.vertexColors })
+      );
       old.dispose();
       geo.computeBoundingBox();
       const c = geo.boundingBox!.getCenter(new THREE.Vector3());

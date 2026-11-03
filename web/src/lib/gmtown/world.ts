@@ -714,7 +714,19 @@ function makeFlowers(): Flower[] {
 export const FLOWERS: Flower[] = makeFlowers();
 
 /** 소품 (Meshy 소품 시트에서 뽑은 6가지) — 부딪힘 · 그리기 같이 씀 */
-export type PropKind = "rock" | "bush" | "mailbox" | "bin" | "barrel" | "crates";
+export type PropKind =
+  | "rock"
+  | "bush"
+  | "mailbox"
+  | "bin"
+  | "barrel"
+  | "crates"
+  | "vending"
+  | "planter"
+  | "hydrant"
+  | "picnic"
+  | "topiary"
+  | "cart";
 export interface Prop {
   kind: PropKind;
   x: number;
@@ -732,14 +744,30 @@ export const PROP_R: Record<PropKind, number> = {
   bin: 0.34,
   barrel: 0.44,
   crates: 0.55,
+  vending: 0.43,
+  planter: 0.37,
+  hydrant: 0.2,
+  picnic: 0.56,
+  topiary: 0.42,
+  cart: 0.6,
 };
+/** 길쭉한 소품: 모델 x 축으로 이만큼(크기 1) 늘어난 캡슐로 부딪힘 */
+export const PROP_LEN: Partial<Record<PropKind, number>> = { planter: 0.6, vending: 0.2, picnic: 0.3, cart: 0.5 };
+/** 소품 부딪힘 캡슐 양 끝 (모델 x 축 = 땅 (cos a, −sin a)) */
+export function propSeg(p: Prop): [number, number, number, number] {
+  const h = ((PROP_LEN[p.kind] ?? 0) * p.s) / 2,
+    ux = Math.cos(p.a),
+    uy = -Math.sin(p.a);
+  return [p.x - ux * h, p.y - uy * h, p.x + ux * h, p.y + uy * h];
+}
 function makeProps(): Prop[] {
   const out: Prop[] = [];
   const clear = (x: number, y: number, r: number) => {
     if (x < 10 + r || y < 10 + r || x > WORLD.w - 10 - r || y > WORLD.h - 10 - r) return false;
     if (TREES.some((t) => (t.x - x) ** 2 + (t.y - y) ** 2 < (0.45 * t.s + r + 0.5) ** 2)) return false;
     if (FLOWERS.some((f) => Math.hypot(f.x - x, f.y - y) < f.r + r + 0.6)) return false;
-    if (out.some((p) => Math.hypot(p.x - x, p.y - y) < PROP_R[p.kind] * p.s + r + 0.8)) return false;
+    if (out.some((p) => Math.hypot(p.x - x, p.y - y) < (PROP_R[p.kind] + (PROP_LEN[p.kind] ?? 0) / 2) * p.s + r + 0.8))
+      return false;
     if (LAMPS.some((l) => Math.hypot(l.x - x, l.y - y) < r + 0.6)) return false;
     if (BENCHES.some((b) => Math.hypot(b.x - x, b.y - y) < r + 1.2)) return false;
     return true;
@@ -827,6 +855,102 @@ function makeProps(): Prop[] {
     if (!clear(x, y, PROP_R.rock * s)) continue;
     out.push({ kind: "rock", x, y, a: hash01(i, 523) * 6.28, s });
   }
+  const offRoad = (x: number, y: number, r: number) =>
+    !nearBuilding(x, y, 0.2) && !inYard(x, y, 0.5) && pathDist(x, y) > r * 0.5 && clear(x, y, r);
+  // 광장 나가는 길 양옆: 둥근 화분 나무 (길 너비 따라 각도)
+  for (const [ang, hw] of [
+    [0, 3.5],
+    [Math.PI / 2, 5],
+    [Math.PI, 3.5],
+    [-Math.PI / 2, 4],
+  ] as const) {
+    const R = PLAZA.r + 0.9;
+    const da = Math.asin(Math.min(0.9, (hw + 1.1) / R));
+    for (const sg of [-1, 1]) {
+      const x = PLAZA.x + Math.cos(ang + sg * da) * R,
+        y = PLAZA.y + Math.sin(ang + sg * da) * R;
+      if (clear(x, y, PROP_R.topiary)) out.push({ kind: "topiary", x, y, a: 0, s: 1 });
+    }
+  }
+  // 역 앞 아치 양옆 화분 나무
+  for (const p of archPosts()) {
+    const x = p.x + Math.sign(p.x - ARCH.x) * 1.6,
+      y = p.y - 1.2;
+    if (clear(x, y, PROP_R.topiary)) out.push({ kind: "topiary", x, y, a: 0, s: 1 });
+  }
+  // 노점 수레: 광장 둘레 대각선 (광장 가운데를 봄) + 호숫가
+  for (const ang of [Math.PI / 4, (-3 * Math.PI) / 4, (3 * Math.PI) / 4]) {
+    const R = PLAZA.r + 2.4;
+    const x = PLAZA.x + Math.cos(ang) * R,
+      y = PLAZA.y + Math.sin(ang) * R;
+    const nx = -Math.cos(ang),
+      ny = -Math.sin(ang);
+    if (clear(x, y, PROP_R.cart + 0.4)) out.push({ kind: "cart", x, y, a: Math.atan2(nx, ny), s: 1 });
+  }
+  {
+    const x = LAKE.x - LAKE.rx - 3.2,
+      y = LAKE.y + 4.5;
+    if (clear(x, y, PROP_R.cart + 0.4)) out.push({ kind: "cart", x, y, a: Math.atan2(1, 0), s: 1 });
+  }
+  // 피크닉 테이블: 전망 공원 · 호숫가 · 강둑 풀밭
+  const picnic: [number, number][] = [
+    [PARK.x - 4.5, PARK.y - 4],
+    [PARK.x + 5, PARK.y - 3],
+    [PARK.x + 4, PARK.y + 5.5],
+    [PARK.x - 6, PARK.y + 3.5],
+    [LAKE.x - LAKE.rx - 3.5, LAKE.y - 4.5],
+    [LAKE.x + 1, LAKE.y + LAKE.ry + 3.4],
+    [riverX(62) - RIVER.bank - 4.6, 62],
+    [riverX(128) - RIVER.bank - 4.6, 128],
+  ];
+  picnic.forEach(([x, y], i) => {
+    if (clear(x, y, PROP_R.picnic + 0.4)) out.push({ kind: "picnic", x, y, a: hash01(i, 611) * 0.8 - 0.4, s: 1 });
+  });
+  // 길 따라: 화단 상자 (중앙대로 · 상점가 인도 쪽, 길과 나란히)
+  for (let y = 117; y <= 146; y += 7)
+    for (const sd of [-1, 1]) {
+      const x = 100 + sd * 6.5;
+      if (offRoad(x, y, 0.9)) out.push({ kind: "planter", x, y, a: -Math.PI / 2, s: 1.2 });
+    }
+  for (let x = 20; x <= 84; x += 9)
+    for (const sd of [-1, 1]) {
+      const y = 100 + sd * 4.9;
+      if (offRoad(x, y, 0.9)) out.push({ kind: "planter", x, y, a: 0, s: 1.2 });
+    }
+  // 소화전 · 자판기: 돌길 가장자리 (자판기는 길을 봄)
+  let hy = 0,
+    vd = 0;
+  PATHS.forEach((p, pi) => {
+    if (p.kind !== "stone" || p.w < 4) return;
+    for (let i = 0; i < p.pts.length - 1; i++) {
+      const [ax, ay] = p.pts[i],
+        [bx, by] = p.pts[i + 1];
+      const L = Math.hypot(bx - ax, by - ay),
+        dx = (bx - ax) / L,
+        dy = (by - ay) / L;
+      for (let t = 6; t < L - 4; t += 11) {
+        const k = hash01(pi * 31 + i, t);
+        const sd = k < 0.5 ? -1 : 1;
+        const nx = -dy * sd,
+          ny = dx * sd;
+        if (k < 0.3 && hy < 14) {
+          const x = ax + dx * t + nx * (p.w / 2 + 0.6),
+            y = ay + dy * t + ny * (p.w / 2 + 0.6);
+          if (offRoad(x, y, 0.5) && pathDist(x, y) > 0.3) {
+            out.push({ kind: "hydrant", x, y, a: Math.atan2(-nx, -ny), s: 1 });
+            hy++;
+          }
+        } else if (k > 0.82 && vd < 9) {
+          const x = ax + dx * t + nx * (p.w / 2 + 0.95),
+            y = ay + dy * t + ny * (p.w / 2 + 0.95);
+          if (offRoad(x, y, 0.8) && pathDist(x, y) > 0.55) {
+            out.push({ kind: "vending", x, y, a: Math.atan2(-nx, -ny), s: 1 });
+            vd++;
+          }
+        }
+      }
+    }
+  });
   return out;
 }
 
@@ -877,7 +1001,11 @@ export function blocked(x: number, y: number, r = RADIUS): boolean {
   for (let i = -1; i <= 1; i++)
     for (let j = -1; j <= 1; j++) {
       const l = propGrid.get((gx + i) * 1000 + gy + j);
-      if (l) for (const p of l) if ((x - p.x) ** 2 + (y - p.y) ** 2 < (PROP_R[p.kind] * p.s + r) ** 2) return true;
+      if (l)
+        for (const p of l) {
+          const [ax, ay, bx, by] = propSeg(p);
+          if (segDist(x, y, ax, ay, bx, by) < PROP_R[p.kind] * p.s + r) return true;
+        }
     }
   return false;
 }
