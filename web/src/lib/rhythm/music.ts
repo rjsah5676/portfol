@@ -32,6 +32,8 @@ import neonseasideData from "@/data/rhythm/neonseaside.json";
 import riseofchampionsData from "@/data/rhythm/riseofchampions.json";
 import bladestormData from "@/data/rhythm/bladestorm.json";
 import venombloomData from "@/data/rhythm/venombloom.json";
+import colossusData from "@/data/rhythm/colossus.json";
+import cornercypherData from "@/data/rhythm/cornercypher.json";
 import auroraData from "@/data/rhythm/aurora.json";
 import rooftopData from "@/data/rhythm/rooftop.json";
 
@@ -486,6 +488,24 @@ const VENOMBLOOM = audioSong("venombloom", "Venom Bloom", "/audio/venombloom.mp3
   desc: "140 BPM · GIRL-CRUSH K-POP TRAP · AI 자작곡 (tunee.ai)",
 });
 
+// 3분 4초 → 2분 38초: 0:52~1:17(16마디)을 덜어 냄 (유사도 0.88)
+const COLOSSUS = audioSong("colossus", "COLOSSUS", "/audio/colossus.mp3", colossusData, {
+  color: "#DC2626",
+  desc: "150 BPM · HARDSTYLE · AI 자작곡 (tunee.ai)",
+});
+
+// 3분 47초 → 2분 44초: 0:34~1:37(24마디)을 덜어 냄 (유사도 0.92)
+const CORNERCYPHER = audioSong(
+  "cornercypher",
+  "Corner Cypher",
+  "/audio/cornercypher.mp3",
+  cornercypherData,
+  {
+    color: "#CA8A04",
+    desc: "92 BPM · BOOM BAP HIP-HOP · AI 자작곡 (tunee.ai)",
+  }
+);
+
 // 4분 7초 → 2분 29초: 1:46~2:56(40마디, 유사도 0.90)과 인트로 0:17~0:45(16마디, 0.85)를 덜어 냄
 const AURORA = audioSong("aurora", "Aurora Ascent", "/audio/aurora.mp3", auroraData, {
   color: "#7C3AED",
@@ -582,6 +602,8 @@ const FREEDOMDIVE = audioSong(
  *   venombloom     --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 19 코드잭형)
  *   aurora         --bpm-label 138 --boss '{}' --explus '{}' --abyss '{"p3":0.45,"share":0.85}' --levels 3,4,7,11,14,15   (NM 13 · ULT 14 · ABYSS 19 — 트랜스라 8분 하이햇이 꽉 차서 보통~EX 를 한 칸씩 낮춰야 osu 결에 가까움)
  *   rooftop        --bpm-label 162 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}'   (자동 목표 3/5/8/13/15/16 · ABYSS 20 — 기본 코드잭은 22, 스트림형은 18)
+ *   colossus       --bpm 150 --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 20 — 템포가 120 으로 잡혀서 --bpm 150 · 기본 코드잭은 22)
+ *   cornercypher   --single --bpm-label 92 --boss '{"fullSub":6}' --explus '{"fullSub":6,"full":0.7,"loud":0.4,"chordScale":1.4}' --abyss '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 19 — 2배 184 로 잡혀서 --single · 스윙 16분(박의 1/6 · 2/3)이라 셋잇단 격자 → 빽빽한 마디는 16분 셋잇단(fullSub 6), 곡 내내 꽉 차서 full 문턱을 올려 쉬는 마디를 둠)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -630,6 +652,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  COLOSSUS,
+  CORNERCYPHER,
   AURORA,
   ROOFTOP,
   BLADESTORM,

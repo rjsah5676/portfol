@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.22",
+    name: "새 곡 2곡",
+    date: "2026.11.03",
+    lines: [
+      "COLOSSUS — 150 BPM 하드스타일 (EASY 3 ~ ABYSS 20)",
+      "Corner Cypher — 92 BPM 붐뱁 힙합, 스윙 리듬 그대로 (EASY 3 ~ ABYSS 19)",
+      "둘 다 AI 자작곡(tunee.ai), 2분 40초 안팎으로 줄임",
+    ],
+  },
+  {
     ver: "v2.21",
     name: "새 곡 2곡",
     date: "2026.11.02",

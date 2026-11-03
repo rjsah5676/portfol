@@ -2599,10 +2599,13 @@ export interface AbyssTweak {
 export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): Chart {
   let seed = 7;
   const rnd = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32;
-  // 16분 칸: 분석 박을 4등분 (박 사이 흔들림을 따라감)
+  // 16분 칸: 분석 박을 4등분 (박 사이 흔들림을 따라감). 셋잇단 격자 곡은 6등분 — 4등분이면 박의 1/6 · 1/3 자리
+  //  줄이 한 칸으로 합쳐져 같은 레인 노트가 사라짐 (Corner Cypher: 스윙 16분이 1/6 · 2/3 자리)
   const ab = an.beats;
   const anaLen = (ab[ab.length - 1] - ab[0]) / Math.max(1, ab.length - 1);
-  const sub = Math.max(1, Math.round((anaLen / (60 / an.bpm)) * 4));
+  const per = an.div === DIV_TRIPLET ? 6 : 4;
+  const sub = Math.max(1, Math.round((anaLen / (60 / an.bpm)) * per));
+  const BAR = sub * 4;
   const slots: number[] = [];
   for (let i = 0; i + 1 < ab.length; i++)
     for (let k = 0; k < sub; k++) slots.push(ab[i] + ((ab[i + 1] - ab[i]) * k) / sub);
@@ -2642,10 +2645,10 @@ export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): C
     const s = slotOf(o.t);
     if (Math.abs(slots[s] - o.t) <= 0.03) slotS.set(s, Math.max(slotS.get(s) ?? 0, sRank(o.s)));
   }
-  // 마디(16칸) 세기 = ULTIMA 줄 수 + 소리 세기 절반
-  const barE = new Array(Math.ceil(slots.length / 16)).fill(0);
-  for (const r of rows.values()) barE[Math.floor(r.s / 16)] += 1;
-  for (const [s, v] of slotS) barE[Math.floor(s / 16)] += v * 0.5;
+  // 마디(4박) 세기 = ULTIMA 줄 수 + 소리 세기 절반
+  const barE = new Array(Math.ceil(slots.length / BAR)).fill(0);
+  for (const r of rows.values()) barE[Math.floor(r.s / BAR)] += 1;
+  for (const [s, v] of slotS) barE[Math.floor(s / BAR)] += v * 0.5;
   const barSorted = barE.filter((x) => x > 0).sort((x, y) => x - y);
   const rank = (b: number) => {
     const v = barE[b];
@@ -2681,17 +2684,17 @@ export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): C
   if (stream) {
     // 1) 센 마디부터 줄 간격 2·3칸(위 마디는 4칸까지)을 16분 단노트로 — 박당 줄 수가 목표에 닿을 때까지
     const keys = [...rows.keys()];
-    const beats = (Math.max(...keys) - Math.min(...keys)) / 4;
+    const beats = (Math.max(...keys) - Math.min(...keys)) / sub;
     const bars = [...barE.keys()].sort((a, b) => barE[b] - barE[a]);
     for (const b of bars) {
       if (rows.size / beats >= (tw.rpb ?? 3.2)) break;
       const top = rank(b) >= (tw.q4 ?? 0.7);
-      const rs = order().filter((r) => r.s >= b * 16 - 4 && r.s < b * 16 + 20);
+      const rs = order().filter((r) => r.s >= b * BAR - sub && r.s < b * BAR + BAR + sub);
       for (let i = 0; i + 1 < rs.length; i++) {
         const a = rs[i];
         const c = rs[i + 1];
-        const g = c.s - a.s;
-        if (Math.floor(a.s / 16) !== b && Math.floor(c.s / 16) !== b) continue;
+        const g = ((c.s - a.s) * 4) / sub;
+        if (Math.floor(a.s / BAR) !== b && Math.floor(c.s / BAR) !== b) continue;
         if (!(g === 2 || g === 3 || (g === 4 && top))) continue;
         for (const [l, e] of a.lanes) if (e && e > slots[c.s] - 0.02) a.lanes.set(l, undefined);
         let prev = a;
@@ -2721,8 +2724,9 @@ export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): C
     // 3) 센 마디 강세: 정박(·8분·16분 일부) 줄을 하나 더 두껍게 (점프스트림) — 바로 옆 줄 레인은 피함
     for (let i = 1; i + 1 < rs.length; i++) {
       const r = rs[i];
-      if (rank(Math.floor(r.s / 16)) < (tw.q3 ?? 0.7) || r.lanes.size >= 3) continue;
-      const strong = r.s % 4 === 0 ? 1 : r.s % 2 === 0 ? (tw.e8acc ?? 1) : (tw.e16acc ?? 0.3);
+      if (rank(Math.floor(r.s / BAR)) < (tw.q3 ?? 0.7) || r.lanes.size >= 3) continue;
+      const strong =
+        r.s % sub === 0 ? 1 : r.s % (sub / 2) === 0 ? (tw.e8acc ?? 1) : (tw.e16acc ?? 0.3);
       if (rnd() >= strong * (tw.acc ?? 1)) continue;
       const near = r.s - rs[i - 1].s <= 1 || rs[i + 1].s - r.s <= 1;
       const busy = new Set([...lanesOf(rs[i - 1]), ...lanesOf(rs[i + 1])]);
@@ -2733,7 +2737,7 @@ export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): C
     // 센 마디(위 75%) 줄을 소리 세기 · 박 위치 순으로 위 35% 3개 · 다음 45% 2개 동시 —
     //  더하는 노트는 대부분 바로 앞 줄 레인(코드잭), 같은 레인 3연타는 피함
     const rs = order();
-    const el = rs.filter((r) => rank(Math.floor(r.s / 16)) >= (tw.q ?? 0.25));
+    const el = rs.filter((r) => rank(Math.floor(r.s / BAR)) >= (tw.q ?? 0.25));
     for (const r of el) for (const [l, e] of r.lanes) if (e) r.lanes.set(l, undefined);
     const p3 = tw.p3 ?? 0.35;
     const p2 = tw.p2 ?? 0.45;
@@ -2742,7 +2746,9 @@ export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): C
         (r) =>
           [
             r,
-            (slotS.get(r.s) ?? 0) + (r.s % 4 === 0 ? 0.35 : r.s % 2 === 0 ? 0.15 : 0) + rnd() * 0.3,
+            (slotS.get(r.s) ?? 0) +
+              (r.s % sub === 0 ? 0.35 : r.s % (sub / 2) === 0 ? 0.15 : 0) +
+              rnd() * 0.3,
           ] as const
       )
       .sort((a, b) => b[1] - a[1]);
@@ -2758,8 +2764,8 @@ export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): C
       const pp = i > 1 ? rs[i - 2] : null;
       while (r.lanes.size < w) {
         const free = [0, 1, 2, 3].filter((l) => !r.lanes.has(l));
-        const pl = p && r.s - p.s <= 2 ? free.filter((l) => p.lanes.has(l)) : [];
-        const pl2 = pl.filter((l) => !(pp && pp.lanes.has(l) && r.s - pp.s <= 4));
+        const pl = p && r.s - p.s <= sub / 2 ? free.filter((l) => p.lanes.has(l)) : [];
+        const pl2 = pl.filter((l) => !(pp && pp.lanes.has(l) && r.s - pp.s <= sub));
         const l =
           pl2.length && rnd() < (tw.share ?? 0.8)
             ? pl2[Math.floor(rnd() * pl2.length)]

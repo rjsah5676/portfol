@@ -125,8 +125,10 @@ export async function analyzeAudio(
   progress: Progress,
   /** straight: 셋잇단처럼 보여도 1.5배 템포 4/4로 (내장곡 채보 만들 때 직접 지정)
    *  double: 절반 템포로 잡혀도 2배 템포로 (내장곡 채보 만들 때 직접 지정)
-   *  single: 2배 템포 후보를 쓰지 않음 (하프타임 덥스텝·트랩·시티팝처럼 박 사이가 센 곡) */
-  opt: { straight?: boolean; double?: boolean; single?: boolean } = {}
+   *  single: 2배 템포 후보를 쓰지 않음 (하프타임 덥스텝·트랩·시티팝처럼 박 사이가 센 곡)
+   *  bpm: 템포를 이 근처(±4%)에서만 찾음 — 2배·절반이 아닌 엉뚱한 템포로 잡힐 때 (내장곡 채보 만들 때 직접 지정.
+   *       COLOSSUS 하드스타일 150 BPM 이 120 으로 잡혔음 — 120 쪽에 가중치가 있어서) */
+  opt: { straight?: boolean; double?: boolean; single?: boolean; bpm?: number } = {}
 ): Promise<Analysis> {
   progress(0.02, "모노로 변환 중");
   const len = Math.ceil(buffer.duration * SR);
@@ -233,7 +235,9 @@ export async function analyzeAudio(
     // 박의 배수에서도 상관이 크면 진짜 박일 가능성이 큼
     return w * (ac[lag] + 0.5 * (ac[lag * 2] ?? 0) + 0.25 * (ac[lag * 3] ?? 0));
   };
+  const hintLag = opt.bpm ? (60 * FPS) / opt.bpm : 0;
   for (let lag = minLag; lag <= maxLag; lag++) {
+    if (hintLag && Math.abs(lag / hintLag - 1) > 0.04) continue;
     const s = scoreOf(lag);
     if (s > bestScore) {
       bestScore = s;

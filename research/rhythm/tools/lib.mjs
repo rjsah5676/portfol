@@ -46,6 +46,8 @@ export const BUILTIN = {
   venombloom: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 8, 12, 15, 17] },
   aurora: { boss: {}, explus: {}, abyss: { p3: 0.45, share: 0.85 }, levels: [3, 4, 7, 11, 14, 15] },
   rooftop: { boss: {}, explus: {}, abyss: { p3: 0.2, share: 0.6 } },
+  colossus: { bpm: 150, boss: {}, explus: {}, abyss: { p3: 0.2, share: 0.6 }, levels: [3, 5, 8, 12, 15, 17] },
+  cornercypher: { single: true, boss: { fullSub: 6 }, explus: { fullSub: 6, full: 0.7, loud: 0.4, chordScale: 1.4 }, abyss: {}, levels: [3, 5, 8, 12, 15, 17] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

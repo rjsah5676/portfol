@@ -15,6 +15,7 @@
  *   --straight        분석기가 셋잇단(12/8)으로 잘못 볼 때 1.5배 템포 4/4로 강제
  *   --double          분석기가 절반 템포로 잘못 볼 때 2배 템포로 강제
  *   --single          분석기가 2배 템포로 잘못 볼 때 원래 템포로 강제 (하프타임·시티팝)
+ *   --bpm <n>         분석기가 엉뚱한 템포(2배·절반이 아닌)로 잡을 때 n 근처(±4%)에서만 찾음
  *   --tweak '<json>'  난이도별 AutoTweak 덮어쓰기 (예: '{"expert":{"fill":0.6}}')
  *   --levels a,b,c…   난이도별 목표 레벨 (쉬움부터, 별점×4) — 직접 쳐 보고 정한 레벨에 맞춰 뽑음
  *   --dry             파일은 안 쓰고 난이도별 통계만 출력
@@ -45,7 +46,7 @@ const argv = process.argv.slice(2);
 const id = argv.find(
   (a) =>
     !a.startsWith("--") &&
-    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|boss|tweak|levels|explus|abyss|keep)$/)
+    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|bpm|boss|tweak|levels|explus|abyss|keep)$/)
 );
 if (!id) {
   console.error(
@@ -63,6 +64,8 @@ const hardSlots = argv.includes("--hard-slots");
 const straight = argv.includes("--straight");
 const double = argv.includes("--double");
 const single = argv.includes("--single");
+// --bpm <n>: 분석기가 엉뚱한 템포(2배·절반이 아닌)로 잡을 때 n 근처(±4%)에서만 템포를 찾음
+const bpmHint = opt("--bpm") ? Number(opt("--bpm")) : undefined;
 const dry = argv.includes("--dry");
 
 // ── src/lib/rhythm의 TS를 임시 폴더에 JS로 옮겨서 불러옴 ──
@@ -102,7 +105,12 @@ globalThis.OfflineAudioContext = class {
     return { getChannelData: () => pcm };
   }
 };
-const a = await analyzeAudio({ duration: pcm.length / SR }, () => {}, { straight, double, single });
+const a = await analyzeAudio({ duration: pcm.length / SR }, () => {}, {
+  straight,
+  double,
+  single,
+  bpm: bpmHint,
+});
 console.log(
   `분석: ${a.bpm.toFixed(2)} BPM (표시 ${displayBpm(a).toFixed(1)}), 비트 ${a.beats.length}, 타격 ${a.onsets.length}, ${a.duration.toFixed(1)}초`
 );

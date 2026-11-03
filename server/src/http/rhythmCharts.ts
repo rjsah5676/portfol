@@ -23,6 +23,8 @@ import neonseaside from "../../../web/src/data/rhythm/neonseaside.json";
 import riseofchampions from "../../../web/src/data/rhythm/riseofchampions.json";
 import bladestorm from "../../../web/src/data/rhythm/bladestorm.json";
 import venombloom from "../../../web/src/data/rhythm/venombloom.json";
+import colossus from "../../../web/src/data/rhythm/colossus.json";
+import cornercypher from "../../../web/src/data/rhythm/cornercypher.json";
 import aurora from "../../../web/src/data/rhythm/aurora.json";
 import rooftop from "../../../web/src/data/rhythm/rooftop.json";
 
@@ -65,6 +67,8 @@ const SONGS: Record<string, SongData> = {
   riseofchampions,
   bladestorm,
   venombloom,
+  colossus,
+  cornercypher,
   aurora,
   rooftop,
 };
