@@ -14,6 +14,9 @@ import {
   LAMPS,
   PATHS,
   PLAZA,
+  onBridge,
+  onStairs,
+  stairTop,
   RIVER,
   TREES,
   WORLD,
@@ -625,6 +628,158 @@ diffuseColor.rgb *= col;`
         const pier = new THREE.Mesh(own(new THREE.BoxGeometry(0.8, 2.4, br.w - 0.6)), toon(0xb9ab92));
         pier.position.set(cx + dx, BRIDGE_H - 1.6, br.y);
         scene.add(pier);
+      }
+    }
+  }
+
+  // ── 길 소품: 언덕 돌계단 · 큰길 연석 · 철길 (침목 + 레일) ──
+  {
+    /** 같은 상자를 여러 곳에 (+ 외곽선 껍데기) */
+    const boxes = (
+      sx: number,
+      sy: number,
+      sz: number,
+      mat: THREE.Material,
+      list: { x: number; y: number; z: number; rot: number; len?: number }[],
+      ink = 0,
+      shadow = true
+    ) => {
+      if (!list.length) return;
+      const o = new THREE.Object3D();
+      const put = (g: THREE.BufferGeometry, m: THREE.Material, grow: number) => {
+        const im = new THREE.InstancedMesh(own(g), m, list.length);
+        list.forEach((p, i) => {
+          o.position.set(p.x, p.y, p.z);
+          o.rotation.set(0, p.rot, 0);
+          o.scale.set(p.len ? (p.len + grow) / (sx + grow) : 1, 1, 1);
+          o.updateMatrix();
+          im.setMatrixAt(i, o.matrix);
+        });
+        im.computeBoundingSphere();
+        return im;
+      };
+      const im = put(new THREE.BoxGeometry(sx, sy, sz), mat, 0);
+      im.castShadow = shadow;
+      im.receiveShadow = true;
+      scene.add(im);
+      if (ink) scene.add(put(new THREE.BoxGeometry(sx + ink, sy + ink, sz + ink), inkShared, ink));
+    };
+    const segs = (pts: [number, number][]) =>
+      pts.slice(1).map((b, i) => {
+        const a = pts[i];
+        const L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        return { ax: a[0], ay: a[1], dx: (b[0] - a[0]) / L, dy: (b[1] - a[1]) / L, L };
+      });
+    const segD = (x: number, y: number, s: { ax: number; ay: number; dx: number; dy: number; L: number }) => {
+      const t = Math.max(0, Math.min(s.L, (x - s.ax) * s.dx + (y - s.ay) * s.dy));
+      return Math.hypot(x - (s.ax + s.dx * t), y - (s.ay + s.dy * t));
+    };
+
+    // 돌계단: 길을 따라 땅 높이가 한 칸(STAIR_STEP) 넘어갈 때마다 새 칸. 칸 윗면 = 그 구간 가장 높은 땅
+    const stoneStep = toon(0xd8cebd);
+    for (const p of PATHS) {
+      if (!p.stairs) continue;
+      const steps: { x: number; y: number; z: number; rot: number; len: number }[] = [];
+      for (const sg of segs(p.pts)) {
+        let s0 = 0,
+          k0 = stairTop(terrainH(sg.ax, sg.ay));
+        const close = (s1: number) => {
+          if (s1 - s0 < 0.05) return;
+          const m = (s0 + s1) / 2;
+          // 큰길 위로는 안 깔림
+          if (!onStairs(sg.ax + sg.dx * m, sg.ay + sg.dy * m)) return;
+          steps.push({
+            x: sg.ax + sg.dx * m,
+            y: k0 - 0.3,
+            z: sg.ay + sg.dy * m,
+            rot: -Math.atan2(sg.dy, sg.dx),
+            len: s1 - s0,
+          });
+        };
+        for (let t = 0.1; t <= sg.L + 1e-6; t += 0.1) {
+          const k = stairTop(terrainH(sg.ax + sg.dx * t, sg.ay + sg.dy * t));
+          // 큰길 위는 건너뛰고, 길 가장자리부터 첫 칸 시작
+          if (!onStairs(sg.ax + sg.dx * t, sg.ay + sg.dy * t)) {
+            s0 = t;
+            k0 = k;
+            continue;
+          }
+          if (Math.abs(k - k0) > 1e-3) {
+            close(t);
+            s0 = t;
+            k0 = k;
+          }
+        }
+        close(sg.L);
+      }
+      // 길 폭보다 살짝 좁게 · 0.6m 두께 (땅 속으로 묻힘)
+      boxes(1, 0.6, p.w - 0.2, stoneStep, steps, 0.06);
+    }
+
+    // 연석: 넓은 돌길(6m 이상) 양쪽 가장자리. 다른 돌길 · 광장 · 다리와 겹치는 곳은 끊음
+    const stoneSegs = PATHS.filter((p) => p.kind === "stone").flatMap((p) =>
+      segs(p.pts).map((sg) => ({ ...sg, w: p.w }))
+    );
+    const otherSegs = PATHS.filter((p) => p.kind === "dirt").flatMap((p) =>
+      segs(p.pts).map((sg) => ({ ...sg, w: p.w }))
+    );
+    const curbs: { x: number; y: number; z: number; rot: number }[] = [];
+    const CL = 0.5;
+    for (const sg of stoneSegs) {
+      if (sg.w < 6) continue;
+      for (const side of [-1, 1]) {
+        const off = sg.w / 2 + 0.1;
+        for (let t = CL / 2; t < sg.L; t += CL) {
+          const x = sg.ax + sg.dx * t - sg.dy * off * side,
+            y = sg.ay + sg.dy * t + sg.dx * off * side;
+          if (Math.hypot(x - PLAZA.x, y - PLAZA.y) < PLAZA.r + 0.6) continue;
+          if (onBridge(x, y) || Math.abs(x - riverX(y)) < RIVER.bank + 2) continue;
+          if (stoneSegs.some((o) => o !== sg && segD(x, y, o) < o.w / 2 + 0.35)) continue;
+          // 흙길 · 계단이 이어지는 입구도 끊음
+          if (otherSegs.some((o) => segD(x, y, o) < o.w / 2 + 0.3)) continue;
+          curbs.push({ x, y: heightAt(x, y) + 0.04, z: y, rot: -Math.atan2(sg.dy, sg.dx) });
+        }
+      }
+    }
+    boxes(CL, 0.16, 0.22, toon(0xc9c2b6), curbs, 0, false);
+
+    // 철길: 침목(나무) 0.65m 마다 + 레일 두 줄. 높이는 땅을 부드럽게 따라가고 다리 위는 다리 높이
+    for (const p of PATHS) {
+      if (p.kind !== "rail") continue;
+      for (const sg of segs(p.pts)) {
+        const hAt = (t: number) => {
+          const x = sg.ax + sg.dx * t,
+            y = sg.ay + sg.dy * t;
+          if (onBridge(x, y)) return BRIDGE_H;
+          let h = 0,
+            n = 0;
+          for (let u = -3; u <= 3; u += 1) {
+            const xx = x + sg.dx * u,
+              yy = y + sg.dy * u;
+            h += onBridge(xx, yy) ? BRIDGE_H : Math.max(terrainH(xx, yy), -0.2);
+            n++;
+          }
+          return h / n;
+        };
+        const rot = -Math.atan2(sg.dy, sg.dx);
+        const sleepers: { x: number; y: number; z: number; rot: number }[] = [];
+        for (let t = 0.3; t < sg.L; t += 0.65)
+          sleepers.push({ x: sg.ax + sg.dx * t, y: hAt(t) + 0.06, z: sg.ay + sg.dy * t, rot });
+        boxes(0.24, 0.12, 2.1, toon(0x7d5a3c), sleepers, 0.04);
+        const rails: { x: number; y: number; z: number; rot: number; len: number }[] = [];
+        const RL = 1.3;
+        for (const off of [-0.55, 0.55])
+          for (let t = 0; t < sg.L; t += RL) {
+            const m = t + RL / 2;
+            rails.push({
+              x: sg.ax + sg.dx * m - sg.dy * off,
+              y: hAt(m) + 0.18,
+              z: sg.ay + sg.dy * m + sg.dx * off,
+              rot,
+              len: RL,
+            });
+          }
+        boxes(1, 0.1, 0.09, toon(0x8c93a0), rails, 0.03, false);
       }
     }
   }

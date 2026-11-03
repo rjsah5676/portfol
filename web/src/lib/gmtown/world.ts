@@ -77,10 +77,12 @@ export const LAKE = { x: 179, y: 150, rx: 9, ry: 7 } as const;
 export const RIVER = { half: 6, bank: 9 } as const;
 export const riverX = (y: number) => 150 + 8 * Math.sin(y / 32) + 0.06 * y;
 /** 다리 (강을 동서로 건넘): 가운데 y · 폭(남북) */
-export const BRIDGES = [
+export const BRIDGES: { y: number; w: number; rail?: boolean }[] = [
   { y: 100, w: 6 },
   { y: 140, w: 5 },
-] as const;
+  // 철길 다리 (사람도 건널 수 있음)
+  { y: 167, w: 4, rail: true },
+];
 /** 다리 위 높이 */
 export const BRIDGE_H = 0.45;
 export function onBridge(x: number, y: number): boolean {
@@ -96,6 +98,8 @@ export interface Path {
   w: number;
   /** stone = 돌 · 보도블록 큰길, dirt = 흙길 · 산책로, rail = 철길 자갈 */
   kind: "stone" | "dirt" | "rail";
+  /** 언덕길: 돌계단을 깔고, 서 있는 높이도 계단 높이로 */
+  stairs?: boolean;
 }
 
 /** 둑길 (강을 따라 양쪽) */
@@ -118,10 +122,10 @@ export const PATHS: Path[] = [
   // 순환로
   { pts: [[60, 56], [140, 56], [140, 146], [60, 146], [60, 56]], w: 6, kind: "stone" },
   // 언덕 계단길 (순환로 북쪽 → 전망 공원)
-  { pts: [[100, 56], [92, 48], [104, 40], [95, 29]], w: 3.6, kind: "dirt" },
+  { pts: [[100, 56], [92, 48], [104, 40], [95, 29]], w: 3.6, kind: "dirt", stairs: true },
   // 성으로 · 학교로
-  { pts: [[60, 56], [54, 46], [50, 42]], w: 4, kind: "dirt" },
-  { pts: [[140, 56], [137, 46]], w: 4, kind: "dirt" },
+  { pts: [[60, 56], [54, 46], [50, 42]], w: 4, kind: "dirt", stairs: true },
+  { pts: [[140, 56], [137, 46]], w: 4, kind: "dirt", stairs: true },
   // 탐정사무소 골목
   { pts: [[44, 100], [44, 94]], w: 3, kind: "stone" },
   // 주택가 골목
@@ -308,6 +312,36 @@ export function doorFront(b: Building): { x: number; y: number } {
 
 /** 땅 그대로의 높이 (강바닥 포함 — 다리는 heightAt) */
 export function terrainH(x: number, y: number): number {
+  let h = terrainBase(x, y);
+  // 계단길은 가로로 평평하게 (비탈을 비스듬히 지나가도 계단이 한쪽만 묻히지 않게) — 가장 가까운 계단길 가운데 줄 높이로
+  let best = Infinity,
+    bx0 = 0,
+    by0 = 0,
+    bw = 0;
+  for (const p of PATHS) {
+    if (!p.stairs) continue;
+    for (let i = 0; i < p.pts.length - 1; i++) {
+      const [ax, ay] = p.pts[i],
+        [bx, by] = p.pts[i + 1];
+      const L = Math.hypot(bx - ax, by - ay),
+        dx = (bx - ax) / L,
+        dy = (by - ay) / L;
+      const t = Math.max(0, Math.min(L, (x - ax) * dx + (y - ay) * dy));
+      const cx = ax + dx * t,
+        cy = ay + dy * t;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < best) {
+        best = d;
+        bx0 = cx;
+        by0 = cy;
+        bw = p.w;
+      }
+    }
+  }
+  if (best < bw / 2 + 2.5) h += (terrainBase(bx0, by0) - h) * ss(bw / 2 + 2.5, bw / 2 + 0.2, best);
+  return h;
+}
+function terrainBase(x: number, y: number): number {
   let h = rawH(x, y);
   // 살짝 울퉁불퉁
   h += (noise(x + 300, y + 300, 17) - 0.5) * 0.9 * (1 - flatK(x, y));
@@ -361,10 +395,36 @@ function flatten(x: number, y: number, h: number): number {
   }
   return h;
 }
-/** 서 있는 높이 (다리 위면 다리, 아니면 땅) */
+/** 계단 한 칸 높이 (m) */
+export const STAIR_STEP = 0.22;
+/** 계단 길 위인지 (길 너비 안) */
+export function onStairs(x: number, y: number): boolean {
+  // 큰길(돌길) 위는 계단 아님
+  for (const p of PATHS) {
+    if (p.kind !== "stone") continue;
+    for (let i = 0; i < p.pts.length - 1; i++) {
+      const [ax, ay] = p.pts[i],
+        [bx, by] = p.pts[i + 1];
+      if (segDist(x, y, ax, ay, bx, by) < p.w / 2) return false;
+    }
+  }
+  for (const p of PATHS) {
+    if (!p.stairs) continue;
+    for (let i = 0; i < p.pts.length - 1; i++) {
+      const [ax, ay] = p.pts[i],
+        [bx, by] = p.pts[i + 1];
+      if (segDist(x, y, ax, ay, bx, by) < p.w / 2) return true;
+    }
+  }
+  return false;
+}
+/** 계단 칸 윗면 높이 (땅 높이를 한 칸씩 올림) */
+export const stairTop = (h: number) => Math.ceil(h / STAIR_STEP - 1e-4) * STAIR_STEP;
+/** 서 있는 높이 (다리 위면 다리, 계단이면 칸 윗면, 아니면 땅) */
 export function heightAt(x: number, y: number): number {
   if (onBridge(x, y)) return BRIDGE_H;
-  return terrainH(x, y);
+  const h = terrainH(x, y);
+  return onStairs(x, y) ? stairTop(h) : h;
 }
 
 // ───────────── 장식 ─────────────
@@ -597,7 +657,7 @@ for (const t of TREES) {
 export function blocked(x: number, y: number, r = RADIUS): boolean {
   if (x < BOUNDS.x0 + r || y < BOUNDS.y0 + r || x > BOUNDS.x1 - r || y > BOUNDS.y1 - r) return true;
   // 너무 가파른 곳 (기울기 1 넘게 — 강가 벼랑 같은 곳)
-  if (!onBridge(x, y)) {
+  if (!onBridge(x, y) && !onStairs(x, y)) {
     const e = 0.5;
     const gx = heightAt(x + e, y) - heightAt(x - e, y),
       gy = heightAt(x, y + e) - heightAt(x, y - e);
