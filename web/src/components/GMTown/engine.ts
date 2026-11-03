@@ -1377,7 +1377,9 @@ diffuseColor.a *= smoothstep( 0.05, 0.3, normalize( vNormal ).z );`
 float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
 float eWhite = smoothstep( 0.72, 0.82, eLum ) * smoothstep( -0.04, 0.01, sampledDiffuseColor.b - sampledDiffuseColor.r );
 diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite ), max( smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ), smoothstep( 0.3, 0.42, sampledDiffuseColor.r - sampledDiffuseColor.g ) ) )
-  * smoothstep( 0.02, 0.2, normalize( vNormal ).z );`
+  * smoothstep( 0.02, 0.2, normalize( vNormal ).z )
+  // 눈 줄만 (눈썹 · 코 · 입은 앞머리 위로 안 올림 — 위에서 보면 눈썹이 속눈썹처럼 하나 더 보였음)
+  * smoothstep( 0.42, 0.46, vMapUv.y ) * ( 1.0 - smoothstep( 0.62, 0.66, vMapUv.y ) );`
               : "")
         )
         .replace(
