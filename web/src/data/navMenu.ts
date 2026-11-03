@@ -5,6 +5,7 @@ import imgMelongame from "@/img/menu/melongame.jpg";
 import imgRspeed from "@/img/menu/rspeed.jpg";
 import imgMine from "@/img/menu/mine.jpg";
 import imgSuspect from "@/img/menu/suspect.jpg";
+import imgCasefile from "@/img/menu/casefile.jpg";
 import imgBoard from "@/img/menu/board.jpg";
 import imgFight from "@/img/menu/fight.jpg";
 import imgRhythm from "@/img/menu/rhythm.jpg";
@@ -130,6 +131,14 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "단서만으로 범인을 가려내는 하루 한 판 추리 퍼즐, 난이도별 일일 랭킹",
         icon: "px:suspect",
         featured: true,
+        badge: "NEW",
+      },
+      {
+        href: "/games/casefile",
+        image: imgCasefile,
+        label: "오늘의 사건 파일",
+        desc: "동선표와 증거 문서로 알리바이를 깨는 하루 한 판 살인 사건 추리 퍼즐",
+        icon: "🗂️",
         badge: "NEW",
       },
       {

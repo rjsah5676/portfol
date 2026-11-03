@@ -1,0 +1,918 @@
+@import url("https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@700;800&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap");
+
+/*
+ * 오늘의 사건 파일 — 수사 기록철 (회청색 종이 · 남색 잉크 · 붉은 직인)
+ *  풀기 화면: 위 = 수사 보드(시간대 탭 · 도면 · 동선표, 고정) / 아래 = 문서 탭(안에서만 스크롤) — 폰에서 위아래 왕복 없게
+ *  넓은 화면(900px~)은 좌우 2단
+ */
+/* 토큰 · 글꼴은 고르기 창(document.body 로 띄움, .cf-portal)도 같이 씀 */
+.cf,
+.cf-portal {
+  --bg: #e5e8e3;
+  --paper: #f8f9f6;
+  --room: #fdfdfb;
+  --ink: #1c2330;
+  --ink2: #566070;
+  --ink3: #8a929d;
+  --line: #c8cdc5;
+  --wall: #2a3340;
+  --stamp: #b3261e;
+  --stamp-bg: #f6e2df;
+  --ok: #2f6b3a;
+  --ok-bg: #e1eee2;
+  --p0: #34558f;
+  --p1: #1f7a70;
+  --p2: #93650f;
+  --p3: #7b4381;
+  --p4: #55722a;
+  --cf-disp: "Nanum Myeongjo", "Batang", serif;
+  --cf-body: "IBM Plex Sans KR", "Nanum Gothic", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --cf-mono: "IBM Plex Mono", ui-monospace, monospace;
+  color: var(--ink);
+  font-family: var(--cf-body);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.cf {
+  background: var(--bg);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.cf *,
+.cf *::before,
+.cf *::after,
+.cf-portal *,
+.cf-portal *::before,
+.cf-portal *::after {
+  box-sizing: border-box;
+}
+/* 단추 초기화는 우선순위 0 (:where) — 아래 .cf-tier 같은 단추 꾸밈이 이기게 */
+:where(.cf, .cf-portal) button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.cf button:focus-visible,
+.cf-portal button:focus-visible {
+  outline: 2px solid var(--stamp);
+  outline-offset: 2px;
+}
+.cf .mono {
+  font-family: var(--cf-mono);
+}
+.cf .gut {
+  padding-left: 14px;
+  padding-right: 14px;
+}
+.cf .hint {
+  font-size: 12px;
+  color: var(--ink3);
+  margin: 0 0 6px;
+}
+
+/* ───── 첫 화면 ───── */
+.cf-home {
+  padding: 20px 16px 22px;
+}
+.cf-home .no {
+  font-family: var(--cf-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink2);
+}
+.cf-home h2 {
+  font-family: var(--cf-disp);
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 1.15;
+  margin: 2px 0 6px;
+}
+.cf-home .lede {
+  color: var(--ink2);
+  margin: 0 0 12px;
+  word-break: keep-all;
+}
+.cf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.cf-chip {
+  font-size: 12.5px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.cf-tiers {
+  display: grid;
+  gap: 8px;
+}
+@media (min-width: 560px) {
+  .cf-tiers {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.cf-tier {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  text-align: left;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--wall);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.cf-tier:hover {
+  border-color: var(--ink3);
+}
+.cf-tier b {
+  font-size: 17px;
+}
+.cf-tier small {
+  display: block;
+  color: var(--ink2);
+  font-size: 12.5px;
+}
+.cf-tier .st {
+  font-family: var(--cf-mono);
+  font-size: 12.5px;
+  color: var(--ink2);
+  text-align: right;
+}
+.cf-tier .st.done {
+  color: var(--ok);
+}
+.cf-tier .st.go {
+  color: var(--stamp);
+}
+.cf-box {
+  margin-top: 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.cf-box > b {
+  display: block;
+  margin-bottom: 6px;
+}
+.cf-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cf-pill {
+  border: 1px solid var(--line) !important;
+  background: var(--room) !important;
+  border-radius: 999px;
+  padding: 5px 12px !important;
+  font-size: 13px;
+}
+.cf-pill[aria-pressed="true"] {
+  border-color: var(--ink) !important;
+  background: var(--ink) !important;
+  color: var(--paper);
+  font-weight: 600;
+}
+.cf-how {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--ink2);
+  word-break: keep-all;
+}
+.cf-how ol {
+  list-style: decimal;
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+/* ───── 풀기 화면 ───── */
+.cf-play {
+  display: flex;
+  flex-direction: column;
+  /* 사이트 머리(56) + 메뉴(48) 아래를 꽉 채움 */
+  height: calc(100svh - 116px);
+  min-height: 520px;
+  scroll-margin-top: 110px;
+}
+.cf-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+}
+.cf-top .back {
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px !important;
+  border: 1px solid var(--line) !important;
+  flex: none;
+}
+.cf-top .ttl {
+  min-width: 0;
+  flex: 1;
+}
+.cf-top .ttl b {
+  display: block;
+  font-family: var(--cf-disp);
+  font-size: 16.5px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cf-top .ttl span {
+  font-size: 11.5px;
+  color: var(--ink2);
+  font-family: var(--cf-mono);
+}
+.cf-timer {
+  font-family: var(--cf-mono);
+  font-size: 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: var(--room);
+  font-variant-numeric: tabular-nums;
+}
+.cf-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cf-board {
+  flex: none;
+  padding-block: 8px 6px;
+  border-bottom: 1px solid var(--line);
+  max-height: 62%;
+  overflow: auto;
+}
+.cf-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+}
+@media (min-width: 900px) {
+  .cf-play {
+    height: calc(100svh - 132px);
+    min-height: 600px;
+  }
+  .cf-main {
+    flex-direction: row;
+  }
+  .cf-board {
+    width: 52%;
+    max-height: none;
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+    padding-block: 14px;
+  }
+  .cf-panel {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+/* 시간대 탭 */
+.cf-slots {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.cf-slot {
+  flex: 1;
+  border: 1px solid var(--line) !important;
+  background: var(--room) !important;
+  border-radius: 8px;
+  padding: 4px 2px !important;
+  font-family: var(--cf-mono);
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
+}
+.cf-slot small {
+  display: block;
+  font-family: var(--cf-body);
+  font-size: 10.5px;
+  color: var(--ink3);
+}
+.cf-slot[aria-pressed="true"] {
+  background: var(--ink) !important;
+  color: var(--paper);
+  border-color: var(--ink) !important;
+}
+.cf-slot[aria-pressed="true"] small {
+  color: inherit;
+  opacity: 0.75;
+}
+.cf-slot.murder small {
+  color: var(--stamp);
+}
+.cf-slot.murder[aria-pressed="true"] small {
+  color: inherit;
+}
+.cf-bar {
+  display: flex;
+  align-items: center;
+  margin: -2px 0 4px;
+}
+.cf-bar .hint {
+  margin: 0;
+}
+.cf-tog {
+  font-size: 11.5px;
+  color: var(--ink2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* 도면 */
+.cf-plan {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, minmax(54px, auto));
+  border: 3px solid var(--wall);
+  border-radius: 3px;
+  background: var(--room);
+  margin-bottom: 8px;
+}
+@media (min-width: 900px) {
+  .cf-plan {
+    grid-template-rows: repeat(2, minmax(84px, auto));
+  }
+}
+.cf-room {
+  position: relative;
+  border: 1.5px solid var(--wall) !important;
+  margin: -1px;
+  padding: 4px 5px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  min-width: 0;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.cf-room:hover {
+  background: rgba(28, 35, 48, 0.04) !important;
+}
+.cf-room.open {
+  border-style: dashed !important;
+}
+.cf-room .rn {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.cf-room.scene {
+  background: rgba(179, 38, 30, 0.08) !important;
+}
+.cf-room.scene .rn {
+  color: var(--stamp);
+}
+.cf-room.bad {
+  outline: 2px solid var(--stamp);
+  outline-offset: -4px;
+}
+.cf-wall {
+  margin: -1px;
+  border: 1.5px solid var(--wall);
+  background: repeating-linear-gradient(45deg, transparent 0 6px, rgba(42, 51, 64, 0.14) 6px 7px);
+}
+.cf-door {
+  position: absolute;
+  background: var(--room);
+  pointer-events: none;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+}
+.cf-door.v {
+  width: 7px;
+  height: 18px;
+}
+.cf-door.h {
+  width: 20px;
+  height: 7px;
+}
+.cf-door::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px dashed var(--ink3);
+}
+.cf-occ {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.cf-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  background: var(--pc);
+  color: var(--paper);
+  font-weight: 700;
+  font-size: 12px;
+  flex: none;
+}
+.cf-dot.sm {
+  width: 18px;
+  height: 18px;
+  font-size: 10px;
+}
+.cf-room .full {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pc);
+  white-space: nowrap;
+}
+@media (max-width: 899px) {
+  .cf-room .full {
+    display: none;
+  }
+}
+
+/* 동선표 */
+.cf-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 3px;
+  table-layout: fixed;
+}
+.cf-grid th {
+  font-family: var(--cf-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink2);
+  padding: 0 2px;
+  text-align: center;
+}
+.cf-grid th:first-child {
+  text-align: left;
+  width: 30%;
+}
+.cf-grid th.on {
+  color: var(--ink);
+}
+.cf-grid td {
+  padding: 0 2px;
+}
+.cf-who {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cf-who b {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+.cf-who small {
+  display: block;
+  font-size: 10.5px;
+  color: var(--ink2);
+  white-space: nowrap;
+}
+.cf-cell {
+  width: 100%;
+  height: 36px;
+  border: 1px solid var(--line) !important;
+  background: var(--room) !important;
+  border-radius: 7px;
+  font-size: 12.5px;
+  line-height: 1.15;
+  padding: 2px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.cf-cell.set {
+  background: color-mix(in srgb, var(--pc) 16%, var(--room)) !important;
+  border-color: var(--pc) !important;
+  font-weight: 600;
+}
+.cf-cell .q {
+  color: var(--ink3);
+}
+.cf-cell.on {
+  box-shadow: 0 0 0 1.5px var(--ink);
+}
+.cf-cell.bad {
+  border-color: var(--stamp) !important;
+  background: var(--stamp-bg) !important;
+  color: var(--stamp);
+}
+.cf-cell.it {
+  font-size: 11.5px;
+}
+
+/* 문서 탭 */
+.cf-tabs {
+  flex: none;
+  display: flex;
+  border-bottom: 1px solid var(--line);
+}
+.cf-tab {
+  flex: 1;
+  padding: 10px 4px 8px !important;
+  font-size: 13.5px;
+  color: var(--ink2);
+  border-bottom: 2px solid transparent !important;
+}
+.cf-tab[aria-selected="true"] {
+  color: var(--ink);
+  font-weight: 700;
+  border-bottom-color: var(--stamp) !important;
+}
+.cf-tab .n {
+  font-family: var(--cf-mono);
+  font-size: 11px;
+  color: var(--ink3);
+  margin-left: 3px;
+}
+.cf-pane {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-block: 12px 28px;
+}
+.cf-pane h3 {
+  font-family: var(--cf-disp);
+  font-size: 17px;
+  margin: 16px 0 6px;
+}
+.cf-pane h3:first-child {
+  margin-top: 0;
+}
+.cf-pane .lede {
+  margin: 0;
+  color: var(--ink2);
+  word-break: keep-all;
+}
+.cf-doc {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--stamp);
+  background: var(--room);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+.cf-doc.plain {
+  border-left-color: var(--wall);
+}
+.cf-doc .k {
+  font-family: var(--cf-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--ink2);
+}
+.cf-doc dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 6px 0 0;
+}
+.cf-doc dt {
+  font-size: 12px;
+  color: var(--ink2);
+}
+.cf-doc dd {
+  margin: 0;
+  font-weight: 600;
+}
+.cf-doc .so {
+  margin: 8px 0 0;
+  font-size: 13px;
+  word-break: keep-all;
+}
+.cf-doc .so.bad {
+  color: var(--stamp);
+}
+.cf-rules {
+  list-style: disc;
+  margin: 0;
+  padding-left: 18px;
+  word-break: keep-all;
+}
+.cf-rules li {
+  margin: 2px 0;
+}
+.cf-tblw {
+  overflow-x: auto;
+}
+.cf-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.cf-tbl th,
+.cf-tbl td {
+  border-bottom: 1px solid var(--line);
+  padding: 5px 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+.cf-tbl th {
+  font-size: 11.5px;
+  color: var(--ink2);
+  font-weight: 600;
+}
+.cf-tag {
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 5px;
+  color: var(--ink2);
+}
+.cf-tag.cause {
+  border-color: var(--stamp);
+  color: var(--stamp);
+}
+.cf-clue {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.cf-clue .n {
+  font-family: var(--cf-mono);
+  font-weight: 600;
+  color: var(--ink2);
+}
+.cf-clue small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+.cf-clue .tx {
+  word-break: keep-all;
+}
+.cf-clue.done {
+  opacity: 0.45;
+}
+.cf-clue.done .tx {
+  text-decoration: line-through;
+}
+.cf-chk {
+  border: 1px solid var(--line) !important;
+  background: var(--room) !important;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 2px 10px !important;
+  white-space: nowrap;
+}
+.cf-clue.done .cf-chk {
+  border-color: var(--ok) !important;
+  color: var(--ok);
+  background: var(--ok-bg) !important;
+}
+.cf-stmt {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 10px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.cf-stmt .wn {
+  font-size: 13px;
+  font-weight: 700;
+}
+.cf-stmt .wn span {
+  font-weight: 400;
+  color: var(--ink2);
+  font-size: 12px;
+}
+.cf-stmt q {
+  display: block;
+  font-family: var(--cf-disp);
+  font-weight: 700;
+  font-size: 14.5px;
+  line-height: 1.5;
+  quotes: "“" "”";
+  word-break: keep-all;
+}
+.cf-truth {
+  justify-self: start;
+  border: 1px solid var(--line) !important;
+  background: var(--room) !important;
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 2px 10px !important;
+  margin-top: 4px;
+}
+.cf-truth[data-v="참"] {
+  border-color: var(--ok) !important;
+  color: var(--ok);
+  background: var(--ok-bg) !important;
+}
+.cf-truth[data-v="거짓"] {
+  border-color: var(--stamp) !important;
+  color: var(--stamp);
+  background: var(--stamp-bg) !important;
+}
+.cf-go {
+  margin-top: 12px;
+  width: 100%;
+  border-radius: 8px;
+  padding: 11px !important;
+  background: var(--stamp) !important;
+  color: #fff !important;
+  font-weight: 700;
+  font-size: 15px;
+}
+.cf-go:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cf-go.sub {
+  background: var(--room) !important;
+  color: var(--ink) !important;
+  border: 1px solid var(--line) !important;
+  font-weight: 600;
+}
+.cf-verdict {
+  margin-top: 8px;
+  font-size: 13.5px;
+  color: var(--stamp);
+}
+.cf-shake {
+  animation: cf-shake 0.35s;
+}
+@keyframes cf-shake {
+  20%,
+  60% {
+    transform: translateX(-4px);
+  }
+  40%,
+  80% {
+    transform: translateX(4px);
+  }
+}
+.cf-solved {
+  border: 2px solid var(--ok);
+  background: var(--ok-bg);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.cf-stamp {
+  display: inline-block;
+  font-family: var(--cf-disp);
+  font-weight: 800;
+  font-size: 22px;
+  color: var(--stamp);
+  border: 3px solid var(--stamp);
+  padding: 2px 12px;
+  transform: rotate(-4deg);
+  margin-bottom: 6px;
+}
+.cf-label {
+  font-family: var(--cf-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--ink2);
+}
+.cf-loading {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: var(--ink2);
+}
+.cf-loading b {
+  display: block;
+  font-family: var(--cf-disp);
+  font-size: 20px;
+  color: var(--ink);
+}
+
+/* 고르기 창 */
+.cf-sheet-bg {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 15, 0.5);
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+@media (min-width: 600px) {
+  .cf-sheet-bg {
+    align-items: center;
+  }
+}
+.cf-sheet {
+  background: var(--paper);
+  color: var(--ink);
+  width: min(440px, 100%);
+  max-height: 85%;
+  overflow: auto;
+  border-radius: 14px 14px 0 0;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 -6px 30px rgba(0, 0, 0, 0.3);
+}
+@media (min-width: 600px) {
+  .cf-sheet {
+    border-radius: 14px;
+  }
+}
+.cf-sheet h4 {
+  margin: 0;
+  font-size: 16px;
+}
+.cf-sheet > p {
+  margin: 2px 0 8px;
+  font-size: 12.5px;
+  color: var(--ink2);
+}
+.cf-srow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+  padding: 9px 8px !important;
+  border-top: 1px solid var(--line) !important;
+  width: 100%;
+  text-align: left;
+  border-radius: 6px;
+}
+.cf-srow:hover {
+  background: rgba(28, 35, 48, 0.05) !important;
+}
+.cf-srow[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--pc, var(--ink)) 16%, transparent) !important;
+}
+.cf-srow b {
+  font-size: 14px;
+}
+.cf-srow small {
+  display: block;
+  color: var(--ink3);
+  font-size: 11.5px;
+}
+.cf-srow small.no {
+  color: var(--stamp);
+}
+.cf-srow .mark {
+  font-weight: 700;
+  color: var(--pc, var(--ink));
+  width: 16px;
+  text-align: center;
+}
+.cf-sbtns {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.cf-sbtns button {
+  flex: 1;
+  border: 1px solid var(--line) !important;
+  background: var(--room) !important;
+  border-radius: 8px;
+  padding: 9px !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cf-shake {
+    animation: none;
+  }
+}
+
+/* 풀기 화면에선 사이트 빠른 메뉴 단추 숨김 (문서 탭 글을 가려서) */
+html.cf-playing .quick-menu-fab {
+  display: none;
+}
