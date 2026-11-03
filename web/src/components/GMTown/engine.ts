@@ -208,6 +208,8 @@ type RigMats = {
   toon: THREE.Material;
   ink: THREE.Material;
   ghost: THREE.Material;
+  /** 몸 텍스처가 여럿일 때 (베이스 몸 + 입힌 옷 · 머리): 원래 그림 → 툰 · 반투명 */
+  byMap: Map<THREE.Texture | null, { toon: THREE.Material; ghost: THREE.Material }>;
   eyeBase?: THREE.Material;
   eyeOver?: THREE.Material;
 };
@@ -240,6 +242,7 @@ function markFlatFace(scene: THREE.Object3D, tex: THREE.Texture | null) {
   }
   scene.traverse((o) => {
     if (!(o instanceof THREE.SkinnedMesh) || isEyes(o)) return;
+    if (((o.material as THREE.MeshStandardMaterial).map ?? null) !== tex) return;
     const g = o.geometry as THREE.BufferGeometry;
     if (g.getAttribute("aFlat")) return;
     const n = g.getAttribute("position").count;
@@ -1272,34 +1275,25 @@ export class TownEngine {
 
   /** 툰: 빛 방향으로 2단 (조명 계산 안 씀) · 외곽선: 뒤집은 껍데기를 법선 쪽으로 · 가려졌을 때: 반투명 위에 */
   private makeRigMats(scene: THREE.Object3D) {
-    let map: THREE.Texture | null = null,
-      eyeMap: THREE.Texture | null = null;
+    let eyeMap: THREE.Texture | null = null;
+    const maps: (THREE.Texture | null)[] = [];
     scene.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return;
       const t = (o.material as THREE.MeshStandardMaterial).map ?? null;
       if (isEyes(o)) eyeMap ??= t;
-      else map ??= t;
+      else if (!maps.includes(t)) maps.push(t);
     });
-    const tex = map as THREE.Texture | null,
-      etex = eyeMap as THREE.Texture | null;
+    const etex = eyeMap as THREE.Texture | null;
     const aniso = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
-    if (tex) tex.anisotropy = aniso;
+    for (const t of maps) if (t) t.anisotropy = aniso;
     if (etex) etex.anisotropy = aniso;
-    // 양면: Tripo 메시에 뒤집힌 면이 섞여 있어서 한 면만 그리면 그 자리로 외곽선 껍데기가 비쳐 검은 점이 됨
-    const toon = new THREE.MeshToonMaterial({ map: tex, side: THREE.DoubleSide });
-    markFlatFace(scene, tex);
-    toon.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, this.toonU);
-      sh.vertexShader = sh.vertexShader
-        .replace("void main() {", "attribute float aFlat;\nvarying float vFlat;\nvoid main() {\nvFlat = aFlat;");
-      sh.fragmentShader = sh.fragmentShader
-        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvarying float vFlat;\nvoid main() {")
-        .replace(
-          "#include <opaque_fragment>",
-          `outgoingLight = diffuseColor.rgb * mix( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade, 1.0, step( 0.5, vFlat ) );
-#include <opaque_fragment>`
-        );
-    };
+    const byMap: RigMats["byMap"] = new Map();
+    for (const t of maps) {
+      markFlatFace(scene, t);
+      byMap.set(t, { toon: this.toonMat(t), ghost: this.ghostMat(t) });
+    }
+    const first = byMap.get(maps[0] ?? null) ?? { toon: this.toonMat(null), ghost: this.ghostMat(null) };
+    const toon = first.toon;
     const ink = new THREE.MeshBasicMaterial({ color: INK_COLOR, side: THREE.BackSide });
     ink.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.inkU);
@@ -1323,19 +1317,34 @@ vInkZ = normalize( transformedNormal ).z;`
         "varying float vInkZ;\nvoid main() {\nif ( vInkZ < -0.5 ) discard;"
       );
     };
-    const ghost = new THREE.MeshBasicMaterial({
-      map: tex,
-      transparent: true,
-      opacity: 0.34,
-      depthTest: false,
-      depthWrite: false,
-    });
-    const mats: RigMats = { toon, ink, ghost };
+    const ghost = first.ghost;
+    const mats: RigMats = { toon, ink, ghost, byMap };
     if (etex) {
       mats.eyeBase = this.eyeMat(etex, false);
       mats.eyeOver = this.eyeMat(etex, true);
     }
     return mats;
+  }
+
+  /** 툰: 빛 방향으로 2단 (얼굴 살은 그늘 없음) — 양면: Tripo 메시에 뒤집힌 면이 섞여 있어서 한 면만 그리면 그 자리로 외곽선 껍데기가 비쳐 검은 점이 됨 */
+  private toonMat(tex: THREE.Texture | null) {
+    const toon = new THREE.MeshToonMaterial({ map: tex, side: THREE.DoubleSide });
+    toon.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.toonU);
+      sh.vertexShader = sh.vertexShader
+        .replace("void main() {", "attribute float aFlat;\nvarying float vFlat;\nvoid main() {\nvFlat = aFlat;");
+      sh.fragmentShader = sh.fragmentShader
+        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvarying float vFlat;\nvoid main() {")
+        .replace(
+          "#include <opaque_fragment>",
+          `outgoingLight = diffuseColor.rgb * mix( dot( normalize( normal ), uLight ) > 0.08 ? 1.0 : uShade, 1.0, step( 0.5, vFlat ) );
+#include <opaque_fragment>`
+        );
+    };
+    return toon;
+  }
+  private ghostMat(tex: THREE.Texture | null) {
+    return new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0.34, depthTest: false, depthWrite: false });
   }
 
   /**
@@ -1349,21 +1358,26 @@ vInkZ = normalize( transformedNormal ).z;`
       depthWrite: false,
       side: THREE.FrontSide,
       alphaTest: over ? 0 : 0.01,
-      // 덧그림은 깊이를 안 봄: 위에서 내려다보면 앞머리가 눈 앞으로 두껍게 와서 당겨도 가려졌음 (건물에 가려질 땐 끔)
-      depthTest: !over,
     });
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU, {
         uBias: { value: over ? EYE_OVER : EYE_LIFT },
       });
       sh.vertexShader = sh.vertexShader
-        .replace("void main() {", "uniform float uBias;\nvoid main() {")
+        .replace("void main() {", "uniform float uBias;\nvarying float vFace;\nvoid main() {")
         .replace(
           "#include <project_vertex>",
-          "#include <project_vertex>\ngl_Position = projectionMatrix * vec4( mvPosition.xyz * ( 1.0 - uBias / max( length( mvPosition.xyz ), 1e-3 ) ), 1.0 );"
+          // vFace: 머리 앞쪽(모델 +z, 머리 뼈 따라 돎)이 카메라를 얼마나 똑바로 보는지 — 면마다가 아니라 머리 하나로 (위에서 볼 때 윗눈꺼풀 면만 켜져 조각나던 것)
+          `#include <project_vertex>
+gl_Position = projectionMatrix * vec4( mvPosition.xyz * ( 1.0 - uBias / max( length( mvPosition.xyz ), 1e-3 ) ), 1.0 );
+vec3 eyeFw = vec3( 0.0, 0.0, 1.0 );
+#ifdef USE_SKINNING
+eyeFw = ( skinMatrix * vec4( eyeFw, 0.0 ) ).xyz;
+#endif
+vFace = dot( normalize( normalMatrix * eyeFw ), normalize( -mvPosition.xyz ) );`
         );
       sh.fragmentShader = sh.fragmentShader
-        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvoid main() {")
+        .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvarying float vFace;\nvoid main() {")
         .replace(
           "#include <map_fragment>",
           `vec4 sampledDiffuseColor = texture2D( map, vMapUv, -0.8 );
@@ -1377,7 +1391,7 @@ diffuseColor.a *= smoothstep( 0.05, 0.3, normalize( vNormal ).z );`
 float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
 float eWhite = smoothstep( 0.72, 0.82, eLum ) * smoothstep( -0.04, 0.01, sampledDiffuseColor.b - sampledDiffuseColor.r );
 diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite ), max( smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ), smoothstep( 0.3, 0.42, sampledDiffuseColor.r - sampledDiffuseColor.g ) ) )
-  * smoothstep( 0.6, 0.85, normalize( vNormal ).z )
+  * smoothstep( 0.8, 0.93, vFace )
   // 눈 줄만 (눈썹 · 코 · 입은 앞머리 위로 안 올림 — 위에서 보면 눈썹이 속눈썹처럼 하나 더 보였음)
   * smoothstep( 0.42, 0.46, vMapUv.y ) * ( 1.0 - smoothstep( 0.62, 0.66, vMapUv.y ) );`
               : "")
@@ -1427,13 +1441,14 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
         m.parent!.add(o);
         continue;
       }
-      m.material = mats.toon;
+      const mm = mats.byMap.get((m.material as THREE.MeshStandardMaterial).map ?? null) ?? mats;
+      m.material = mm.toon;
       m.frustumCulled = false;
       m.castShadow = true;
       m.renderOrder = 3;
       for (const [mat, order] of [
         [mats.ink, 3],
-        [mats.ghost, 10],
+        [mm.ghost, 10],
       ] as const) {
         const c = new THREE.SkinnedMesh(m.geometry, mat);
         c.bind(m.skeleton, m.bindMatrix);
@@ -1443,7 +1458,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
         c.quaternion.copy(m.quaternion);
         c.scale.copy(m.scale);
         m.parent!.add(c);
-        if (mat === mats.ghost) {
+        if (mat === mm.ghost) {
           c.visible = false;
           ghosts.push(c);
         }
