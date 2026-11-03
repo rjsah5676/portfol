@@ -42,7 +42,7 @@ export const TOWN_FILES = {
   stockGlb: "/gmtown/bld/stock.glb",
   stockPaint: "/gmtown/bld/stock_paint.webp",
   stockJson: "/gmtown/bld/stock.json",
-  tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand") => `/gmtown/tex/${n}.webp`,
+  tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand" | "rail") => `/gmtown/tex/${n}.webp`,
 };
 /** 미리 받을 파일 (건물을 다시 지을 때 그 건물 파일을 더함) */
 export const townFiles = () => [
@@ -51,6 +51,7 @@ export const townFiles = () => [
   TOWN_FILES.tex("paving"),
   TOWN_FILES.tex("dirt"),
   TOWN_FILES.tex("sand"),
+  TOWN_FILES.tex("rail"),
 ];
 
 export interface BuildingView {
@@ -78,7 +79,7 @@ export interface TownScene {
 }
 
 const INK = 0x2b2433;
-const TILE = { grass: 7, paving: 3.2, dirt: 5, plaza: 3, sand: 6 } as const;
+const TILE = { grass: 7, paving: 3.2, dirt: 5, plaza: 3, sand: 6, rail: 2.5 } as const;
 
 function gradientMap(): THREE.DataTexture {
   const d = new Uint8Array([150, 150, 150, 255, 205, 205, 205, 255, 255, 255, 255, 255]);
@@ -319,19 +320,20 @@ export async function buildTown(): Promise<TownScene> {
 
   // 땅 그림
   const tl = new THREE.TextureLoader();
-  const load = async (n: "grass" | "paving" | "dirt" | "plaza" | "sand") => {
+  const load = async (n: "grass" | "paving" | "dirt" | "plaza" | "sand" | "rail") => {
     const t = own(await tl.loadAsync(TOWN_FILES.tex(n)));
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = 8;
     return t;
   };
-  const [gTex, pTex, dTex, plTex, sTex] = await Promise.all([
+  const [gTex, pTex, dTex, plTex, sTex, rTex] = await Promise.all([
     load("grass"),
     load("paving"),
     load("dirt"),
     load("plaza"),
     load("sand"),
+    load("rail"),
   ]);
   // ── 지형: 높이 그대로 한 장 (마을 밖 산까지) ──
   const ground = buildGround();
@@ -378,20 +380,48 @@ export async function buildTown(): Promise<TownScene> {
     c.ellipse(LAKE.x, LAKE.y, LAKE.rx * 1.35, LAKE.ry * 1.35, 0, 0, Math.PI * 2);
     c.fill();
     c.filter = "none";
-    // 흙: 부지 · 마당 · 흙길 · 철길
+    // 흙: 부지 · 마당 · 흙길 · 철길 (살짝 흐리게 — 경계에서 섞일 폭)
+    c.filter = "blur(3px)";
     c.fillStyle = "#00ff00";
     for (const b of BUILDINGS) c.fillRect(b.x, b.y, b.w, b.d);
     c.fillStyle = "#008000";
     for (const q of YARDS) c.fillRect(q.x, q.y, q.w, q.d);
-    for (const pth of PATHS) if (pth.kind !== "stone") stroke(pth.pts, pth.w, "#00ff00");
-    // 돌: 큰길 · 광장 (흙 위를 덮게 흙 값을 지움)
+    for (const pth of PATHS) if (pth.kind === "dirt") stroke(pth.pts, pth.w, "#00ff00");
+    // 철길 둑은 흙으로 조금 넓게 (자갈 바깥 어깨)
+    for (const pth of PATHS) if (pth.kind === "rail") stroke(pth.pts, pth.w + 1.6, "#00ff00");
+    // 돌: 큰길 · 광장 (흙 위를 덮게 흙 값을 지움) — 살짝 흐리게 해서 경계에서 섞일 폭을 남김
     c.globalCompositeOperation = "source-over";
+    c.filter = "blur(3px)";
     const stoneCol = "#ff0000";
     for (const pth of PATHS) if (pth.kind === "stone") stroke(pth.pts, pth.w, stoneCol);
     c.fillStyle = stoneCol;
     c.beginPath();
     c.arc(PLAZA.x, PLAZA.y, PLAZA.r, 0, Math.PI * 2);
     c.fill();
+    c.filter = "none";
+    // 철길 자갈은 따로 한 장 (R 만 씀)
+    const RPX = 4;
+    const cr = document.createElement("canvas");
+    cr.width = WORLD.w * RPX;
+    cr.height = WORLD.h * RPX;
+    const r = cr.getContext("2d")!;
+    r.fillStyle = "#000";
+    r.fillRect(0, 0, cr.width, cr.height);
+    r.scale(RPX, RPX);
+    r.lineCap = r.lineJoin = "round";
+    r.filter = "blur(1.5px)";
+    r.strokeStyle = "#ff0000";
+    for (const pth of PATHS)
+      if (pth.kind === "rail") {
+        r.lineWidth = pth.w;
+        r.beginPath();
+        pth.pts.forEach(([x, y], i) => (i ? r.lineTo(x, y) : r.moveTo(x, y)));
+        r.stroke();
+      }
+    const railSplat = own(new THREE.CanvasTexture(cr));
+    railSplat.colorSpace = THREE.NoColorSpace;
+    railSplat.flipY = false;
+    railSplat.wrapS = railSplat.wrapT = THREE.ClampToEdgeWrapping;
     const splat = own(new THREE.CanvasTexture(cv));
     splat.colorSpace = THREE.NoColorSpace;
     splat.flipY = false;
@@ -405,6 +435,9 @@ export async function buildTown(): Promise<TownScene> {
         uPlaza: { value: new THREE.Vector4(PLAZA.x, PLAZA.y, PLAZA.r, TILE.plaza) },
         tDirt: { value: dTex },
         tSand: { value: sTex },
+        tRail: { value: rTex },
+        tRailSplat: { value: railSplat },
+        uRailTile: { value: TILE.rail },
         uSandTile: { value: TILE.sand },
         tSplat: { value: splat },
         uWorld: { value: new THREE.Vector2(WORLD.w, WORLD.h) },
@@ -422,6 +455,9 @@ export async function buildTown(): Promise<TownScene> {
           `uniform sampler2D tStone;
 uniform sampler2D tDirt;
 uniform sampler2D tSand;
+uniform sampler2D tRail;
+uniform sampler2D tRailSplat;
+uniform float uRailTile;
 uniform float uSandTile;
 uniform sampler2D tSplat;
 uniform sampler2D tPlaza;
@@ -430,6 +466,18 @@ uniform vec2 uWorld;
 uniform vec3 uTile;
 varying vec3 vWP;
 varying float vUp;
+// 경계를 울퉁불퉁하게 섞는 값 잡음 (0..1)
+float gHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
+float gNoise( vec2 p ) {
+  vec2 i = floor( p ), f = fract( p );
+  f = f * f * ( 3.0 - 2.0 * f );
+  return mix( mix( gHash( i ), gHash( i + vec2( 1.0, 0.0 ) ), f.x ), mix( gHash( i + vec2( 0.0, 1.0 ) ), gHash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y );
+}
+float gFbm( vec2 p ) { return gNoise( p ) * 0.6 + gNoise( p * 2.7 + 13.1 ) * 0.3 + gNoise( p * 7.3 + 41.7 ) * 0.1; }
+// w: 칠하기 값, h: 그 텍스처의 밝기(돌 위는 높고 틈은 낮음), n: 잡음 → 돌 · 자갈은 남고 틈부터 풀이 파고듦
+float gBlend( float w, float h, float n, float soft ) {
+  return smoothstep( 0.5 - soft, 0.5 + soft, w + ( h - 0.5 ) * 0.35 + ( n - 0.5 ) * 0.45 );
+}
 void main() {`
         )
         .replace(
@@ -441,12 +489,33 @@ vec4 cD = texture2D( tDirt, wuv / uTile.z );
 vec3 cSand = texture2D( tSand, wuv / uSandTile ).rgb;
 vec2 suv = wuv / uWorld;
 vec3 sp = ( suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0 ) ? vec3( 0.0 ) : texture2D( tSplat, suv ).rgb;
-vec3 col = mix( cG.rgb, cSand, sp.b );
-col = mix( col, cD.rgb, sp.g );
+float rp = ( suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0 ) ? 0.0 : texture2D( tRailSplat, suv ).r;
+vec3 cR = texture2D( tRail, wuv / uRailTile ).rgb;
+float nA = gFbm( wuv * 0.9 ), nB = gFbm( wuv * 1.7 + 7.0 );
 // 광장은 벽돌 (헤링본), 나머지 돌길은 보도블록
 vec3 cP = texture2D( tPlaza, wuv / uPlaza.w ).rgb;
 float inPlaza = 1.0 - smoothstep( uPlaza.z - 0.05, uPlaza.z + 0.05, distance( wuv, uPlaza.xy ) );
-col = mix( col, mix( cS.rgb, cP, inPlaza ), sp.r );
+// 풀 아닌 땅(돌 · 흙 · 모래)끼리 먼저 섞고, 그다음 풀과 한 번만 섞음 → 두 땅 사이에 풀 실금이 안 생김
+float sum = sp.r + sp.g + sp.b + 1e-4;
+float lumD = dot( cD.rgb, vec3( 0.33 ) );
+float lumS = smoothstep( 0.45, 0.75, dot( cS.rgb, vec3( 0.33 ) ) );
+float wDS = gBlend( sp.g / ( sp.g + sp.b + 1e-4 ), mix( 0.5, lumD, 0.6 ), nB, 0.15 );
+vec3 base = mix( cSand, cD.rgb, wDS );
+float rS = sp.r / sum;
+float wS = mix( gBlend( rS, lumS, nB, 0.08 ), smoothstep( 0.3, 0.6, rS ), inPlaza );
+vec3 ground = mix( base, mix( cS.rgb, cP, inPlaza ), wS );
+// 풀과의 경계: 돌은 끝까지 남고 줄눈부터 풀이 들어옴, 흙은 자갈 무늬 따라 엇갈림, 모래는 넓고 둥글게
+float h = mix( mix( 0.5, lumD, 0.8 * wDS ), lumS, wS );
+float T = clamp( sum, 0.0, 1.0 );
+float wN = gBlend( T, h, mix( nA, nB, 0.5 ), mix( 0.1, 0.22, sp.b / sum ) );
+wN = max( wN, inPlaza * smoothstep( 0.3, 0.6, sp.r ) );
+// 길 둘레 풀은 살짝 밟혀 누렇게
+float worn = smoothstep( 0.0, 0.5, T ) * ( 1.0 - wN );
+vec3 gCol = mix( cG.rgb, cG.rgb * vec3( 0.9, 0.86, 0.6 ) + vec3( 0.05, 0.04, 0.0 ), worn * 0.55 );
+vec3 col = mix( gCol, ground, wN );
+// 철길 자갈 (흙 둑 위)
+float wR = gBlend( rp, dot( cR, vec3( 0.33 ) ), nA, 0.1 );
+col = mix( col, cR, wR );
 // 가파른 산비탈은 바위색, 물에 잠기는 곳은 어둡게
 col = mix( col, vec3( 0.55, 0.52, 0.46 ), smoothstep( 0.78, 0.6, vUp ) );
 col *= mix( 0.72, 1.0, smoothstep( -1.4, -0.4, vWP.y ) );

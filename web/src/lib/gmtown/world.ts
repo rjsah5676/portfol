@@ -19,7 +19,7 @@ export const PITCH = (35 * Math.PI) / 180;
 export const YAW = 0;
 
 /** 걷는 속도 (m/초) */
-export const SPEED = 2.8;
+export const SPEED = 3.4;
 /** 뛰는 속도 (m/초) — Shift · 먼 곳 누르기 · 조이스틱 끝까지 */
 export const RUN_SPEED = SPEED * 2;
 /** 캐릭터 몸 반지름 (부딪힘) */

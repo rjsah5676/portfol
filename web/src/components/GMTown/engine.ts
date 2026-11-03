@@ -157,6 +157,21 @@ function pitchOfDist(d: number) {
     : 26 * DEG * Math.min(1, (d - CAM_DIST) / 8);
 }
 const SUN_OFF = new THREE.Vector3(-34, 52, 30);
+/** 동그란 그림자 알파 (가운데 1 → 끝 0) */
+function blobTex(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "#fff");
+  gr.addColorStop(0.55, "#bbb");
+  gr.addColorStop(1, "#000");
+  g.fillStyle = gr;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.NoColorSpace;
+  return t;
+}
 /** 하늘 (위 · 지평선) — 지평선 색이 안개 색 */
 const SKY_TOP = new THREE.Color(0x7cc4f5);
 const SKY_HORIZON = new THREE.Color(0xd9efff);
@@ -192,7 +207,10 @@ function isEyes(o: THREE.Object3D) {
 }
 
 /** 뛰기로 바뀌는 거리 (누른 곳까지 길 길이, m) */
-const RUN_FAR = 10;
+const RUN_FAR = 5;
+/** 걷기 · 뛰기 동작이 발이 안 미끄러지는 속도 (동작 1배속일 때 m/초) */
+const WALK_ANIM_V = 2.8 / 1.15;
+const RUN_ANIM_V = 5.6;
 
 /** 땅 기준 8 방향 → 땅 위 방향 벡터 (0 = 북(-y), 시계 방향) */
 function dirVec(d: number): [number, number] {
@@ -301,12 +319,17 @@ export class TownEngine {
   private inkU = { uInk: { value: 0.001 } };
   private sky: THREE.Mesh | null = null;
   private sheetGeo = new Map<string, THREE.BufferGeometry>();
-  private shadowGeo = new THREE.CircleGeometry(0.42, 24);
+  /** 발밑 접지 그림자 (해 그림자는 몸이 따로 드리움) — 가운데 진하고 가장자리로 흐려짐 */
+  private shadowGeo = new THREE.CircleGeometry(0.36, 24);
   private shadowMat = new THREE.MeshBasicMaterial({
     color: 0x14202a,
     transparent: true,
-    opacity: 0.26,
+    opacity: 0.42,
     depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -2,
+    alphaMap: blobTex(),
   });
   private ray = new THREE.Raycaster();
   private walk: Uint8Array;
@@ -424,6 +447,7 @@ export class TownEngine {
         }
       });
     this.shadowGeo.dispose();
+    this.shadowMat.alphaMap?.dispose();
     this.shadowMat.dispose();
     if (this.sky) {
       this.sky.geometry.dispose();
@@ -692,8 +716,10 @@ export class TownEngine {
     } else if (e.button === 2 || (e.button === 0 && this.overview)) this.tap(px, py);
   };
   private onMenu = (e: MouseEvent) => e.preventDefault();
+  /** 끌어서 정하는 높이각 + 거리에 따른 높이각 = 실제 높이각 이 PITCH_MIN~MAX 안에 들게 (멀리서도 낮게 눕힐 수 있게) */
   private clampPitch(p: number) {
-    return Math.max(PITCH_MIN, Math.min(PITCH_MAX, p));
+    const o = pitchOfDist(this.dist);
+    return Math.max(PITCH_MIN - o, Math.min(PITCH_MAX - o, p));
   }
   private onMove = (e: PointerEvent) => {
     const r = this.canvas.getBoundingClientRect();
@@ -1027,8 +1053,10 @@ export class TownEngine {
       me.running = running;
       me.phase += dt * 1000 * (moving ? Math.max(0.55, speed / SPEED) : 1);
       this.walkRate = running
-        ? speed / RUN_SPEED
-        : 1.15 * (moving ? Math.max(0.55, speed / SPEED) : 1);
+        ? speed / RUN_ANIM_V
+        : moving
+          ? Math.max(0.55 * SPEED, speed) / WALK_ANIM_V
+          : 1.15;
       // 보내기 (0.1초마다, 바뀐 게 있을 때만)
       const m = moving ? (running ? 2 : 1) : 0;
       if (
@@ -1320,6 +1348,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
       }
       m.material = mats.toon;
       m.frustumCulled = false;
+      m.castShadow = true;
       m.renderOrder = 3;
       for (const [mat, order] of [
         [mats.ink, 3],
@@ -1385,8 +1414,8 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
       if (r.cur) r.cur.crossFadeTo(want, 0.18, false);
       r.cur = want;
     }
-    if (r.walk) r.walk.timeScale = a === this.me && !a.running ? this.walkRate : 1.15;
-    if (r.run) r.run.timeScale = a === this.me && a.running ? this.walkRate : 1;
+    if (r.walk) r.walk.timeScale = a === this.me && !a.running ? this.walkRate : SPEED / WALK_ANIM_V;
+    if (r.run) r.run.timeScale = a === this.me && a.running ? this.walkRate : RUN_SPEED / RUN_ANIM_V;
     r.mixer.update(dt);
     // 돌아서기 (짧은 쪽으로, 0.1초쯤)
     const to = a.faceTo ?? a.face ?? 0;
@@ -1397,7 +1426,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     const gh = heightAt(a.x, a.y);
     r.root.position.set(a.x, gh + 0.02, a.y);
     r.root.rotation.y = f;
-    r.shadow.position.set(a.x, gh + 0.06, a.y);
+    r.shadow.position.set(a.x, gh + 0.015, a.y);
     if (r.tails.length && dt > 0) {
       r.root.updateMatrixWorld(true);
       for (const t of r.tails) this.swingTail(t, dt);
@@ -1536,6 +1565,7 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     // 카메라
     const cam = this.camera;
     const k = this.ovK;
+    if (!this.drag) this.camPitch = this.clampPitch(this.camPitch);
     const near = Math.max(3 * DEG, Math.min(78 * DEG, this.camPitch + pitchOfDist(this.dist)));
     const pitch = near + (OV_PITCH - near) * k;
     // 보는 점: 서 있는 땅 높이 + 가슴 (언덕을 오르면 같이 올라감, 부드럽게)
