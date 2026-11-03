@@ -10,9 +10,9 @@ import {
   FOUNTAIN,
   LAKE,
   PATHS,
-  PITCH,
   PLAZA,
   RADIUS,
+  RUN_SPEED,
   SPEED,
   WORLD,
   YAW,
@@ -21,7 +21,6 @@ import {
   doorAt,
   doorFront,
   fromScreen,
-  hiddenBy,
   isLot,
   toCam,
   type Building,
@@ -32,15 +31,17 @@ import { buildTown, type TownScene } from "./scene3d";
  * GMTOWN 엔진 — three.js 쿼터뷰 장면 위에 사람들을 세우고, 내 캐릭터를 움직이고, 다른 사람을 부드럽게 보여 줌.
  * React(GMTownApp)는 HUD(채널 · 채팅 · 건물 카드)만 맡고 여기 훅으로 주고받음.
  *
- * 카메라: 쿼터뷰 (위 35°) 직교, 처음엔 남동 45° 에서. 내 캐릭터를 따라감.
+ * 카메라: 원근 3인칭 (시야 45°, 기본 7.5m 거리 · 위 26°), 처음엔 남동 45° 에서. 내 캐릭터를 따라감.
+ *   당기면 낮고 가까이(5m), 밀면 높고 멀리(17m · 52°) — 높이는 끌어서 따로 더하고 뺄 수 있음.
  *   마우스: 왼쪽 끌기 = 시점 돌리기(좌우) · 높이(위아래) · 오른쪽 누르기 = 그곳으로 걷기 · 휠 = 당기기/밀기.
  *   폰: 누르기 = 걷기 · 두 손가락 = 당기기 + 돌리기 + 위아래로 밀면 높이.
  *   「지도」는 마을 전체.
  * 사람: 3D 모델이 있는 캐릭터는 리깅된 3D 로 (걷기 · 숨쉬기 동작, 가는 쪽을 보며 돌아섬, 툰 2단 명암 + 화면 두께가 같은 외곽선).
- *   모델이 없거나 못 받았으면 스프라이트를 카메라를 보는 세로 판에 (35° 로 눌린 만큼 세로로 늘려서 원래 비율).
+ *   모델이 없거나 못 받았으면 스프라이트를 카메라를 보는 세로 판에.
  *   가려진 사람은 반투명으로 한 번 더 (어디 있는지는 보이게), 내가 건물 뒤에 들어가면 그 건물을 비치게.
  * 이름표 · 말풍선 · 조이스틱은 위에 겹친 2D 캔버스.
- * 움직이기: 키보드(WASD · 방향키 = 화면 방향) · 오른쪽으로 누른 곳으로 걸어가기(0.5m 격자 A* → 직선으로 펴기) · 폰은 왼쪽 손가락 조이스틱.
+ * 움직이기: 키보드(WASD · 방향키 = 카메라 기준 앞뒤좌우, Shift = 뛰기) · 오른쪽으로 누른 곳으로 걸어가기(0.5m 격자 A* → 직선으로 펴기,
+ *   멀면 뛰어감) · 폰은 왼쪽 손가락 조이스틱 (끝까지 밀면 뛰기).
  *   보내는 방향 d 는 땅 기준 8방향 (0 = 북(-y), 시계 방향) — 사람마다 카메라가 달라서.
  *   부딪히면 벽을 따라 미끄러짐. 0.1초마다 바뀐 위치를 서버로.
  * 다른 사람: 받은 위치를 0.12초 늦게 보여 주며 사이를 이어 그림 (끊김 없이).
@@ -54,7 +55,7 @@ export interface EngineHooks {
   /** E · 스페이스 */
   onInteract(): void;
   /** 내 위치 보내기 */
-  send(x: number, y: number, d: number, m: 0 | 1): void;
+  send(x: number, y: number, d: number, m: 0 | 1 | 2): void;
   /** 마을 전체 지도를 켜고 끔 (엔진이 스스로 끌 때도) */
   onOverview(on: boolean): void;
   /** 3D 를 못 여는 기기 · 파일을 못 받음 */
@@ -66,7 +67,7 @@ interface Sample {
   x: number;
   y: number;
   d: number;
-  m: 0 | 1;
+  m: 0 | 1 | 2;
 }
 
 interface AvatarView {
@@ -83,10 +84,12 @@ interface RigView {
   mixer: THREE.AnimationMixer;
   walk: THREE.AnimationAction | null;
   idle: THREE.AnimationAction | null;
+  run: THREE.AnimationAction | null;
+  /** 지금 틀고 있는 동작 */
+  cur: THREE.AnimationAction | null;
   /** 가려졌을 때만 보이는 반투명 몸 */
   ghosts: THREE.Object3D[];
   shadow: THREE.Mesh;
-  moving: boolean;
   tails: Tail[];
 }
 
@@ -97,6 +100,9 @@ interface Tail {
   rest: THREE.Quaternion[];
   sim: THREE.Vector3[];
   prev: THREE.Vector3[];
+  /** 지난 프레임 뿌리 위치 · 뿌리 평균 속도 (출렁임만 골라내려고) */
+  root0: THREE.Vector3;
+  vel: THREE.Vector3;
   ready: boolean;
 }
 
@@ -109,6 +115,7 @@ interface Avatar {
   y: number;
   d: number;
   moving: boolean;
+  running: boolean;
   /** 애니메이션 시계 (ms) */
   phase: number;
   samples: Sample[];
@@ -122,32 +129,50 @@ interface Avatar {
 
 const GRID = 0.5;
 const INTERP_MS = 120;
-/** 화면에 보이는 캐릭터 키 (px) — 화면 폭에서 보이는 너비(m)를 정함 */
-const TARGET_PX_WIDE = 70;
-const TARGET_PX_SMALL = 56;
-const ZOOM_MIN = 0.2;
-const ZOOM_MAX = 2.2;
-const COS_P = Math.cos(PITCH);
-/** 왼쪽 끌기 1px 에 돌아가는 각도 · 카메라 높이 범위 (땅에서 위로) */
+const DEG = Math.PI / 180;
+/** 원근 카메라: 세로 시야각 (세로로 긴 화면은 조금 넓게) · 기본 거리(m) · 기본 높이각 · 보는 점 높이(가슴) */
+const FOV = 45;
+const FOV_TALL = 55;
+const CAM_DIST = 7.5;
+const PITCH0 = 26 * DEG;
+const LOOK_H = 0.9;
+/** 당기기 · 밀기 (기본 거리의 배수: 5m ~ 17m) */
+const ZOOM_MIN = 5 / CAM_DIST;
+const ZOOM_MAX = 17 / CAM_DIST;
+/** 지도(마을 전체): 거리 · 높이각 */
+const OV_DIST = 118;
+const OV_PITCH = 60 * DEG;
+/** 왼쪽 끌기 1px 에 돌아가는 각도 · 끌어서 정하는 높이 범위 (줌에 따른 높이는 따로 더함) */
 const ROT_PER_PX = 0.0085;
-const PITCH_MIN = (18 * Math.PI) / 180;
-const PITCH_MAX = (72 * Math.PI) / 180;
+const PITCH_MIN = 8 * DEG;
+const PITCH_MAX = 72 * DEG;
+/** 거리에 따라 높이각을 같이 바꿈: 기본보다 4m 가까우면 −11° · 8m 멀면 +26° */
+function pitchOfDist(d: number) {
+  return d <= CAM_DIST
+    ? -11 * DEG * Math.min(1, (CAM_DIST - d) / 4)
+    : 26 * DEG * Math.min(1, (d - CAM_DIST) / 8);
+}
 const SUN_OFF = new THREE.Vector3(-34, 52, 30);
-/** 3D 캐릭터: 키 1 짜리 모델을 판과 같은 화면 키로 (세운 키 h 는 화면에서 h·cos35 로 보임) */
-const RIG_SCALE = CHAR_TALL / Math.cos(PITCH);
+/** 하늘 (위 · 지평선) — 지평선 색이 안개 색 */
+const SKY_TOP = new THREE.Color(0x7cc4f5);
+const SKY_HORIZON = new THREE.Color(0xd9efff);
+/** 3D 캐릭터: 키 1 짜리 모델 → 실제 키 */
+const RIG_SCALE = CHAR_TALL;
 /** 툰 명암: 빛 방향 (화면 기준 — 보는 사람 왼쪽 위 앞에서, 얼굴이 늘 밝게) · 그늘 밝기 · 외곽선 두께(화면 px) · 색 */
 const TOON_LIGHT = new THREE.Vector3(-0.45, 0.55, 0.7).normalize();
 const TOON_SHADE = 0.8;
-const INK_PX = 1.0;
+const INK_PX = 0.75;
 const INK_COLOR = 0x3a2a3e;
-/** 눈 조각: 얼굴 위에 살짝 띄움 · 앞머리 위로 한 번 더 그릴 때 당기는 거리 (모델 키 1 기준, 앞머리~눈 틈 0.07) */
+/** 눈 조각: 얼굴 위에 살짝 띄움 · 앞머리 위로 한 번 더 그릴 때 카메라 쪽으로 당기는 거리 (모델 키 1 기준, 앞머리~눈 틈 0.07) */
 const EYE_LIFT = 0.004 * RIG_SCALE;
 const EYE_OVER = 0.12 * RIG_SCALE;
 /** 트윈테일 흔들림: 원래 자세로 당기는 힘 · 흔들림 남는 정도(60fps 한 프레임 기준) · 처짐 · 원래 자세에서 최대 벌어짐 */
-const TAIL_PULL = 0.12;
-const TAIL_DAMP = 0.86;
+const TAIL_PULL = 0.08;
+const TAIL_DAMP = 0.9;
 const TAIL_G = 2.0;
 const TAIL_MAX = (30 * Math.PI) / 180;
+/** 머리의 출렁임(걸음마다 위아래 · 좌우 흔들림)을 꼬리가 이만큼 크게 느낌 — 꾸준히 가는 속도는 빼고 */
+const TAIL_BOUNCE = 3;
 
 type RigMats = {
   toon: THREE.Material;
@@ -162,6 +187,9 @@ function isEyes(o: THREE.Object3D) {
   return o.name.startsWith("eyes") || (o.parent?.name.startsWith("eyes") ?? false);
 }
 
+/** 뛰기로 바뀌는 거리 (누른 곳까지 길 길이, m) */
+const RUN_FAR = 10;
+
 /** 땅 기준 8 방향 → 땅 위 방향 벡터 (0 = 북(-y), 시계 방향) */
 function dirVec(d: number): [number, number] {
   const a = (d * Math.PI) / 4;
@@ -173,6 +201,27 @@ function faceOfDir(d: number): number {
   return Math.atan2(x, y);
 }
 
+/** 하늘 공: 위는 파랑, 지평선 아래로는 안개 색 (카메라를 따라다님) */
+function skyDome() {
+  const g = new THREE.SphereGeometry(300, 32, 16);
+  const pos = g.attributes.position as THREE.BufferAttribute;
+  const col = new Float32Array(pos.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 300;
+    c.copy(SKY_HORIZON).lerp(SKY_TOP, Math.pow(Math.max(0, y), 0.55));
+    c.toArray(col, i * 3);
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const m = new THREE.Mesh(
+    g,
+    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false })
+  );
+  m.renderOrder = -10;
+  m.frustumCulled = false;
+  return m;
+}
+
 interface RigModel {
   scene: THREE.Object3D;
   clips: THREE.AnimationClip[];
@@ -181,7 +230,7 @@ interface RigModel {
 export class TownEngine {
   private ctx: CanvasRenderingContext2D;
   private renderer: THREE.WebGLRenderer;
-  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 900);
+  private camera = new THREE.PerspectiveCamera(FOV, 1, 0.3, 400);
   private town: TownScene | null = null;
   private cw = 0;
   private ch = 0;
@@ -189,14 +238,17 @@ export class TownEngine {
   private phone = false;
   /** 카메라가 보는 땅 위 점 */
   private cam = { x: 54, y: 52 };
-  /** 화면 폭에 들어가는 m (지금 · 기본) */
-  private vw = 34;
-  private baseVw = 34;
+  /** 카메라 거리 (지금 · 이 화면의 기본) · 보는 점에서 화면 폭에 들어가는 m (그림자 범위 등에 씀) */
+  private dist = CAM_DIST;
+  private baseDist = CAM_DIST;
+  private vw = 13;
   private zoom = 1;
+  /** 지도로 넘어가는 정도 (0 ~ 1, 부드럽게) */
+  private ovK = 0;
   /** 카메라가 있는 쪽 (땅 위, 라디안 — +y 쪽이 0, 처음 남동 45°) */
   private camYaw = YAW;
-  /** 카메라 높이 각 (처음 35°) */
-  private camPitch = PITCH;
+  /** 끌어서 정한 높이 각 (처음 26°, 실제 높이는 여기에 줌에 따른 각을 더함) */
+  private camPitch = PITCH0;
   private camDir = new THREE.Vector3();
   /** 마우스 왼쪽 끌기 (시점 돌리기) · 폰 두 손가락 각도 */
   private drag: { x: number; y: number; yaw: number; pitch: number } | null = null;
@@ -229,13 +281,17 @@ export class TownEngine {
   private sent = { x: 0, y: 0, d: -1, m: -1 as number, at: 0 };
   private typing = false;
   private walkRate = 1.15;
+  private shift = false;
+  /** 누른 곳이 멀어서 뛰어가는 중 */
+  private runPath = false;
 
   private sheets = new Map<string, THREE.Texture>();
   private models = new Map<string, RigModel>();
   /** 3D 캐릭터 공용 재질 (툰 · 외곽선 · 가려졌을 때) — 캐릭터 종류마다 하나 */
   private rigMats = new Map<string, RigMats>();
   private toonU = { uLight: { value: new THREE.Vector3() }, uShade: { value: TOON_SHADE } };
-  private inkU = { uInk: { value: 0.004 } };
+  private inkU = { uInk: { value: 1 }, uRes: { value: new THREE.Vector2(1, 1) } };
+  private sky: THREE.Mesh | null = null;
   private sheetGeo = new Map<string, THREE.BufferGeometry>();
   private shadowGeo = new THREE.CircleGeometry(0.42, 24);
   private shadowMat = new THREE.MeshBasicMaterial({
@@ -305,6 +361,10 @@ export class TownEngine {
         this.town = s;
         const size = this.phone ? 1024 : 2048;
         s.sun.shadow.mapSize.set(size, size);
+        // 이제 지평선이 보이니 하늘 공 + 먼 곳은 안개로 (먼 나무도 덜 그림)
+        s.scene.fog = new THREE.Fog(SKY_HORIZON, 40, 140);
+        this.sky = skyDome();
+        s.scene.add(this.sky);
       },
       (err) => {
         console.error("[gmtown]", err);
@@ -357,6 +417,10 @@ export class TownEngine {
       });
     this.shadowGeo.dispose();
     this.shadowMat.dispose();
+    if (this.sky) {
+      this.sky.geometry.dispose();
+      (this.sky.material as THREE.Material).dispose();
+    }
     this.town?.dispose();
     this.renderer.dispose();
   }
@@ -453,6 +517,7 @@ export class TownEngine {
       y: p.y,
       d: p.d,
       moving: !!p.m,
+      running: p.m === 2,
       phase: Math.random() * 1000,
       samples: [{ t: performance.now(), x: p.x, y: p.y, d: p.d, m: p.m }],
       bubble: null,
@@ -475,9 +540,15 @@ export class TownEngine {
     this.canvas.style.height = this.ui.style.height = `${ch}px`;
     this.ui.width = Math.round(cw * dpr);
     this.ui.height = Math.round(ch * dpr);
-    // 캐릭터가 넓은 화면 70px · 좁은 화면 56px 쯤으로 보이게, 세로로도 너무 좁지 않게
-    const px = cw >= 900 ? TARGET_PX_WIDE : TARGET_PX_SMALL;
-    this.baseVw = Math.max(14, Math.min(60, Math.max((cw * CHAR_TALL) / px, (cw / ch) * 9)));
+    // 세로로 긴 화면(폰)은 시야를 조금 넓히고, 그래도 좌우가 11m 는 보이게 조금 물러섬 (최대 1.7배)
+    const aspect = cw / ch;
+    const fov = aspect < 1 ? FOV_TALL : FOV;
+    this.camera.fov = fov;
+    this.camera.aspect = aspect;
+    this.camera.updateProjectionMatrix();
+    const halfW = Math.tan((fov * DEG) / 2) * aspect;
+    this.baseDist = CAM_DIST * Math.max(1, Math.min(1.7, 11 / (2 * CAM_DIST * halfW)));
+    this.inkU.uRes.value.set(cw * dpr, ch * dpr);
   }
 
   /** 화면 px → 땅 위 점 */
@@ -501,6 +572,7 @@ export class TownEngine {
   // ───────────── 입력 ─────────────
 
   private onKey = (e: KeyboardEvent) => {
+    if (e.key === "Shift") this.shift = e.type === "keydown";
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || this.typing) return;
     const k = e.key.toLowerCase();
@@ -533,7 +605,10 @@ export class TownEngine {
     else if (k === "=" || k === "+") this.zoomBy(1 / 1.2);
     else if (k === "-" || k === "_") this.zoomBy(1.2);
   };
-  private onBlur = () => this.keys.clear();
+  private onBlur = () => {
+    this.keys.clear();
+    this.shift = false;
+  };
 
   private pickTarget(px: number, py: number): Building | "board" | null {
     if (!this.town) return null;
@@ -548,7 +623,8 @@ export class TownEngine {
     }
     if (best) return best.b;
     const s = this.screen(BOARD.x, BOARD.y, 1.4);
-    const ppm = this.cw / this.vw;
+    const s2 = this.screen(BOARD.x, BOARD.y, 2.4);
+    const ppm = Math.max(8, Math.abs(s.y - s2.y));
     if (Math.abs(px - s.x) < ppm * 0.9 && Math.abs(py - s.y) < ppm * 0.9) return "board";
     return null;
   }
@@ -683,6 +759,15 @@ export class TownEngine {
     this.path = p;
     this.goal = goal;
     this.stuck = 0;
+    let len = 0,
+      px = this.me.x,
+      py = this.me.y;
+    for (const q of p) {
+      len += Math.hypot(q.x - px, q.y - py);
+      px = q.x;
+      py = q.y;
+    }
+    this.runPath = len > RUN_FAR;
     if (!p.length && goal) this.hooks.onArrive(goal);
   }
 
@@ -832,15 +917,16 @@ export class TownEngine {
   };
 
   /** 입력 · 길 따라가기 · 부딪힘을 짧은 시간 h 만큼 (한 장면을 여러 번 나눠서) */
-  private step(me: Avatar, h: number): { moving: boolean; speed: number } {
-    // 키 · 조이스틱은 화면 방향 → 땅 방향으로
+  private step(me: Avatar, h: number): { moving: boolean; speed: number; running: boolean } {
+    // 키 · 조이스틱은 화면 방향 → 땅 방향으로 (위 = 카메라가 보는 앞)
     let sx = 0,
       sy = 0;
     if (this.keys.has("l")) sx -= 1;
     if (this.keys.has("r")) sx += 1;
     if (this.keys.has("u")) sy -= 1;
     if (this.keys.has("d")) sy += 1;
-    let speed = SPEED;
+    let running = this.shift && !!(sx || sy);
+    let speed = running ? RUN_SPEED : SPEED;
     if (this.joy) {
       const dx = this.joy.x - this.joy.ox,
         dy = this.joy.y - this.joy.oy;
@@ -848,13 +934,17 @@ export class TownEngine {
       if (len > 8) {
         sx = dx / len;
         sy = dy / len;
-        speed = SPEED * Math.min(1, len / 46);
+        // 끝까지 밀면 뛰기
+        running = len >= 44;
+        speed = running ? RUN_SPEED : SPEED * Math.min(1, len / 40);
       }
     }
     let vx = 0,
       vy = 0;
-    if (sx || sy) [vx, vy] = fromScreen(sx, sy, this.camYaw, this.camPitch);
+    if (sx || sy) [vx, vy] = fromScreen(sx, sy, this.camYaw, Math.PI / 2);
     if (!vx && !vy && this.path.length) {
+      running = this.runPath || this.shift;
+      speed = running ? RUN_SPEED : SPEED;
       const p = this.path[0];
       const dx = p.x - me.x,
         dy = p.y - me.y;
@@ -869,7 +959,7 @@ export class TownEngine {
       } else {
         vx = dx / dist;
         vy = dy / dist;
-        if (dist < SPEED * h) speed = dist / h;
+        if (dist < speed * h) speed = dist / h;
       }
     }
     const len = Math.hypot(vx, vy);
@@ -898,7 +988,8 @@ export class TownEngine {
       me.d = dir8(vx, vy);
       me.faceTo = Math.atan2(vx, vy);
     }
-    return { moving, speed };
+    if (!this.path.length) this.runPath = false;
+    return { moving, speed, running: moving && running };
   }
 
   private update(dt: number, now: number) {
@@ -906,16 +997,20 @@ export class TownEngine {
     if (me) {
       const n = Math.max(1, Math.ceil(dt / 0.04));
       let moving = false,
+        running = false,
         speed = SPEED;
-      for (let i = 0; i < n; i++) ({ moving, speed } = this.step(me, dt / n));
+      for (let i = 0; i < n; i++) ({ moving, speed, running } = this.step(me, dt / n));
       if (moving !== me.moving) {
         me.moving = moving;
         me.phase = 0;
       }
+      me.running = running;
       me.phase += dt * 1000 * (moving ? Math.max(0.55, speed / SPEED) : 1);
-      this.walkRate = 1.15 * (moving ? Math.max(0.55, speed / SPEED) : 1);
+      this.walkRate = running
+        ? speed / RUN_SPEED
+        : 1.15 * (moving ? Math.max(0.55, speed / SPEED) : 1);
       // 보내기 (0.1초마다, 바뀐 게 있을 때만)
-      const m = moving ? 1 : 0;
+      const m = moving ? (running ? 2 : 1) : 0;
       if (
         now - this.sent.at >= 100 &&
         (Math.hypot(me.x - this.sent.x, me.y - this.sent.y) > 0.01 ||
@@ -951,9 +1046,9 @@ export class TownEngine {
     const k = Math.min(1, dt * (this.overview ? 4 : 7));
     this.cam.x += (tx - this.cam.x) * k;
     this.cam.y += (ty - this.cam.y) * k;
-    const aspect = this.cw / this.ch;
-    const want = this.overview ? Math.max(124, 84 * aspect) : this.baseVw * this.zoom;
-    this.vw += (want - this.vw) * Math.min(1, dt * 6);
+    const want = this.overview ? OV_DIST : this.baseDist * this.zoom;
+    this.dist += (want - this.dist) * Math.min(1, dt * 6);
+    this.ovK += ((this.overview ? 1 : 0) - this.ovK) * Math.min(1, dt * 5);
 
     // 다른 사람: 0.12초 늦게 이어 그리기
     const rt = now - INTERP_MS;
@@ -975,11 +1070,12 @@ export class TownEngine {
           y = s[1].y;
         }
       }
-      const moving = m === 1 && now - s[s.length - 1].t < 400;
+      const moving = m >= 1 && now - s[s.length - 1].t < 400;
       if (moving !== a.moving) {
         a.moving = moving;
         a.phase = 0;
       }
+      a.running = moving && m === 2;
       a.x = x;
       a.y = y;
       if (d !== a.d || a.faceTo === undefined) a.faceTo = faceOfDir(d);
@@ -990,14 +1086,14 @@ export class TownEngine {
 
   // ───────────── 사람 그리기 ─────────────
 
-  /** 시트 하나의 판 (발이 원점, 35° 로 눌린 만큼 세로로 늘림) */
+  /** 시트 하나의 판 (발이 원점) */
   private geoOf(def: (typeof CHARS)[keyof typeof CHARS], sh: Sheet) {
     const key = `${def.base}/${sh.file}`;
     let g = this.sheetGeo.get(key);
     if (!g) {
       const hs = (CHAR_TALL * sh.h) / def.tall,
         ws = (hs * sh.w) / sh.h;
-      const hp = hs / COS_P;
+      const hp = hs;
       g = new THREE.PlaneGeometry(ws, hp);
       g.translate(ws * (0.5 - sh.ax / sh.w), hp / 2 - ((sh.h - sh.ay) / sh.h) * hp, 0);
       this.sheetGeo.set(key, g);
@@ -1085,10 +1181,12 @@ export class TownEngine {
     ink.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.inkU);
       sh.vertexShader = sh.vertexShader
-        .replace("void main() {", "uniform float uInk;\nvoid main() {")
+        .replace("void main() {", "uniform float uInk;\nuniform vec2 uRes;\nvoid main() {")
         .replace(
-          "#include <skinning_vertex>",
-          "#include <skinning_vertex>\ntransformed += normalize( objectNormal ) * uInk;"
+          "#include <project_vertex>",
+          `#include <project_vertex>
+vec2 inkN = ( projectionMatrix * vec4( transformedNormal, 0.0 ) ).xy;
+gl_Position.xy += normalize( inkN + 1e-6 ) * uInk * 2.0 / uRes * gl_Position.w;`
         );
     };
     const ghost = new THREE.MeshBasicMaterial({
@@ -1108,7 +1206,7 @@ export class TownEngine {
 
   /**
    * 눈 조각 재질 — 그림은 멀리서도 또렷하게 (밉맵 한 단계 덜 흐리게).
-   * over: 카메라 쪽으로 당겨서 앞머리 위로 한 번 더. 속눈썹(아주 어두운 곳)·흰자·눈동자(푸른 곳)만, 정면에서만 (뒤·옆에선 안 비침)
+   * over: 카메라 쪽으로 당겨서 앞머리 위로 한 번 더. 속눈썹(아주 어두운 곳) · 눈동자(푸른 곳)만, 정면에서만 (흰자까지 올리면 번져 보임) (뒤·옆에선 안 비침)
    */
   private eyeMat(map: THREE.Texture, over: boolean) {
     const m = new THREE.MeshToonMaterial({
@@ -1126,7 +1224,7 @@ export class TownEngine {
         .replace("void main() {", "uniform float uBias;\nvoid main() {")
         .replace(
           "#include <project_vertex>",
-          "#include <project_vertex>\ngl_Position = projectionMatrix * ( mvPosition + vec4( 0.0, 0.0, uBias, 0.0 ) );"
+          "#include <project_vertex>\ngl_Position = projectionMatrix * vec4( mvPosition.xyz * ( 1.0 - uBias / max( length( mvPosition.xyz ), 1e-3 ) ), 1.0 );"
         );
       sh.fragmentShader = sh.fragmentShader
         .replace("void main() {", "uniform vec3 uLight;\nuniform float uShade;\nvoid main() {")
@@ -1137,7 +1235,7 @@ diffuseColor *= sampledDiffuseColor;` +
             (over
               ? `
 float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
-diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( -0.06, 0.0, sampledDiffuseColor.b - sampledDiffuseColor.r ) )
+diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ) )
   * smoothstep( 0.35, 0.7, normalize( vNormal ).z );`
               : "")
         )
@@ -1209,13 +1307,16 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     const clip = (n: string) => model.clips.find((c) => c.name.startsWith(n));
     const walk = clip("walk") ? mixer.clipAction(clip("walk")!) : null;
     const idle = clip("idle") ? mixer.clipAction(clip("idle")!) : null;
+    const run = clip("run") ? mixer.clipAction(clip("run")!) : null;
     // 사람마다 숨쉬기 박자를 조금씩 다르게
     if (idle) {
       idle.play();
       idle.time = Math.random() * idle.getClip().duration;
     }
-    walk?.play();
-    walk?.setEffectiveWeight(0);
+    for (const x of [walk, run]) {
+      x?.play();
+      x?.setEffectiveWeight(0);
+    }
     const shadow = new THREE.Mesh(this.shadowGeo, this.shadowMat);
     shadow.rotation.x = -Math.PI / 2;
     shadow.scale.y = 0.62;
@@ -1231,24 +1332,25 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
           rest: bones.map((b) => b!.quaternion.clone()),
           sim: bones.map(() => new THREE.Vector3()),
           prev: bones.map(() => new THREE.Vector3()),
+          root0: new THREE.Vector3(),
+          vel: new THREE.Vector3(),
           ready: false,
         });
     }
-    a.rig = { root, mixer, walk, idle, ghosts, shadow, moving: false, tails };
+    a.rig = { root, mixer, walk, idle, run, cur: idle, ghosts, shadow, tails };
     return a.rig;
   }
 
   private placeRig(a: Avatar, r: RigView, dt: number) {
-    // 걷기 ↔ 숨쉬기 (0.18초 섞기), 걷는 속도에 맞춰 발 박자
-    if (a.moving !== r.moving) {
-      r.moving = a.moving;
-      const [on, off] = a.moving ? [r.walk, r.idle] : [r.idle, r.walk];
-      if (on && off) {
-        on.reset().setEffectiveWeight(1).play();
-        off.crossFadeTo(on, 0.18, false);
-      }
+    // 숨쉬기 ↔ 걷기 ↔ 뛰기 (0.18초 섞기), 가는 속도에 맞춰 발 박자
+    const want = a.moving ? (a.running && r.run ? r.run : r.walk) : r.idle;
+    if (want && want !== r.cur) {
+      want.reset().setEffectiveWeight(1).play();
+      if (r.cur) r.cur.crossFadeTo(want, 0.18, false);
+      r.cur = want;
     }
-    if (r.walk) r.walk.timeScale = a === this.me ? this.walkRate : 1.15;
+    if (r.walk) r.walk.timeScale = a === this.me && !a.running ? this.walkRate : 1.15;
+    if (r.run) r.run.timeScale = a === this.me && a.running ? this.walkRate : 1;
     r.mixer.update(dt);
     // 돌아서기 (짧은 쪽으로, 0.1초쯤)
     const to = a.faceTo ?? a.face ?? 0;
@@ -1264,11 +1366,26 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
       for (const t of r.tails) this.swingTail(t, dt);
     }
     // 건물에 가려지면 반투명 몸을 위에
-    const hidden =
-      !this.overview &&
-      this.town!.buildings.some((v) => hiddenBy(v.b, a.x, a.y, 0.9, this.camYaw, this.camPitch));
+    const hidden = !this.overview && !!this.blocker(a.x, a.y);
     for (const g of r.ghosts) g.visible = hidden;
   }
+
+  /** 카메라에서 이 사람(가슴 · 머리)까지 사이를 막는 건물 */
+  private blocker(x: number, y: number) {
+    const town = this.town;
+    if (!town) return null;
+    const o = this.camera.position;
+    for (const h of [0.9, 1.6]) {
+      const d = this.bv.set(x - o.x, h - o.y, y - o.z);
+      const far = d.length() - 0.3;
+      if (far <= 0) continue;
+      this.ray.set(o, d.normalize());
+      this.ray.far = far;
+      for (const v of town.buildings) if (this.ray.intersectObject(v.pick, false).length) return v;
+    }
+    return null;
+  }
+  private bv = new THREE.Vector3();
 
   private tv = [0, 1, 2, 3, 4].map(() => new THREE.Vector3());
   private tq = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
@@ -1291,6 +1408,8 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
         S[k].copy(A[k]);
         P[k].copy(A[k]);
       }
+      t.root0.copy(A[0]);
+      t.vel.set(0, 0, 0);
       t.ready = true;
       return;
     }
@@ -1299,6 +1418,12 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     const damp = Math.pow(TAIL_DAMP, n),
       pull = 1 - Math.pow(1 - TAIL_PULL, n);
     const [vel, dir, adir] = this.tw;
+    // 뿌리 출렁임 = 이번 이동 - 평균 속도만큼 이동 → 꼬리를 그 반대로 더 밀어 크게 출렁이게
+    vel.subVectors(A[0], t.root0);
+    t.vel.lerp(dir.copy(vel).divideScalar(h), 1 - Math.pow(0.9, n));
+    vel.addScaledVector(t.vel, -h).multiplyScalar(TAIL_BOUNCE - 1);
+    for (let k = 1; k < 5; k++) S[k].sub(vel);
+    t.root0.copy(A[0]);
     S[0].copy(A[0]);
     P[0].copy(A[0]);
     for (let k = 1; k < 5; k++) {
@@ -1372,26 +1497,31 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     const town = this.town;
     const t = (now - this.t0) / 1000;
     // 카메라
-    const aspect = this.cw / this.ch;
     const cam = this.camera;
-    cam.left = -this.vw / 2;
-    cam.right = this.vw / 2;
-    cam.top = this.vw / 2 / aspect;
-    cam.bottom = -this.vw / 2 / aspect;
+    const k = this.ovK;
+    const near = Math.max(3 * DEG, Math.min(78 * DEG, this.camPitch + pitchOfDist(this.dist)));
+    const pitch = near + (OV_PITCH - near) * k;
+    const target = new THREE.Vector3(this.cam.x, LOOK_H * (1 - k), this.cam.y);
+    const cp = Math.cos(pitch);
+    this.camDir.set(cp * Math.sin(this.camYaw), Math.sin(pitch), cp * Math.cos(this.camYaw));
+    cam.position.copy(target).addScaledVector(this.camDir, this.dist);
+    cam.far = this.dist + 260;
     cam.updateProjectionMatrix();
-    const target = new THREE.Vector3(this.cam.x, 0, this.cam.y);
-    const cp = Math.cos(this.camPitch);
-    this.camDir.set(cp * Math.sin(this.camYaw), Math.sin(this.camPitch), cp * Math.cos(this.camYaw));
-    cam.position.copy(target).addScaledVector(this.camDir, 220);
     cam.lookAt(target);
     cam.updateMatrixWorld();
+    this.vw = 2 * this.dist * Math.tan((cam.fov * DEG) / 2) * cam.aspect;
 
     if (town) {
       // 그림자는 보이는 곳만 (화면 폭이 크게 바뀔 때만 다시)
       const sun = town.sun;
-      sun.position.copy(target).add(SUN_OFF);
-      sun.target.position.copy(target);
-      const half = Math.min(90, this.vw * 0.75 + 8);
+      // 그림자: 보는 쪽(앞)으로 조금 밀어서, 원근으로 넓게 보이는 만큼
+      const half = Math.min(90, Math.max(24, this.dist * 2.6 + 8));
+      const fwd = Math.min(half * 0.5, this.dist * 1.2) * (1 - k);
+      const sc = target.clone();
+      sc.x -= Math.sin(this.camYaw) * fwd;
+      sc.z -= Math.cos(this.camYaw) * fwd;
+      sun.position.copy(sc).add(SUN_OFF);
+      sun.target.position.copy(sc);
       if (Math.abs(half - this.shadowVw) > 2) {
         this.shadowVw = half;
         Object.assign(sun.shadow.camera, {
@@ -1404,20 +1534,24 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
         });
         sun.shadow.camera.updateProjectionMatrix();
       }
-      // 3D 캐릭터: 빛 방향은 카메라 기준으로, 외곽선은 화면에서 INK_PX 두께가 되게 (모델 안 단위로)
+      // 하늘은 카메라를 따라다님, 안개는 카메라 거리만큼 밀어서
+      if (this.sky) this.sky.position.copy(cam.position);
+      const fog = town.scene.fog as THREE.Fog | null;
+      if (fog) {
+        fog.near = this.dist + 34 + k * 80;
+        fog.far = this.dist + 130 + k * 120;
+      }
+      // 3D 캐릭터: 빛 방향은 카메라 기준으로, 외곽선은 화면에서 INK_PX 두께 (밀면 얇게, 당기면 조금만 두껍게)
       this.toonU.uLight.value.copy(TOON_LIGHT);
-      //   멀리서 볼 때(지도 · 밀기)는 그만큼 얇게, 당기면 조금만 두껍게
-      const inkPx = INK_PX * Math.max(0.3, Math.min(1.25, this.baseVw / this.vw));
-      this.inkU.uInk.value = (inkPx * this.vw) / Math.max(1, this.cw) / RIG_SCALE;
+      const inkPx = INK_PX * Math.max(0.35, Math.min(1.15, this.baseDist / this.dist));
+      this.inkU.uInk.value = inkPx * this.dpr;
       // 사람
       for (const a of this.others.values()) this.placeAvatar(a, dt);
       if (this.me) this.placeAvatar(this.me, dt);
       // 내가 건물 뒤면 그 건물을 비치게
+      const meBlock = this.me ? this.blocker(this.me.x, this.me.y) : null;
       for (const v of town.buildings) {
-        const hide =
-          !!this.me &&
-          !this.overview &&
-          hiddenBy(v.b, this.me.x, this.me.y, 0.9, this.camYaw, this.camPitch);
+        const hide = !!this.me && !this.overview && meBlock === v;
         const nf = v.fade + ((hide ? 1 : 0) - v.fade) * Math.min(1, dt * 10);
         if (Math.abs(nf - v.fade) < 1e-4 && !hide && v.fade === 0) continue;
         v.fade = nf < 0.005 && !hide ? 0 : nf;
@@ -1457,16 +1591,27 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.cw, this.ch);
     if (!this.town) return;
+    const o = this.camera.position;
+    const far = (a: Avatar) => Math.hypot(a.x - o.x, a.y - o.z);
     const people = [...this.others.values(), ...(this.me ? [this.me] : [])];
-    // 앞(아래)에 있는 사람 이름표가 위에 오게
-    people.sort((a, b) => a.x + a.y - (b.x + b.y));
-    // 이름표 높이: 3D 는 머리 위 리본까지 키가 판보다 조금 큼
-    const headH = CHAR_TALL / COS_P + (this.models.size ? 0.22 : 0);
+    // 가까운 사람 이름표가 위에 오게 (먼 사람부터 그림)
+    people.sort((a, b) => far(b) - far(a));
+    // 이름표 높이: 3D 는 머리 위 리본까지
+    const headH = CHAR_TALL + (this.models.size ? 0.28 : 0.05);
+    const fwdX = -Math.sin(this.camYaw),
+      fwdY = -Math.cos(this.camYaw);
     for (const a of people) {
       if (this.overview && a !== this.me) continue;
+      // 카메라 뒤
+      if ((a.x - o.x) * fwdX + (a.y - o.z) * fwdY < 0.3) continue;
       const s = this.screen(a.x, a.y, headH);
       if (s.x < -80 || s.x > this.cw + 80 || s.y < -40 || s.y > this.ch + 120) continue;
-      this.drawTag(a, s.x, s.y - 4, now);
+      const sz = Math.max(0.72, Math.min(1, (this.baseDist * 1.3) / Math.max(1, far(a))));
+      ctx.save();
+      ctx.translate(s.x, s.y - 4);
+      ctx.scale(sz, sz);
+      this.drawTag(a, 0, 0, now);
+      ctx.restore();
     }
 
     // 조이스틱
@@ -1551,11 +1696,11 @@ diffuseColor.a *= 0.95 * max( 1.0 - smoothstep( 0.03, 0.08, eLum ), smoothstep( 
     ctx.textAlign = "left";
   }
 
-  // ───────────── 작은 지도 (화면과 같은 방향 — 시점을 돌리면 같이 돎) ─────────────
+  // ───────────── 작은 지도 (보는 쪽이 위 — 시점을 돌리면 같이 돎) ─────────────
 
   drawMinimap(m: CanvasRenderingContext2D, w: number, h: number) {
-    // 땅 (x, y) → 지도: 카메라 쪽으로 돌리고 세로를 sin35 로 눌러서 (화면과 같은 모양)
-    const SP = Math.sin(this.camPitch);
+    // 땅 (x, y) → 지도: 카메라가 보는 쪽이 위로 오게 돌리기만 (위에서 내려다본 모양)
+    const SP = 1;
     const C = Math.cos(this.camYaw),
       S = Math.sin(this.camYaw);
     const U = (x: number, y: number) => x * C - y * S,

@@ -18,6 +18,8 @@ export const YAW = (45 * Math.PI) / 180;
 
 /** 걷는 속도 (m/초) */
 export const SPEED = 2.8;
+/** 뛰는 속도 (m/초) — Shift · 먼 곳 누르기 · 조이스틱 끝까지 */
+export const RUN_SPEED = SPEED * 2;
 /** 캐릭터 몸 반지름 (부딪힘) */
 export const RADIUS = 0.3;
 /** 들어오는 곳 (남동쪽 아치 안쪽) */

@@ -19,12 +19,12 @@ export interface PlayerWire {
   y: number;
   /** 바라보는 방향 0~7 (0 = 위, 시계 방향) */
   d: number;
-  /** 걷는 중 */
-  m: 0 | 1;
+  /** 0 서 있음 · 1 걷는 중 · 2 뛰는 중 */
+  m: 0 | 1 | 2;
 }
 
-/** [id, x, y, 방향, 걷는 중] — 0.1초마다 바뀐 사람만 */
-export type MoveWire = [id: string, x: number, y: number, d: number, m: 0 | 1];
+/** [id, x, y, 방향, 0 서 있음 · 1 걷기 · 2 뛰기] — 0.1초마다 바뀐 사람만 */
+export type MoveWire = [id: string, x: number, y: number, d: number, m: 0 | 1 | 2];
 
 export interface ChatWire {
   id: string;

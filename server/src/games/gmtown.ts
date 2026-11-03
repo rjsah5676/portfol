@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Deps } from "../deps";
 import { AppError, bad } from "../errors";
 import { newId } from "../ids";
-import { CHANNEL_CAP, CHAT_MAX, MAX_CHANNELS, RADIUS, SPAWN, SPEED, blocked } from "../../../web/src/lib/gmtown/world";
+import { CHANNEL_CAP, CHAT_MAX, MAX_CHANNELS, RADIUS, RUN_SPEED, SPAWN, blocked } from "../../../web/src/lib/gmtown/world";
 import type { ChannelList, ChatWire, MoveWire, PlayerWire, TownSnap } from "../../../web/src/lib/gmtown/types";
 
 /*
@@ -31,7 +31,7 @@ interface P {
   x: number;
   y: number;
   d: number;
-  m: 0 | 1;
+  m: 0 | 1 | 2;
   ch: number;
   /** 이동 예산 (칸) · 마지막 계산 시각 */
   bank: number;
@@ -149,14 +149,14 @@ export function registerGmtown({ gateway }: Deps, opts: GmtownOptions = {}) {
   });
   gateway.onDisconnect((ctx) => remove(ctx.socket.id));
 
-  const MoveArgs = z.object({ x: z.number().finite(), y: z.number().finite(), d: z.number().int().min(0).max(7), m: z.union([z.literal(0), z.literal(1)]) });
+  const MoveArgs = z.object({ x: z.number().finite(), y: z.number().finite(), d: z.number().int().min(0).max(7), m: z.union([z.literal(0), z.literal(1), z.literal(2)]) });
 
   gateway.rpc("gmtown.move", (ctx, raw) => {
     const p = bySock.get(ctx.socket.id);
     if (!p) return null;
     const a = MoveArgs.parse(raw);
     const t = now();
-    p.bank = Math.min(BANK_MAX, p.bank + ((t - p.at) / 1000) * SPEED * 1.4);
+    p.bank = Math.min(BANK_MAX, p.bank + ((t - p.at) / 1000) * RUN_SPEED * 1.4);
     p.at = t;
     let x = a.x,
       y = a.y,
