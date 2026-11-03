@@ -713,6 +713,123 @@ function makeFlowers(): Flower[] {
 }
 export const FLOWERS: Flower[] = makeFlowers();
 
+/** 소품 (Meshy 소품 시트에서 뽑은 6가지) — 부딪힘 · 그리기 같이 씀 */
+export type PropKind = "rock" | "bush" | "mailbox" | "bin" | "barrel" | "crates";
+export interface Prop {
+  kind: PropKind;
+  x: number;
+  y: number;
+  /** 3D 에서 y 축 회전 (라디안, 0 = 앞면이 +y 쪽) */
+  a: number;
+  /** 크기 배수 */
+  s: number;
+}
+/** 부딪힘 반지름 (크기 1 일 때) */
+export const PROP_R: Record<PropKind, number> = {
+  rock: 0.58,
+  bush: 0.5,
+  mailbox: 0.14,
+  bin: 0.34,
+  barrel: 0.44,
+  crates: 0.55,
+};
+function makeProps(): Prop[] {
+  const out: Prop[] = [];
+  const clear = (x: number, y: number, r: number) => {
+    if (x < 10 + r || y < 10 + r || x > WORLD.w - 10 - r || y > WORLD.h - 10 - r) return false;
+    if (TREES.some((t) => (t.x - x) ** 2 + (t.y - y) ** 2 < (0.45 * t.s + r + 0.5) ** 2)) return false;
+    if (FLOWERS.some((f) => Math.hypot(f.x - x, f.y - y) < f.r + r + 0.6)) return false;
+    if (out.some((p) => Math.hypot(p.x - x, p.y - y) < PROP_R[p.kind] * p.s + r + 0.8)) return false;
+    if (LAMPS.some((l) => Math.hypot(l.x - x, l.y - y) < r + 0.6)) return false;
+    if (BENCHES.some((b) => Math.hypot(b.x - x, b.y - y) < r + 1.2)) return false;
+    return true;
+  };
+  // 우체통: 마당 문 옆 (울타리 바깥, 길 쪽을 봄)
+  for (const q of YARDS) {
+    const x0 = q.x - 0.3,
+      y0 = q.y - 0.3,
+      x1 = q.x + q.w + 0.3,
+      y1 = q.y + q.d + 0.3;
+    const sides: [number, number, number, number][] = [
+      [x0, y0, x1, y0],
+      [x1, y0, x1, y1],
+      [x1, y1, x0, y1],
+      [x0, y1, x0, y0],
+    ];
+    const near = sides.map(([a, b, c, d]) => pathDist((a + c) / 2, (b + d) / 2));
+    const [a, b, c, d] = sides[near.indexOf(Math.min(...near))];
+    const L = Math.hypot(c - a, d - b),
+      dx = (c - a) / L,
+      dy = (d - b) / L;
+    const cx = q.x + q.w / 2,
+      cy = q.y + q.d / 2;
+    let nx = -dy,
+      ny = dx;
+    // 바깥쪽 (마당 가운데에서 멀어지는 쪽)
+    if (nx * ((a + c) / 2 - cx) + ny * ((b + d) / 2 - cy) < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const x = (a + c) / 2 + dx * 1.15 + nx * 0.45,
+      y = (b + d) / 2 + dy * 1.15 + ny * 0.45;
+    out.push({ kind: "mailbox", x, y, a: Math.atan2(nx, ny), s: 0.85 });
+  }
+  // 쓰레기통: 벤치 옆 (광장은 하나 건너 하나)
+  BENCHES.forEach((bn, i) => {
+    if (i < 8 && i % 2) return;
+    const px = -Math.sin(bn.a),
+      py = Math.cos(bn.a);
+    const x = bn.x + px * 1.55,
+      y = bn.y + py * 1.55;
+    if (blockedStatic(x, y, PROP_R.bin)) return;
+    out.push({ kind: "bin", x, y, a: Math.atan2(Math.cos(bn.a), Math.sin(bn.a)), s: 1 });
+  });
+  // 빈 터 (공사장): 뒤 구석에 나무 상자 · 통
+  for (const b of BUILDINGS) {
+    if (!isLot(b)) continue;
+    const W = frontLen(b),
+      D = b.face === "y" || b.face === "-y" ? b.d : b.w;
+    const th = faceRot(b),
+      c = Math.cos(th),
+      sn = Math.sin(th);
+    const cx = b.x + b.w / 2,
+      cy = b.y + b.d / 2;
+    const P = (lx: number, lz: number) => ({ x: cx + lx * c + lz * sn, y: cy - lx * sn + lz * c });
+    const k = hash01(b.x, b.y);
+    const cr = P(-W / 2 + 1.3, -D / 2 + 1.3);
+    out.push({ kind: "crates", x: cr.x, y: cr.y, a: th + k * 0.6, s: 1 });
+    const br = P(W / 2 - 1.15, -D / 2 + 1.1);
+    out.push({ kind: "barrel", x: br.x, y: br.y, a: k * 6.28, s: 1 });
+    if (W >= 18) {
+      const b2 = P(W / 2 - 1.1, -D / 2 + 2.15);
+      out.push({ kind: "barrel", x: b2.x, y: b2.y, a: k * 3.1, s: 0.92 });
+    }
+  }
+  // 덤불: 길가 (길에서 1.2 ~ 3.5m)
+  for (let i = 0; i < 3000 && out.filter((p) => p.kind === "bush").length < 56; i++) {
+    const x = 14 + hash01(i, 401) * (WORLD.w - 28),
+      y = 14 + hash01(i, 409) * (WORLD.h - 28);
+    const s = 0.75 + hash01(i, 419) * 0.5;
+    const pd = pathDist(x, y);
+    if (pd < 1.0 + 0.5 * s || pd > 3.5) continue;
+    if (busy(x, y, 0.5 * s) || !clear(x, y, PROP_R.bush * s)) continue;
+    out.push({ kind: "bush", x, y, a: hash01(i, 421) * 6.28, s });
+  }
+  // 바위: 숲 가장자리 · 언덕 · 강가 모래 (길 · 마당은 피함)
+  for (let i = 0; i < 4000 && out.filter((p) => p.kind === "rock").length < 44; i++) {
+    const x = 12 + hash01(i, 503) * (WORLD.w - 24),
+      y = 12 + hash01(i, 509) * (WORLD.h - 24);
+    const s = 0.6 + hash01(i, 521) * 0.8;
+    const dr = Math.abs(x - riverX(y));
+    const bank = dr > RIVER.half + 1.6 && dr < RIVER.bank - 0.5;
+    if (!bank && busy(x, y, 0.7 * s)) continue;
+    if (pathDist(x, y) < 0.8 + 0.7 * s || inYard(x, y, 1) || inLake(x, y, 0.8)) continue;
+    if (!clear(x, y, PROP_R.rock * s)) continue;
+    out.push({ kind: "rock", x, y, a: hash01(i, 523) * 6.28, s });
+  }
+  return out;
+}
+
 // ───────────── 부딪힘 ─────────────
 
 /** 걸을 수 있는 네모 (바깥은 숲 · 산) */
@@ -743,8 +860,29 @@ for (const f of FENCES) {
     }
 }
 
+export const PROPS: Prop[] = makeProps();
+const propGrid = new Map<number, Prop[]>();
+for (const p of PROPS) {
+  const k = Math.floor(p.x / TG) * 1000 + Math.floor(p.y / TG);
+  let l = propGrid.get(k);
+  if (!l) propGrid.set(k, (l = []));
+  l.push(p);
+}
+
 /** (x, y) 에 반지름 r 인 몸이 들어갈 수 있는지 */
 export function blocked(x: number, y: number, r = RADIUS): boolean {
+  if (blockedStatic(x, y, r)) return true;
+  const gx = Math.floor(x / TG),
+    gy = Math.floor(y / TG);
+  for (let i = -1; i <= 1; i++)
+    for (let j = -1; j <= 1; j++) {
+      const l = propGrid.get((gx + i) * 1000 + gy + j);
+      if (l) for (const p of l) if ((x - p.x) ** 2 + (y - p.y) ** 2 < (PROP_R[p.kind] * p.s + r) ** 2) return true;
+    }
+  return false;
+}
+/** 소품 빼고 부딪힘 (소품 자리 고를 때도 씀) */
+function blockedStatic(x: number, y: number, r = RADIUS): boolean {
   if (x < BOUNDS.x0 + r || y < BOUNDS.y0 + r || x > BOUNDS.x1 - r || y > BOUNDS.y1 - r) return true;
   // 너무 가파른 곳 (기울기 1 넘게 — 강가 벼랑 같은 곳)
   if (!onBridge(x, y) && !onStairs(x, y)) {

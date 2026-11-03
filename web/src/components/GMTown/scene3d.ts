@@ -15,6 +15,7 @@ import {
   LAMPS,
   PATHS,
   PLAZA,
+  PROPS,
   onBridge,
   onStairs,
   stairTop,
@@ -46,10 +47,12 @@ export const TOWN_FILES = {
   stockGlb: "/gmtown/bld/stock.glb",
   stockPaint: "/gmtown/bld/stock_paint.webp",
   stockJson: "/gmtown/bld/stock.json",
+  props: "/gmtown/props/props1.glb",
   tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand" | "rail") => `/gmtown/tex/${n}.webp`,
 };
 /** 미리 받을 파일 (건물을 다시 지을 때 그 건물 파일을 더함) */
 export const townFiles = () => [
+  TOWN_FILES.props,
   TOWN_FILES.tex("grass"),
   TOWN_FILES.tex("plaza"),
   TOWN_FILES.tex("paving"),
@@ -821,6 +824,54 @@ diffuseColor.rgb *= col;`
         boxes(1, 0.1, 0.09, toon(0x8c93a0), rails, 0.03, false);
       }
     }
+  }
+
+  // ── 소품 (Meshy 소품 시트 한 장 → 바위 · 덤불 · 우체통 · 쓰레기통 · 통 · 상자) ──
+  try {
+    const gl = await new GLTFLoader().loadAsync(TOWN_FILES.props);
+    const src = new Map<string, THREE.Mesh>();
+    gl.scene.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh) src.set(o.name, o as THREE.Mesh);
+    });
+    const m4 = new THREE.Matrix4(),
+      q = new THREE.Quaternion(),
+      up = new THREE.Vector3(0, 1, 0),
+      v = new THREE.Vector3(),
+      sc = new THREE.Vector3();
+    const kinds = [...new Set(PROPS.map((p) => p.kind))];
+    for (const kind of kinds) {
+      const mesh = src.get(kind);
+      if (!mesh) continue;
+      const list = PROPS.filter((p) => p.kind === kind);
+      const geo = own(mesh.geometry);
+      const old = mesh.material as THREE.MeshStandardMaterial;
+      if (old.map) own(old.map);
+      const mat = own(new THREE.MeshToonMaterial({ map: old.map ?? null, gradientMap: grad }));
+      old.dispose();
+      geo.computeBoundingBox();
+      const c = geo.boundingBox!.getCenter(new THREE.Vector3());
+      // 외곽선: 가운데 기준으로 조금 키운 뒤집은 껍데기
+      const inkM = new THREE.Matrix4()
+        .makeTranslation(c.x, c.y, c.z)
+        .multiply(new THREE.Matrix4().makeScale(1.035, 1.035, 1.035))
+        .multiply(new THREE.Matrix4().makeTranslation(-c.x, -c.y, -c.z));
+      const body = new THREE.InstancedMesh(geo, mat, list.length);
+      const ink = new THREE.InstancedMesh(geo, inkShared, list.length);
+      list.forEach((p, i) => {
+        q.setFromAxisAngle(up, p.a);
+        v.set(p.x, heightAt(p.x, p.y) - 0.02, p.y);
+        sc.setScalar(p.s);
+        m4.compose(v, q, sc);
+        body.setMatrixAt(i, m4);
+        ink.setMatrixAt(i, m4.clone().multiply(inkM));
+      });
+      body.castShadow = body.receiveShadow = true;
+      body.computeBoundingSphere();
+      ink.computeBoundingSphere();
+      scene.add(body, ink);
+    }
+  } catch (e) {
+    console.error("[gmtown] 소품", e);
   }
 
   // ── 울타리 · 이정표 · 화단 테두리 ──
