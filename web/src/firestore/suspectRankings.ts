@@ -50,3 +50,44 @@ export async function submitCase(
 ): Promise<{ id: string; gp?: number; kept?: boolean }> {
   return submitRunRes<{ id: string; gp?: number; kept?: boolean }>(boardOf(c), suspectRankPath(c), rec);
 }
+
+/** 사건 하나 요약 — 내 기록(me)은 로그인(비회원 익명 포함)했을 때만 */
+export interface CaseSummary {
+  total: number;
+  perfect: number;
+  /** 가운데 사람의 기록 (초) */
+  median: number | null;
+  avgMiss: number | null;
+  me: { id: string; pos: number; score: number; time: number; miss: number } | null;
+}
+export const getCaseSummary = (c: string) =>
+  api<CaseSummary>(`${suspectRankPath(c)}/summary`, { auth: true });
+
+/** 누적 랭킹 (날짜 상관없이) — tier "all" 이면 전 난이도 */
+export type HallSort = "solved" | "wins";
+export interface HallRow {
+  name: string;
+  member: boolean;
+  avatar: string | null;
+  solved: number;
+  wins: number;
+  perfect: number;
+  last: Date | null;
+  me?: boolean;
+}
+export interface Hall {
+  players: number;
+  /** 기록이 하나라도 있는 사건 수 */
+  cases: number;
+  /** 모든 사람이 푼 사건 수 합 */
+  solves: number;
+  rows: HallRow[];
+  me: { pos: number; solved: number; wins: number; perfect: number } | null;
+}
+export async function getSuspectHall(tier: string, sort: HallSort, limit = 50): Promise<Hall> {
+  const h = await api<Omit<Hall, "rows"> & { rows: (Omit<HallRow, "last"> & { last: number | null })[] }>(
+    `/api/rankings/suspect-hall?tier=${tier}&sort=${sort}&limit=${limit}`,
+    { auth: true }
+  );
+  return { ...h, rows: h.rows.map((r) => ({ ...r, avatar: r.avatar ?? null, last: toDate(r.last) })) };
+}

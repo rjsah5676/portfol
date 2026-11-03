@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { kstDay } from "../../../web/src/lib/suspect/engine";
 import type { Deps } from "../deps";
+import { clearSuspectHall } from "./suspectHall";
 import { h, requireAdmin } from "./util";
 
 /*
@@ -91,6 +92,7 @@ export function suspectRouters({ auth, db }: Deps): { pub: Router; admin: Router
         })
         .parse(req.body);
       const r = await ranks.deleteMany(day === "all" ? {} : { case: { $regex: `^${day}_` } });
+      clearSuspectHall();
       const at = await push(day);
       console.warn(`[admin] 오늘의 용의자 랭킹 초기화 ${day} → ${r.deletedCount}`);
       return { deleted: r.deletedCount, at };

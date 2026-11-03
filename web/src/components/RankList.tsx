@@ -14,6 +14,8 @@ export interface RankRow {
   /** 이름 아래 작은 설명 (예: "vs 1600 · 32수") */
   sub?: ReactNode;
   date?: Date | null;
+  /** 날짜 칸에 date 대신 쓸 말 (예: 하루짜리 랭킹이면 푼 시각 "14:32") */
+  when?: string;
 }
 
 /**
@@ -67,7 +69,7 @@ export default function RankList({
             </span>
             <span className="text-right text-white tabular-nums">{r.value}</span>
             <span className="text-right text-[11px] text-white/30 tabular-nums">
-              {rankDateLabel(r.date)}
+              {r.when ?? rankDateLabel(r.date)}
             </span>
           </li>
         )

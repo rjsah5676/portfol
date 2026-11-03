@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import GameHeader from "@/components/GameHeader";
-import RankList from "@/components/RankList";
 import { Icon } from "@/components/Sketch/Art";
 import { SUSPECT_GUIDE } from "@/data/gameGuides";
 import { prepareRuns } from "@/lib/api/rankRun";
@@ -41,9 +40,10 @@ import {
   preloadSounds,
   setSound,
 } from "@/lib/suspect/sound";
-import { beginCase, getCaseRanking, type SuspectRanking } from "@/firestore/suspectRankings";
+import { beginCase } from "@/firestore/suspectRankings";
 import CaseBoard, { type BoardMode, type FinishInfo } from "./CaseBoard";
 import Result, { fmtTime } from "./Result";
+import { useSuspectRank } from "./SuspectRank";
 
 /*
  * 오늘의 용의자 — 화면 흐름
@@ -60,12 +60,6 @@ interface Run {
   seed: number;
 }
 type Phase = "play" | "result" | "review";
-
-/** "YYYYMMDD" 하루 전 */
-function prevDay(day: string): string {
-  const d = new Date(Date.UTC(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6, 8)) - 864e5);
-  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
-}
 
 const DOTS: Record<TierId, number> = { intro: 0, easy: 1, normal: 2, hard: 3, hell: 4, big: 3 };
 const TIER_COLOR: Record<TierId, string> = {
@@ -190,28 +184,6 @@ function Loading({ pct }: { pct: number }) {
   );
 }
 
-// ───────────────────────── 랭킹 모달 ─────────────────────────
-
-function useRankings(c: string | null) {
-  const [rows, setRows] = useState<Record<string, SuspectRanking[]>>({});
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    if (!c) return;
-    let off = false;
-    getCaseRanking(c, 50)
-      .then((r) => !off && setRows((o) => ({ ...o, [c]: r })))
-      .catch(() => !off && setRows((o) => ({ ...o, [c]: o[c] ?? [] })));
-    return () => {
-      off = true;
-    };
-  }, [c, tick]);
-  return { rows: c ? rows[c] : undefined, reload: useCallback(() => setTick((t) => t + 1), []) };
-}
-
-const rankValue = (r: SuspectRanking) => fmtTime(r.score);
-const rankSub = (r: SuspectRanking) =>
-  `${fmtTime(r.time)} · 실수 ${r.miss}${r.hint ? ` · 힌트 ${r.hint}` : ""}${r.miss === 0 && r.hint === 0 ? " · 완벽" : ""}`;
-
 // ───────────────────────── 본체 ─────────────────────────
 
 export default function SuspectApp() {
@@ -225,13 +197,8 @@ export default function SuspectApp() {
   const [result, setResult] = useState<FinishInfo | null>(null);
   const [saved, setSaved] = useState<PlayState | undefined>();
 
-  // 랭킹 모달
-  const [rankOpen, setRankOpen] = useState(false);
-  const [rankTier, setRankTier] = useState<TierId>("normal");
-  const [rankDay, setRankDay] = useState<0 | -1>(0);
-  const rankDate = rankDay === 0 ? today : prevDay(today);
-  const rankCase = caseKey(rankDate, rankTier);
-  const { rows, reload } = useRankings(ready ? rankCase : null);
+  // 랭킹 창 (날짜별 · 누적 — SuspectRank.tsx)
+  const { spec: rankSpec, openRank } = useSuspectRank(ready, today, store);
 
   useEffect(prepareRuns, []);
 
@@ -355,20 +322,6 @@ export default function SuspectApp() {
     [run]
   );
 
-  const openRank = (tier: TierId, day?: string) => {
-    setRankTier(tier);
-    setRankDay(day && day !== today ? -1 : 0);
-    reload();
-    setRankOpen(true);
-  };
-
-  const pill = (on: boolean) =>
-    `cursor-pointer rounded-full border px-3 py-1 text-xs ${
-      on
-        ? "border-[#C9A15B] bg-[#C9A15B]/15 font-bold text-white"
-        : "border-white/10 text-white/55 hover:text-white"
-    }`;
-
   // ───── 화면 ─────
   let body: ReactNode;
   if (!ready || !store) body = <Loading pct={pct} />;
@@ -486,7 +439,6 @@ export default function SuspectApp() {
       />
     );
 
-  const list = rows ?? [];
   // 대형 사건을 푸는 · 다시 보는 중이면 무대 · 머리말을 넓게 (결과 화면은 그대로)
   const wide = !!run && isWide(run.tier) && !!puzzle && phase !== "result";
   return (
@@ -500,69 +452,7 @@ export default function SuspectApp() {
         tags={["데일리 퍼즐", "논리 추리", "4단계 + 대형 사건", "날마다 랭킹"]}
         className={`w-full ${wide ? "max-w-[680px]" : "max-w-[560px]"}`}
         guide={SUSPECT_GUIDE}
-        rank={{
-          top: list.slice(0, 3).map((r) => ({
-            name: r.name,
-            member: r.member,
-            avatar: r.avatar,
-            value: rankValue(r),
-          })),
-          sub: `${dayLabel(rankDate)} · ${TIERS[rankTier].label}`,
-          open: rankOpen,
-          onOpenChange: (o) => {
-            if (o) reload();
-            setRankOpen(o);
-          },
-          head: () => (
-            <div className="mb-3 flex flex-col items-center gap-1.5">
-              <div className="flex flex-wrap justify-center gap-1.5">
-                {RANKED_TIERS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={pill(t === rankTier)}
-                    onClick={() => setRankTier(t)}
-                  >
-                    {TIERS[t].label}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-1.5">
-                {([0, -1] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={pill(d === rankDay)}
-                    onClick={() => setRankDay(d)}
-                  >
-                    {d === 0 ? "오늘" : "어제"} ({dayLabel(d === 0 ? today : prevDay(today))})
-                  </button>
-                ))}
-              </div>
-              <p className="m-0 text-[11px] text-white/40">
-                기록 = 시간 + 실수×2분 · 힌트 없음 · 사건마다 첫 풀이만
-              </p>
-            </div>
-          ),
-          render: () => (
-            <RankList
-              rows={list.map((r) => ({
-                name: r.name,
-                member: r.member,
-                avatar: r.avatar,
-                value: rankValue(r),
-                sub: rankSub(r),
-                date: r.createdAt,
-              }))}
-              skip={3}
-              empty={
-                rows
-                  ? "아직 이 사건을 푼 사람이 없어요. 첫 번째 탐정이 되어 보세요!"
-                  : "불러오는 중…"
-              }
-            />
-          ),
-        }}
+        rank={rankSpec}
       />
       <div className={`sp sp-stage mx-auto mt-3 w-full ${wide ? "max-w-[680px] is-wide" : "max-w-[560px]"}`}>
         <div className={`sp-inner${wide ? " is-wide" : ""}`}>{body}</div>
@@ -609,7 +499,9 @@ function Home({
         </p>
         <div className="mt-2 flex justify-center gap-2">
           <span className="sp-chip">🔥 연속 {streak}일</span>
-          <span className="sp-chip">오늘 {doneToday}/4 해결</span>
+          <span className="sp-chip">
+            오늘 {doneToday}/{RANKED_TIERS.length} 해결
+          </span>
           <span className="sp-chip">총 {store.solved}건</span>
         </div>
       </div>

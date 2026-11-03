@@ -19,11 +19,13 @@ import { BUILD_ID as FIGHT_BUILD } from "../../../web/src/lib/fight/sim";
 import {
   CASE_RE as SUSPECT_CASE_RE,
   DAILY_GP as SUSPECT_GP,
+  RANKED_TIERS as SUSPECT_TIERS,
   kstDay,
   scoreOf as suspectScore,
   type TierId as SuspectTier,
 } from "../../../web/src/lib/suspect/engine";
 import { h, ms, userOf } from "./util";
+import { clearSuspectHall, sortHall, suspectHall, type HallSort } from "./suspectHall";
 
 /*
  * 게임 랭킹. 컬렉션 이름과 값의 범위는 기존 firestore.rules 그대로.
@@ -33,6 +35,8 @@ import { h, ms, userOf } from "./util";
  *   GET  /api/rankings/fight-rank-stats           격투 랭크전 캐릭터 통계 (로그인했으면 내 캐릭터별 기록도)
  *   GET  /api/rankings/fight-me                   (로그인) 내 랭크전 레이팅·순위 · 캐릭터별 기록 · 최근 경기
  *   GET  /api/rankings/rhythm-bp?limit=10          회원 BP 랭킹 (곡별 최고 BP 상위 20곡 합)
+ *   GET  /api/rankings/suspect/:case/summary       용의자 사건 요약 (푼 사람 · 완벽 · 중간 기록 · 내 순위)
+ *   GET  /api/rankings/suspect-hall?tier&sort      용의자 누적 랭킹 (푼 사건 수 · 1위 횟수)
  *   POST /api/rankings/tickets  { board }           게임을 시작할 때: 1회용 티켓 발급 (로그인 필요)
  *   POST /api/rankings/:board   { …기록, ticket }   기록 등록 (로그인 필요)
  *   POST /api/rankings/rhythm/:chart
@@ -572,6 +576,7 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
       const c = String(req.params.case);
       if (!SUSPECT_CASE_RE.test(c)) throw bad();
       const out = await submit(req, `suspect:${c}`, "suspect_rankings", { case: c });
+      if (!("kept" in out)) clearSuspectHall();
       // 처음 올린 기록이면 회원에게 난이도별 GP (사건마다 한 번 — 원장에 같은 사건이 있으면 안 줌. 비회원은 건너뜀)
       const gp = SUSPECT_GP[c.slice(9) as SuspectTier] ?? 0;
       if (!("kept" in out) && gp) {
@@ -586,6 +591,98 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
         }
       }
       return out;
+    }),
+  );
+  // 사건 하나 요약: 푼 사람 · 완벽 해결 · 중간 기록 · 평균 실수 + 내 기록 순위 (로그인했으면 — 비회원 익명 로그인 포함)
+  r.get(
+    "/suspect/:case/summary",
+    h(async (req) => {
+      const c = String(req.params.case);
+      if (!SUSPECT_CASE_RE.test(c)) throw bad();
+      const col = db.col("suspect_rankings");
+      const [agg] = await col
+        .aggregate<{ n: number; perfect: number; miss: number }>([
+          { $match: { case: c } },
+          {
+            $group: {
+              _id: null,
+              n: { $sum: 1 },
+              perfect: {
+                $sum: { $cond: [{ $and: [{ $eq: ["$miss", 0] }, { $eq: ["$hint", 0] }] }, 1, 0] },
+              },
+              miss: { $avg: "$miss" },
+            },
+          },
+        ])
+        .toArray();
+      const total = agg?.n ?? 0;
+      const mid = total
+        ? await col
+            .find({ case: c })
+            .sort({ score: 1, createdAt: 1 })
+            .skip(Math.floor((total - 1) / 2))
+            .limit(1)
+            .project<{ score: number }>({ score: 1 })
+            .next()
+        : null;
+      const user = await userOf(auth, req).catch(() => null);
+      const mine = user ? await col.findOne({ case: c, uid: user.uid }) : null;
+      const me = mine
+        ? {
+            id: mine._id,
+            pos:
+              (await col.countDocuments({
+                case: c,
+                $or: [
+                  { score: { $lt: mine.score } },
+                  { score: mine.score, createdAt: { $lt: mine.createdAt } },
+                ],
+              })) + 1,
+            score: mine.score,
+            time: mine.time,
+            miss: mine.miss,
+          }
+        : null;
+      return {
+        total,
+        perfect: agg?.perfect ?? 0,
+        median: mid?.score ?? null,
+        avgMiss: agg ? Math.round(agg.miss * 10) / 10 : null,
+        me,
+      };
+    }),
+  );
+  // 누적 랭킹 (명예의 전당): 푼 사건 수 · 1위 횟수 (http/suspectHall.ts)
+  r.get(
+    "/suspect-hall",
+    h(async (req) => {
+      const tq = String(req.query.tier ?? "all");
+      const tier = (SUSPECT_TIERS as string[]).includes(tq) ? tq : "all";
+      const by: HallSort = req.query.sort === "wins" ? "wins" : "solved";
+      const hall = await suspectHall(db, tier);
+      const list = sortHall(hall.list, by);
+      const user = await userOf(auth, req).catch(() => null);
+      const pos = user ? list.findIndex((x) => x.uid === user.uid) : -1;
+      const top = list.slice(0, limitOf(req.query.limit));
+      const av = await avatarsOf(
+        db,
+        top.filter((x) => x.member).map((x) => x.uid),
+      );
+      const out = ({ uid, first: _first, ...x }: (typeof list)[number]) => ({
+        ...x,
+        avatar: (x.member && av.get(uid)) || null,
+        ...(user?.uid === uid ? { me: true } : {}),
+      });
+      return {
+        players: list.length,
+        cases: hall.cases,
+        solves: list.reduce((n, x) => n + x.solved, 0),
+        rows: top.map(out),
+        me:
+          pos >= 0
+            ? { pos: pos + 1, solved: list[pos].solved, wins: list[pos].wins, perfect: list[pos].perfect }
+            : null,
+      };
     }),
   );
 

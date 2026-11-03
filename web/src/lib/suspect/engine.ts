@@ -831,11 +831,23 @@ export function kstDay(now = Date.now(), offsetDays = 0): string {
   return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+/** 사건 #1 날짜 (처음 연 날) — 랭킹 달력은 이날부터 */
+export const FIRST_CASE_DAY = "20261031";
+const utcOf = (day: string) => Date.UTC(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6, 8));
+
 /** 사건 번호 (#1 = 2026-10-31, 처음 연 날) */
 export function caseNo(day: string): number {
-  const t = Date.UTC(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6, 8));
-  return Math.floor((t - Date.UTC(2026, 9, 31)) / 864e5) + 1;
+  return Math.floor((utcOf(day) - utcOf(FIRST_CASE_DAY)) / 864e5) + 1;
 }
+
+/** "YYYYMMDD" 에서 n일 뒤 (-1 = 하루 전) */
+export function shiftDay(day: string, n: number): string {
+  const d = new Date(utcOf(day) + n * 864e5);
+  return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+/** 요일 한 글자 "화" */
+export const weekdayOf = (day: string) => "일월화수목금토"[new Date(utcOf(day)).getUTCDay()];
 
 /** "10월 31일" */
 export const dayLabel = (day: string) => `${+day.slice(4, 6)}월 ${+day.slice(6, 8)}일`;

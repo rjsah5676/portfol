@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   caseKey,
   caseNo,
+  kstDay,
   PENALTY,
   penaltyLabel,
   rng,
@@ -14,7 +15,7 @@ import {
 } from "@/lib/suspect/engine";
 import { getPlay, loadStore, saveStore, setPlay } from "@/lib/suspect/progress";
 import { playSfx } from "@/lib/suspect/sound";
-import { getCaseRanking, submitCase } from "@/firestore/suspectRankings";
+import { getCaseSummary, submitCase } from "@/firestore/suspectRankings";
 import { useAutoRank } from "@/lib/useAutoRank";
 import { RANK_NAME_MAX } from "@/lib/api/rankRun";
 import type { BoardMode, FinishInfo } from "./CaseBoard";
@@ -194,20 +195,16 @@ export default function Result({
   useEffect(() => {
     if (!daily || (send !== "done" && send !== "kept")) return;
     let off = false;
-    getCaseRanking(ck, 200)
-      .then((rows) => {
-        if (off) return;
-        const mine = getPlay(day, tier)?.score ?? score;
-        setRank({
-          pos: rows.filter((r) => r.score < mine).length + 1,
-          total: Math.max(rows.length, 1),
-        });
+    getCaseSummary(ck)
+      .then((s) => {
+        if (off || !s.me) return;
+        setRank({ pos: s.me.pos, total: Math.max(s.total, 1) });
       })
       .catch(() => {});
     return () => {
       off = true;
     };
-  }, [daily, send, ck, day, tier, score]);
+  }, [daily, send, ck]);
 
   const text = shareText(puzzle, tier, daily ? day : null, result);
   const copy = async () => {
@@ -285,8 +282,11 @@ export default function Result({
               ) : null}
               {rank && (
                 <div className="sp-hand mt-1 text-[19px]">
-                  오늘 {TIERS[tier].label} {rank.pos}위{" "}
-                  <span className="text-[16px] text-[var(--ink2)]">/ {rank.total}명</span>
+                  {day === kstDay() ? "오늘" : `#${caseNo(day)}`} {TIERS[tier].label} {rank.pos}위{" "}
+                  <span className="text-[16px] text-[var(--ink2)]">
+                    / {rank.total}명
+                    {rank.total >= 3 && ` · 상위 ${Math.max(1, Math.round((rank.pos / rank.total) * 100))}%`}
+                  </span>
                 </div>
               )}
             </div>

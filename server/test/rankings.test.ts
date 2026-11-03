@@ -560,6 +560,39 @@ describe("랭킹: 오늘의 용의자", () => {
     expect((await play("gp2", `suspect:${kstDay()}_easy`, row)).body.gp).toBeUndefined();
   });
 
+  it("사건 요약(푼 사람 · 완벽 · 중간 기록 · 내 순위) · 누적 랭킹(해결 수 · 1위 횟수)", async () => {
+    const big = (d: number) => `suspect:${kstDay(Date.now(), d)}_big`;
+    const fast = { name: "빠름", time: 60, miss: 0, hint: 0, score: 60 };
+    const slow = { name: "느림", time: 100, miss: 1, hint: 0, score: 220 };
+    expect(await status("h1", big(0), fast)).toBe(200);
+    expect(await status("h2", big(0), slow)).toBe(200);
+    expect(await status("h1", big(-1), slow)).toBe(200);
+    expect(await status("h3", big(-1), fast)).toBe(200);
+    expect(await status("h1", big(1), slow)).toBe(200);
+
+    const sum = (await s.http(`${pathOf(big(0))}/summary`, { token: await s.token("h2") })).body;
+    expect(sum).toMatchObject({ total: 2, perfect: 1, median: 60, avgMiss: 0.5, me: { pos: 2, score: 220 } });
+    expect((await s.http(`${pathOf(big(0))}/summary`)).body.me).toBeNull(); // 로그인 안 하면 내 기록 없음
+    expect((await s.http(`/api/rankings/suspect/${kstDay()}_easy/summary`)).body.total).toBeGreaterThanOrEqual(0);
+    expect((await s.http("/api/rankings/suspect/today_big/summary")).status).toBe(400);
+
+    const hall = (await s.http("/api/rankings/suspect-hall?tier=big", { token: await s.token("h3") })).body;
+    expect(hall).toMatchObject({ players: 3, cases: 3, solves: 5, me: { pos: 2, solved: 1, wins: 1 } });
+    expect(hall.rows.map((r: { name: string; solved: number; wins: number }) => [r.name, r.solved, r.wins])).toEqual([
+      ["느림", 3, 2], // h1: 마지막 이름 · 3건 중 오늘 · 내일 1위
+      ["빠름", 1, 1],
+      ["느림", 1, 0],
+    ]);
+    expect(hall.rows[1].me).toBe(true);
+    expect(hall.rows[0].uid).toBeUndefined(); // 누구 기록인지는 안 내보냄
+    const wins = (await s.http("/api/rankings/suspect-hall?tier=big&sort=wins")).body;
+    expect(wins.rows.map((r: { wins: number }) => r.wins)).toEqual([2, 1, 0]);
+    expect(wins.me).toBeNull();
+    // 새 기록이 올라오면 캐시를 비워서 바로 반영
+    expect(await status("h4", big(0), slow)).toBe(200);
+    expect((await s.http("/api/rankings/suspect-hall?tier=big")).body.players).toBe(4);
+  });
+
   it("관리자 데일리 초기화 · 랭킹 초기화는 확인 문구가 맞아야 · 관리자만", async () => {
     const admin = await s.adminToken();
     expect((await s.http("/api/suspect/reset")).body).toMatchObject({ at: expect.any(Number) });
