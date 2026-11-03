@@ -12,6 +12,7 @@ import {
   FOUNTAIN,
   LAKE,
   LAMPS,
+  PARK,
   PATHS,
   PLAZA,
   onBridge,
@@ -213,6 +214,44 @@ function woodSign(text: string, sub?: string) {
       g.fillStyle = "#8a5a3b";
       g.fillText(sub, W / 2, H / 2 + 32);
     }
+  });
+}
+/** 이정표 화살표 판 (left = 왼쪽을 가리킴) */
+function arrowSign(text: string, left: boolean) {
+  return canvasTex(320, 80, (g, W, H) => {
+    const tip = 34;
+    const path = () => {
+      g.beginPath();
+      if (left) {
+        g.moveTo(4, H / 2);
+        g.lineTo(tip, 4);
+        g.lineTo(W - 4, 4);
+        g.lineTo(W - 4, H - 4);
+        g.lineTo(tip, H - 4);
+      } else {
+        g.moveTo(W - 4, H / 2);
+        g.lineTo(W - tip, 4);
+        g.lineTo(4, 4);
+        g.lineTo(4, H - 4);
+        g.lineTo(W - tip, H - 4);
+      }
+      g.closePath();
+    };
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = "#f6e7c8";
+    path();
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = "#6b3a22";
+    path();
+    g.stroke();
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillStyle = "#6b3a22";
+    let fs = 40;
+    g.font = `400 ${fs}px "Black Han Sans", sans-serif`;
+    while (fs > 20 && g.measureText(text).width > W - tip - 30) g.font = `400 ${(fs -= 2)}px "Black Han Sans", sans-serif`;
+    g.fillText(text, left ? W / 2 + tip / 3 : W / 2 - tip / 3, H / 2 + 2);
   });
 }
 /** 픽셀 벽돌 (32px → 최근접) */
@@ -780,6 +819,202 @@ diffuseColor.rgb *= col;`
             });
           }
         boxes(1, 0.1, 0.09, toon(0x8c93a0), rails, 0.03, false);
+      }
+    }
+  }
+
+  // ── 울타리 · 이정표 · 화단 테두리 ──
+  {
+    const o = new THREE.Object3D();
+    type P = { x: number; y: number; z: number; rot: number; len?: number };
+    const many = (g: THREE.BufferGeometry, mat: THREE.Material, list: P[], sx: number, inkGrow = 0, shadow = true) => {
+      if (!list.length) return;
+      const mk = (geo: THREE.BufferGeometry, m: THREE.Material, grow: number) => {
+        const im = new THREE.InstancedMesh(own(geo), m, list.length);
+        list.forEach((p, i) => {
+          o.position.set(p.x, p.y, p.z);
+          o.rotation.set(0, p.rot, 0);
+          o.scale.set(p.len ? (p.len + grow) / (sx + grow) : 1, 1, 1);
+          o.updateMatrix();
+          im.setMatrixAt(i, o.matrix);
+        });
+        im.computeBoundingSphere();
+        return im;
+      };
+      const im = mk(g, mat, 0);
+      im.castShadow = shadow;
+      im.receiveShadow = true;
+      scene.add(im);
+      if (inkGrow) {
+        const p = (g as THREE.BoxGeometry).parameters;
+        scene.add(mk(new THREE.BoxGeometry(p.width + inkGrow, p.height + inkGrow, p.depth + inkGrow), inkShared, inkGrow));
+      }
+    };
+    const pathSegs = PATHS.flatMap((p) =>
+      p.pts.slice(1).map((b, i) => ({ a: p.pts[i], b, w: p.w, stairs: !!p.stairs }))
+    );
+    const pDist = (x: number, y: number, only?: (s: (typeof pathSegs)[number]) => boolean) => {
+      let m = Infinity;
+      for (const s of pathSegs) {
+        if (only && !only(s)) continue;
+        const [ax, ay] = s.a,
+          [bx, by] = s.b;
+        const L = Math.hypot(bx - ax, by - ay),
+          dx = (bx - ax) / L,
+          dy = (by - ay) / L;
+        const t = Math.max(0, Math.min(L, (x - ax) * dx + (y - ay) * dy));
+        m = Math.min(m, Math.hypot(x - ax - dx * t, y - ay - dy * t) - s.w / 2);
+      }
+      return m;
+    };
+    /** 두 점 사이 울타리 (기둥 간격 step · 가로대 높이 rails) — 가운데 gap(m) 만큼 비우면 문 */
+    const fence = (
+      ax: number,
+      ay: number,
+      bx: number,
+      by: number,
+      step: number,
+      posts: P[],
+      rails: P[],
+      railH: number[],
+      gap = 0
+    ) => {
+      const L = Math.hypot(bx - ax, by - ay),
+        dx = (bx - ax) / L,
+        dy = (by - ay) / L,
+        rot = -Math.atan2(dy, dx);
+      const n = Math.max(1, Math.round(L / step));
+      const g0 = (L - gap) / 2,
+        g1 = (L + gap) / 2;
+      for (let i = 0; i <= n; i++) {
+        const t = (i * L) / n;
+        if (gap && t > g0 + 0.01 && t < g1 - 0.01) continue;
+        const x = ax + dx * t,
+          y = ay + dy * t;
+        posts.push({ x, y: heightAt(x, y), z: y, rot });
+      }
+      const runs = gap ? [[0, g0], [g1, L]] : [[0, L]];
+      for (const [s0, s1] of runs) {
+        if (s1 - s0 < 0.1) continue;
+        const m = (s0 + s1) / 2,
+          x = ax + dx * m,
+          y = ay + dy * m;
+        for (const h of railH) rails.push({ x, y: heightAt(x, y) + h, z: y, rot, len: s1 - s0 });
+      }
+    };
+
+    // 주택가 마당: 하얀 나무 울타리 (길 쪽 가운데는 문으로 비움)
+    {
+      const posts: P[] = [],
+        rails: P[] = [];
+      for (const q of YARDS) {
+        const x0 = q.x - 0.3,
+          y0 = q.y - 0.3,
+          x1 = q.x + q.w + 0.3,
+          y1 = q.y + q.d + 0.3;
+        const sides: [number, number, number, number][] = [
+          [x0, y0, x1, y0],
+          [x1, y0, x1, y1],
+          [x1, y1, x0, y1],
+          [x0, y1, x0, y0],
+        ];
+        const near = sides.map(([a, b, c, d]) => pDist((a + c) / 2, (b + d) / 2));
+        const door = near.indexOf(Math.min(...near));
+        sides.forEach(([a, b, c, d], i) => fence(a, b, c, d, 0.42, posts, rails, [0.22, 0.46], i === door ? 1.3 : 0));
+      }
+      // 뾰족 말뚝 (위가 세모)
+      const picket = mergeGeometries([
+        new THREE.BoxGeometry(0.09, 0.55, 0.05).translate(0, 0.275, 0),
+        new THREE.ConeGeometry(0.065, 0.12, 4).rotateY(Math.PI / 4).translate(0, 0.61, 0),
+      ])!;
+      many(picket, toon(0xfbf7ee), posts, 1, 0, true);
+      many(new THREE.BoxGeometry(1, 0.06, 0.04), toon(0xf1ebde), rails, 1, 0.03, false);
+    }
+
+    // 전망 공원 둘레 난간 (계단이 올라오는 곳은 비움)
+    {
+      const posts: P[] = [],
+        rails: P[] = [];
+      const R = PARK.r - 0.4,
+        N = 48;
+      const pt = (i: number) => {
+        const a = (i / N) * Math.PI * 2;
+        return [PARK.x + Math.cos(a) * R, PARK.y + Math.sin(a) * R] as const;
+      };
+      for (let i = 0; i < N; i++) {
+        const [ax, ay] = pt(i),
+          [bx, by] = pt(i + 1);
+        const open = (x: number, y: number) => pDist(x, y, (s) => s.stairs || s.w >= 3) < 1.2;
+        if (open(ax, ay) || open(bx, by) || open((ax + bx) / 2, (ay + by) / 2)) continue;
+        fence(ax, ay, bx, by, 99, posts, rails, [0.5, 0.95]);
+      }
+      many(new THREE.BoxGeometry(0.14, 1.05, 0.14).translate(0, 0.525, 0), toon(0x8a5a3b), posts, 1, 0.05);
+      many(new THREE.BoxGeometry(1, 0.08, 0.08), toon(0xa06a42), rails, 1, 0.03, false);
+    }
+
+    // 화단 테두리: 꽃밭 둘레에 납작한 돌
+    {
+      const stones: P[] = [];
+      for (const f of FLOWERS) {
+        const rx = f.r + 0.45,
+          ry = (f.r + 0.45) * 0.8;
+        const n = Math.round((Math.PI * (rx + ry)) / 0.34);
+        for (let i = 0; i < n; i++) {
+          const a = (i / n) * Math.PI * 2;
+          const x = f.x + Math.cos(a) * rx,
+            y = f.y + Math.sin(a) * ry;
+          stones.push({ x, y: heightAt(x, y) + 0.04, z: y, rot: -a + (i % 3) * 0.4 });
+        }
+      }
+      const g = new THREE.IcosahedronGeometry(0.17, 0).scale(1.15, 0.5, 0.9);
+      many(g, toon(0xd6cdbf), stones, 1, 0, false);
+    }
+
+    // 이정표: 갈림길마다 기둥 + 가리키는 화살표 판
+    const SIGNPOSTS: { x: number; y: number; to: [string, number, number][] }[] = [
+      { x: 104, y: 60.2, to: [["전망 공원", 95, 29], ["광장", 100, 100], ["언덕 위 학교", 137, 40]] },
+      { x: 64.4, y: 51.6, to: [["디펜스 성", 50, 30], ["광장", 100, 100]] },
+      { x: 144.2, y: 51.6, to: [["언덕 위 학교", 137, 40], ["광장", 100, 100]] },
+      { x: 84.6, y: 104.6, to: [["주택가", 30, 130], ["탐정사무소", 44, 90], ["광장", 100, 100]] },
+      { x: 115.6, y: 104.6, to: [["강 건너", 175, 100], ["호수 공원", 179, 150], ["광장", 100, 100]] },
+      { x: 106.4, y: 142, to: [["광장", 100, 100], ["마을 역", 100, 158]] },
+    ];
+    {
+      const pole = toon(0x7a4f33);
+      const board = toon(0xb5835a);
+      for (const sp of SIGNPOSTS) {
+        const G = new THREE.Group();
+        G.position.set(sp.x, heightAt(sp.x, sp.y), sp.y);
+        scene.add(G);
+        const p = new THREE.Mesh(own(new THREE.BoxGeometry(0.16, 2.6, 0.16)), pole);
+        p.position.y = 1.3;
+        p.castShadow = true;
+        withInk(G, p, 0.05);
+        sp.to.forEach(([text, tx, ty], i) => {
+          const a = Math.atan2(ty - sp.y, tx - sp.x);
+          const arm = new THREE.Group();
+          arm.position.y = 2.3 - i * 0.42;
+          arm.rotation.y = -a;
+          G.add(arm);
+          const bx = new THREE.Mesh(own(new THREE.BoxGeometry(1.5, 0.34, 0.06)), board);
+          bx.position.x = 0.78;
+          bx.castShadow = true;
+          withInk(arm, bx, 0.04);
+          for (const back of [false, true]) {
+            const pl = new THREE.Mesh(
+              own(new THREE.PlaneGeometry(1.52, 0.38)),
+              own(new THREE.MeshBasicMaterial({ map: own(arrowSign(text, back)), transparent: true, alphaTest: 0.5 }))
+            );
+            pl.position.set(0.78, 0, back ? -0.035 : 0.035);
+            if (back) pl.rotation.y = Math.PI;
+            arm.add(pl);
+          }
+        });
+        // 꼭대기 작은 지붕
+        const cap = new THREE.Mesh(own(new THREE.ConeGeometry(0.2, 0.18, 4)), pole);
+        cap.rotation.y = Math.PI / 4;
+        cap.position.y = 2.69;
+        G.add(cap);
       }
     }
   }
