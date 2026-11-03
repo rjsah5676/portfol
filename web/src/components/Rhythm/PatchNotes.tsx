@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.23",
+    name: "새 곡 2곡",
+    date: "2026.11.04",
+    lines: [
+      "REDLINE FEVER — 160 BPM 유로비트 (EASY 3 ~ ABYSS 20)",
+      "Hairpin Phantom — 145 BPM 드리프트 펑크 (EASY 3 ~ ABYSS 19)",
+      "둘 다 AI 자작곡(tunee.ai), REDLINE FEVER 는 2분 34초로 줄임",
+    ],
+  },
+  {
     ver: "v2.22",
     name: "새 곡 2곡",
     date: "2026.11.03",

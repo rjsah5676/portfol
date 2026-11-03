@@ -48,6 +48,8 @@ export const BUILTIN = {
   rooftop: { boss: {}, explus: {}, abyss: { p3: 0.2, share: 0.6 } },
   colossus: { bpm: 150, boss: {}, explus: {}, abyss: { p3: 0.2, share: 0.6 }, levels: [3, 5, 8, 12, 15, 17] },
   cornercypher: { single: true, boss: { fullSub: 6 }, explus: { fullSub: 6, full: 0.7, loud: 0.4, chordScale: 1.4 }, abyss: {}, levels: [3, 5, 8, 12, 15, 17] },
+  redline: { boss: {}, explus: {}, abyss: { p3: 0.28, share: 0.7 }, levels: [3, 6, 9, 13, 15, 17] },
+  hairpin: { boss: {}, explus: { chordScale: 1.4 }, abyss: { p3: 0.3, share: 0.7 }, levels: [3, 5, 8, 12, 14, 17] },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];
