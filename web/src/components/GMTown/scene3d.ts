@@ -354,6 +354,8 @@ export async function buildTown(): Promise<TownScene> {
   const grad = gradientMap();
   const disposables: { dispose(): void }[] = [grad];
   const own = <T extends { dispose(): void }>(x: T) => (disposables.push(x), x);
+  /** 매 프레임 움직이는 것들 (리듬 음악당 이퀄라이저 등) */
+  const anims: ((t: number) => void)[] = [];
   const treeView = { uEye: { value: new THREE.Vector3(0, 1e4, 0) }, uFocus: { value: new THREE.Vector3(0, 1e4, 0) } };
   const shared = new Map<string, THREE.MeshToonMaterial>();
   const toon = (c: THREE.ColorRepresentation, o: THREE.MeshToonMaterialParameters = {}) => {
@@ -1480,7 +1482,7 @@ if ( vFade > 0.01 ) {
   const views: BuildingView[] = [];
   const pickMat = own(new THREE.MeshBasicMaterial({ visible: false }));
   for (const b of BUILDINGS) {
-    const v = b.model === "stock" ? codeStock(b) : b.model === "fight" ? codeFight(b) : codeBuilding(b);
+    const v = b.model === "stock" ? codeStock(b) : b.model === "fight" ? codeFight(b) : b.model === "rhythm" ? codeRhythm(b) : codeBuilding(b);
     const ph = Math.max(2.2, b.h);
     const pick = new THREE.Mesh(own(new THREE.BoxGeometry(b.w, ph, b.d)), pickMat);
     pick.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2) + ph / 2, b.y + b.d / 2);
@@ -1751,6 +1753,280 @@ if ( vFade > 0.01 ) {
   }
 
   /** 증권거래소: 3D 모델 + 덧칠 그림 투사 + 전광판 · 간판 (글씨는 코드) */
+  /** RHYTHM UP 음악당: 커다란 붐박스 (복셀) — 이퀄라이저 · 스피커 · 카세트 · 음표가 박자에 맞춰 움직임 */
+  function codeRhythm(b: Building): { group: THREE.Group; mats: THREE.Material[] } {
+    const G = new THREE.Group();
+    const mats: THREE.Material[] = [];
+    const mine = <T extends THREE.Material>(m: T) => (mats.push(own(m)), m);
+    const mt = (c: THREE.ColorRepresentation, o: THREE.MeshToonMaterialParameters = {}) =>
+      mine(new THREE.MeshToonMaterial({ color: c, gradientMap: grad, ...o }));
+    const ink = mine(new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
+    const glow = (c: number) => mine(new THREE.MeshBasicMaterial({ color: c }));
+    const W = frontLen(b),
+      D = b.face === "y" || b.face === "-y" ? b.d : b.w,
+      zf = D / 2;
+    const brickMat = (base: string, w: number, h: number) => {
+      const t = own(brick(base, shade(base, -0.28), shade(base, 0.16)));
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(w / 2, h / 2);
+      return mine(new THREE.MeshToonMaterial({ map: t, gradientMap: grad }));
+    };
+    const box = (w: number, h: number, d: number, m: THREE.Material, x: number, y: number, z: number, k = 0.06, p: THREE.Object3D = G) => {
+      const mesh = new THREE.Mesh(own(new THREE.BoxGeometry(w, h, d)), m);
+      mesh.position.set(x, y + h / 2, z);
+      mesh.castShadow = mesh.receiveShadow = true;
+      return withInk(p, mesh, k, ink);
+    };
+    const plane = (w: number, h: number, m: THREE.Material, x: number, y: number, z: number, ry = 0, p: THREE.Object3D = G) => {
+      const q = new THREE.Mesh(own(new THREE.PlaneGeometry(w, h)), m);
+      q.position.set(x, y, z);
+      q.rotation.y = ry;
+      p.add(q);
+      return q;
+    };
+    const purple = "#4b2a7a",
+      pink = "#ff3e9a";
+    const purpleM = brickMat(purple, W, 7),
+      pinkM = brickMat(pink, 2, 2),
+      deepM = brickMat("#3a2060", 3, 3),
+      darkM = mt(0x2a1a4a),
+      cyan = glow(0x3df0ff),
+      yellow = glow(0xffd34d);
+    // 몸통 · 받침
+    box(W + 0.4, 0.6, D + 0.4, darkM, 0, 0, 0, 0.07);
+    box(W, 6.6, D, purpleM, 0, 0.6, 0);
+    box(W + 0.3, 0.5, D + 0.3, darkM, 0, 7.2, 0, 0.07);
+    box(W + 0.35, 0.18, D + 0.35, pinkM, 0, 7.15, 0, 0.03);
+    // 앞면 분홍 테 (위 · 양옆) — 붐박스 모서리처럼 계단식
+    box(W + 0.2, 0.6, 0.5, pinkM, 0, 6.6, zf + 0.05, 0.05);
+    for (const sx of [-1, 1]) {
+      box(0.6, 6.0, 0.5, pinkM, sx * (W / 2 - 0.2), 0.6, zf + 0.05, 0.05);
+      box(1.0, 0.6, 0.5, pinkM, sx * (W / 2 - 0.5), 6.0, zf + 0.05, 0.03);
+      // 옆면 청록 줄
+      plane(D - 1.2, 0.3, cyan, sx * (W / 2 + 0.01), 3.0, 0, (sx * Math.PI) / 2);
+      plane(D - 1.2, 0.3, cyan, sx * (W / 2 + 0.01), 3.6, 0, (sx * Math.PI) / 2);
+    }
+    // 위층 창 (보라 방 + 불빛) — 앞 양옆
+    const roomTex = own(
+      canvasTex(
+        32,
+        24,
+        (g, w, h) => {
+          const gr = g.createLinearGradient(0, 0, 0, h);
+          gr.addColorStop(0, "#3b2a8a");
+          gr.addColorStop(1, "#1d1238");
+          g.fillStyle = gr;
+          g.fillRect(0, 0, w, h);
+          g.fillStyle = "#ffd34d";
+          for (const x of [6, 22]) g.fillRect(x, 3, 4, 2);
+          const cs = ["#ff5fb8", "#3df0ff", "#ff5fb8"];
+          for (let i = 0; i < 3; i++) {
+            g.fillStyle = cs[i];
+            g.fillRect(3 + i * 9, 14 - (i % 2) * 2, 6, 2);
+          }
+          g.fillStyle = "rgba(255,255,255,0.15)";
+          g.fillRect(15, 0, 2, h);
+        },
+        true
+      )
+    );
+    const room = mine(new THREE.MeshBasicMaterial({ map: roomTex }));
+    for (const sx of [-1, 1]) {
+      box(3.0, 2.2, 0.3, deepM, sx * 3.3, 4.3, zf + 0.05, 0.04);
+      plane(2.5, 1.7, room, sx * 3.3, 5.4, zf + 0.21);
+      for (let i = 0; i < 3; i++) plane(0.45, 0.25, yellow, sx * (2.75 + i * 0.55), 4.05, zf + 0.31);
+    }
+    // 스피커 둘 (분홍 틀 · 콘 · 청록 링 · 가운데 캡) — 쿵쿵
+    const BEAT = 2; // 초당 박자 (120bpm)
+    for (const sx of [-1, 1]) {
+      const sp = new THREE.Group();
+      sp.position.set(sx * 3.3, 2.15, zf + 0.25);
+      G.add(sp);
+      box(3.6, 3.4, 0.5, deepM, 0, -1.7, 0, 0.05, sp);
+      const rim = new THREE.Mesh(own(new THREE.TorusGeometry(1.55, 0.2, 4, 8)), mt(0xff3e9a));
+      rim.rotation.z = Math.PI / 8;
+      rim.position.z = 0.3;
+      sp.add(rim);
+      const cone = new THREE.Mesh(own(new THREE.CylinderGeometry(1.45, 1.0, 0.4, 8)), darkM);
+      cone.rotation.x = Math.PI / 2;
+      cone.rotation.y = Math.PI / 8;
+      cone.position.z = 0.25;
+      sp.add(cone);
+      const ring = new THREE.Mesh(own(new THREE.TorusGeometry(1.25, 0.1, 4, 8)), cyan);
+      ring.rotation.z = Math.PI / 8;
+      ring.position.z = 0.47;
+      sp.add(ring);
+      const cap = box(0.6, 0.6, 0.4, mt(0xf2e6dc), 0, -0.3, 0.45, 0.03, sp);
+      anims.push((t) => {
+        const ph = (t * BEAT) % 1;
+        const k = Math.exp(-ph * 7);
+        ring.scale.setScalar(1 + k * 0.12);
+        cone.position.z = 0.25 + k * 0.12;
+        cap.position.z = 0.45 + k * 0.16;
+      });
+    }
+    // 입구: 분홍 기둥 · 청록 줄 · 파란 문
+    for (const sx of [-1, 1]) {
+      box(0.6, 3.2, 0.5, pinkM, sx * 1.4, 0.6, zf + 0.3, 0.04);
+      plane(0.16, 2.4, cyan, sx * 1.4, 2.1, zf + 0.56);
+    }
+    box(3.4, 0.35, 0.55, mt(0xffb23f), 0, 3.4, zf + 0.3, 0.04);
+    box(2.2, 2.6, 0.12, mt(0x2f55b8), 0, 0.7, zf + 0.04, 0.03);
+    for (const sx of [-1, 1]) box(0.12, 0.6, 0.08, mt(0xffd34d), sx * 0.2, 1.8, zf + 0.12, 0);
+    // 피아노 계단 (흰 건반 · 검은 건반)
+    const white = mt(0xfaf3e6),
+      black = mt(0x2a2530);
+    for (let i = 0; i < 3; i++) {
+      const y = 0.4 - i * 0.2,
+        z = zf + 0.7 + i * 0.5,
+        w = 3.2 + i * 0.4,
+        n = 6 + i;
+      for (let k = 0; k < n; k++) box(w / n - 0.06, 0.2, 0.48, white, -w / 2 + (k + 0.5) * (w / n), y, z, 0.02);
+      if (i === 0) for (let k = 0; k < n - 1; k++) if (k % 3 !== 2) box(0.22, 0.12, 0.3, black, -w / 2 + (k + 1) * (w / n), y + 0.2, z - 0.08, 0.02);
+    }
+    for (const sx of [-1, 1]) box(0.5, 0.8, 1.6, pinkM, sx * 2.2, 0, zf + 1.1, 0.04);
+    // 재생 버튼 줄 (◀◀ ▶ ▶▶)
+    const iconTex = (kind: number) =>
+      own(
+        canvasTex(
+          16,
+          16,
+          (g) => {
+            g.fillStyle = kind === 1 ? "#ff3e9a" : "#2a1a4a";
+            g.fillRect(0, 0, 16, 16);
+            g.fillStyle = kind === 1 ? "#ffd34d" : "#3df0ff";
+            const tri = (x0: number, dir: number) => {
+              for (let i = 0; i < 6; i++) g.fillRect(dir > 0 ? x0 + i : x0 - i, 5 + (i >> 1), 1, 6 - ((i >> 1) << 1));
+            };
+            if (kind === 0) {
+              tri(8, -1);
+              tri(13, -1);
+            } else if (kind === 1) tri(5, 1);
+            else {
+              tri(3, 1);
+              tri(8, 1);
+            }
+          },
+          true
+        )
+      );
+    [0, 1, 2].forEach((k) => {
+      box(1.0, 0.75, 0.3, darkM, (k - 1) * 1.15, 3.8, zf + 0.15, 0.03);
+      plane(0.8, 0.6, mine(new THREE.MeshBasicMaterial({ map: iconTex(k) })), (k - 1) * 1.15, 4.17, zf + 0.31);
+    });
+    // 카세트 창 (테이프 + 도는 바퀴)
+    box(3.6, 1.5, 0.35, darkM, 0, 4.75, zf + 0.12, 0.04);
+    const tapeTex = own(
+      canvasTex(
+        48,
+        20,
+        (g, w, h) => {
+          g.fillStyle = "#3b2a6a";
+          g.fillRect(0, 0, w, h);
+          g.fillStyle = "#ff7ab8";
+          g.fillRect(4, 4, w - 8, h - 8);
+          g.fillStyle = "#c9388a";
+          g.fillRect(14, 8, 20, 4);
+          g.fillStyle = "rgba(255,255,255,0.25)";
+          g.fillRect(0, 0, w, 2);
+        },
+        true
+      )
+    );
+    plane(3.2, 1.2, mine(new THREE.MeshBasicMaterial({ map: tapeTex })), 0, 5.5, zf + 0.3);
+    const reelTex = own(
+      canvasTex(
+        16,
+        16,
+        (g) => {
+          g.clearRect(0, 0, 16, 16);
+          g.fillStyle = "#f6efe6";
+          g.beginPath();
+          g.arc(8, 8, 7, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = "#3b2a6a";
+          g.beginPath();
+          g.arc(8, 8, 3, 0, Math.PI * 2);
+          g.fill();
+          g.fillStyle = "#f6efe6";
+          for (const [x, y] of [
+            [7, 4],
+            [7, 10],
+            [4, 7],
+            [10, 7],
+          ])
+            g.fillRect(x, y, 2, 2);
+        },
+        true
+      )
+    );
+    const reelM = mine(new THREE.MeshBasicMaterial({ map: reelTex, transparent: true, alphaTest: 0.5 }));
+    for (const sx of [-1, 1]) {
+      const r = plane(0.72, 0.72, reelM, sx * 0.95, 5.5, zf + 0.31);
+      anims.push((t) => (r.rotation.z = -t * 3));
+    }
+    // 간판 (분홍 테 · 크림 판 · 픽셀 글자)
+    box(5.4, 1.4, 0.45, pinkM, 0, 6.15, zf + 0.25, 0.05);
+    const signTex = own(
+      canvasTex(
+        96,
+        24,
+        (g, w, h) => {
+          g.fillStyle = "#fff3c4";
+          g.fillRect(0, 0, w, h);
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.font = "bold 15px monospace";
+          g.fillStyle = "#3df0ff";
+          g.fillText(b.sign, w / 2 + 1, h / 2 + 1);
+          g.fillStyle = "#c9388a";
+          g.fillText(b.sign, w / 2, h / 2);
+        },
+        true
+      )
+    );
+    plane(4.9, 1.05, mine(new THREE.MeshBasicMaterial({ map: signTex })), 0, 6.85, zf + 0.49);
+    // 지붕: 이퀄라이저 (청록 → 분홍, 박자에 맞춰 오르내림)
+    const eqCols = [0x3df0ff, 0x3df0ff, 0x7ad8ff, 0xb48cff, 0xff5fb8, 0xb48cff, 0x7ad8ff, 0x3df0ff, 0x3df0ff];
+    const eqGeo = own(new THREE.BoxGeometry(0.6, 1, 0.6).translate(0, 0.5, 0));
+    eqCols.forEach((c, i) => {
+      const bar = new THREE.Mesh(eqGeo, glow(c));
+      bar.position.set(-3.6 + i * 0.9, 7.7, 0.6);
+      G.add(bar);
+      const base = 0.7 + Math.sin(i * 0.9) * 0.3 + (i === 4 ? 0.9 : 0);
+      anims.push((t) => {
+        const ph = (t * BEAT) % 1;
+        const hit = Math.exp(-ph * 5);
+        bar.scale.y = Math.max(0.25, base + hit * (0.6 + 0.6 * Math.abs(Math.sin(i * 2.1 + Math.floor(t * BEAT) * 1.7))));
+      });
+    });
+    // 손잡이 (분홍 아치 + 청록 줄)
+    for (const sx of [-1, 1]) {
+      box(0.9, 2.6, 0.9, pinkM, sx * (W / 2 - 1.1), 7.7, -0.6, 0.05);
+      box(1.6, 0.9, 0.9, pinkM, sx * (W / 2 - 1.7), 9.6, -0.6, 0.05);
+    }
+    box(W - 4.2, 0.8, 0.9, darkM, 0, 9.7, -0.6, 0.05);
+    plane(W - 4.8, 0.22, cyan, 0, 10.1, -0.14);
+    // 떠다니는 음표 (복셀)
+    const noteCols = [0xffd34d, 0xff5fb8, 0x3df0ff];
+    noteCols.forEach((c, i) => {
+      const n = new THREE.Group();
+      const m = glow(c);
+      box(0.5, 0.4, 0.3, m, 0, 0, 0, 0.03, n);
+      box(0.14, 1.0, 0.3, m, 0.18, 0.3, 0, 0, n);
+      box(0.4, 0.18, 0.3, m, 0.38, 1.12, 0, 0, n);
+      n.position.set(-2.4 + i * 2.4, 11, 0.4);
+      G.add(n);
+      anims.push((t) => {
+        n.position.y = 11 + Math.sin(t * 1.6 + i * 2.1) * 0.35;
+        n.rotation.y = Math.sin(t * 0.9 + i) * 0.5;
+      });
+    });
+    G.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2), b.y + b.d / 2);
+    G.rotation.y = faceRot(b);
+    return { group: G, mats };
+  }
+
   /** PIXEL FIGHT 오락실: 복셀 블록 건물 + 지붕 위 주먹(모델) */
   function codeFight(b: Building): { group: THREE.Group; mats: THREE.Material[] } {
     const G = new THREE.Group();
@@ -2104,6 +2380,7 @@ if ( vFade > 0.01 ) {
     },
     tick(t: number) {
       if (ticker) ticker.offset.x = (t * 0.035) % 1;
+      for (const f of anims) f(t);
       // 분수: 물줄기 출렁 · 물방울 둥글게
       const [cone, ...drops] = spray;
       if (cone) cone.scale.y = 1 + Math.sin(t * 6) * 0.12;
