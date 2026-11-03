@@ -2,6 +2,7 @@ import { readdirSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { chessScore, janggiScore, omokScore } from "../../web/src/lib/aiScore";
 import { kstDay } from "../../web/src/lib/suspect/engine";
+import { dailySeed as cfSeed, generate as cfGenerate } from "../../web/src/lib/casefile/engine";
 import { RHYTHM_CHARTS, RHYTHM_SONG_IDS } from "../src/http/rhythmCharts";
 import { startTestServer, type TestServer } from "./helpers";
 
@@ -16,7 +17,9 @@ const pathOf = (board: string) =>
     ? `/api/rankings/rhythm/${board.slice(7)}`
     : board.startsWith("suspect:")
       ? `/api/rankings/suspect/${board.slice(8)}`
-      : `/api/rankings/${board}`;
+      : board.startsWith("casefile:")
+        ? `/api/rankings/casefile/${board.slice(9)}`
+        : `/api/rankings/${board}`;
 
 /** 티켓을 받고, 받은 시각을 ago초 전으로 돌려 놓음 (게임을 그만큼 한 것처럼) */
 async function ticket(uid: string, board: string, ago = 0): Promise<string> {
@@ -623,5 +626,47 @@ describe("랭킹: 오늘의 용의자", () => {
     const r = (await s.http("/api/suspect/reset")).body;
     expect(r.at).toBe(day.body.at);
     expect(r.resets.slice(0, 3).map((x: { day: string }) => x.day)).toEqual([kstDay(), "all", "all"]);
+  });
+});
+
+describe("랭킹: 오늘의 사건 파일", () => {
+  const c = `${kstDay()}_easy`;
+  const board = `casefile:${c}`;
+  const C = cfGenerate(cfSeed(kstDay(), "easy"), "easy");
+  const answer = { cell: C.pos, it: C.item };
+  const row = { name: "형사", time: 100, wrong: 1, score: 220 };
+
+  it("동선표가 정답이어야 등록 · 정답은 랭킹에 안 남음 · 첫 기록만", async () => {
+    // 틀린 동선표 (물건 둘을 바꿈)
+    const it2 = C.item.slice();
+    [it2[0], it2[1]] = [it2[1], it2[0]];
+    expect(await status("cf1", board, { ...row, cell: C.pos, it: it2 })).toBe(400);
+    expect(await status("cf1", board, row)).toBe(400); // 동선표 없음
+    expect(await status("cf1", board, { ...row, ...answer })).toBe(200);
+    expect(await status("cf1", board, { ...row, time: 50, wrong: 0, score: 50, ...answer })).toBe(200);
+    const { body } = await s.http(pathOf(board));
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject(row);
+    expect(body[0].cell).toBeUndefined();
+    expect(body[0].it).toBeUndefined();
+  });
+
+  it("점수 계산 · 시간이 안 맞으면 거절 · 지난 사건은 거절", async () => {
+    expect(await status("cf2", board, { ...row, score: 100, ...answer })).toBe(400);
+    expect(await status("cf2", board, { ...row, ...answer }, 20)).toBe(400);
+    expect(await status("cf2", "casefile:20200101_easy", { ...row, ...answer })).toBe(400);
+  });
+
+  it("요약 · 내 순위, 회원은 처음 풀면 GP (쉬움 200) 한 번만", async () => {
+    expect(await status("cf3", board, { ...row, time: 300, score: 420, ...answer })).toBe(200);
+    const sum = (await s.http(`${pathOf(board)}/summary`, { token: await s.token("cf3") })).body;
+    expect(sum).toMatchObject({ total: 2, clean: 0, avgWrong: 1, me: { pos: 2, score: 420, wrong: 1 } });
+
+    const token = await s.token("cfgp", { email: "cfgp@example.com" });
+    expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "형사gp" } })).status).toBe(200);
+    const memberPlay = async () =>
+      s.http(pathOf(board), { method: "POST", token, body: { ...row, ...answer, ticket: await ticket("cfgp", board, 600) } });
+    expect((await memberPlay()).body).toMatchObject({ gp: 200 });
+    expect((await memberPlay()).body.gp).toBeUndefined();
   });
 });

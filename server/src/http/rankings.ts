@@ -24,6 +24,16 @@ import {
   scoreOf as suspectScore,
   type TierId as SuspectTier,
 } from "../../../web/src/lib/suspect/engine";
+import {
+  CASE_RE as CASEFILE_CASE_RE,
+  DAILY_GP as CASEFILE_GP,
+  dailySeed as casefileSeed,
+  generate as casefileGenerate,
+  isSolution as casefileSolved,
+  scoreOf as casefileScore,
+  type Case as CasefileCase,
+  type TierId as CasefileTier,
+} from "../../../web/src/lib/casefile/engine";
 import { h, ms, userOf } from "./util";
 import { clearSuspectHall, sortHall, suspectHall, type HallSort } from "./suspectHall";
 
@@ -233,6 +243,44 @@ const suspectBoard = (c: string): Board => ({
   firstOnly: true,
 });
 
+/**
+ * 오늘의 사건 파일: 날짜 · 난이도(case)마다 랭킹. 점수 = 시간 + 오답 2분 (작을수록 좋음), 첫 기록만.
+ * 제출한 동선표는 POST 라우트에서 같은 시드로 만든 사건과 맞춰 본 뒤 빼고 저장 (정답이 랭킹에 남지 않게)
+ */
+const casefileSchema = z.strictObject({
+  name,
+  time: z.number().min(5).max(86400),
+  wrong: int.min(0).max(500),
+  score: z.number().min(5).max(200_000),
+});
+const casefileRecent = (c: string, now = Date.now()) => {
+  const day = c.slice(0, 8);
+  return day >= kstDay(now, -1) && day <= kstDay(now, 1);
+};
+const casefileBoard = (c: string): Board => ({
+  sort: { score: 1 },
+  schema: casefileSchema,
+  minSec: (d) => d.time,
+  check: (d) => casefileRecent(c) && Math.abs(d.score - casefileScore(d.time, d.wrong)) < 0.05,
+  firstOnly: true,
+});
+/** 사건은 만드는 데 최대 1초쯤 걸려서 기억해 둠 (받는 사건은 어제 · 오늘 · 내일뿐) */
+const casefileCache = new Map<string, CasefileCase>();
+function casefileCase(c: string): CasefileCase {
+  let k = casefileCache.get(c);
+  if (!k) {
+    const tier = c.slice(9) as CasefileTier;
+    k = casefileGenerate(casefileSeed(c.slice(0, 8), tier), tier);
+    casefileCache.set(c, k);
+    if (casefileCache.size > 16) casefileCache.delete(casefileCache.keys().next().value!);
+  }
+  return k;
+}
+const casefileAnswer = z.object({
+  cell: z.array(z.array(z.number().int().min(-1).max(9)).max(9)).max(9),
+  it: z.array(z.number().int().min(-1).max(9)).max(9),
+});
+
 const limitOf = (v: unknown) =>
   Math.min(100, Math.max(1, Math.floor(Number(v)) || 10));
 
@@ -406,6 +454,8 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
       return CHART_RE.test(key.slice(7)) ? rhythmBoard(key.slice(7)) : null;
     if (key.startsWith("suspect:"))
       return SUSPECT_CASE_RE.test(key.slice(8)) ? suspectBoard(key.slice(8)) : null;
+    if (key.startsWith("casefile:"))
+      return CASEFILE_CASE_RE.test(key.slice(9)) ? casefileBoard(key.slice(9)) : null;
     return Object.hasOwn(BOARDS, key) ? BOARDS[key] : null;
   };
 
@@ -682,6 +732,111 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
           pos >= 0
             ? { pos: pos + 1, solved: list[pos].solved, wins: list[pos].wins, perfect: list[pos].perfect }
             : null,
+      };
+    }),
+  );
+
+  // 오늘의 사건 파일 (case = YYYYMMDD_난이도)
+  r.get(
+    "/casefile/:case",
+    h(async (req) => {
+      const c = String(req.params.case);
+      if (!CASEFILE_CASE_RE.test(c)) throw bad();
+      const docs = await db
+        .col("casefile_rankings")
+        .find({ case: c })
+        .sort({ score: 1, createdAt: 1 })
+        .limit(limitOf(req.query.limit))
+        .toArray();
+      return rows(db, docs);
+    }),
+  );
+  r.post(
+    "/casefile/:case",
+    h(async (req) => {
+      const c = String(req.params.case);
+      if (!CASEFILE_CASE_RE.test(c)) throw bad();
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      // 동선표가 정답인지 (날짜가 지난 사건은 아래 check 에서 거절되니 사건을 만들지도 않음). 맞으면 빼고 저장
+      if (casefileRecent(c)) {
+        const ans = casefileAnswer.safeParse({ cell: body.cell, it: body.it });
+        if (!ans.success || !casefileSolved(casefileCase(c), ans.data.cell, ans.data.it)) {
+          console.warn(`[rank] 거절(answer) casefile:${c}`);
+          throw bad();
+        }
+      }
+      delete body.cell;
+      delete body.it;
+      const out = await submit(req, `casefile:${c}`, "casefile_rankings", { case: c });
+      // 처음 올린 기록이면 회원에게 난이도별 GP (사건마다 한 번 — 원장에 같은 사건이 있으면 안 줌)
+      const gp = CASEFILE_GP[c.slice(9) as CasefileTier] ?? 0;
+      if (!("kept" in out) && gp) {
+        const user = await userOf(auth, req);
+        const got = user && (await db.col("point_log").findOne({ uid: user.uid, reason: "casefile", ref: c }));
+        if (user && !user.anonymous && !got) {
+          const ok = await points.grant(user.uid, gp, "casefile", c).then(
+            () => true,
+            () => false,
+          );
+          if (ok) return { ...out, gp };
+        }
+      }
+      return out;
+    }),
+  );
+  // 사건 하나 요약: 푼 사람 · 한 번에 해결 · 중간 기록 · 평균 오답 + 내 순위
+  r.get(
+    "/casefile/:case/summary",
+    h(async (req) => {
+      const c = String(req.params.case);
+      if (!CASEFILE_CASE_RE.test(c)) throw bad();
+      const col = db.col("casefile_rankings");
+      const [agg] = await col
+        .aggregate<{ n: number; clean: number; wrong: number }>([
+          { $match: { case: c } },
+          {
+            $group: {
+              _id: null,
+              n: { $sum: 1 },
+              clean: { $sum: { $cond: [{ $eq: ["$wrong", 0] }, 1, 0] } },
+              wrong: { $avg: "$wrong" },
+            },
+          },
+        ])
+        .toArray();
+      const total = agg?.n ?? 0;
+      const mid = total
+        ? await col
+            .find({ case: c })
+            .sort({ score: 1, createdAt: 1 })
+            .skip(Math.floor((total - 1) / 2))
+            .limit(1)
+            .project<{ score: number }>({ score: 1 })
+            .next()
+        : null;
+      const user = await userOf(auth, req).catch(() => null);
+      const mine = user ? await col.findOne({ case: c, uid: user.uid }) : null;
+      const me = mine
+        ? {
+            id: mine._id,
+            pos:
+              (await col.countDocuments({
+                case: c,
+                $or: [
+                  { score: { $lt: mine.score } },
+                  { score: mine.score, createdAt: { $lt: mine.createdAt } },
+                ],
+              })) + 1,
+            score: mine.score,
+            wrong: mine.wrong,
+          }
+        : null;
+      return {
+        total,
+        clean: agg?.clean ?? 0,
+        median: mid?.score ?? null,
+        avgWrong: agg ? Math.round(agg.wrong * 10) / 10 : null,
+        me,
       };
     }),
   );

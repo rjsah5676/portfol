@@ -24,6 +24,8 @@ export const RANK_COLLECTIONS = [
   "fight_ai_rankings",
   // 오늘의 용의자: 날짜_난이도(case)마다 사람당 첫 기록 하나
   "suspect_rankings",
+  // 오늘의 사건 파일: 날짜_난이도(case)마다 사람당 첫 기록 하나
+  "casefile_rankings",
 ] as const;
 export const ROOM_COLLECTIONS = ["chess_rooms", "janggi_rooms", "omok_rooms"] as const;
 
@@ -105,6 +107,8 @@ async function ensureIndexes({ db }: Database) {
   // 오늘의 용의자: 날짜_난이도별 순위 · 그 사람의 첫 기록 찾기
   idx("suspect_rankings", { case: 1, score: 1 });
   idx("suspect_rankings", { case: 1, uid: 1 });
+  idx("casefile_rankings", { case: 1, score: 1 });
+  idx("casefile_rankings", { case: 1, uid: 1 });
   // 랭킹 티켓: 사람별 최근 발급 수 확인, 8일 지나면 자동 삭제(유효 기간 7일)
   idx("rank_tickets", { uid: 1, createdAt: -1 });
   idx("rank_tickets", { createdAt: 1 }, { expireAfterSeconds: 8 * 24 * 60 * 60 });

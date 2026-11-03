@@ -21,13 +21,20 @@ export interface Play {
   /** 마지막 저장 시각 — 오늘의 사건은 창을 닫아 둔 시간도 셈 */
   at?: number;
   done: boolean;
-  /** 해결했을 때 기록 (초) */
+  /** 해결했을 때 걸린 시간 · 기록 (초) */
+  time?: number;
   score?: number;
+  /** 랭킹에 올렸는지 (오늘의 사건) */
+  submitted?: boolean;
 }
 export interface Store {
   days: Record<string, Partial<Record<TierId, Play>>>;
   solved: number;
   best: Partial<Record<TierId, number>>;
+  /** 입문 사건을 끝냈는지 */
+  tutorial?: boolean;
+  /** 비회원이 랭킹에 적은 이름 */
+  name?: string;
 }
 
 const KEY = "casefile:v1";

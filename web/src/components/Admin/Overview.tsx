@@ -22,6 +22,8 @@ export const BOARD_LABEL: Record<string, string> = {
   minesweeper_rankings: "지뢰찾기",
   suspect_rankings: "오늘의 용의자",
   suspect: "오늘의 용의자",
+  casefile_rankings: "오늘의 사건 파일",
+  casefile: "오늘의 사건 파일",
   reaction: "반응속도",
   rhythm_rankings: "PIXEL Rhythm Up",
   chess_ai_rankings: "체스 AI",

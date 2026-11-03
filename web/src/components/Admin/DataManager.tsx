@@ -61,6 +61,16 @@ const SOURCES: Source[] = [
     note: "case = 날짜_난이도. 날짜 · 난이도마다 첫 기록만 남음",
   },
   {
+    key: "casefile",
+    label: "오늘의 사건 파일",
+    group: "랭킹",
+    path: () => "casefile_rankings",
+    columns: ["name", "case", "score", "time", "wrong"],
+    sort: ["score", "asc"],
+    editable: true,
+    note: "case = 날짜_난이도. 날짜 · 난이도마다 첫 기록만 남음",
+  },
+  {
     key: "reaction",
     label: "반응속도",
     group: "랭킹",

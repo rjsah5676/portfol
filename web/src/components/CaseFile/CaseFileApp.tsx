@@ -11,11 +11,27 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import GameHeader from "@/components/GameHeader";
+import { Icon } from "@/components/Sketch/Art";
 import { CASEFILE_GUIDE } from "@/data/gameGuides";
+import { beginCase, getCaseSummary, submitCase } from "@/firestore/casefileRankings";
+import { prepareRuns, RANK_NAME_MAX } from "@/lib/api/rankRun";
+import { useAutoRank } from "@/lib/useAutoRank";
+import { TUT_STEPS, TUTORIAL } from "@/lib/casefile/tutorial";
+import {
+  getSound,
+  onSoundChange,
+  playBgm,
+  playSfx,
+  preloadSounds,
+  setSound,
+} from "@/lib/casefile/sound";
+import { useCaseFileRank } from "./CaseFileRank";
 import {
   CAT,
   CAUSE,
+  caseKey,
   caseNo,
+  DAILY_GP,
   clueText,
   dailySeed,
   dayLabel,
@@ -39,6 +55,7 @@ import {
   loadStore,
   markSolved,
   onStoreChange,
+  saveStore,
   setPlay,
   type Play,
   type Store,
@@ -53,7 +70,7 @@ import {
  *  - 오늘의 사건은 판 상태를 저장해서 이어 풀기, 창을 닫아 둔 시간도 셈
  */
 
-type Mode = "daily" | "practice";
+type Mode = "daily" | "practice" | "tutorial";
 interface Run {
   mode: Mode;
   tier: TierId;
@@ -61,7 +78,7 @@ interface Run {
   day: string | null;
   seed: number;
 }
-type Tab = "case" | "clues" | "submit";
+type Tab = "guide" | "case" | "clues" | "submit";
 type Sheet =
   | { kind: "cell"; t: number; p: number }
   | { kind: "room"; t: number; r: number }
@@ -71,7 +88,70 @@ const fmt = (s: number) =>
   `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const PC = (p: number) => ({ "--pc": `var(--p${p})` }) as CSSProperties;
 const caseTitle = (r: Run) =>
-  r.day ? `오늘의 사건 #${String(caseNo(r.day)).padStart(3, "0")}` : "연습 사건";
+  r.mode === "tutorial"
+    ? "입문 사건"
+    : r.day
+      ? `오늘의 사건 #${String(caseNo(r.day)).padStart(3, "0")}`
+      : "연습 사건";
+
+// ───────────────────────── 로딩 (소리 · 글꼴을 다 받은 뒤 시작) ─────────────────────────
+
+function useAssets() {
+  const [pct, setPct] = useState(0);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let off = false;
+    let snd = 0;
+    let sndTotal = 7;
+    let font = 0;
+    const bump = () => !off && setPct(Math.round(((snd + font) / (sndTotal + 1)) * 100));
+    const sounds = preloadSounds((d, t) => {
+      snd = d;
+      sndTotal = t;
+      bump();
+    });
+    const fonts = Promise.race([
+      document.fonts?.load('800 20px "Nanum Myeongjo"').catch(() => {}) ?? Promise.resolve(),
+      new Promise((ok) => setTimeout(ok, 2500)),
+    ]).then(() => {
+      font = 1;
+      bump();
+    });
+    void Promise.all([sounds, fonts]).then(() => {
+      if (off) return;
+      setPct(100);
+      setTimeout(() => !off && setReady(true), 150);
+    });
+    return () => {
+      off = true;
+    };
+  }, []);
+  return { pct, ready };
+}
+
+function SoundBtn() {
+  const [mute, setMute] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장된 소리 설정은 화면이 뜬 뒤에 읽음
+    setMute(getSound().mute);
+    return onSoundChange(() => setMute(getSound().mute));
+  }, []);
+  return (
+    <button
+      type="button"
+      className="back"
+      title={mute ? "소리 켜기" : "소리 끄기"}
+      aria-label={mute ? "소리 켜기" : "소리 끄기"}
+      onClick={() => {
+        setSound({ mute: !getSound().mute });
+        playSfx("sfx-tap");
+      }}
+      style={{ display: "grid", placeItems: "center" }}
+    >
+      <Icon name={mute ? "mute" : "sound"} size={16} />
+    </button>
+  );
+}
 
 function useStore(on: boolean): Store | null {
   const [s, setS] = useState<Store | null>(null);
@@ -85,11 +165,7 @@ function useStore(on: boolean): Store | null {
 }
 
 export default function CaseFileApp() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- 화면이 뜬 뒤에만 오늘 날짜 · 기록을 읽음
-    setMounted(true);
-  }, []);
+  const { pct, ready: mounted } = useAssets();
   const store = useStore(mounted);
   const [today, setToday] = useState(() => kstDay());
   const [run, setRun] = useState<Run | null>(null);
@@ -97,6 +173,14 @@ export default function CaseFileApp() {
   const [err, setErr] = useState(false);
   const [practiceTier, setPracticeTier] = useState<TierId>("normal");
   const stageRef = useRef<HTMLDivElement>(null);
+  const { spec: rankSpec, openRank, reload: reloadRank } = useCaseFileRank(mounted, today);
+
+  useEffect(prepareRuns, []);
+  // 풀기 화면에서만 배경음악
+  useEffect(() => {
+    playBgm(!!kase);
+    return () => playBgm(false);
+  }, [kase]);
 
   // 자정이 지나면 오늘의 사건이 바뀜 (첫 화면에 있을 때)
   useEffect(() => {
@@ -121,12 +205,15 @@ export default function CaseFileApp() {
   }, [mounted, today]);
 
   const start = (r: Run) => {
+    playSfx("sfx-flip");
     setRun(r);
     setKase(null);
     setErr(false);
-    makeCase(r.seed, r.tier).then(setKase, () => setErr(true));
+    if (r.mode === "tutorial") setKase(TUTORIAL);
+    else makeCase(r.seed, r.tier).then(setKase, () => setErr(true));
   };
   const home = () => {
+    playSfx("sfx-tap");
     setRun(null);
     setKase(null);
     document
@@ -148,6 +235,10 @@ export default function CaseFileApp() {
       <div className="cf-loading">
         <div>
           <b>사건 파일을 펼치는 중…</b>
+          <div className="cf-loadbar">
+            <i style={{ width: `${pct}%` }} />
+          </div>
+          <span className="mono">{pct}%</span>
         </div>
       </div>
     );
@@ -172,7 +263,17 @@ export default function CaseFileApp() {
       </div>
     );
   else if (run && kase)
-    body = <Board key={`${run.seed}:${run.tier}`} C={kase} run={run} onHome={home} />;
+    body = (
+      <Board
+        key={`${run.mode}:${run.seed}:${run.tier}`}
+        C={kase}
+        run={run}
+        onHome={home}
+        onRank={openRank}
+        onRanked={reloadRank}
+        onDaily={(t) => start({ mode: "daily", tier: t, day: today, seed: dailySeed(today, t) })}
+      />
+    );
   else
     body = (
       <Home
@@ -181,6 +282,8 @@ export default function CaseFileApp() {
         practiceTier={practiceTier}
         setPracticeTier={setPracticeTier}
         onDaily={(t) => start({ mode: "daily", tier: t, day: today, seed: dailySeed(today, t) })}
+        onTutorial={() => start({ mode: "tutorial", tier: "easy", day: null, seed: 0 })}
+        onRank={openRank}
         onPractice={() =>
           start({
             mode: "practice",
@@ -204,6 +307,7 @@ export default function CaseFileApp() {
         tags={["데일리 퍼즐", "논리 추리", "알리바이", "살인 사건"]}
         className={`mx-auto w-full ${wide ? "max-w-[1000px]" : "max-w-[640px]"}`}
         guide={CASEFILE_GUIDE}
+        rank={rankSpec}
       />
       <div
         ref={stageRef}
@@ -223,6 +327,8 @@ function Home({
   practiceTier,
   setPracticeTier,
   onDaily,
+  onTutorial,
+  onRank,
   onPractice,
 }: {
   store: Store;
@@ -230,10 +336,13 @@ function Home({
   practiceTier: TierId;
   setPracticeTier: (t: TierId) => void;
   onDaily: (t: TierId) => void;
+  onTutorial: () => void;
+  onRank: (t: TierId) => void;
   onPractice: () => void;
 }) {
   const plays = store.days[today] ?? {};
   const done = TIER_IDS.filter((t) => plays[t]?.done).length;
+  const first = !store.tutorial && store.solved === 0;
   return (
     <div className="cf-home">
       <div className="no">
@@ -251,6 +360,19 @@ function Home({
         </span>
         <span className="cf-chip">총 {store.solved}건</span>
       </div>
+      {first && (
+        <button type="button" className="cf-tut" onClick={onTutorial}>
+          <b>처음이세요? 입문 사건부터 (3분)</b>
+          <span>4명짜리 작은 사건을 한 단계씩 짚어 드려요. 기록도 벌점도 없어요.</span>
+          <span className="go">입문 사건 시작 →</span>
+        </button>
+      )}
+      <div className="cf-sec">
+        <b>오늘의 사건 · 난이도</b>
+        <button type="button" className="cf-pill" onClick={() => onRank("normal")}>
+          🏆 랭킹
+        </button>
+      </div>
       <div className="cf-tiers">
         {TIER_IDS.map((t) => {
           const T = TIERS[t];
@@ -262,6 +384,7 @@ function Home({
                 <small>
                   용의자 {T.n}명 · 시간대 {T.T}개
                 </small>
+                <small className="gp">회원 +{DAILY_GP[t].toLocaleString("ko-KR")} GP</small>
               </span>
               {p?.done ? (
                 <span className="st done">해결 {fmt(p.score ?? 0)}</span>
@@ -297,6 +420,11 @@ function Home({
             새 사건 열기
           </button>
         </div>
+        {!first && (
+          <button type="button" className="cf-link" onClick={onTutorial}>
+            입문 사건 다시 보기
+          </button>
+        )}
       </div>
       <div className="cf-how">
         <b>푸는 법</b>
@@ -307,7 +435,8 @@ function Home({
           </li>
           <li>시간대가 바뀔 땐 제자리이거나 문으로 이어진 방으로만 움직여요.</li>
           <li>범인만 거짓말을 해요. 사망 추정 시각에 현장에 있던 사람이 범인이에요.</li>
-          <li>동선표를 다 채워서 제출해요. 틀리면 기록에 2분이 붙어요. 처음이면 쉬움부터!</li>
+          <li>동선표를 다 채워서 제출해요. 틀리면 기록에 2분이 붙어요.</li>
+          <li>오늘의 사건은 랭킹에 첫 풀이만 남고, 회원은 처음 풀 때 GP를 받아요.</li>
         </ol>
       </div>
     </div>
@@ -328,21 +457,46 @@ function freshPlay(C: Case): Play {
   };
 }
 
-function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
+type Send = "idle" | "sending" | "done" | "error" | "kept";
+const fillOk = (S: Play, [t, p, v]: [number, number, number]) =>
+  t < 0 ? S.it[p] === v : S.cell[t][p] === v;
+
+function Board({
+  C,
+  run,
+  onHome,
+  onRank,
+  onDaily,
+  onRanked,
+}: {
+  C: Case;
+  run: Run;
+  onHome: () => void;
+  onRank: (t: TierId, day?: string) => void;
+  onDaily: (t: TierId) => void;
+  /** 기록을 올린 뒤 (머리글 랭킹 새로 읽기) */
+  onRanked: () => void;
+}) {
   const daily = run.mode === "daily" && !!run.day;
+  const tutorial = run.mode === "tutorial";
   const [boot] = useState(() => {
     const s = daily ? getPlay(run.day!, run.tier) : undefined;
     const ok = s && s.cell.length === C.T && s.cell[0]?.length === C.n && s.it.length === C.n;
     const play = ok ? s : freshPlay(C);
     // 오늘의 사건은 창을 닫아 둔 시간도 셈 (캡처해 두고 닫았다가 풀기 막기)
     const ms0 = play.ms + (daily && !play.done && play.at ? Math.max(0, Date.now() - play.at) : 0);
-    return { play, ms0 };
+    return { play, ms0, fresh: !ok };
   });
   const [S, setS] = useState<Play>(boot.play);
   const msRef = useRef(boot.ms0);
   const [sec, setSec] = useState(Math.floor(boot.ms0 / 1000));
   const [slot, setSlot] = useState(C.T - 1);
-  const [tab, setTab] = useState<Tab>("case");
+  const [tab, setTab] = useState<Tab>(tutorial ? "guide" : "case");
+
+  // 오늘의 사건을 처음 펼칠 때 랭킹 시작 표 (이어 풀기면 받아 둔 표를 씀)
+  useEffect(() => {
+    if (daily && boot.fresh) beginCase(caseKey(run.day!, run.tier));
+  }, [daily, boot.fresh, run.day, run.tier]);
   const [plan, setPlan] = useState(true);
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [shake, setShake] = useState(0);
@@ -419,7 +573,8 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
       return `${ro(roomName(S.cell[t + 1][p]))} 못 감`;
     return "";
   };
-  const setCell = (t: number, p: number, r: number) =>
+  const setCell = (t: number, p: number, r: number) => {
+    playSfx(S.cell[t][p] === r ? "sfx-erase" : "sfx-pick");
     up((d) => {
       if (d.cell[t][p] === r) {
         d.cell[t][p] = -1;
@@ -428,7 +583,9 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
       for (let q = 0; q < C.n; q++) if (d.cell[t][q] === r) d.cell[t][q] = -1;
       d.cell[t][p] = r;
     });
-  const setItem = (p: number, i: number) =>
+  };
+  const setItem = (p: number, i: number) => {
+    playSfx(S.it[p] === i ? "sfx-erase" : "sfx-pick");
     up((d) => {
       if (d.it[p] === i) {
         d.it[p] = -1;
@@ -437,9 +594,17 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
       for (let q = 0; q < C.n; q++) if (d.it[q] === i) d.it[q] = -1;
       d.it[p] = i;
     });
-  const clearCell = (t: number, p: number) =>
-    S.cell[t][p] >= 0 && up((d) => void (d.cell[t][p] = -1));
-  const clearItem = (p: number) => S.it[p] >= 0 && up((d) => void (d.it[p] = -1));
+  };
+  const clearCell = (t: number, p: number) => {
+    if (S.cell[t][p] < 0) return;
+    playSfx("sfx-erase");
+    up((d) => void (d.cell[t][p] = -1));
+  };
+  const clearItem = (p: number) => {
+    if (S.it[p] < 0) return;
+    playSfx("sfx-erase");
+    up((d) => void (d.it[p] = -1));
+  };
 
   // 우클릭 · 길게 누르기 = 지우기 (길게 누른 뒤엔 눌림으로 치지 않음)
   const lp = useRef<{ tm: number | null; fired: boolean }>({ tm: null, fired: false });
@@ -466,8 +631,32 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
   });
   const openSheet = (s: Sheet) => {
     if (lp.current.fired || S.done) return;
+    playSfx("sfx-tap");
     setSheet(s);
   };
+  const goTab = (k: Tab) => {
+    if (k !== tab) playSfx("sfx-tap");
+    setTab(k);
+  };
+
+  // ───── 입문 안내: 단계마다 채울 칸이 다 맞으면 다음 단계 ─────
+  const tutIdx = tutorial ? TUT_STEPS.findIndex((st) => !st.fill.every((f) => fillOk(S, f))) : -1;
+  const tutNow = tutIdx >= 0 ? TUT_STEPS[tutIdx] : null;
+  const tutKey = (t: number, p: number) => `${t}:${p}`;
+  const tutCells = new Set(
+    (tutNow?.fill ?? []).filter((f) => !fillOk(S, f)).map(([t, p]) => tutKey(t, p))
+  );
+  const tutRef = useRef(tutIdx);
+  useEffect(() => {
+    if (!tutorial || tutRef.current === tutIdx) return;
+    const next = tutIdx < 0 || tutIdx > tutRef.current;
+    tutRef.current = tutIdx;
+    if (!next) return;
+    playSfx("sfx-flip");
+    const t0 = tutIdx >= 0 ? TUT_STEPS[tutIdx].fill.find(([t]) => t >= 0)?.[0] : undefined;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 다음 단계의 시간대로 동선표를 맞춰 줌
+    if (t0 !== undefined) setSlot(t0);
+  }, [tutorial, tutIdx]);
 
   // ───── 제출 ─────
   const total = C.T * C.n + C.n;
@@ -480,19 +669,87 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
       C.pos.every((a, t) => a.every((r, p) => S.cell[t][p] === r)) &&
       C.item.every((i, p) => S.it[p] === i);
     if (ok) {
-      const score = scoreOf(msRef.current / 1000, S.wrong);
+      // 서버와 같은 셈: 시간은 0.1초 단위, 기록 = 시간 + 오답 × 2분
+      const time = Math.max(0.1, Math.round(msRef.current / 100) / 10);
+      const score = scoreOf(time, S.wrong);
       doneRef.current = true;
       up((d) => {
         d.done = true;
+        d.time = time;
         d.score = score;
       });
       if (daily) markSolved(run.tier, score);
+      if (tutorial)
+        saveStore((s) => {
+          s.tutorial = true;
+        });
+      playSfx("sfx-stamp");
+      setTimeout(() => playSfx("jingle-clear"), 380);
       setVerdict("");
     } else {
+      playSfx("sfx-wrong");
       up((d) => void d.wrong++);
-      setVerdict(`맞지 않는 칸이 있어요. +2분 (오답 ${S.wrong + 1}번)`);
+      setVerdict(
+        tutorial
+          ? "맞지 않는 칸이 있어요. 입문 안내를 다시 따라가 보세요."
+          : `맞지 않는 칸이 있어요. +2분 (오답 ${S.wrong + 1}번)`
+      );
       setShake((k) => k + 1);
     }
+  };
+
+  // ───── 랭킹 (오늘의 사건만 · 사건마다 첫 풀이만) ─────
+  const ck = daily ? caseKey(run.day!, run.tier) : "";
+  const [already] = useState(() => !!boot.play.submitted);
+  const [send, setSend] = useState<Send>(already ? "kept" : "idle");
+  const [sendErr, setSendErr] = useState("");
+  const [gp, setGp] = useState(0);
+  const [name, setName] = useState(() => loadStore().name ?? "");
+  const [rank, setRank] = useState<{ pos: number; total: number } | null>(null);
+  const sendRank = async (nick: string) => {
+    const cur = sRef.current;
+    const time =
+      cur.time ?? Math.max(0.1, Math.round(((cur.score ?? 0) - cur.wrong * PENALTY) * 10) / 10);
+    setSend("sending");
+    setSendErr("");
+    try {
+      const res = await submitCase(ck, {
+        name: nick,
+        time,
+        wrong: cur.wrong,
+        score: scoreOf(time, cur.wrong),
+        cell: cur.cell,
+        it: cur.it,
+      });
+      if (res.gp) setGp(res.gp);
+      up((d) => void (d.submitted = true));
+      setSend(res.kept ? "kept" : "done");
+      onRanked();
+    } catch (e) {
+      setSendErr(e instanceof Error ? e.message : "기록을 올리지 못했어요.");
+      setSend("error");
+      throw e;
+    }
+  };
+  const auto = useAutoRank(daily && S.done && !already, sendRank);
+  useEffect(() => {
+    if (!daily || (send !== "done" && send !== "kept")) return;
+    let off = false;
+    getCaseSummary(ck)
+      .then((s) => !off && s.me && setRank({ pos: s.me.pos, total: Math.max(1, s.total) }))
+      .catch(() => {});
+    return () => {
+      off = true;
+    };
+  }, [daily, send, ck]);
+  const guestSend = () => {
+    const n = name.trim().slice(0, RANK_NAME_MAX);
+    if (!n) return;
+    playSfx("sfx-tap");
+    saveStore((s) => {
+      s.name = n;
+    });
+    void sendRank(n).catch(() => {});
   };
   const share = async () => {
     const text = [
@@ -589,7 +846,10 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
             type="button"
             className={`cf-slot${i === C.T - 1 ? " murder" : ""}`}
             aria-pressed={slot === i}
-            onClick={() => setSlot(i)}
+            onClick={() => {
+              if (i !== slot) playSfx("sfx-tap");
+              setSlot(i);
+            }}
           >
             {hhmm(s[0])}
             <small>{i === C.T - 1 ? "사망 추정" : i === 0 ? "사건 전" : "이동"}</small>
@@ -642,7 +902,7 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
                   <td key={s}>
                     <button
                       type="button"
-                      className={`cf-cell${r >= 0 ? " set" : ""}${s === slot ? " on" : ""}${bad ? " bad" : ""}`}
+                      className={`cf-cell${r >= 0 ? " set" : ""}${s === slot ? " on" : ""}${bad ? " bad" : ""}${tutCells.has(tutKey(s, p)) ? " tut" : ""}`}
                       style={PC(p)}
                       aria-label={`${pp.name} ${hhmm(C.slots[s][0])}`}
                       title={bad || undefined}
@@ -660,7 +920,7 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
               <td>
                 <button
                   type="button"
-                  className={`cf-cell it${S.it[p] >= 0 ? " set" : ""}`}
+                  className={`cf-cell it${S.it[p] >= 0 ? " set" : ""}${tutCells.has(tutKey(-1, p)) ? " tut" : ""}`}
                   style={PC(p)}
                   aria-label={`${pp.name}의 물건`}
                   onClick={() => openSheet({ kind: "item", p })}
@@ -794,9 +1054,10 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
             <button
               type="button"
               className="cf-chk"
-              onClick={() =>
-                up((s) => void (s.seen = d ? s.seen.filter((x) => x !== i) : [...s.seen, i]))
-              }
+              onClick={() => {
+                playSfx("sfx-tap");
+                up((s) => void (s.seen = d ? s.seen.filter((x) => x !== i) : [...s.seen, i]));
+              }}
             >
               {d ? "✓ 확인" : "확인"}
             </button>
@@ -822,12 +1083,13 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
                 type="button"
                 className="cf-truth"
                 data-v={v}
-                onClick={() =>
+                onClick={() => {
+                  playSfx("sfx-tap");
                   up((d) => {
                     const o: Truth[] = ["?", "참", "거짓"];
                     d.truth[p] = o[(o.indexOf(d.truth[p]) + 1) % 3];
-                  })
-                }
+                  });
+                }}
               >
                 {v === "?" ? "판단 전" : v}
               </button>
@@ -842,19 +1104,95 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
   const wi = cul >= 0 ? S.it[cul] : -1;
   const paneSubmit = S.done ? (
     <div className="cf-solved">
-      <span className="cf-stamp">사건 해결</span>
+      <span className="cf-stamp">{tutorial ? "입문 완료" : "사건 해결"}</span>
       <p style={{ margin: "2px 0 6px" }}>
         <b>
           {C.people[C.culprit].name} · {C.items[C.item[C.culprit]].name} · {roomName(C.crimeRoom)}
         </b>
       </p>
-      <p className="hint" style={{ margin: 0 }}>
-        기록 <b className="mono">{fmt(S.score ?? 0)}</b> = 걸린 시간 + 오답 {S.wrong}번 × 2분
-        {S.wrong === 0 && " · 한 번에 해결"}
-      </p>
-      <button type="button" className="cf-go sub" onClick={share}>
-        {copied ? "복사했어요!" : "결과 공유하기 (정답은 안 보여요)"}
-      </button>
+      {tutorial ? (
+        <>
+          <p className="hint" style={{ margin: 0 }}>
+            이게 전부예요. 확실한 단서로 칸을 채우고, 거짓말쟁이를 하나씩 놓아 보며 모순을 찾고,
+            도면으로 동선을 이으면 돼요. 오늘의 사건은 단서가 더 많고 판이 커요.
+          </p>
+          <button type="button" className="cf-go" onClick={() => onDaily("easy")}>
+            오늘의 사건 풀러 가기 (쉬움)
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="hint" style={{ margin: 0 }}>
+            기록 <b className="mono">{fmt(S.score ?? 0)}</b> = 걸린 시간 + 오답 {S.wrong}번 × 2분
+            {S.wrong === 0 && " · 한 번에 해결"}
+          </p>
+          {daily && (
+            <div className="cf-rank">
+              <div className="st">
+                {send === "kept" ? (
+                  "이미 랭킹에 올린 사건이에요. 랭킹엔 첫 풀이만 남아요."
+                ) : send === "sending" || auto.state === "sending" ? (
+                  "기록 올리는 중…"
+                ) : send === "done" ? (
+                  <b>
+                    랭킹에 올렸어요!
+                    {gp > 0 && <span className="gp"> +{gp.toLocaleString("ko-KR")} GP</span>}
+                  </b>
+                ) : send === "error" ? (
+                  <span className="bad">{sendErr}</span>
+                ) : !auto.member ? (
+                  "이름을 남기면 랭킹에 올라가요."
+                ) : null}
+              </div>
+              {rank && (
+                <div className="pos">
+                  {run.day === kstDay() ? "오늘" : `#${caseNo(run.day!)}`} {T.label}{" "}
+                  <b>{rank.pos}위</b>
+                  <span>
+                    {" "}
+                    / {rank.total}명
+                    {rank.total >= 3 &&
+                      ` · 상위 ${Math.max(1, Math.round((rank.pos / rank.total) * 100))}%`}
+                  </span>
+                </div>
+              )}
+              {!auto.member && (send === "idle" || send === "error") && (
+                <div className="cf-name">
+                  <input
+                    value={name}
+                    maxLength={RANK_NAME_MAX}
+                    placeholder="랭킹에 남길 이름"
+                    aria-label="랭킹에 남길 이름"
+                    onChange={(e) => setName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && guestSend()}
+                  />
+                  <button type="button" onClick={guestSend} disabled={!name.trim()}>
+                    올리기
+                  </button>
+                </div>
+              )}
+              <button
+                type="button"
+                className="cf-go sub"
+                onClick={() => {
+                  playSfx("sfx-tap");
+                  onRank(run.tier, run.day!);
+                }}
+              >
+                🏆 랭킹 보기
+              </button>
+            </div>
+          )}
+          {run.mode === "practice" && (
+            <p className="hint" style={{ margin: "8px 0 0" }}>
+              연습 사건은 랭킹에 올라가지 않아요.
+            </p>
+          )}
+          <button type="button" className="cf-go sub" onClick={share}>
+            {copied ? "복사했어요!" : "결과 공유하기 (정답은 안 보여요)"}
+          </button>
+        </>
+      )}
       <button type="button" className="cf-go sub" style={{ marginTop: 6 }} onClick={onHome}>
         사건 목록으로
       </button>
@@ -908,7 +1246,67 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
     </div>
   );
 
+  const paneGuide = tutorial && (
+    <div className="cf-guide">
+      <div className="steps" aria-label="입문 안내 단계">
+        {TUT_STEPS.map((_, i) => (
+          <i
+            key={i}
+            className={tutIdx < 0 || i < tutIdx ? "ok" : i === tutIdx ? "on" : ""}
+            aria-hidden
+          />
+        ))}
+        <span className="mono">
+          {tutIdx < 0 ? TUT_STEPS.length : tutIdx + 1} / {TUT_STEPS.length}
+        </span>
+      </div>
+      {tutNow ? (
+        <div className="cf-coach" key={tutIdx}>
+          <b>{tutNow.title}</b>
+          <p>{tutNow.body}</p>
+          <div className="todo">
+            <small>지금 채울 칸 (동선표에서 반짝이는 칸)</small>
+            {tutNow.fill.map((f) => {
+              const [t, p] = f;
+              const ok = fillOk(S, f);
+              const cur = t < 0 ? S.it[p] : S.cell[t][p];
+              const got = cur >= 0 ? (t < 0 ? C.items[cur].name : roomName(cur)) : "";
+              return (
+                <span key={tutKey(t, p)} className={ok ? "ok" : cur >= 0 ? "no" : ""} style={PC(p)}>
+                  <span className="cf-dot sm">{ini(p)}</span>
+                  {C.people[p].name} · {t < 0 ? "물건" : hhmm(C.slots[t][0])}
+                  <em>{ok ? "✓" : got ? `${josa(got, "은", "는")} 아니에요` : ""}</em>
+                </span>
+              );
+            })}
+          </div>
+          <button type="button" className="cf-link" onClick={() => goTab("clues")}>
+            단서 · 진술 보기 →
+          </button>
+        </div>
+      ) : S.done ? (
+        <div className="cf-coach">
+          <b>입문 사건 해결!</b>
+          <p>제출 탭에서 결과를 보고 오늘의 사건으로 넘어가세요.</p>
+        </div>
+      ) : (
+        <div className="cf-coach">
+          <b>동선표가 다 찼어요</b>
+          <p>이제 수사 보고서를 내요. 실제 사건에선 틀리면 기록에 2분이 붙어요.</p>
+          <button type="button" className="cf-go" onClick={() => goTab("submit")}>
+            제출 탭으로
+          </button>
+        </div>
+      )}
+      <p className="hint">
+        규칙: 시간대마다 방 하나에 한 명 · 문으로 이어진 방으로만 이동 · 범인만 거짓말 · 사망 추정
+        시각에 현장(서재)에 있던 사람이 범인.
+      </p>
+    </div>
+  );
+
   const tabs: [Tab, string, number | null][] = [
+    ...(tutorial ? ([["guide", "안내", null]] as [Tab, string, null][]) : []),
     ["case", "사건", null],
     ["clues", "단서 · 진술", C.clues.length + C.n],
     ["submit", S.done ? "해결" : "제출", null],
@@ -928,9 +1326,16 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
             {T.label} · {C.n}명 · 시간대 {C.T}
           </span>
         </div>
-        <span className="cf-timer" title="걸린 시간 + 오답 × 2분">
-          {fmt(shown)}
-        </span>
+        <SoundBtn />
+        {tutorial ? (
+          <span className="cf-timer" title="입문 사건은 기록이 없어요">
+            입문
+          </span>
+        ) : (
+          <span className="cf-timer" title="걸린 시간 + 오답 × 2분">
+            {fmt(shown)}
+          </span>
+        )}
       </div>
       <div className="cf-main">
         {board}
@@ -943,7 +1348,7 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
                 role="tab"
                 className="cf-tab"
                 aria-selected={tab === k}
-                onClick={() => setTab(k)}
+                onClick={() => goTab(k)}
               >
                 {l}
                 {n !== null && <span className="n">{n}</span>}
@@ -951,7 +1356,13 @@ function Board({ C, run, onHome }: { C: Case; run: Run; onHome: () => void }) {
             ))}
           </div>
           <div className="cf-pane gut">
-            {tab === "case" ? paneCase : tab === "clues" ? paneClues : paneSubmit}
+            {tab === "guide"
+              ? paneGuide
+              : tab === "case"
+                ? paneCase
+                : tab === "clues"
+                  ? paneClues
+                  : paneSubmit}
           </div>
         </div>
       </div>

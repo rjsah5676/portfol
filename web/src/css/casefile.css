@@ -916,3 +916,245 @@
 html.cf-playing .quick-menu-fab {
   display: none;
 }
+
+/* ───── 로딩 막대 ───── */
+.cf-loadbar {
+  width: 220px;
+  height: 6px;
+  margin: 12px auto 6px;
+  border-radius: 99px;
+  background: var(--line);
+  overflow: hidden;
+}
+.cf-loadbar i {
+  display: block;
+  height: 100%;
+  background: var(--stamp);
+  transition: width 0.2s;
+}
+.cf-loading .mono {
+  font-size: 12px;
+}
+
+/* ───── 첫 화면: 입문 · 구역 머리 · GP ───── */
+.cf-tut {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 14px;
+  padding: 12px 14px !important;
+  border-radius: 10px;
+  border: 1.5px dashed var(--stamp) !important;
+  background: var(--stamp-bg) !important;
+}
+.cf-tut b {
+  display: block;
+  font-family: var(--cf-disp);
+  font-size: 17px;
+  color: var(--stamp);
+}
+.cf-tut span {
+  display: block;
+  font-size: 13px;
+  color: var(--ink2);
+  word-break: keep-all;
+}
+.cf-tut .go {
+  margin-top: 4px;
+  font-weight: 700;
+  color: var(--stamp);
+}
+.cf-sec {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.cf-sec > b {
+  font-size: 13px;
+  color: var(--ink2);
+}
+.cf-tier small.gp {
+  color: var(--p2);
+  font-family: var(--cf-mono);
+  font-size: 11.5px;
+}
+.cf-link {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.cf-link:hover {
+  color: var(--ink);
+}
+
+/* ───── 입문 안내 ───── */
+.cf-guide .steps {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.cf-guide .steps i {
+  flex: 1;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line);
+}
+.cf-guide .steps i.ok {
+  background: var(--ok);
+}
+.cf-guide .steps i.on {
+  background: var(--stamp);
+}
+.cf-guide .steps .mono {
+  margin-left: 4px;
+  font-size: 11.5px;
+  color: var(--ink2);
+}
+.cf-coach {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--stamp);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  animation: cf-in 0.25s ease-out;
+  word-break: keep-all;
+}
+.cf-coach > b {
+  font-family: var(--cf-disp);
+  font-size: 16px;
+}
+.cf-coach p {
+  margin: 4px 0 8px;
+  font-size: 13.5px;
+}
+.cf-coach .todo {
+  display: grid;
+  gap: 4px;
+}
+.cf-coach .todo small {
+  font-size: 11.5px;
+  color: var(--ink3);
+}
+.cf-coach .todo > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px dashed var(--pc);
+  background: color-mix(in srgb, var(--pc) 7%, var(--room));
+}
+.cf-coach .todo > span.ok {
+  border-style: solid;
+  border-color: var(--ok);
+  background: var(--ok-bg);
+}
+.cf-coach .todo > span.no {
+  border-color: var(--stamp);
+}
+.cf-coach .todo em {
+  margin-left: auto;
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ok);
+}
+.cf-coach .todo > span.no em {
+  color: var(--stamp);
+}
+@keyframes cf-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+/* 지금 채울 칸 — 동선표에서 반짝임 */
+.cf-cell.tut {
+  animation: cf-tut 1.2s ease-in-out infinite;
+  border-color: var(--stamp) !important;
+}
+@keyframes cf-tut {
+  50% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--stamp) 35%, transparent);
+  }
+}
+
+/* ───── 해결: 랭킹 ───── */
+.cf-solved .cf-stamp {
+  animation: cf-stamp 0.4s cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+@keyframes cf-stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-4deg) scale(1.8);
+  }
+}
+.cf-rank {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--ok);
+  font-size: 13.5px;
+}
+.cf-rank .gp {
+  color: var(--p2);
+  font-family: var(--cf-mono);
+}
+.cf-rank .bad {
+  color: var(--stamp);
+}
+.cf-rank .pos {
+  margin-top: 2px;
+  font-family: var(--cf-disp);
+  font-size: 17px;
+}
+.cf-rank .pos span {
+  font-family: var(--cf-body);
+  font-size: 13px;
+  color: var(--ink2);
+}
+.cf-name {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.cf-name input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  background: var(--room);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.cf-name input:focus {
+  outline: 2px solid var(--stamp);
+  outline-offset: 0;
+}
+.cf-name button {
+  flex: none;
+  border-radius: 8px;
+  padding: 8px 14px !important;
+  background: var(--ink) !important;
+  color: var(--paper) !important;
+  font-weight: 700;
+}
+.cf-name button:disabled {
+  opacity: 0.4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cf-cell.tut,
+  .cf-coach,
+  .cf-solved .cf-stamp {
+    animation: none;
+  }
+}
+/* 입문은 탭이 4개 — 폰에서 줄바꿈 없이 */
+.cf-tab {
+  white-space: nowrap;
+}

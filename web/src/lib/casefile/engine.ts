@@ -773,6 +773,17 @@ export const FIRST_CASE_DAY = "20261104";
 const utcOf = (day: string) => Date.UTC(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6, 8));
 export const caseNo = (day: string) => Math.floor((utcOf(day) - utcOf(FIRST_CASE_DAY)) / 864e5) + 1;
 export const dayLabel = (day: string) => `${+day.slice(4, 6)}월 ${+day.slice(6, 8)}일`;
+/** 랭킹 칸 이름 "YYYYMMDD_tier" */
+export const caseKey = (day: string, tier: TierId) => `${day}_${tier}`;
+export const CASE_RE = /^(\d{8})_(easy|normal|hard|hell)$/;
+/** 회원이 사건을 처음 풀었을 때 GP */
+export const DAILY_GP: Record<TierId, number> = { easy: 200, normal: 300, hard: 500, hell: 1000 };
+/** 제출한 동선표가 정답인지 (서버가 같은 시드로 사건을 다시 만들어서 확인) */
+export const isSolution = (C: World, cell: number[][], it: number[]) =>
+  cell.length === C.T &&
+  it.length === C.n &&
+  C.pos.every((a, t) => cell[t]?.length === C.n && a.every((r, p) => cell[t][p] === r)) &&
+  C.item.every((i, p) => it[p] === i);
 /** 오늘의 사건 시드 — 같은 날 같은 난이도는 누구나 같은 사건 */
 export const dailySeed = (day: string, tier: TierId) => hashStr(`${day}:${tier}:casefile-v1`);
 
