@@ -42,7 +42,7 @@ export const TOWN_FILES = {
   stockGlb: "/gmtown/bld/stock.glb",
   stockPaint: "/gmtown/bld/stock_paint.webp",
   stockJson: "/gmtown/bld/stock.json",
-  tex: (n: "grass" | "paving" | "dirt" | "plaza") => `/gmtown/tex/${n}.webp`,
+  tex: (n: "grass" | "paving" | "dirt" | "plaza" | "sand") => `/gmtown/tex/${n}.webp`,
 };
 /** 미리 받을 파일 (건물을 다시 지을 때 그 건물 파일을 더함) */
 export const townFiles = () => [
@@ -50,6 +50,7 @@ export const townFiles = () => [
   TOWN_FILES.tex("plaza"),
   TOWN_FILES.tex("paving"),
   TOWN_FILES.tex("dirt"),
+  TOWN_FILES.tex("sand"),
 ];
 
 export interface BuildingView {
@@ -77,7 +78,7 @@ export interface TownScene {
 }
 
 const INK = 0x2b2433;
-const TILE = { grass: 7, paving: 3.2, dirt: 5, plaza: 3 } as const;
+const TILE = { grass: 7, paving: 3.2, dirt: 5, plaza: 3, sand: 6 } as const;
 
 function gradientMap(): THREE.DataTexture {
   const d = new Uint8Array([150, 150, 150, 255, 205, 205, 205, 255, 255, 255, 255, 255]);
@@ -318,18 +319,19 @@ export async function buildTown(): Promise<TownScene> {
 
   // 땅 그림
   const tl = new THREE.TextureLoader();
-  const load = async (n: "grass" | "paving" | "dirt" | "plaza") => {
+  const load = async (n: "grass" | "paving" | "dirt" | "plaza" | "sand") => {
     const t = own(await tl.loadAsync(TOWN_FILES.tex(n)));
     t.colorSpace = THREE.SRGBColorSpace;
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = 8;
     return t;
   };
-  const [gTex, pTex, dTex, plTex] = await Promise.all([
+  const [gTex, pTex, dTex, plTex, sTex] = await Promise.all([
     load("grass"),
     load("paving"),
     load("dirt"),
     load("plaza"),
+    load("sand"),
   ]);
   // ── 지형: 높이 그대로 한 장 (마을 밖 산까지) ──
   const ground = buildGround();
@@ -402,6 +404,8 @@ export async function buildTown(): Promise<TownScene> {
         tPlaza: { value: plTex },
         uPlaza: { value: new THREE.Vector4(PLAZA.x, PLAZA.y, PLAZA.r, TILE.plaza) },
         tDirt: { value: dTex },
+        tSand: { value: sTex },
+        uSandTile: { value: TILE.sand },
         tSplat: { value: splat },
         uWorld: { value: new THREE.Vector2(WORLD.w, WORLD.h) },
         uTile: { value: new THREE.Vector3(TILE.grass, TILE.paving, TILE.dirt) },
@@ -417,6 +421,8 @@ export async function buildTown(): Promise<TownScene> {
           "void main() {",
           `uniform sampler2D tStone;
 uniform sampler2D tDirt;
+uniform sampler2D tSand;
+uniform float uSandTile;
 uniform sampler2D tSplat;
 uniform sampler2D tPlaza;
 uniform vec4 uPlaza;
@@ -432,7 +438,7 @@ void main() {`
 vec4 cG = texture2D( map, wuv / uTile.x );
 vec4 cS = texture2D( tStone, wuv / uTile.y );
 vec4 cD = texture2D( tDirt, wuv / uTile.z );
-vec3 cSand = cD.rgb * vec3( 1.18, 1.12, 0.9 ) + 0.06;
+vec3 cSand = texture2D( tSand, wuv / uSandTile ).rgb;
 vec2 suv = wuv / uWorld;
 vec3 sp = ( suv.x < 0.0 || suv.y < 0.0 || suv.x > 1.0 || suv.y > 1.0 ) ? vec3( 0.0 ) : texture2D( tSplat, suv ).rgb;
 vec3 col = mix( cG.rgb, cSand, sp.b );
