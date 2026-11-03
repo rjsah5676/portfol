@@ -418,6 +418,8 @@ export class TownEngine {
       canvas,
       antialias: true,
       powerPreference: "high-performance",
+      // 스텐실: 캐릭터 몸이 그려진 픽셀 표시 → 눈 덧그림은 그 위에만 (앞머리 위로 눈 · 원신식)
+      stencil: true,
     });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -1335,7 +1337,15 @@ vInkZ = normalize( transformedNormal ).z;`
 
   /** 툰: 빛 방향으로 2단 (얼굴 살은 그늘 없음) — 양면: Tripo 메시에 뒤집힌 면이 섞여 있어서 한 면만 그리면 그 자리로 외곽선 껍데기가 비쳐 검은 점이 됨 */
   private toonMat(tex: THREE.Texture | null) {
-    const toon = new THREE.MeshToonMaterial({ map: tex, side: THREE.DoubleSide });
+    const toon = new THREE.MeshToonMaterial({
+      map: tex,
+      side: THREE.DoubleSide,
+      // 보이는 캐릭터 몸 픽셀에 1 을 씀 (눈 덧그림이 그 위에만 그려지게 — 앞 건물 · 땅 · 하늘엔 안 비침)
+      stencilWrite: true,
+      stencilRef: 1,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilZPass: THREE.ReplaceStencilOp,
+    });
     toon.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU);
       sh.vertexShader = sh.vertexShader
@@ -1365,6 +1375,16 @@ vInkZ = normalize( transformedNormal ).z;`
       depthWrite: false,
       side: THREE.FrontSide,
       alphaTest: over ? 0 : 0.01,
+      // 덧그림: 깊이는 안 보고 제자리에 · 캐릭터 몸(앞머리 · 얼굴) 픽셀 위에만 — 당긴 거리로 앞머리를 이기던 방식은 가닥 따라 눈이 조각났음
+      ...(over
+        ? {
+            depthTest: false,
+            stencilWrite: true,
+            stencilWriteMask: 0,
+            stencilRef: 1,
+            stencilFunc: THREE.EqualStencilFunc,
+          }
+        : {}),
     });
     m.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, this.toonU, {
