@@ -491,7 +491,14 @@ export class TownEngine {
     for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) this.dropView(a);
     for (const t of this.sheets.values()) t.dispose();
     for (const g of this.sheetGeo.values()) g.dispose();
-    for (const m of this.rigMats.values()) for (const x of Object.values(m)) x?.dispose();
+    for (const m of this.rigMats.values()) {
+      const { byMap, ...rest } = m;
+      for (const x of Object.values(rest)) x?.dispose();
+      for (const v of byMap.values()) {
+        v.toon.dispose();
+        v.ghost.dispose();
+      }
+    }
     for (const m of this.models.values())
       m.scene.traverse((o) => {
         if (o instanceof THREE.Mesh) {
