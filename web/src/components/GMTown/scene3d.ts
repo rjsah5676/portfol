@@ -1766,7 +1766,7 @@ if ( vFade > 0.01 ) {
     const G = new THREE.Group();
     const model = gl.scene;
     G.add(model);
-    G.position.set(b.x + b.w / 2, 0, b.y + b.d / 2);
+    G.position.set(b.x + b.w / 2, heightAt(b.x + b.w / 2, b.y + b.d / 2), b.y + b.d / 2);
     G.updateMatrixWorld(true);
     // 덧칠 그림을 찍은 직교 카메라 (모델 공간) → 지금 놓인 자리 기준으로
     const r = meta.ref;

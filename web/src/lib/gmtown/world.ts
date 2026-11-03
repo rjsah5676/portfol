@@ -232,7 +232,26 @@ const lot = (
 
 /** 부지 (번호는 배치도 v2) */
 export const BUILDINGS: Building[] = [
-  lot("lot-stock", "증권거래소 자리", 86, 62, 28, 14, "y", "광장 북쪽 랜드마크"),
+  // 증권거래소: 원래 쓰던 3D 모델 + 덧칠 그림 (부지 가운데, 광장을 봄)
+  {
+    id: "stock",
+    sign: "증권거래소",
+    sub: "주식게임 · 솔로 · 코인 · 대전",
+    href: "/games/stock",
+    icon: "px:stock",
+    style: "neon",
+    roof: "flat",
+    x: 100 - 14.07 / 2,
+    y: 75 - 9.1,
+    w: 14.07,
+    d: 9.1,
+    h: 6,
+    face: "y",
+    wall: "#F3E6CF",
+    accent: "#3DD6FF",
+    top: "#1B2A66",
+    model: "stock",
+  },
   lot("lot-fight", "PIXEL FIGHT 자리", 74, 119, 14, 12, "x"),
   lot("lot-rhythm", "RHYTHM UP 자리", 112, 119, 14, 12, "-x"),
   lot("lot-poker", "포커 자리", 74, 133, 14, 11, "x"),
