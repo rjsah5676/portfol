@@ -299,7 +299,7 @@ export default function CaseFileApp() {
   return (
     <>
       <GameHeader
-        icon="🗂️"
+        icon="px:casefile"
         title="오늘의 사건 파일"
         en="Daily Case File"
         accent="#D0675B"

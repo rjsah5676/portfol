@@ -137,8 +137,8 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/games/casefile",
         image: imgCasefile,
         label: "오늘의 사건 파일",
-        desc: "동선표와 증거 문서로 알리바이를 깨는 하루 한 판 살인 사건 추리 퍼즐",
-        icon: "🗂️",
+        desc: "동선표와 증거 문서로 알리바이를 깨는 하루 한 판 살인 사건 추리 퍼즐, 난이도별 일일 랭킹",
+        icon: "px:casefile",
         badge: "NEW",
       },
       {
