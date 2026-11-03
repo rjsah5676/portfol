@@ -231,13 +231,15 @@ export default function CaseBoard({
           <Quote text={puzzle.clues[guideStep.speaker].text} />
           <span className="why">
             {guided === 0 && "주황 테두리 카드들이 이 단서가 가리키는 사람이에요. "}
+            {/* 정체를 밝히면 그 사람 단서가 새로 열린다는 걸 첫 지목 바로 뒤에 알려 줌 */}
+            {guided > 0 && fresh >= 0 && `방금 밝혀진 ${P[fresh].name}의 카드에 새 단서가 열렸어요. `}
             {explain(P, x, puzzle.clues[guideStep.speaker], guideStep.i, guideStep.v)}
           </span>
         </>
       ),
     });
     /* eslint-enable react-hooks/set-state-in-effect */
-  }, [guideStep, guided, P, x, puzzle]);
+  }, [guideStep, guided, P, x, puzzle, fresh]);
 
   // ───── 끝 ─────
   const finishRef = useRef(onFinish);
