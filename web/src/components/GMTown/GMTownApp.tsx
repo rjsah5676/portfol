@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { signInAnonymously } from "firebase/auth";
 import { auth } from "@/firebase";
 import GameIcon from "@/components/GameIcon";
@@ -10,14 +10,35 @@ import { NAV_GROUPS } from "@/data/navMenu";
 import { rpc, subscribe } from "@/lib/api/socket";
 import { charFiles } from "@/lib/gmtown/chars";
 import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
-import { BUILDINGS, CHAT_MAX, isLot, type BStyle, type Building } from "@/lib/gmtown/world";
+import { BUILDINGS, CHAT_MAX, PLAZA, isLot, warps, type BStyle, type Building, type Warp } from "@/lib/gmtown/world";
 import { TownEngine } from "./engine";
+import MapModal from "./MapModal";
 import { townFiles } from "./scene3d";
+import { drawMiniRound } from "./townMap";
 
 /*
  * GMTOWN 화면 — 3D 캔버스(엔진) + 이름표 캔버스 위에 HUD: 채널 · 사람 수 / 작은 지도 · 당기기 · 지도 / 채팅 / 문 앞 「들어가기」 / 건물 카드.
- * 로그인 안 했으면 게스트(익명)로 들어옴. 폰은 화면 전체(사이트 메뉴 없이), 왼쪽 손가락 조이스틱 · 누른 곳으로 걷기 · 두 손가락으로 당기기.
+ * 로그인 안 했으면 게스트(익명)로 들어옴. 폰은 화면 전체(사이트 메뉴 없이), 왼쪽 아래 고정 조이스틱 · 한 손가락 끌기 = 시점 · 두 손가락 = 돌리기 · 당기기.
+ * HUD 는 로아식: 왼쪽 아래 늘 떠 있는 채팅창(탭) · 오른쪽 위 원형 지도 · M = 전체 지도 창(순간이동 · 걸어서 이동).
  */
+
+/** 시스템 줄 (채팅창 「시스템」 탭) */
+type SysLine = { at: number; text: string };
+type ChatTab = "all" | "talk" | "sys";
+/** 지금 있는 곳 이름 (원형 지도 위): 가까운 지도 장소, 없으면 마을 */
+function regionName(x: number, y: number): string {
+  if (Math.hypot(x - PLAZA.x, y - PLAZA.y) < PLAZA.r + 4) return "중앙 광장";
+  let best: Warp | null = null,
+    bd = 16;
+  for (const w of warps()) {
+    const d = Math.hypot(w.x - x, w.y - y);
+    if (d < bd) {
+      bd = d;
+      best = w;
+    }
+  }
+  return best ? best.name : y < 60 ? "북쪽 언덕" : "GMTOWN 마을";
+}
 
 const preload = () => [
   ...charFiles("amy"),
@@ -145,8 +166,16 @@ function Town({ phone }: { phone: boolean }) {
   const [typing, setTyping] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [help, setHelp] = useState(false);
-  const [logOpen, setLogOpen] = useState(true);
+  /** 폰 채팅창 펼침 (PC 는 늘 펼침) */
+  const [logOpen, setLogOpen] = useState(false);
   const [overview, setOverview] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [sys, setSys] = useState<SysLine[]>([]);
+  const [tab, setTab] = useState<ChatTab>("all");
+  const [region, setRegion] = useState("GMTOWN 마을");
+  const [lastWarp, setLastWarp] = useState(0);
+  const chatEnd = useRef<HTMLDivElement | null>(null);
+  const addSys = useCallback((text: string) => setSys((l) => [...l.slice(-29), { at: Date.now(), text }]), []);
   // 엔진 훅(키 입력)이 지금 값을 보게
   const cardRef = useRef<Near>(null);
   const nearRef = useRef<Near>(null);
@@ -176,6 +205,7 @@ function Town({ phone }: { phone: boolean }) {
         },
         send: (x, y, d, m) => void rpc("gmtown.move", { x, y, d, m }).catch(() => {}),
         onOverview: (on) => setOverview(on),
+        onMap: () => setMapOpen((o) => !o),
         onError: (m) => {
           setErr(m);
           setStatus("error");
@@ -229,6 +259,7 @@ function Town({ phone }: { phone: boolean }) {
             setCount(s.players.length);
             setLog(s.chat);
             setStatus("on");
+            setSys((l) => [...l.slice(-29), { at: Date.now(), text: `${s.ch}채널에 들어왔어요. (${s.players.length}명)` }]);
           },
           onEvent: (t, d) => {
             if (t === "join") engine.join(d as PlayerWire);
@@ -239,7 +270,6 @@ function Town({ phone }: { phone: boolean }) {
             else if (t === "chat") {
               engine.chat(d as ChatWire);
               setLog((l) => [...l.slice(-39), d as ChatWire]);
-              setLogOpen(true);
             }
             if (t === "join" || t === "leave") setCount(engine.count());
           },
@@ -270,8 +300,10 @@ function Town({ phone }: { phone: boolean }) {
         m.height = m.clientHeight * dpr;
       }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      engine.drawMinimap(ctx, m.clientWidth, m.clientHeight);
-    }, 200);
+      const st = engine.mapState();
+      drawMiniRound(ctx, m.clientWidth, st.me, st.others, st.yaw);
+      if (st.me) setRegion(regionName(st.me.x, st.me.y));
+    }, 150);
     return () => window.clearInterval(id);
   }, [engine]);
 
@@ -280,23 +312,49 @@ function Town({ phone }: { phone: boolean }) {
     const on = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (cardRef.current) setCard(null);
+        else if (mapOpen) setMapOpen(false);
         else if (chanList) setChanList(null);
         else if (overview) engine?.setOverview(false);
         inputRef.current?.blur();
         return;
       }
-      if (e.key === "Enter" && document.activeElement !== inputRef.current && !cardRef.current) {
+      if (e.key === "Enter" && document.activeElement !== inputRef.current && !cardRef.current && !mapOpen) {
         e.preventDefault();
         inputRef.current?.focus();
       }
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
-  }, [chanList, overview, engine]);
+  }, [chanList, overview, engine, mapOpen]);
 
   useEffect(() => {
-    engine?.setTyping(typing || !!card || !!chanList);
-  }, [engine, typing, card, chanList]);
+    engine?.setTyping(typing || !!card || !!chanList || mapOpen);
+    engine?.setMapOpen(mapOpen);
+  }, [engine, typing, card, chanList, mapOpen]);
+
+  // 채팅창: 새 줄이 오면 맨 아래로
+  useEffect(() => {
+    chatEnd.current?.scrollIntoView({ block: "end" });
+  }, [log, sys, tab]);
+
+  const warpTo = (w: Warp) => {
+    void rpc<{ x: number; y: number }>("gmtown.warp", { to: w.id }).then(
+      (r) => {
+        engine?.snap(r.x, r.y);
+        setLastWarp(Date.now());
+        setMapOpen(false);
+        addSys(`${w.name} 앞으로 순간이동했어요.`);
+      },
+      (e) => say((e as Error).message || "이동하지 못했어요.")
+    );
+  };
+  const walkTo = (w: Warp) => {
+    if (!engine) return;
+    if (w.b) engine.walkToBuilding(w.b);
+    else engine.walkTo(w.x, w.y, null);
+    setMapOpen(false);
+    addSys(`${w.name}(으)로 걸어가요.`);
+  };
 
   const send = () => {
     const v = text.trim();
@@ -360,99 +418,114 @@ function Town({ phone }: { phone: boolean }) {
         </button>
       </div>
 
-      {/* 오른쪽 위: 작은 지도 (누르면 마을 전체) · 당기기 · 밀기 */}
-      <div className="absolute top-3 right-3 flex items-start gap-1.5">
-        <div className="flex flex-col gap-1.5">
-          {(
-            [
-              ["+", "가까이", () => engine?.zoomBy(1 / 1.25)],
-              ["−", "멀리", () => engine?.zoomBy(1.25)],
-            ] as const
-          ).map(([t, label, f]) => (
+      {/* 오른쪽 위: 원형 지도 (누르면 전체 지도) · 지역 이름 · 채널 · 당기기 · 밀기 */}
+      <div className="absolute top-2.5 right-2.5 flex flex-col items-end gap-1">
+        <div className="gmt-lo-soft pointer-events-none flex h-6 items-center gap-1.5 rounded-full px-3 text-[11.5px] font-bold">
+          <span className="text-[#FFE6A0]">{region}</span>
+          {ch && <span className="text-white/55">· {ch}채널</span>}
+        </div>
+        <div className="flex items-start gap-1.5">
+          <div className="flex flex-col gap-1.5 pt-1">
             <button
-              key={t}
               type="button"
-              onClick={f}
-              aria-label={label}
-              className="gmt-glass flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-[16px] font-bold leading-none"
+              onClick={() => setMapOpen(true)}
+              aria-label="전체 지도"
+              className="gmt-lo-soft flex h-9 w-9 cursor-pointer flex-col items-center justify-center rounded-lg text-[15px] leading-none"
             >
-              {t}
+              🗺<span className="mt-0.5 text-[8.5px] font-bold text-white/75">{phone ? "지도" : "M"}</span>
             </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => engine?.setOverview(!overview)}
-          aria-label={overview ? "지도 닫기" : "마을 전체 지도"}
-          className={`gmt-glass relative cursor-pointer overflow-hidden rounded-xl p-1 ${overview ? "ring-2 ring-[#F2C14E]" : ""}`}
-        >
-          <canvas
-            ref={miniRef}
-            className={phone ? "block h-[70px] w-[108px]" : "block h-[104px] w-[160px]"}
-          />
-          <span className="absolute right-1.5 bottom-1 rounded bg-black/45 px-1 text-[10px] font-bold text-white/90">
-            {overview ? "닫기" : !phone ? "지도 M" : "지도"}
-          </span>
-        </button>
-      </div>
-      {overview && (
-        <div className="gmt-glass gmt-pop pointer-events-none absolute top-16 left-1/2 -translate-x-1/2 rounded-full px-4 py-2 text-[12px]">
-          가고 싶은 건물 · 땅을 누르면 거기로 걸어가요
-        </div>
-      )}
-
-      {/* 왼쪽 아래: 채팅 */}
-      <div
-        className={`absolute bottom-3 left-3 flex flex-col gap-1.5 ${phone ? "w-[46%] max-w-[340px]" : "w-[340px]"}`}
-      >
-        {logOpen && log.length > 0 && (
-          <div
-            className="gmt-glass pointer-events-auto max-h-[150px] overflow-y-auto rounded-xl px-3 py-2 text-[12px] leading-[1.55]"
-            onClick={() => setLogOpen(false)}
-          >
-            {log.slice(-8).map((m, i) => (
-              <div key={`${m.at}-${i}`} className="truncate">
-                <b className={m.name.startsWith("◦") ? "text-white/60" : "text-[#FFD36B]"}>
-                  {m.name}
-                </b>{" "}
-                <span className="text-white/90">{m.text}</span>
-              </div>
+            {(
+              [
+                ["+", "가까이", () => engine?.zoomBy(1 / 1.25)],
+                ["−", "멀리", () => engine?.zoomBy(1.25)],
+              ] as const
+            ).map(([t, label, f]) => (
+              <button
+                key={t}
+                type="button"
+                onClick={f}
+                aria-label={label}
+                className="gmt-lo-soft flex h-7 w-9 cursor-pointer items-center justify-center rounded-lg text-[15px] font-bold leading-none"
+              >
+                {t}
+              </button>
             ))}
           </div>
-        )}
-        <form
-          className="gmt-glass pointer-events-auto flex h-10 items-center gap-2 rounded-full pr-1 pl-4"
-          onSubmit={(e) => {
-            e.preventDefault();
-            send();
-          }}
-        >
-          <input
-            ref={inputRef}
-            value={text}
-            maxLength={CHAT_MAX}
-            onChange={(e) => setText(e.target.value)}
-            onFocus={() => setTyping(true)}
-            onBlur={() => setTyping(false)}
-            placeholder={phone ? "말하기" : "Enter 로 말하기"}
-            className="min-w-0 flex-1 bg-transparent text-[13px] text-white outline-none placeholder:text-white/45"
-            enterKeyHint="send"
-          />
           <button
-            type="submit"
-            className="h-8 shrink-0 cursor-pointer rounded-full bg-[#F2C14E] px-3 text-[12px] font-bold text-[#1A1408]"
+            type="button"
+            onClick={() => setMapOpen(true)}
+            aria-label="마을 전체 지도"
+            className="relative cursor-pointer rounded-full p-[3px]"
+            style={{ background: "linear-gradient(160deg,#f3d68e,#8a6a2c 45%,#f0cf86)" }}
           >
-            보내기
+            <canvas
+              ref={miniRef}
+              className={`block rounded-full ${phone ? "h-[96px] w-[96px]" : "h-[150px] w-[150px]"}`}
+            />
           </button>
-        </form>
+        </div>
       </div>
 
+      {/* 왼쪽 아래: 로아식 채팅창 (늘 떠 있음 · 탭 · 입력줄). 폰은 조이스틱 위에 작게 (누르면 펼침) */}
+      <ChatBox
+        phone={phone}
+        open={logOpen}
+        setOpen={setLogOpen}
+        tab={tab}
+        setTab={setTab}
+        log={log}
+        sys={sys}
+        endRef={chatEnd}
+        input={
+          <form
+            className="flex h-9 items-center gap-2 border-t border-[#c9a45c]/25 bg-black/35 pr-1 pl-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              send();
+            }}
+          >
+            <input
+              ref={inputRef}
+              value={text}
+              maxLength={CHAT_MAX}
+              onChange={(e) => setText(e.target.value)}
+              onFocus={() => setTyping(true)}
+              onBlur={() => setTyping(false)}
+              placeholder={phone ? "말하기" : "Enter 로 채팅"}
+              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-white outline-none placeholder:text-white/40"
+              enterKeyHint="send"
+            />
+            <button
+              type="submit"
+              className="gmt-gold-btn h-7 shrink-0 cursor-pointer rounded-md px-3 text-[11.5px] font-bold"
+            >
+              보내기
+            </button>
+          </form>
+        }
+      />
+
       {/* 아래 가운데: 문 앞 */}
-      {near && !card && (
-        <div
-          className={`gmt-pop pointer-events-auto absolute left-1/2 -translate-x-1/2 ${phone ? "bottom-3" : "bottom-6"}`}
-          style={phone ? { left: "72%" } : undefined}
+      {near && !card && phone && (
+        <button
+          type="button"
+          onClick={() => setCard(near)}
+          className="gmt-pop absolute right-5 bottom-5 flex h-[84px] w-[84px] cursor-pointer flex-col items-center justify-center rounded-full text-[12px] font-extrabold"
+          style={{
+            background: "radial-gradient(circle at 50% 35%, #3a3150, #15121f)",
+            border: "2px solid #e9cf8e",
+            boxShadow: "0 0 0 4px rgba(233,207,142,0.18), 0 6px 20px rgba(0,0,0,0.5)",
+          }}
         >
+          <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg text-[20px]">
+            {near === "board" ? "📋" : <GameIcon icon={near.icon} />}
+          </span>
+          <span className="mt-0.5 text-[#FFE6A0]">{near === "board" ? "보기" : "들어가기"}</span>
+        </button>
+      )}
+      {near && !card && !phone && (
+        <div className="gmt-pop pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2">
+
           <button
             type="button"
             onClick={() => setCard(near)}
@@ -489,8 +562,8 @@ function Town({ phone }: { phone: boolean }) {
             <b className="gmt-brand text-[17px]">GMTOWN 에 오신 걸 환영해요</b>
             <p className="mt-1 text-white/85">
               {phone
-                ? "왼쪽을 누른 채 끌면 걸어요(끝까지 밀면 뛰어요) · 가고 싶은 곳을 누르면 거기로 가요 · 두 손가락으로 당기고 돌려요(같이 위아래로 밀면 높이)."
-                : "WASD · 방향키로 걷고(Shift 를 누르면 뛰어요), 오른쪽 버튼으로 누른 곳으로 가요(멀면 뛰어가요). 왼쪽 버튼으로 끌면 시점이 돌아가고(위아래로 끌면 높이), 휠로 당겨요. M 은 마을 전체 지도."}{" "}
+                ? "왼쪽 아래 조이스틱으로 걸어요(끝까지 밀면 뛰어요) · 화면을 한 손가락으로 끌면 시점이 돌아가고, 두 손가락으로 돌리고 벌려서 당겨요 · 지도 버튼에서 가고 싶은 곳으로 순간이동해요."
+                : "WASD · 방향키로 걷고(Shift 를 누르면 뛰어요), 오른쪽 버튼으로 누른 곳으로 가요(멀면 뛰어가요). 왼쪽 버튼으로 끌면 시점이 돌아가고(위아래로 끌면 높이), 휠로 당겨요. M 은 전체 지도 — 가고 싶은 곳으로 순간이동 · 걸어서 이동."}{" "}
               건물 문 앞에서 {phone ? "버튼" : "E"} 를 누르면 그 게임으로 들어가요. 같은 채널
               사람들끼리 보이고 말할 수 있어요.
             </p>
@@ -503,6 +576,19 @@ function Town({ phone }: { phone: boolean }) {
             </button>
           </div>
         </div>
+      )}
+
+      {/* 전체 지도 창 */}
+      {mapOpen && engine && (
+        <MapModal
+          engine={engine}
+          phone={phone}
+          ch={ch}
+          lastWarp={lastWarp}
+          onClose={() => setMapOpen(false)}
+          onWarp={warpTo}
+          onWalk={walkTo}
+        />
       )}
 
       {/* 건물 카드 */}
@@ -588,6 +674,100 @@ function Town({ phone }: { phone: boolean }) {
   );
 }
 
+const TAB_LABEL: Record<ChatTab, string> = { all: "전체", talk: "대화", sys: "시스템" };
+
+function ChatBox({
+  phone,
+  open,
+  setOpen,
+  tab,
+  setTab,
+  log,
+  sys,
+  endRef,
+  input,
+}: {
+  phone: boolean;
+  open: boolean;
+  setOpen: (v: boolean) => void;
+  tab: ChatTab;
+  setTab: (t: ChatTab) => void;
+  log: ChatWire[];
+  sys: SysLine[];
+  endRef: RefObject<HTMLDivElement | null>;
+  input: ReactNode;
+}) {
+  type Row = { at: number; k: "chat" | "sys"; name?: string; guest?: boolean; text: string };
+  const rows: Row[] = [
+    ...(tab !== "sys"
+      ? log.map((m) => ({ at: m.at, k: "chat" as const, name: m.name, guest: m.name.startsWith("◦"), text: m.text }))
+      : []),
+    ...(tab !== "talk" ? sys.map((m) => ({ at: m.at, k: "sys" as const, text: m.text })) : []),
+  ].sort((a, b) => a.at - b.at);
+  // 폰: 접으면 마지막 두 줄만 (조이스틱 위)
+  const small = phone && !open;
+  const shown = small ? rows.slice(-2) : rows.slice(-60);
+  return (
+    <div
+      className={`gmt-lo-soft pointer-events-auto absolute left-2.5 flex flex-col overflow-hidden rounded-lg ${
+        phone ? (open ? "bottom-2.5 w-[46%] max-w-[360px]" : "bottom-[150px] w-[38%] max-w-[300px]") : "bottom-3 w-[380px]"
+      }`}
+    >
+      {!small && (
+        <div className="flex h-7 shrink-0 items-center gap-0.5 border-b border-[#c9a45c]/25 bg-black/30 px-1">
+          {(Object.keys(TAB_LABEL) as ChatTab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`h-6 cursor-pointer rounded px-2.5 text-[11px] font-bold ${
+                tab === t ? "bg-[#e9cf8e]/18 text-[#FFE6A0]" : "text-white/55 hover:text-white/85"
+              }`}
+            >
+              {TAB_LABEL[t]}
+            </button>
+          ))}
+          {phone && (
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="ml-auto h-6 cursor-pointer px-2 text-[12px] text-white/60"
+              aria-label="채팅 접기"
+            >
+              ▾
+            </button>
+          )}
+        </div>
+      )}
+      <div
+        className={`gmt-chat-scroll overflow-y-auto px-2.5 py-1.5 text-[12px] leading-[1.6] ${
+          small ? "max-h-[46px] cursor-pointer" : phone ? "h-[120px]" : "h-[150px]"
+        }`}
+        onClick={small ? () => setOpen(true) : undefined}
+      >
+        {shown.map((r, i) =>
+          r.k === "sys" ? (
+            <div key={`s${r.at}-${i}`} className="text-[#F2D27A]">
+              <span className="text-[#F2D27A]/70">[시스템]</span> {r.text}
+            </div>
+          ) : (
+            <div key={`c${r.at}-${i}`} className={small ? "truncate" : "break-all"}>
+              <b className={r.guest ? "text-white/55" : "text-[#9fd3ff]"}>{r.name}</b>
+              <span className="text-white/45"> : </span>
+              <span className="text-white/90">{r.text}</span>
+            </div>
+          )
+        )}
+        {!shown.length && (
+          <div className="text-white/40">{small ? "눌러서 채팅" : "같은 채널 사람들과 이야기해요."}</div>
+        )}
+        <div ref={endRef} />
+      </div>
+      {!small && input}
+    </div>
+  );
+}
+
 function Card({ near, onClose }: { near: Building | "board"; onClose: () => void }) {
   if (near === "board")
     return (
@@ -606,7 +786,7 @@ function Card({ near, onClose }: { near: Building | "board"; onClose: () => void
             🏛 게임마다 건물이 하나씩 — 픽셀 게임은 픽셀 건물, 애니 게임은 애니 건물이에요. 광장에서
             길을 따라가면 다 나와요.
           </li>
-          <li>🗺 오른쪽 위 작은 지도를 누르면 마을 전체 — 거기서 건물을 누르면 걸어가요.</li>
+          <li>🗺 오른쪽 위 원형 지도(또는 M)를 누르면 전체 지도 — 가고 싶은 곳을 골라 순간이동 · 걸어서 이동.</li>
           <li>🚧 「새 게임 자리」 팻말 — 새 게임이 생기면 여기에 건물이 들어서요.</li>
           <li>🚪 문 앞에 서서 E(폰은 버튼)를 누르면 그 게임으로 들어가요.</li>
           <li>💬 같은 채널 사람들끼리 보이고 말할 수 있어요. 위의 채널 버튼으로 옮겨요.</li>

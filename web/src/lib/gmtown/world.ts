@@ -1353,3 +1353,50 @@ export function fromScreen(sx: number, sy: number, yaw = YAW, pitch = PITCH): [n
   return [u * c + v * s, v * c - u * s];
 }
 
+
+// ───────────── 순간이동 자리 (전체 지도) ─────────────
+
+export type WarpCat = "game" | "place" | "home";
+export interface Warp {
+  id: string;
+  name: string;
+  sub: string;
+  cat: WarpCat;
+  /** 도착 자리 (문 앞 · 광장 남쪽 등 — 막히지 않은 곳) */
+  x: number;
+  y: number;
+  /** 건물이면 그 건물 */
+  b: Building | null;
+}
+/** (x, y) 가 막혔으면 가까운 둘레에서 안 막힌 곳 */
+function freeNear(x: number, y: number): { x: number; y: number } {
+  if (!blocked(x, y, RADIUS + 0.1)) return { x, y };
+  for (let r = 0.5; r <= 4; r += 0.5)
+    for (let k = 0; k < 16; k++) {
+      const a = (k / 16) * Math.PI * 2,
+        qx = x + Math.cos(a) * r,
+        qy = y + Math.sin(a) * r;
+      if (!blocked(qx, qy, RADIUS + 0.1)) return { x: qx, y: qy };
+    }
+  return { x, y };
+}
+let warpCache: Warp[] | null = null;
+/** 지도에서 고를 수 있는 곳: 게임 건물 · 광장 · 공원 · 역 · 우리 집 */
+export function warps(): Warp[] {
+  if (warpCache) return warpCache;
+  const out: Warp[] = [];
+  const place = (id: string, name: string, sub: string, x: number, y: number) =>
+    out.push({ id, name, sub, cat: "place", ...freeNear(x, y), b: null });
+  place("plaza", "중앙 광장", "분수 · 마을 한가운데", PLAZA.x, PLAZA.y + FOUNTAIN.r + 3);
+  place("park", "전망 공원", "북쪽 언덕 꼭대기", PARK.x, PARK.y + 4);
+  for (const b of BUILDINGS) {
+    if (isLot(b)) continue;
+    const cat: WarpCat = b.id === "home" ? "home" : b.href ? "game" : "place";
+    out.push({ id: b.id, name: b.sign, sub: b.sub, cat, ...freeNear(doorFront(b).x, doorFront(b).y), b });
+  }
+  warpCache = out;
+  return out;
+}
+export const warpById = (id: string) => warps().find((w) => w.id === id) ?? null;
+/** 순간이동 다시 쓰기까지 (ms) */
+export const WARP_GAP_MS = 4000;

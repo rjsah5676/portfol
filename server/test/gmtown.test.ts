@@ -9,6 +9,7 @@ import {
   doorAt,
   doorFront,
   isLot,
+  warps,
 } from "../../web/src/lib/gmtown/world";
 import type { ChannelList, TownSnap } from "../../web/src/lib/gmtown/types";
 import {
@@ -67,6 +68,13 @@ describe("마을 지도", () => {
     }
     for (const b of BUILDINGS)
       expect(seen[at(doorFront(b).x, doorFront(b).y)], b.id).toBe(1);
+  });
+
+  it("지도 순간이동 자리는 모두 막히지 않은 곳", () => {
+    const w = warps();
+    expect(w.length).toBeGreaterThan(5);
+    for (const p of w) expect(blocked(p.x, p.y), p.id).toBe(false);
+    expect(new Set(w.map((p) => p.id)).size).toBe(w.length);
   });
 
   it("건물끼리 겹치지 않음", () => {
@@ -184,6 +192,28 @@ describe("광장", () => {
     expect(moved).toBeGreaterThan(2);
     expect(moved).toBeLessThan(2.7);
     a.close();
+  });
+
+  it("지도 순간이동: 정해진 곳만 · 잠깐 쉬었다 다시 · 다른 사람에게도 옮겨 보임", async () => {
+    const a = await member();
+    const b = await member();
+    const sa = await a.sub<TownSnap>("gmtown.ch", { ch: 6 });
+    const sb = await b.sub<TownSnap>("gmtown.ch", { ch: 6 });
+    const to = warps().find((w) => w.id === "stock")!;
+    const r = await a.rpc<{ x: number; y: number }>("gmtown.warp", { to: "stock" });
+    expect(r.x).toBeCloseTo(to.x, 1);
+    expect(r.y).toBeCloseTo(to.y, 1);
+    const mv = await sb.wait(
+      (e) => e.t === "mv" && e.d.some((row: unknown[]) => row[0] === sa.data.me),
+    );
+    const row = mv.d.find((row: unknown[]) => row[0] === sa.data.me);
+    expect(row[1]).toBeCloseTo(to.x, 1);
+    // 이어서 걸으면 새 자리에서부터
+    await a.rpc("gmtown.move", { x: to.x + 0.3, y: to.y, d: 2, m: 1 });
+    expect(await code(a.rpc("gmtown.warp", { to: "plaza" }))).toBe("RATE_LIMITED");
+    expect(await code(a.rpc("gmtown.warp", { to: "nowhere" }))).toBe("BAD_REQUEST");
+    a.close();
+    b.close();
   });
 
   it("채팅: 같은 채널 모두에게 · 너무 빠르면 거절 · 길면 자름 · 다른 채널엔 안 감", async () => {

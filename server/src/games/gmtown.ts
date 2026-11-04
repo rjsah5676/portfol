@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Deps } from "../deps";
 import { AppError, bad } from "../errors";
 import { newId } from "../ids";
-import { CHANNEL_CAP, CHAT_MAX, MAX_CHANNELS, RADIUS, RUN_SPEED, SPAWN, blocked } from "../../../web/src/lib/gmtown/world";
+import { CHANNEL_CAP, CHAT_MAX, MAX_CHANNELS, RADIUS, RUN_SPEED, SPAWN, WARP_GAP_MS, blocked, warpById } from "../../../web/src/lib/gmtown/world";
 import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "../../../web/src/lib/gmtown/types";
 
 /*
@@ -37,6 +37,8 @@ interface P {
   bank: number;
   at: number;
   chatAt: number;
+  /** 마지막 순간이동 시각 */
+  warpAt: number;
 }
 
 interface Chan {
@@ -137,7 +139,7 @@ export function registerGmtown({ gateway }: Deps, opts: GmtownOptions = {}) {
         const uid = ctx.uid;
         const guest = !ctx.nick;
         const at = args.x !== undefined && args.y !== undefined && !blocked(args.x, args.y) ? { x: args.x, y: args.y } : spawnAt();
-        p = { id: newId(8), sock, uid, name: ctx.name(`손님${guestNo(uid)}`, 10), guest, c: args.c ?? "amy", x: at.x, y: at.y, d: 0, m: 0, ch: n, bank: BANK_MAX, at: now(), chatAt: 0 };
+        p = { id: newId(8), sock, uid, name: ctx.name(`손님${guestNo(uid)}`, 10), guest, c: args.c ?? "amy", x: at.x, y: at.y, d: 0, m: 0, ch: n, bank: BANK_MAX, at: now(), chatAt: 0, warpAt: 0 };
         c.players.set(sock, p);
         bySock.set(sock, p);
         gateway.emit(keyOf(n), "join", wire(p));
@@ -183,6 +185,25 @@ export function registerGmtown({ gateway }: Deps, opts: GmtownOptions = {}) {
     chans.get(p.ch)?.dirty.add(p.sock);
     if (snap) gateway.emitTo(ctx.socket, keyOf(p.ch), "snap", { x: r2(x), y: r2(y) });
     return null;
+  });
+
+  // 전체 지도에서 고른 곳으로 순간이동 (정해진 자리만 · 몇 초에 한 번)
+  gateway.rpc("gmtown.warp", (ctx, raw) => {
+    const p = bySock.get(ctx.socket.id);
+    if (!p) throw bad("마을에 들어와야 이동할 수 있어요.");
+    const { to } = z.object({ to: z.string().max(40) }).parse(raw);
+    const w = warpById(to);
+    if (!w) throw bad("그곳으로는 갈 수 없어요.");
+    const t = now();
+    if (t - p.warpAt < WARP_GAP_MS) throw new AppError("RATE_LIMITED", "순간이동은 잠시 후에 다시 쓸 수 있어요.", 429);
+    p.warpAt = t;
+    p.x = w.x;
+    p.y = w.y;
+    p.m = 0;
+    p.bank = BANK_MAX;
+    p.at = t;
+    chans.get(p.ch)?.dirty.add(p.sock);
+    return { x: r2(w.x), y: r2(w.y) };
   });
 
   gateway.rpc("gmtown.chat", (ctx, raw) => {

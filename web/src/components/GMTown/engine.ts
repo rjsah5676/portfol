@@ -62,6 +62,8 @@ export interface EngineHooks {
   send(x: number, y: number, d: number, m: 0 | 1 | 2): void;
   /** 마을 전체 지도를 켜고 끔 (엔진이 스스로 끌 때도) */
   onOverview(on: boolean): void;
+  /** M · 작은 지도: 전체 지도 창 열고 닫기 */
+  onMap?(): void;
   /** 3D 를 못 여는 기기 · 파일을 못 받음 */
   onError(msg: string): void;
 }
@@ -112,6 +114,10 @@ interface Tail {
   ready: boolean;
   /** 흔들림 성질 (트윈테일 · 긴 뒷머리 가닥) */
   k: TailK;
+  /** 바람 흔들림 위상 (줄기마다 다르게) */
+  ph: number;
+  /** 마디 길이 (쉬는 자세) — 바람 · 끌림으로 목표점을 옮겨도 길이는 그대로 */
+  len: number[];
 }
 
 interface Avatar {
@@ -152,6 +158,8 @@ const OV_DIST = 235;
 const OV_PITCH = 60 * DEG;
 /** 왼쪽 끌기 1px 에 돌아가는 각도 · 끌어서 정하는 높이 범위 (줌에 따른 높이는 따로 더함) */
 const ROT_PER_PX = 0.0085;
+/** 폰 조이스틱 반지름 (px) */
+const JOY_R = 58;
 /** 음수면 땅에 붙은 카메라가 캐릭터를 올려다봄 */
 const PITCH_MIN = -30 * DEG;
 const PITCH_MAX = 72 * DEG;
@@ -192,16 +200,23 @@ const TAIL_G = 2.0;
 const TAIL_MAX = (30 * Math.PI) / 180;
 /** 머리의 출렁임(걸음마다 위아래 · 좌우 흔들림)을 꼬리가 이만큼 크게 느낌 — 꾸준히 가는 속도는 빼고 */
 const TAIL_BOUNCE = 3;
-type TailK = { pull: number; damp: number; g: number; max: number; bounce: number; noFwd: boolean };
-const TWIN_K: TailK = { pull: TAIL_PULL, damp: TAIL_DAMP, g: TAIL_G, max: TAIL_MAX, bounce: TAIL_BOUNCE, noFwd: false };
-/** 긴 뒷머리 가닥: 덩어리라 덜 휘고 빨리 돌아옴 · 몸 앞쪽(원래 자세보다 앞)으로는 못 넘어감 — 멈출 때 몸 뚫기 막음 */
-const BACK_K: TailK = { pull: 0.2, damp: 0.84, g: 1.2, max: (13 * Math.PI) / 180, bounce: 1.6, noFwd: true };
-/** 얼굴 옆 짧은 옆머리: 뛸 때 과하게 날리지 않게 */
-const SIDE_K: TailK = { pull: 0.16, damp: 0.86, g: 1.6, max: (14 * Math.PI) / 180, bounce: 1.6, noFwd: false };
+/**
+ * noFwd: 몸 앞쪽(원래 자세보다 앞)으로 못 감 (뒷머리 — 몸 뚫기 막음) · noBack: 뒤로(얼굴 쪽) 못 감 (앞머리)
+ * wind: 서 있을 때도 살랑이는 폭 (줄기 길이 비율, 끝으로 갈수록 큼) · drag: 걸을 때 뒤로 끌리는 정도 (속도 1 당 줄기 길이 비율)
+ */
+type TailK = { pull: number; damp: number; g: number; max: number; bounce: number; noFwd: boolean; noBack?: boolean; wind?: number; drag?: number };
+const TWIN_K: TailK = { pull: TAIL_PULL, damp: TAIL_DAMP, g: TAIL_G, max: TAIL_MAX, bounce: TAIL_BOUNCE, noFwd: false, wind: 0.025 };
+/** 긴 뒷머리 가닥: 덩어리라 덜 휘고 빨리 돌아옴 · 뒤로는 걸음에 끌려 날림 · 앞(몸 쪽)으로는 못 넘어감 */
+const BACK_K: TailK = { pull: 0.16, damp: 0.86, g: 1.2, max: (22 * Math.PI) / 180, bounce: 1.8, noFwd: true, wind: 0.035, drag: 0.05 };
+/** 얼굴 옆 짧은 옆머리 (구레나룻): 살짝만 */
+const SIDE_K: TailK = { pull: 0.16, damp: 0.86, g: 1.6, max: (14 * Math.PI) / 180, bounce: 1.6, noFwd: false, wind: 0.06 };
+/** 앞머리: 아주 살짝, 얼굴 쪽으론 못 들어감 */
+const BANG_K: TailK = { pull: 0.22, damp: 0.82, g: 0.4, max: (7 * Math.PI) / 180, bounce: 1.4, noFwd: false, noBack: true, wind: 0.05 };
 const TAIL_NAMES: [string, TailK][] = [
   ...["SideA", "SideB"].map((n) => [n, SIDE_K] as [string, TailK]),
   ...["TailA", "TailB", "TailC", "TailD"].map((n) => [n, TWIN_K] as [string, TailK]),
   ..."ABCDEFGH".split("").map((c) => ["Back" + c, BACK_K] as [string, TailK]),
+  ..."ABCDE".split("").map((c) => ["Bang" + c, BANG_K] as [string, TailK]),
 ];
 
 type RigMats = {
@@ -503,6 +518,9 @@ export class TownEngine {
     for (const [id, x, y, d, m] of list) {
       const a = this.others.get(id);
       if (!a) continue;
+      const l = a.samples[a.samples.length - 1];
+      // 순간이동 (멀리 한 번에) → 지나가는 길을 그리지 않고 바로 그 자리로
+      if (l && Math.hypot(x - l.x, y - l.y) > 6) a.samples.length = 0;
       a.samples.push({ t, x, y, d, m });
       if (a.samples.length > 24) a.samples.splice(0, a.samples.length - 24);
     }
@@ -515,9 +533,31 @@ export class TownEngine {
   /** 서버가 위치를 바로잡음 */
   snap(x: number, y: number) {
     if (!this.me) return;
+    const far = Math.hypot(x - this.me.x, y - this.me.y) > 6;
     this.me.x = x;
     this.me.y = y;
     this.path = [];
+    // 순간이동: 카메라도 바로 (마을을 가로질러 미끄러지지 않게)
+    if (far) {
+      this.cam = { x, y };
+      this.camHSet = false;
+      this.goal = null;
+    }
+  }
+  /** 지도 창 · 원형 지도가 그릴 것: 나 (보는 쪽) · 다른 사람 · 시점 방향 */
+  mapState() {
+    const me = this.me ? { x: this.me.x, y: this.me.y, face: this.me.face ?? 0 } : null;
+    const others = [...this.others.values()].map((a) => ({ x: a.x, y: a.y }));
+    return { me, others, yaw: this.camYaw };
+  }
+  /** 지도에서 고른 건물 앞까지 걸어감 */
+  walkToBuilding(b: Building) {
+    if (this.overview) this.setOverview(false);
+    this.walkTo(doorFront(b).x, doorFront(b).y, b);
+  }
+  /** 걸어서 가는 중인지 (지도 창에서 보여 줌) */
+  walking() {
+    return this.path.length > 0;
   }
   setTyping(v: boolean) {
     this.typing = v;
@@ -673,7 +713,10 @@ export class TownEngine {
     if (k === "e" || k === " ") {
       e.preventDefault();
       this.hooks.onInteract();
-    } else if (k === "m") this.setOverview(!this.overview);
+    } else if (k === "m") {
+      if (this.hooks.onMap) this.hooks.onMap();
+      else this.setOverview(!this.overview);
+    }
     else if (k === "=" || k === "+") this.zoomBy(1 / 1.2);
     else if (k === "-" || k === "_") this.zoomBy(1.2);
   };
@@ -715,15 +758,17 @@ export class TownEngine {
     const px = e.clientX - r.left,
       py = e.clientY - r.top;
     if (e.pointerType === "touch") {
-      // 왼쪽 40% 는 조이스틱 (지도 볼 때는 빼고)
-      if (px < this.cw * 0.4 && !this.joy && !this.overview && !this.touches.size) {
-        this.joy = { id: e.pointerId, ox: px, oy: py, x: px, y: py };
+      // 왼쪽 아래 고정 조이스틱 (그 둘레를 누르면 — 손가락이 조금 빗나가도)
+      const j = this.joyAt();
+      if (!this.joy && !this.overview && Math.hypot(px - j.x, py - j.y) < JOY_R * 1.7) {
+        this.joy = { id: e.pointerId, ox: j.x, oy: j.y, x: px, y: py };
         this.path = [];
         this.goal = null;
       } else {
         this.touches.set(e.pointerId, { x: px, y: py, sx: px, sy: py });
         if (this.touches.size === 2) {
           const [a, b] = [...this.touches.values()];
+          this.drag = null;
           this.pinch = {
             d: Math.hypot(a.x - b.x, a.y - b.y),
             zoom: this.zoom,
@@ -732,7 +777,9 @@ export class TownEngine {
             my: (a.y + b.y) / 2,
             pitch: this.camPitch,
           };
-        }
+        } else if (this.touches.size === 1)
+          // 한 손가락으로 끌면 시점 돌리기 (땅 누르기 이동은 없음)
+          this.drag = { x: px, y: py, yaw: this.camYaw, pitch: this.camPitch };
       }
       this.canvas.setPointerCapture(e.pointerId);
       return;
@@ -744,6 +791,19 @@ export class TownEngine {
     } else if (e.button === 2 || (e.button === 0 && this.overview)) this.tap(px, py);
   };
   private onMenu = (e: MouseEvent) => e.preventDefault();
+  /** 폰 조이스틱 가운데 (왼쪽 아래 — 노치 · 둥근 모서리 피해서) */
+  private joyAt() {
+    return { x: Math.max(JOY_R + 22, this.cw * 0.09 + JOY_R * 0.6), y: this.ch - JOY_R - 26 };
+  }
+  /** 지도 창이 열려 있음 (조이스틱 숨김 · 입력 멈춤) */
+  private mapOpen = false;
+  setMapOpen(on: boolean) {
+    this.mapOpen = on;
+    if (on) {
+      this.keys.clear();
+      this.joy = null;
+    }
+  }
   /** 높이각은 끌어서만 바뀜 (줌은 거리만) */
   private clampPitch(p: number) {
     return Math.max(PITCH_MIN, Math.min(PITCH_MAX, p));
@@ -761,6 +821,11 @@ export class TownEngine {
     if (t) {
       t.x = px;
       t.y = py;
+      if (this.drag && !this.pinch && this.touches.size === 1 && !this.overview) {
+        this.camYaw = this.drag.yaw - (px - this.drag.x) * ROT_PER_PX * 1.2;
+        this.camPitch = this.clampPitch(this.drag.pitch + (py - this.drag.y) * ROT_PER_PX * 0.8);
+        return;
+      }
       if (this.pinch && this.touches.size === 2) {
         const [a, b] = [...this.touches.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
@@ -807,14 +872,17 @@ export class TownEngine {
     this.touches.delete(e.pointerId);
     const wasPinch = !!this.pinch;
     if (this.touches.size < 2) this.pinch = null;
-    // 손가락 하나로 짧게 누르면 그곳으로
+    if (!this.touches.size) this.drag = null;
+    // 손가락 하나로 짧게 누르면: 건물 · 안내판만 그리로 (땅 누르기 이동은 없음 — 조이스틱으로)
     if (
       !wasPinch &&
       !this.touches.size &&
       e.type === "pointerup" &&
       Math.hypot(t.x - t.sx, t.y - t.sy) < 12
-    )
-      this.tap(t.x, t.y);
+    ) {
+      const b = this.pickTarget(t.x, t.y);
+      if (b) this.tap(t.x, t.y);
+    }
   };
   private onLeave = () => {
     this.hover = null;
@@ -1008,8 +1076,8 @@ export class TownEngine {
         sx = dx / len;
         sy = dy / len;
         // 끝까지 밀면 뛰기
-        running = len >= 44;
-        speed = running ? RUN_SPEED : SPEED * Math.min(1, len / 40);
+        running = len >= JOY_R * 0.85;
+        speed = running ? RUN_SPEED : SPEED * Math.min(1, len / (JOY_R * 0.75));
       }
     }
     let vx = 0,
@@ -1471,6 +1539,8 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
           vel: new THREE.Vector3(),
           ready: false,
           k,
+          ph: Math.random() * 100,
+          len: [0, 0, 0, 0, 0],
         });
     }
     a.rig = { root, mixer, walk, idle, run, cur: idle, ghosts, overs, shadow, tails };
@@ -1544,6 +1614,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     for (let k = 0; k < 5; k++) B[k].quaternion.copy(t.rest[k]);
     B[0].updateMatrixWorld(true);
     for (let k = 0; k < 5; k++) A[k].setFromMatrixPosition(B[k].matrixWorld);
+    for (let k = 1; k < 5; k++) t.len[k] = A[k].distanceTo(A[k - 1]);
     if (!t.ready || S[0].distanceToSquared(A[0]) > 4) {
       for (let k = 0; k < 5; k++) {
         S[k].copy(A[k]);
@@ -1560,6 +1631,23 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     const damp = Math.pow(K.damp, n),
       pull = 1 - Math.pow(1 - K.pull, n);
     const [vel, dir, adir] = this.tw;
+    // 바람 · 끌림: 목표점(A)을 옆 · 뒤로 살짝 옮김 (끝으로 갈수록 크게) — 앞머리는 앞쪽으로만, 뒷머리는 뒤로만
+    if (K.wind || K.drag) {
+      t.ph += h;
+      const L = t.len[1] + t.len[2] + t.len[3] + t.len[4];
+      const fx = this.fwd.x,
+        fz = this.fwd.z;
+      const sp = Math.min(Math.hypot(t.vel.x, t.vel.z), 6);
+      const sw = (K.wind ?? 0) * L * (0.55 * Math.sin(t.ph * 1.3) + 0.3 * Math.sin(t.ph * 2.9 + 1.7));
+      const fb = (K.wind ?? 0) * L * 0.35 * (0.5 + 0.5 * Math.sin(t.ph * 1.7 + 0.6));
+      const dr = (K.drag ?? 0) * L * sp;
+      for (let k = 1; k < 5; k++) {
+        const q = k / 4;
+        // 옆 = (fz, -fx)
+        A[k].x += (fz * sw + (K.noBack ? fx * fb : K.noFwd ? -fx * (fb + dr) : 0)) * q;
+        A[k].z += (-fx * sw + (K.noBack ? fz * fb : K.noFwd ? -fz * (fb + dr) : 0)) * q;
+      }
+    }
     // 뿌리 출렁임 = 이번 이동 - 평균 속도만큼 이동 → 꼬리를 그 반대로 더 밀어 크게 출렁이게
     vel.subVectors(A[0], t.root0);
     t.vel.lerp(dir.copy(vel).divideScalar(h), 1 - Math.pow(0.9, n));
@@ -1578,8 +1666,12 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
         const c = dir.subVectors(S[k], A[k]).dot(this.fwd);
         if (c > 0) S[k].addScaledVector(this.fwd, -c);
       }
+      if (K.noBack) {
+        const c = dir.subVectors(S[k], A[k]).dot(this.fwd);
+        if (c < 0) S[k].addScaledVector(this.fwd, -c);
+      }
       // 마디 길이 그대로, 원래 방향에서 너무 벌어지지 않게
-      const len = A[k].distanceTo(A[k - 1]);
+      const len = t.len[k];
       dir.subVectors(S[k], S[k - 1]).normalize();
       adir.subVectors(A[k], A[k - 1]).normalize();
       const ang = dir.angleTo(adir);
@@ -1787,24 +1879,57 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       ctx.restore();
     }
 
-    // 조이스틱
-    if (this.joy) {
-      const { ox, oy, x, y } = this.joy;
-      const dx = x - ox,
-        dy = y - oy;
-      const len = Math.min(46, Math.hypot(dx, dy));
-      const a = Math.atan2(dy, dx);
-      ctx.fillStyle = "rgba(255,255,255,0.14)";
-      ctx.strokeStyle = "rgba(255,255,255,0.5)";
-      ctx.lineWidth = 2;
+    // 조이스틱 (폰: 왼쪽 아래에 늘 보임 · 누르면 손잡이가 따라감)
+    if (this.phone && !this.overview && !this.mapOpen) {
+      const j = this.joyAt();
+      const ox = j.x,
+        oy = j.y;
+      let kx = ox,
+        ky = oy;
+      if (this.joy) {
+        const dx = this.joy.x - ox,
+          dy = this.joy.y - oy;
+        const len = Math.min(JOY_R - 6, Math.hypot(dx, dy));
+        const a = Math.atan2(dy, dx);
+        kx = ox + Math.cos(a) * len;
+        ky = oy + Math.sin(a) * len;
+      }
+      const on = !!this.joy;
+      const g = ctx.createRadialGradient(ox, oy, JOY_R * 0.3, ox, oy, JOY_R);
+      g.addColorStop(0, on ? "rgba(20,18,30,0.42)" : "rgba(20,18,30,0.28)");
+      g.addColorStop(1, on ? "rgba(20,18,30,0.55)" : "rgba(20,18,30,0.38)");
+      ctx.fillStyle = g;
+      ctx.strokeStyle = on ? "rgba(242,193,78,0.85)" : "rgba(242,193,78,0.45)";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(ox, oy, 52, 0, Math.PI * 2);
+      ctx.arc(ox, oy, JOY_R, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      // 방향 눈금
+      ctx.fillStyle = "rgba(255,255,255,0.45)";
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2;
+        ctx.save();
+        ctx.translate(ox + Math.cos(a) * (JOY_R - 9), oy + Math.sin(a) * (JOY_R - 9));
+        ctx.rotate(a + Math.PI / 2);
+        ctx.beginPath();
+        ctx.moveTo(0, -4);
+        ctx.lineTo(4, 2);
+        ctx.lineTo(-4, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      const kg = ctx.createLinearGradient(kx, ky - 22, kx, ky + 22);
+      kg.addColorStop(0, "rgba(255,240,200,0.95)");
+      kg.addColorStop(1, "rgba(200,160,80,0.9)");
+      ctx.fillStyle = kg;
+      ctx.strokeStyle = "rgba(60,40,10,0.6)";
+      ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.arc(ox + Math.cos(a) * len, oy + Math.sin(a) * len, 22, 0, Math.PI * 2);
+      ctx.arc(kx, ky, 22, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
     }
 
     // 가장자리 살짝 어둡게
