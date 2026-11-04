@@ -26,6 +26,8 @@ interface PublicCase {
   rubricCount: number;
   bonusCount: number;
   credit?: string;
+  /** 후보 사건 (관리자 · 개발 모드에만 뜸) */
+  candidate?: boolean;
 }
 
 interface View {
@@ -122,7 +124,8 @@ export default function MysteryProtoApp() {
   const [boxH, setBoxH] = useState<number | null>(null);
 
   useEffect(() => {
-    api<{ enabled: boolean; cases: PublicCase[] }>("/api/mystery-proto/cases")
+    // 로그인돼 있으면 토큰을 같이 보냄 — 관리자면 후보 사건까지 목록에
+    api<{ enabled: boolean; cases: PublicCase[] }>("/api/mystery-proto/cases", { auth: true })
       .then((r) => {
         setCases(r.cases);
         setEnabled(r.enabled);
@@ -288,6 +291,7 @@ export default function MysteryProtoApp() {
               <div className={`${mono} flex items-center gap-2 text-[11px] text-white/40`}>
                 <span>CASE #{String(i + 1).padStart(2, "0")}</span>
                 <span className="rounded bg-white/10 px-1.5 py-0.5 text-white/70">{c.level}</span>
+                {c.candidate && <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-amber-200">후보</span>}
                 <span>질문 {c.questionLimit} · 단서 {c.clueCount}</span>
               </div>
               <div className="mt-1.5 text-lg font-bold group-hover:text-[#E9C98B]">{c.title}</div>
@@ -312,6 +316,7 @@ export default function MysteryProtoApp() {
         <div className={`${mono} flex items-center gap-2 text-[10px] text-white/40`}>
           <span className="text-[#C9A15B]">CONFIDENTIAL</span>
           <span className="rounded bg-white/10 px-1.5 py-0.5 text-white/70">{c.level}</span>
+          {c.candidate && <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-amber-200">후보</span>}
           <span className="ml-auto lg:hidden">{expanded ? "접기 ▲" : "펼치기 ▼"}</span>
         </div>
         <div className="mt-1 font-bold">{c.title}</div>

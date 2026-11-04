@@ -8,5 +8,7 @@
 !server/tsconfig.json
 !server/tsup.config.ts
 !server/src
+!server/cases/live
+!server/cases/candidates
 !web/src/lib
 !web/src/data/rhythm

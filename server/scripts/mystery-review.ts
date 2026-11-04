@@ -1,9 +1,10 @@
 /*
  * 예/아니오 추리 — 사건 검수 (정적 + LLM). 서버 안 켜도 됨. 키는 GROQ_API_KEY_REVIEW (없으면 GROQ_API_KEY).
  *
- *   npx tsx scripts/mystery-review.ts                      등록된 사건 전부
- *   npx tsx scripts/mystery-review.ts boxes window         일부만
- *   npx tsx scripts/mystery-review.ts --file=cases/candidates/foo.json   후보 JSON (배열 또는 객체 하나)
+ *   npx tsx scripts/mystery-review.ts                      등록된 사건 전부 (cases/live)
+ *   npx tsx scripts/mystery-review.ts boxes window         일부만 (후보 cases/candidates 의 id 도 됨)
+ *   npx tsx scripts/mystery-review.ts --candidates         후보 전부
+ *   npx tsx scripts/mystery-review.ts --file=foo.json      폴더 밖 JSON (배열 또는 객체 하나)
  *   옵션: --lint-only · --repeat=2(흔들림) · --gap=6000(ms) · --play=cases/plays/foo.txt(자동 플레이 질문 목록, 줄마다 질문)
  *         --out=cases/reviews/<id>.md (기본값, 리포트 저장)
  *
@@ -19,7 +20,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { CASES, caseById, type MysteryCase } from "../src/games/mystery/cases";
+import { CANDIDATES, CASES, caseById, type MysteryCase } from "../src/games/mystery/cases";
 import { createMystery, type Verdict } from "../src/games/mystery/game";
 import { lintCase } from "../src/games/mystery/lint";
 import { availableModels, createLlm, GRADE_MODELS, JUDGE_MODELS } from "../src/games/mystery/llm";
@@ -45,6 +46,8 @@ let targets: MysteryCase[];
 if (FILE) {
   const j = JSON.parse(readFileSync(FILE, "utf8"));
   targets = Array.isArray(j) ? j : [j];
+} else if (flag("candidates")) {
+  targets = CANDIDATES;
 } else {
   targets = only.length ? only.map((id) => caseById(id)!).filter(Boolean) : CASES;
 }
@@ -69,7 +72,7 @@ async function review(c: MysteryCase): Promise<{ ok: boolean; md: string }> {
   let fatal = false;
 
   // 1. lint
-  const issues = lintCase(c, CASES.filter((o) => o.id !== c.id));
+  const issues = lintCase(c, [...CASES, ...CANDIDATES].filter((o) => o.id !== c.id));
   const errs = issues.filter((i) => i.level === "error");
   sections.push({
     title: `정적 검수 — 오류 ${errs.length} · 경고 ${issues.length - errs.length}`,
@@ -84,8 +87,8 @@ async function review(c: MysteryCase): Promise<{ ok: boolean; md: string }> {
 
   // 판 하나로 돌림 (캐시 끔)
   const game = createMystery({ llm: createLlm(keys), judgeModels, gradeModels });
-  // 등록 안 된 후보도 돌릴 수 있게 CASES 에 잠깐 끼움
-  const injected = !CASES.includes(c);
+  // --file 로 들어온(폴더 밖) 사건도 돌릴 수 있게 CASES 에 잠깐 끼움
+  const injected = !CASES.includes(c) && !CANDIDATES.includes(c);
   if (injected) CASES.push(c);
   // 한도(429)로 전 모델이 쉬면 조금 길게 기다렸다 두 번 더 시도. 그래도 안 되면 ERROR — 사건 탓이 아니라 "미판정"으로 셈
   let unjudged = 0;

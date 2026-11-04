@@ -1,6 +1,6 @@
 import { newId } from "../../ids";
 import { bad, notFound, AppError } from "../../errors";
-import { bonusRubric, CASES, caseById, requiredRubric, type MysteryCase } from "./cases";
+import { bonusRubric, CANDIDATES, CASES, caseById, requiredRubric, type MysteryCase } from "./cases";
 import { extractJson, type LlmCall, type ModelSpec } from "./llm";
 
 /*
@@ -71,6 +71,8 @@ export interface PublicCase {
   /** 보너스 항목 수 */
   bonusCount: number;
   credit?: string;
+  /** 후보 사건 (개발 모드 · 관리자 목록에만) */
+  candidate?: boolean;
 }
 
 export interface MysteryView {
@@ -278,6 +280,7 @@ export const publicCase = (c: MysteryCase): PublicCase => ({
   rubricCount: requiredRubric(c).length,
   bonusCount: bonusRubric(c).length,
   ...(c.credit ? { credit: c.credit } : {}),
+  ...(c.candidate ? { candidate: true } : {}),
 });
 
 const busyError = () => new AppError("BUSY", "판정관이 잠깐 자리를 비웠어요. 조금 뒤에 다시 물어봐 주세요.", 503);
@@ -377,7 +380,8 @@ export function createMystery(opts: MysteryOptions) {
     get enabled() {
       return opts.judgeModels.length > 0 && opts.gradeModels.length > 0;
     },
-    cases: (): PublicCase[] => CASES.map(publicCase),
+    /** 목록. 후보는 개발 모드 · 관리자일 때만 (플레이 자체는 id 만 알면 됨) */
+    cases: (withCandidates = false): PublicCase[] => (withCandidates ? [...CASES, ...CANDIDATES] : CASES).map(publicCase),
 
     start(caseId: string): MysteryView {
       const c = caseById(caseId);

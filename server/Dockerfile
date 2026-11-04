@@ -24,6 +24,9 @@ WORKDIR /app
 COPY server/package.json server/package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /repo/server/dist ./dist
+# 예/아니오 추리 사건 파일 (dist/index.js 가 위로 올라가며 cases/live 를 찾음). candidates 는 운영에선 관리자 목록에만
+COPY server/cases/live ./cases/live
+COPY server/cases/candidates ./cases/candidates
 # node 이미지에 들어 있는 일반 사용자(uid 1000)로 실행
 USER node
 EXPOSE 4000

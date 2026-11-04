@@ -5,7 +5,7 @@ import type { Deps } from "../deps";
 import { orderedId } from "../ids";
 import { createMystery, type Mystery } from "../games/mystery/game";
 import { availableModels, createLlm, GRADE_MODELS, JUDGE_MODELS } from "../games/mystery/llm";
-import { h, ms, requireAdmin } from "./util";
+import { h, ms, requireAdmin, userOf } from "./util";
 
 /*
  * 예/아니오 추리 (/games/mystery-proto, 프로토 — 게임성 확인용)
@@ -47,7 +47,14 @@ export function mysteryProtoRouter({ cfg, db, auth }: Deps, injected?: Mystery):
 
   const r = Router();
   r.get("/status", h(() => ({ enabled: game.enabled })));
-  r.get("/cases", h(() => ({ enabled: game.enabled, cases: game.cases() })));
+  // 후보 사건(cases/candidates)은 개발 모드거나 관리자로 로그인했을 때만 목록에
+  r.get(
+    "/cases",
+    h(async (req) => {
+      const withCandidates = test || (await userOf(auth, req))?.admin === true;
+      return { enabled: game.enabled, cases: game.cases(withCandidates) };
+    })
+  );
   r.post(
     "/start",
     ...startLimit,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { caseById, CASES } from "../src/games/mystery/cases";
+import { CANDIDATES, caseById, CASES } from "../src/games/mystery/cases";
 import { createMystery, finalVerdict, normalizeQuestion, parseGrade, parseJudge } from "../src/games/mystery/game";
 import { lintAll, lintCase } from "../src/games/mystery/lint";
 import { extractJson, type LlmCall, type ModelSpec } from "../src/games/mystery/llm";
@@ -9,9 +9,15 @@ const boxes = caseById("boxes")!;
 
 describe("예/아니오 추리 — 사건 데이터", () => {
   it("등록된 사건은 정적 검수 오류가 없다", () => {
-    for (const { id, issues } of lintAll(CASES)) {
+    expect(CASES.length).toBeGreaterThanOrEqual(3);
+    for (const { id, issues } of lintAll([...CASES, ...CANDIDATES])) {
       expect(issues.filter((i) => i.level === "error"), id).toEqual([]);
     }
+  });
+
+  it("후보는 candidate 표시가 붙고 등록 사건은 안 붙는다", () => {
+    for (const c of CASES) expect(c.candidate, c.id).toBeUndefined();
+    for (const c of CANDIDATES) expect(c.candidate, c.id).toBe(true);
   });
 
   it("정적 검수가 망가진 사건을 잡는다", () => {
