@@ -100,8 +100,10 @@ afterAll(async () => {
 });
 
 let n = 0;
+let lastUid = "";
 async function member(): Promise<TestClient> {
   const uid = `gm${++n}_${Math.random().toString(36).slice(2, 8)}`;
+  lastUid = uid;
   const email = `${uid}@example.com`;
   const token = await srv.token(uid, { email });
   const r = await srv.http("/api/me/nick", {
@@ -231,6 +233,32 @@ describe("광장", () => {
     a.close();
     b.close();
     c.close();
+  });
+
+  it("집 계약: 게스트 거절 · GP 모자라면 거절 · 한 단계씩 · 이미 산 단계 거절 · GP 차감", async () => {
+    const g = await guest();
+    await g.sub<TownSnap>("gmtown.ch", { ch: 9 });
+    expect((await g.rpc<{ tier: number; gp: number | null }>("gmtown.house")).gp).toBeNull();
+    expect(await code(g.rpc("gmtown.house.buy", { tier: 1 }))).toBe("FORBIDDEN");
+    g.close();
+
+    const a = await member();
+    const uid = lastUid;
+    await a.sub<TownSnap>("gmtown.ch", { ch: 9 });
+    await srv.db.col("users").updateOne({ _id: uid }, { $set: { points: 0 } });
+    expect((await a.rpc<{ tier: number }>("gmtown.house")).tier).toBe(0);
+    expect(await code(a.rpc("gmtown.house.buy", { tier: 1 }))).not.toBe("OK");
+    await srv.db.col("users").updateOne({ _id: uid }, { $set: { points: 30_000 } });
+    expect(await code(a.rpc("gmtown.house.buy", { tier: 2 }))).toBe("BAD_REQUEST");
+    const r1 = await a.rpc<{ tier: number; gp: number }>("gmtown.house.buy", { tier: 1 });
+    expect(r1.tier).toBe(1);
+    expect(r1.gp).toBe(30_000 - 5_000);
+    expect(await code(a.rpc("gmtown.house.buy", { tier: 1 }))).toBe("ALREADY");
+    const r2 = await a.rpc<{ tier: number; gp: number }>("gmtown.house.buy", { tier: 2 });
+    expect(r2.tier).toBe(2);
+    expect(r2.gp).toBe(30_000 - 5_000 - 15_000);
+    expect((await a.rpc<{ tier: number }>("gmtown.house")).tier).toBe(2);
+    a.close();
   });
 
   it("채팅: 같은 채널 모두에게 · 너무 빠르면 거절 · 길면 자름 · 다른 채널엔 안 감", async () => {

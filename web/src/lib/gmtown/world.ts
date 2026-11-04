@@ -668,6 +668,44 @@ export const archPosts = () => [
 /** 안내판 (눌러서 도움말) — 역에서 나오자마자 보이는 길가 */
 export const BOARD = { x: 99.4, y: 146.6 } as const;
 
+// ───────────── NPC · 집 계약 ─────────────
+
+export type NpcId = "agent";
+export interface Npc {
+  id: NpcId;
+  /** 이름표 */
+  name: string;
+  /** 이름표 위 작은 글씨 (하는 일) */
+  title: string;
+  x: number;
+  y: number;
+  /** 보는 쪽 (라디안, +y 가 0 — 캐릭터 face 와 같음) */
+  face: number;
+  /** 말 걸 수 있는 거리 (m) */
+  talk: number;
+}
+/** 마을 NPC: 주택 단지 입구(우리 집 문 옆)에 부동산 중개인 */
+export const NPCS: Npc[] = [{ id: "agent", name: "민트", title: "부동산 중개인", x: 43.2, y: 120.4, face: Math.PI, talk: 2.2 }];
+export const npcById = (id: string) => NPCS.find((n) => n.id === id) ?? null;
+
+/** 내 집 단계 (중개인에게 GP 로 계약 · 한 단계씩 올림). 집 안은 사람마다 따로 */
+export interface HouseTier {
+  tier: number;
+  name: string;
+  /** 이 단계로 올리는 값 (GP) */
+  price: number;
+  desc: string;
+  icon: string;
+}
+export const HOUSE_TIERS: HouseTier[] = [
+  { tier: 1, name: "원룸", price: 5_000, desc: "침대 하나 · 창문 하나, 나만의 첫 방", icon: "🛏️" },
+  { tier: 2, name: "투룸", price: 15_000, desc: "방이 둘 — 거실을 따로 꾸밀 수 있어요", icon: "🛋️" },
+  { tier: 3, name: "2층 집", price: 40_000, desc: "계단 있는 2층, 친구를 부르기 좋은 크기", icon: "🏡" },
+  { tier: 4, name: "정원 주택", price: 80_000, desc: "앞마당 정원까지, 마을에서 제일 좋은 집", icon: "🌷" },
+];
+export const houseTier = (t: number) => HOUSE_TIERS.find((h) => h.tier === t) ?? null;
+
+
 /** 주택가 마당: 골목 사이 칸에 고르게 */
 function makeYards(): Yard[] {
   const out: Yard[] = [];
@@ -1330,6 +1368,7 @@ function blockedStatic(x: number, y: number, r = RADIUS, loose = false): boolean
   for (const bn of BENCHES) if ((x - bn.x) ** 2 + (y - bn.y) ** 2 < (0.72 + r) ** 2) return true;
   for (const p of archPosts()) if ((x - p.x) ** 2 + (y - p.y) ** 2 < (0.95 + r) ** 2) return true;
   if ((x - BOARD.x) ** 2 + (y - BOARD.y) ** 2 < (0.45 + r) ** 2) return true;
+  for (const n of NPCS) if ((x - n.x) ** 2 + (y - n.y) ** 2 < (0.32 + r) ** 2) return true;
   return false;
 }
 
@@ -1400,3 +1439,4 @@ export function warps(): Warp[] {
 export const warpById = (id: string) => warps().find((w) => w.id === id) ?? null;
 /** 순간이동 다시 쓰기까지 (ms) */
 export const WARP_GAP_MS = 4000;
+

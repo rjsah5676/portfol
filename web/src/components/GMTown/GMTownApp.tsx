@@ -10,9 +10,10 @@ import { NAV_GROUPS } from "@/data/navMenu";
 import { rpc, subscribe } from "@/lib/api/socket";
 import { CHARS, charFiles } from "@/lib/gmtown/chars";
 import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
-import { BUILDINGS, CHAT_MAX, PLAZA, isLot, warps, type BStyle, type Building, type Warp } from "@/lib/gmtown/world";
+import { BUILDINGS, CHAT_MAX, PLAZA, isLot, npcById, warps, type BStyle, type Building, type NpcId, type Warp } from "@/lib/gmtown/world";
 import { TownEngine } from "./engine";
 import MapModal from "./MapModal";
+import NpcDialog from "./NpcDialog";
 import { townFiles } from "./scene3d";
 import { drawMiniRound } from "./townMap";
 
@@ -207,7 +208,8 @@ export default function GMTownApp() {
   );
 }
 
-type Near = Building | "board" | null;
+type Near = Building | "board" | NpcId | null;
+const isNpc = (n: Near): n is NpcId => typeof n === "string" && n !== "board";
 
 function Town({
   phone,
@@ -471,7 +473,7 @@ function Town({
     } catch {}
   };
 
-  const nearName = near === "board" ? "마을 안내판" : near?.sign;
+  const nearName = near === "board" ? "마을 안내판" : isNpc(near) ? npcById(near)!.name : near?.sign;
 
   return (
     <div className="absolute inset-0 select-none">
@@ -633,9 +635,9 @@ function Town({
           }}
         >
           <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg text-[20px]">
-            {near === "board" ? "📋" : <GameIcon icon={near.icon} />}
+            {near === "board" ? "📋" : isNpc(near) ? "💬" : <GameIcon icon={near.icon} />}
           </span>
-          <span className="mt-0.5 text-[#FFE6A0]">{near === "board" ? "보기" : "들어가기"}</span>
+          <span className="mt-0.5 text-[#FFE6A0]">{near === "board" ? "보기" : isNpc(near) ? "말 걸기" : "들어가기"}</span>
         </button>
       )}
       {near && !card && !phone && (
@@ -647,13 +649,15 @@ function Town({
             className="gmt-glass flex cursor-pointer items-center gap-3 rounded-2xl py-2 pr-4 pl-2 text-left"
           >
             <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl bg-white/10 text-[22px]">
-              {near === "board" ? "📋" : <GameIcon icon={near.icon} />}
+              {near === "board" ? "📋" : isNpc(near) ? "💬" : <GameIcon icon={near.icon} />}
             </span>
             <span className="flex flex-col">
               <b className="text-[14px] leading-tight">{nearName}</b>
               <span className="text-[11px] text-white/60">
                 {near === "board"
                   ? "마을 둘러보기 · 조작법"
+                  : isNpc(near)
+                    ? `${npcById(near)!.title} · 말 걸기`
                   : near.href
                     ? "들어가기"
                     : isLot(near)
@@ -710,7 +714,10 @@ function Town({
       {picker && <CharPicker cur={myC} phone={phone} onPick={pickChar} onClose={() => setPicker(false)} />}
 
       {/* 건물 카드 */}
-      {card && <Card near={card} onClose={() => setCard(null)} />}
+      {card && isNpc(card) && (
+        <NpcDialog id={card} phone={phone} onClose={() => setCard(null)} onSys={addSys} />
+      )}
+      {card && !isNpc(card) && <Card near={card} onClose={() => setCard(null)} />}
 
       {/* 채널 고르기 */}
       {chanList && (
@@ -1037,7 +1044,7 @@ function Card({ near, onClose }: { near: Building | "board"; onClose: () => void
         </p>
       ) : (
         <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-3 text-[13px] leading-relaxed text-white/85">
-          <b className="text-[#FFD36B]">곧 열려요</b>
+          <b className="text-[#FFD36B]">집 계약은 문 옆 중개인 민트에게</b>
           <ul className="mt-1 space-y-1">
             <li>🏠 GP 로 내 집 사기 (마을에 입구는 하나, 들어가면 나만의 집)</li>
             <li>🔨 원룸 → 투룸 → 2층 → 정원, 단계별 업그레이드</li>

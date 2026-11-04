@@ -1,4 +1,4 @@
-import type { CharId } from "./types";
+import type { CharId, ModelId } from "./types";
 
 /*
  * 마을 캐릭터 스프라이트 — 위 35° 에서 렌더한 걷기 · 숨쉬기 (에이미: 원화 → 3D → 믹사모 → 방향별 GPT → 그록 → 20장).
@@ -39,11 +39,13 @@ const AMY_DIRS: CharDef["dirs"] = {
   back: { walk: { file: "amy_back_walk.webp", n: 20, w: 113, h: 167, ax: 56.7, ay: 160 }, idle: { file: "amy_back_idle.webp", n: 59, w: 118, h: 160, ax: 58.3, ay: 157 }, start: 10 },
 };
 
-export const CHARS: Record<CharId, CharDef> = {
+export const CHARS: Record<ModelId, CharDef> = {
   amy: { name: "에이미", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/amy3d.glb", dirs: AMY_DIRS },
   mio: { name: "미오", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/mio3d.glb", dirs: AMY_DIRS },
   // 세라: 얼굴 비워서 뽑은 모델 + 그려 넣은 눈 · 눈썹 → 눈썹도 앞머리 위로 비침
   sera: { name: "세라", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/sera3d.glb", eyeBand: [0.37, 0.7], dirs: AMY_DIRS },
+  // NPC: 부동산 중개인 민트 (고르는 캐릭터 아님)
+  agent: { name: "민트", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/agent3d.glb", dirs: AMY_DIRS },
 };
 
 /** 방향 0~7 → 시트 · 반전 */

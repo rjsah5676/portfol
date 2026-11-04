@@ -3,9 +3,12 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneRig } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { CHARS, CHAR_TALL, IDLE_MS, WALK_MS, sheetOf, type Sheet } from "@/lib/gmtown/chars";
-import type { CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
+import type { CharId, ChatWire, ModelId, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
 import {
   BOARD,
+  NPCS,
+  type Npc,
+  type NpcId,
   BOUNDS,
   BUILDINGS,
   FOUNTAIN,
@@ -54,9 +57,9 @@ import { buildTown, type TownScene } from "./scene3d";
 
 export interface EngineHooks {
   /** 문 앞에 서거나 벗어남 (board = 안내판) */
-  onNear(b: Building | "board" | null): void;
+  onNear(b: Building | "board" | NpcId | null): void;
   /** 건물을 눌러서 걸어가 문 앞에 닿음 → 카드 열기 */
-  onArrive(b: Building | "board"): void;
+  onArrive(b: Building | "board" | NpcId): void;
   /** E · 스페이스 */
   onInteract(): void;
   /** 내 위치 보내기 */
@@ -125,7 +128,9 @@ interface Avatar {
   id: string;
   name: string;
   guest: boolean;
-  c: PlayerWire["c"];
+  c: ModelId;
+  /** 마을 NPC (서버에 없는, 제자리에 서 있는 사람) */
+  npc?: Npc;
   x: number;
   y: number;
   d: number;
@@ -317,7 +322,7 @@ export class TownEngine {
   private others = new Map<string, Avatar>();
   private keys = new Set<string>();
   private path: { x: number; y: number }[] = [];
-  private goal: Building | "board" | null = null;
+  private goal: Building | "board" | NpcId | null = null;
   private stuck = 0;
   private joy: { id: number; ox: number; oy: number; x: number; y: number } | null = null;
   /** 조이스틱이 아닌 손가락 (누르기 · 두 손가락 확대) */
@@ -330,7 +335,7 @@ export class TownEngine {
     my: number;
     pitch: number;
   } | null = null;
-  private near: Building | "board" | null = null;
+  private near: Building | "board" | NpcId | null = null;
   private hover: Building | null = null;
   private sent = { x: 0, y: 0, d: -1, m: -1 as number, at: 0 };
   private typing = false;
@@ -521,7 +526,7 @@ export class TownEngine {
   }
   /** 내 캐릭터 */
   myChar(): CharId | null {
-    return this.me?.c ?? null;
+    return (this.me?.c as CharId | undefined) ?? null;
   }
   leave(id: string) {
     const a = this.others.get(id);
@@ -613,13 +618,21 @@ export class TownEngine {
         if (this.dead) return;
         this.models.set(c, { scene: g.scene, clips: g.animations });
         this.rigMats.set(c, this.makeRigMats(g.scene, def.eyeBand));
-        for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) if (a.c === c) this.dropView(a);
+        for (const a of [...this.others.values(), ...this.npcs, ...(this.me ? [this.me] : [])]) if (a.c === c) this.dropView(a);
       },
       (err) => console.error("[gmtown] 3D 캐릭터", c, err)
     );
   }
   private modelLoading = new Set<string>();
   private gltf = new GLTFLoader();
+  /** 마을 NPC (중개인 등) — 채널과 상관없이 늘 서 있음 */
+  private npcs: Avatar[] = NPCS.map((n) => ({
+    ...this.avatarOf({ id: "npc:" + n.id, name: n.name, guest: false, c: n.id, x: n.x, y: n.y, d: 4, m: 0 } as unknown as PlayerWire),
+    c: n.id,
+    npc: n,
+    faceTo: n.face,
+    face: n.face,
+  }));
 
   private avatarOf(p: PlayerWire): Avatar {
     this.needModel(p.c);
@@ -740,7 +753,7 @@ export class TownEngine {
     this.shift = false;
   };
 
-  private pickTarget(px: number, py: number, skip: Building | null = null): Building | "board" | null {
+  private pickTarget(px: number, py: number, skip: Building | null = null): Building | "board" | NpcId | null {
     if (!this.town) return null;
     this.ray.setFromCamera(
       new THREE.Vector2((px / this.cw) * 2 - 1, -(py / this.ch) * 2 + 1),
@@ -753,6 +766,12 @@ export class TownEngine {
       if (hit && (!best || hit.distance < best.d)) best = { d: hit.distance, b: v.b };
     }
     if (best) return best.b;
+    for (const n of NPCS) {
+      const a = this.screen(n.x, n.y, 0.2),
+        b = this.screen(n.x, n.y, CHAR_TALL);
+      const h = Math.abs(a.y - b.y);
+      if (Math.abs(px - a.x) < h * 0.35 && py < a.y && py > b.y - h * 0.1) return n.id;
+    }
     const s = this.screen(BOARD.x, BOARD.y, 1.4);
     const s2 = this.screen(BOARD.x, BOARD.y, 2.4);
     const ppm = Math.max(8, Math.abs(s.y - s2.y));
@@ -766,6 +785,11 @@ export class TownEngine {
     const t = this.pickTarget(px, py, occ?.b ?? null);
     if (this.overview) this.setOverview(false);
     if (t === "board") return this.walkTo(BOARD.x + 0.6, BOARD.y + 0.6, "board");
+    if (typeof t === "string") {
+      // NPC 앞 (보는 쪽으로 1.2m)
+      const n = NPCS.find((q) => q.id === t)!;
+      return this.walkTo(n.x + Math.sin(n.face) * 1.2, n.y + Math.cos(n.face) * 1.2, t);
+    }
     if (t) return this.walkTo(doorFront(t).x, doorFront(t).y, t);
     const g = this.ground(px, py);
     if (g) this.walkTo(g.x, g.y, null);
@@ -872,7 +896,7 @@ export class TownEngine {
       return;
     }
     const p = this.pickTarget(px, py);
-    this.hover = p && p !== "board" ? p : null;
+    this.hover = p && typeof p !== "string" ? p : null;
     this.canvas.style.cursor = p ? CURSOR.point : CURSOR.normal;
   };
   private onUp = (e: PointerEvent) => {
@@ -912,7 +936,7 @@ export class TownEngine {
   };
 
   /** 그곳까지 걸어감 (goal 이 있으면 닿았을 때 onArrive) */
-  walkTo(x: number, y: number, goal: Building | "board" | null) {
+  walkTo(x: number, y: number, goal: Building | "board" | NpcId | null) {
     if (!this.me) return;
     const p = this.findPath(this.me.x, this.me.y, x, y);
     this.path = p;
@@ -1183,8 +1207,9 @@ export class TownEngine {
       }
       // 문 앞
       const b = doorAt(me.x, me.y);
-      const nb: Building | "board" | null =
-        b ?? (Math.hypot(me.x - BOARD.x, me.y - BOARD.y) < 1.5 ? "board" : null);
+      const npc = NPCS.find((n) => Math.hypot(me.x - n.x, me.y - n.y) < n.talk);
+      const nb: Building | "board" | NpcId | null =
+        npc?.id ?? b ?? (Math.hypot(me.x - BOARD.x, me.y - BOARD.y) < 1.5 ? "board" : null);
       if (nb !== this.near) {
         this.near = nb;
         this.hooks.onNear(nb);
@@ -1198,7 +1223,7 @@ export class TownEngine {
       ty = (BOUNDS.y0 + BOUNDS.y1) / 2;
     } else if (me) {
       const lean =
-        this.near && this.near !== "board" && !isLot(this.near)
+        this.near && typeof this.near !== "string" && !isLot(this.near)
           ? Math.min(2.6, this.near.h * 0.4)
           : 0;
       tx = Math.max(BOUNDS.x0 + 3, Math.min(BOUNDS.x1 - 3, me.x - lean * Math.sin(this.camYaw)));
@@ -1830,6 +1855,12 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       this.inkU.uInk.value = (inkPx * 2 * Math.tan((cam.fov * DEG) / 2)) / Math.max(1, this.ch);
       // 사람
       for (const a of this.others.values()) this.placeAvatar(a, dt);
+      for (const a of this.npcs) {
+        const n = a.npc!,
+          me = this.me;
+        a.faceTo = me && Math.hypot(me.x - n.x, me.y - n.y) < n.talk * 2.2 ? Math.atan2(me.x - n.x, me.y - n.y) : n.face;
+        this.placeAvatar(a, dt);
+      }
       if (this.me) this.placeAvatar(this.me, dt);
       // 내가 건물 뒤면 그 건물을 비치게
       const meBlock = this.me ? this.blocker(this.me.x, this.me.y) : null;
@@ -1846,7 +1877,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
         }
       }
       // 문 앞 고리 (서 있거나 마우스를 올린 건물)
-      const ring = this.near && this.near !== "board" ? this.near : this.hover;
+      const ring = this.near && typeof this.near !== "string" ? this.near : this.hover;
       town.doorRing.visible = !!ring;
       if (ring) {
         const f = doorFront(ring);
@@ -1876,7 +1907,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     if (!this.town) return;
     const o = this.camera.position;
     const far = (a: Avatar) => Math.hypot(a.x - o.x, a.y - o.z);
-    const people = [...this.others.values(), ...(this.me ? [this.me] : [])];
+    const people = [...this.others.values(), ...this.npcs, ...(this.me ? [this.me] : [])];
     // 가까운 사람 이름표가 위에 오게 (먼 사람부터 그림)
     people.sort((a, b) => far(b) - far(a));
     // 이름표 높이: 3D 는 머리 위 리본까지
@@ -1968,9 +1999,29 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
   private drawTag(a: Avatar, px: number, top: number, now: number) {
     const ctx = this.ctx;
     const isMe = a === this.me;
-    ctx.font = `700 12px "Nanum Gothic", sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+    // NPC: 하는 일(작게, 금색) + 이름(민트색) · 말 걸 수 있으면 말풍선 표시
+    if (a.npc) {
+      ctx.font = `700 10.5px "Nanum Gothic", sans-serif`;
+      const t1 = `<${a.npc.title}>`;
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillText(t1, px + 1, top - 15);
+      ctx.fillStyle = "#F2D27A";
+      ctx.fillText(t1, px, top - 16);
+      ctx.font = `800 13px "Nanum Gothic", sans-serif`;
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "rgba(10,30,20,0.8)";
+      ctx.strokeText(a.name, px, top);
+      ctx.fillStyle = "#9BF0C8";
+      ctx.fillText(a.name, px, top);
+      if (this.near === a.npc.id) {
+        ctx.font = `16px sans-serif`;
+        ctx.fillText("💬", px, top - 34 + Math.sin(now / 260) * 2);
+      }
+      return;
+    }
+    ctx.font = `700 12px "Nanum Gothic", sans-serif`;
     const tw = ctx.measureText(a.name).width + 14;
     ctx.fillStyle = isMe ? "rgba(60,40,0,0.72)" : "rgba(15,18,32,0.62)";
     rr(ctx, px - tw / 2, top - 9, tw, 18, 9);

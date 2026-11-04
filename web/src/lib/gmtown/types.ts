@@ -3,10 +3,23 @@
  *
  * 구독 gmtown.ch { ch: 채널 번호 | null(자동) } → 키 gmtown:ch:N
  *   첫 데이터 TownSnap · 이벤트 join(PlayerWire) · leave(id) · mv(MoveWire[]) · chat(ChatWire) · snap({x, y} — 나에게만, 위치 바로잡기)
- * 요청 gmtown.move { x, y, d, m } · gmtown.chat { text } · gmtown.channels
+ * 요청 gmtown.move { x, y, d, m } · gmtown.chat { text } · gmtown.channels · gmtown.warp { to } · gmtown.char { c }
+ *      gmtown.house → HouseWire · gmtown.house.buy { tier } → HouseWire (중개인 NPC 에게 집 계약)
  */
 
 export type CharId = "amy" | "mio" | "sera";
+/** 마을에 서 있는 NPC 모델 (사람이 고르는 캐릭터 아님) */
+export type NpcModel = "agent";
+/** 3D 모델 종류 (사람 캐릭터 + NPC) */
+export type ModelId = CharId | NpcModel;
+
+/** 내 집 계약 상태 */
+export interface HouseWire {
+  /** 0 = 아직 없음, 1~ = HOUSE_TIERS 단계 */
+  tier: number;
+  /** 지금 GP (게스트는 null — 회원만 계약) */
+  gp: number | null;
+}
 
 export interface PlayerWire {
   /** 이 마을에서만 쓰는 짧은 id (uid 아님) */
