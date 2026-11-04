@@ -557,7 +557,7 @@ export class TownEngine {
       (g) => {
         if (this.dead) return;
         this.models.set(c, { scene: g.scene, clips: g.animations });
-        this.rigMats.set(c, this.makeRigMats(g.scene));
+        this.rigMats.set(c, this.makeRigMats(g.scene, def.eyeBand));
         for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) if (a.c === c) this.dropView(a);
       },
       (err) => console.error("[gmtown] 3D 캐릭터", c, err)
@@ -1227,7 +1227,7 @@ export class TownEngine {
   // ───────────── 3D 캐릭터 ─────────────
 
   /** 툰: 빛 방향으로 2단 (조명 계산 안 씀) · 외곽선: 뒤집은 껍데기를 법선 쪽으로 · 가려졌을 때: 반투명 위에 */
-  private makeRigMats(scene: THREE.Object3D) {
+  private makeRigMats(scene: THREE.Object3D, eyeBand?: [number, number]) {
     let eyeMap: THREE.Texture | null = null;
     const maps: (THREE.Texture | null)[] = [];
     scene.traverse((o) => {
@@ -1273,7 +1273,7 @@ vInkZ = normalize( transformedNormal ).z;`
     const mats: RigMats = { toon, ink, ghost, byMap };
     if (etex) {
       mats.eyeBase = this.eyeMat(etex, false);
-      mats.eyeOver = this.eyeMat(etex, true);
+      mats.eyeOver = this.eyeMat(etex, true, eyeBand);
     }
     return mats;
   }
@@ -1309,7 +1309,7 @@ vInkZ = normalize( transformedNormal ).z;`
    * 눈 조각 재질 — 그림은 멀리서도 또렷하게 (밉맵 한 단계 덜 흐리게).
    * over: 카메라 쪽으로 당겨서 앞머리 위로 한 번 더. 속눈썹(아주 어두운 곳) · 눈동자(푸른 곳)만, 정면에서만 (흰자까지 올리면 번져 보임) (뒤·옆에선 안 비침)
    */
-  private eyeMat(map: THREE.Texture, over: boolean) {
+  private eyeMat(map: THREE.Texture, over: boolean, band: [number, number] = [0.44, 0.64]) {
     const m = new THREE.MeshToonMaterial({
       map,
       transparent: true,
@@ -1360,8 +1360,8 @@ float eLum = dot( sampledDiffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
 float eWhite = smoothstep( 0.72, 0.82, eLum ) * smoothstep( -0.04, 0.01, sampledDiffuseColor.b - sampledDiffuseColor.r );
 diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite ), max( smoothstep( 0.1, 0.22, sampledDiffuseColor.b - sampledDiffuseColor.r ), smoothstep( 0.3, 0.42, sampledDiffuseColor.r - sampledDiffuseColor.g ) ) )
   * smoothstep( 0.8, 0.93, vFace )
-  // 눈 줄만 (눈썹 · 코 · 입은 앞머리 위로 안 올림 — 위에서 보면 눈썹이 속눈썹처럼 하나 더 보였음)
-  * smoothstep( 0.42, 0.46, vMapUv.y ) * ( 1.0 - smoothstep( 0.62, 0.66, vMapUv.y ) );`
+  // 눈 줄만 (기본은 눈썹 · 코 · 입은 앞머리 위로 안 올림 — 위에서 보면 눈썹이 속눈썹처럼 하나 더 보였음). 캐릭터마다 eyeBand
+  * smoothstep( ${(band[0] - 0.02).toFixed(3)}, ${(band[0] + 0.02).toFixed(3)}, vMapUv.y ) * ( 1.0 - smoothstep( ${(band[1] - 0.02).toFixed(3)}, ${(band[1] + 0.02).toFixed(3)}, vMapUv.y ) );`
               : "")
         )
         .replace(

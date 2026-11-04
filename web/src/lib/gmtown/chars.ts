@@ -25,6 +25,8 @@ export interface CharDef {
   tall: number;
   /** 3D 모델 (리깅 + 걷기 · 숨쉬기 동작, 키 1 로 만든 것). 있으면 판 대신 3D 로 세움 — 못 받으면 판으로 */
   model?: string;
+  /** 눈 덧그림(앞머리 위로 비침)을 쓰는 눈 그림 세로 범위 (UV v, 위가 0). 없으면 에이미 눈 줄만 [0.44, 0.64] */
+  eyeBand?: [number, number];
   dirs: Record<SheetDir, { walk: Sheet; idle: Sheet; start: number }>;
 }
 
@@ -40,7 +42,8 @@ const AMY_DIRS: CharDef["dirs"] = {
 export const CHARS: Record<CharId, CharDef> = {
   amy: { name: "에이미", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/amy3d.glb", dirs: AMY_DIRS },
   mio: { name: "미오", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/mio3d.glb", dirs: AMY_DIRS },
-  sera: { name: "세라", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/sera3d.glb", dirs: AMY_DIRS },
+  // 세라: 얼굴 비워서 뽑은 모델 + 그려 넣은 눈 · 눈썹 → 눈썹도 앞머리 위로 비침
+  sera: { name: "세라", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/sera3d.glb", eyeBand: [0.37, 0.7], dirs: AMY_DIRS },
 };
 
 /** 방향 0~7 → 시트 · 반전 */
