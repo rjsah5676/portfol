@@ -854,8 +854,16 @@ export default function Stage({
       beeps.push(o);
     }
 
+    // 출력 지연: 판 도중에 이어폰을 바꾸면(유선 → 블루투스 등) 브라우저가 알려 주는 값이 크게 바뀜 → 그 값으로 시계를 고침.
+    // 같은 기기에서도 값이 몇 ms씩 흔들리므로 30ms 넘게 바뀔 때만 (판정 기준 = 손 지연 몫은 그대로)
+    let outLat = outputLatency ?? 0;
+    const latencyNow = () => {
+      const v = (ctx as AudioContext & { outputLatency?: number }).outputLatency;
+      if (v !== undefined && Math.abs(v - outLat) > 0.03) outLat = v;
+      return outLat;
+    };
     const now = () =>
-      ctx.currentTime - startAt - (outputLatency ?? 0) - (ctx.baseLatency ?? 0) - offsetSec();
+      ctx.currentTime - startAt - latencyNow() - (ctx.baseLatency ?? 0) - offsetSec();
 
     // 화면 효과용 상태
     let lastJudge: { judge: Judge; at: number; diff?: number; tick?: boolean } | null = null;
