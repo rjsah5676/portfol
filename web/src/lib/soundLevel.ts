@@ -35,6 +35,7 @@ export const LEVEL = {
   suspect: { sfx: lv(-8), bgm: lv(-4) },
   /** 오늘의 사건 파일 — 용의자와 같은 결 */
   casefile: { sfx: lv(-8), bgm: lv(-4) },
+  pixelmerge: { sfx: lv(-8), bgm: lv(-6) },
   /** 격투 효과음 (배경음악은 master) */
   fight: { sfx: lv(-7) },
   /** 지뢰찾기 합성음 (lib/sfx.ts 의 깃발 · 칸 열기 · 폭발) */

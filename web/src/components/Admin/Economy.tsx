@@ -38,6 +38,7 @@ const REASON: Record<string, string> = {
   mail: "우편",
   suspect: "오늘의 용의자",
   casefile: "오늘의 사건 파일",
+  pixelmerge: "픽셀 머지",
   defense: "디펜스",
 };
 const reasonName = (r: string) => REASON[r] ?? r;

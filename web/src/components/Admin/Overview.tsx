@@ -24,6 +24,8 @@ export const BOARD_LABEL: Record<string, string> = {
   suspect: "오늘의 용의자",
   casefile_rankings: "오늘의 사건 파일",
   casefile: "오늘의 사건 파일",
+  pixelmerge_rankings: "픽셀 머지",
+  pixelmerge: "픽셀 머지",
   reaction: "반응속도",
   rhythm_rankings: "PIXEL Rhythm Up",
   chess_ai_rankings: "체스 AI",

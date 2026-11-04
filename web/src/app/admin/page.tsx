@@ -42,7 +42,7 @@ const SECTIONS = [
   { key: "guest", label: "방명록", desc: "방명록 메모 고치기 · 지우기" },
   { key: "rooms", label: "방", desc: "지금 열려 있는 방과 남아 있는 대국 방" },
   { key: "visitors", label: "방문자", desc: "누적 · 날짜별 방문자 수" },
-  { key: "retired", label: "내린 게임", desc: "메뉴에서 뺀 게임 6개 — 관리자만 들어가서 해 볼 수 있음" },
+  { key: "retired", label: "내린 게임", desc: "메뉴에서 뺀 게임 7개 — 관리자만 들어가서 해 볼 수 있음" },
   { key: "data", label: "전체 데이터", desc: "모든 컬렉션을 문서 단위로 보기 · 고치기 · 지우기" },
 ] as const;
 type Tab = (typeof SECTIONS)[number]["key"];

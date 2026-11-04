@@ -34,6 +34,12 @@ import {
   type Case as CasefileCase,
   type TierId as CasefileTier,
 } from "../../../web/src/lib/casefile/engine";
+import {
+  DAILY_GP as MERGE_GP,
+  DAY_RE as MERGE_DAY_RE,
+  LAST as MERGE_LAST,
+  plausible as mergePlausible,
+} from "../../../web/src/lib/pixelmerge/engine";
 import { h, ms, userOf } from "./util";
 import { clearSuspectHall, sortHall, suspectHall, type HallSort } from "./suspectHall";
 
@@ -276,6 +282,27 @@ function casefileCase(c: string): CasefileCase {
   }
   return k;
 }
+/**
+ * 픽셀 머지: board = YYYYMMDD(오늘의 판, 날짜 시드로 모두 같은 공 순서) | endless(무한 모드). 점수는 클수록 좋음, 사람마다 최고 하나.
+ * 물리는 서버에서 못 돌려서 공 수 · 시간 · 점수가 말이 되는지만 봄 (lib/pixelmerge/engine.ts plausible)
+ */
+const MERGE_BOARD_RE = /^(\d{8}|endless)$/;
+const mergeSchema = z.strictObject({
+  name,
+  score: int.min(0).max(5_000_000),
+  drops: int.min(1).max(20_000),
+  maxTier: int.min(0).max(MERGE_LAST),
+  time: z.number().min(1).max(172_800),
+});
+const mergeRecent = (b: string, now = Date.now()) =>
+  b === "endless" || (MERGE_DAY_RE.test(b) && b >= kstDay(now, -1) && b <= kstDay(now, 1));
+const mergeBoard = (b: string): Board => ({
+  sort: { score: -1 },
+  schema: mergeSchema,
+  minSec: (d) => d.time,
+  check: (d) => mergeRecent(b) && mergePlausible(d as { score: number; drops: number; time: number }),
+});
+
 const casefileAnswer = z.object({
   cell: z.array(z.array(z.number().int().min(-1).max(9)).max(9)).max(9),
   it: z.array(z.number().int().min(-1).max(9)).max(9),
@@ -456,6 +483,8 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
       return SUSPECT_CASE_RE.test(key.slice(8)) ? suspectBoard(key.slice(8)) : null;
     if (key.startsWith("casefile:"))
       return CASEFILE_CASE_RE.test(key.slice(9)) ? casefileBoard(key.slice(9)) : null;
+    if (key.startsWith("pixelmerge:"))
+      return MERGE_BOARD_RE.test(key.slice(11)) ? mergeBoard(key.slice(11)) : null;
     return Object.hasOwn(BOARDS, key) ? BOARDS[key] : null;
   };
 
@@ -838,6 +867,81 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
         avgWrong: agg ? Math.round(agg.wrong * 10) / 10 : null,
         me,
       };
+    }),
+  );
+
+  // 픽셀 머지 (board = YYYYMMDD | endless)
+  r.get(
+    "/pixelmerge/:board",
+    h(async (req) => {
+      const b = String(req.params.board);
+      if (!MERGE_BOARD_RE.test(b)) throw bad();
+      const docs = await db
+        .col("pixelmerge_rankings")
+        .find({ board: b })
+        .sort({ score: -1, createdAt: 1 })
+        .limit(limitOf(req.query.limit))
+        .toArray();
+      return rows(db, docs);
+    }),
+  );
+  r.post(
+    "/pixelmerge/:board",
+    h(async (req) => {
+      const b = String(req.params.board);
+      if (!MERGE_BOARD_RE.test(b)) throw bad();
+      const out = await submit(req, `pixelmerge:${b}`, "pixelmerge_rankings", { board: b });
+      // 오늘의 판을 그날 처음 올린 회원에게 GP (날짜마다 한 번 — 원장에 같은 날이 있으면 안 줌)
+      if (b !== "endless") {
+        const user = await userOf(auth, req);
+        const got = user && (await db.col("point_log").findOne({ uid: user.uid, reason: "pixelmerge", ref: b }));
+        if (user && !user.anonymous && !got) {
+          const ok = await points.grant(user.uid, MERGE_GP, "pixelmerge", b).then(
+            () => true,
+            () => false,
+          );
+          if (ok) return { ...out, gp: MERGE_GP };
+        }
+      }
+      return out;
+    }),
+  );
+  // 요약: 한 사람 · 중간 점수 · 트로피까지 간 사람 + 내 순위
+  r.get(
+    "/pixelmerge/:board/summary",
+    h(async (req) => {
+      const b = String(req.params.board);
+      if (!MERGE_BOARD_RE.test(b)) throw bad();
+      const col = db.col("pixelmerge_rankings");
+      const total = await col.countDocuments({ board: b });
+      const trophy = total ? await col.countDocuments({ board: b, maxTier: MERGE_LAST }) : 0;
+      const mid = total
+        ? await col
+            .find({ board: b })
+            .sort({ score: -1, createdAt: 1 })
+            .skip(Math.floor((total - 1) / 2))
+            .limit(1)
+            .project<{ score: number }>({ score: 1 })
+            .next()
+        : null;
+      const user = await userOf(auth, req).catch(() => null);
+      const mine = user ? await col.findOne({ board: b, uid: user.uid }) : null;
+      const me = mine
+        ? {
+            id: mine._id,
+            pos:
+              (await col.countDocuments({
+                board: b,
+                $or: [
+                  { score: { $gt: mine.score } },
+                  { score: mine.score, createdAt: { $lt: mine.createdAt } },
+                ],
+              })) + 1,
+            score: mine.score,
+            maxTier: mine.maxTier,
+          }
+        : null;
+      return { total, median: mid?.score ?? null, trophy, me };
     }),
   );
 

@@ -15,7 +15,7 @@ import defenseImg from "@/img/Page/info/defense/title.webp";
 import loveImg from "@/img/menu/love.jpg";
 import suspectImg from "@/img/menu/suspect.jpg";
 import stockImg from "@/img/menu/stock.jpg";
-import casefileImg from "@/img/menu/casefile.jpg";
+import pixelmergeImg from "@/img/menu/pixelmerge.jpg";
 import workDeliveryImg from "@/img/Page/info/work/work-delivery.webp";
 import workPaymentImg from "@/img/Page/info/work/work-payment.webp";
 import workSecurityImg from "@/img/Page/info/work/work-security.webp";
@@ -215,13 +215,13 @@ export const gameProjects: Project[] = [
   },
   {
     idx: 20,
-    name: "오늘의 사건 파일",
-    imgLink: casefileImg,
-    title: "살인 사건 추리 퍼즐 [오늘의 사건 파일]",
-    desc: "저택 도면과 시간대 동선표, 진술과 증거 문서로 알리바이를 깨는 하루 한 판 퍼즐",
-    tech: ["TypeScript", "React", "Web Worker"],
+    name: "픽셀 머지",
+    imgLink: pixelmergeImg,
+    title: "캐릭터 합치기 물리 퍼즐 [픽셀 머지]",
+    desc: "PIXEL FIGHT 캐릭터 공을 떨어뜨려 합치고, 합칠 때마다 캐릭터 기술이 터지는 머지 퍼즐 · 오늘의 판 랭킹",
+    tech: ["TypeScript", "React", "matter-js", "Canvas"],
     period: "2026.11 –",
-    playLink: "/games/casefile/",
+    playLink: "/games/pixelmerge/",
   },
 ];
 

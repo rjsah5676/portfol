@@ -71,6 +71,16 @@ const SOURCES: Source[] = [
     note: "case = 날짜_난이도. 날짜 · 난이도마다 첫 기록만 남음",
   },
   {
+    key: "pixelmerge",
+    label: "픽셀 머지",
+    group: "랭킹",
+    path: () => "pixelmerge_rankings",
+    columns: ["name", "board", "score", "maxTier", "drops", "time"],
+    sort: ["score", "desc"],
+    editable: true,
+    note: "board = 날짜(오늘의 판) 또는 endless(무한 모드). 사람마다 가장 높은 점수 하나",
+  },
+  {
     key: "reaction",
     label: "반응속도",
     group: "랭킹",

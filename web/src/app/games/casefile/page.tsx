@@ -20,6 +20,8 @@ export const metadata = pageMeta({
   title: TITLE,
   description: DESCRIPTION,
   path: PATH,
+  // 2026-11-04 메뉴에서 내림 — 관리자 「내린 게임」에서만 (layout.tsx AdminGate)
+  noindex: true,
   keywords: [
     "오늘의 사건 파일",
     "추리 퍼즐",

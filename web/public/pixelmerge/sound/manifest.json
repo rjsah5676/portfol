@@ -1,0 +1,16 @@
+{
+  "bgm-main": "bgm-main.m4a",
+  "bubble": "bubble.mp3",
+  "combo": "combo.mp3",
+  "drop": "drop.mp3",
+  "encore": "encore.mp3",
+  "fire": "fire.mp3",
+  "merge": "merge.mp3",
+  "over": "over.mp3",
+  "pause": "pause.mp3",
+  "quake": "quake.mp3",
+  "trophy": "trophy.mp3",
+  "whip": "whip.mp3",
+  "wind": "wind.mp3",
+  "zap": "zap.mp3"
+}

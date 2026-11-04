@@ -19,7 +19,9 @@ const pathOf = (board: string) =>
       ? `/api/rankings/suspect/${board.slice(8)}`
       : board.startsWith("casefile:")
         ? `/api/rankings/casefile/${board.slice(9)}`
-        : `/api/rankings/${board}`;
+        : board.startsWith("pixelmerge:")
+          ? `/api/rankings/pixelmerge/${board.slice(11)}`
+          : `/api/rankings/${board}`;
 
 /** 티켓을 받고, 받은 시각을 ago초 전으로 돌려 놓음 (게임을 그만큼 한 것처럼) */
 async function ticket(uid: string, board: string, ago = 0): Promise<string> {
@@ -668,5 +670,38 @@ describe("랭킹: 오늘의 사건 파일", () => {
       s.http(pathOf(board), { method: "POST", token, body: { ...row, ...answer, ticket: await ticket("cfgp", board, 600) } });
     expect((await memberPlay()).body).toMatchObject({ gp: 200 });
     expect((await memberPlay()).body.gp).toBeUndefined();
+  });
+});
+
+describe("랭킹: 픽셀 머지", () => {
+  const day = `pixelmerge:${kstDay()}`;
+  const row = { name: "머지", score: 1500, drops: 60, maxTier: 7, time: 120 };
+
+  it("가장 높은 점수만 · 말이 안 되는 점수 · 지난 날 거절", async () => {
+    expect(await status("pm1", day, row)).toBe(200);
+    expect(await status("pm1", day, { ...row, score: 900 })).toBe(200); // 더 낮으면 그대로
+    expect(await status("pm1", day, { ...row, score: 2100, drops: 80, time: 160 })).toBe(200);
+    const { body } = await s.http(pathOf(day));
+    expect(body).toHaveLength(1);
+    expect(body[0]).toMatchObject({ score: 2100, drops: 80 });
+    expect(await status("pm2", day, { ...row, score: 60 * 80 + 301 })).toBe(400); // 공 하나에 80점 넘게
+    expect(await status("pm2", day, { ...row, drops: 400 })).toBe(400); // 120초에 공 400개
+    expect(await status("pm2", day, row, 30)).toBe(400); // 120초 판을 30초 만에
+    expect(await status("pm2", "pixelmerge:20200101", row)).toBe(400);
+    expect(await status("pm2", "pixelmerge:endless", row)).toBe(200);
+  });
+
+  it("요약 · 내 순위, 회원은 오늘의 판을 그날 처음 올리면 GP 300 (무한 모드는 없음)", async () => {
+    expect(await status("pm3", day, { ...row, score: 700, maxTier: 10 })).toBe(200);
+    const sum = (await s.http(`${pathOf(day)}/summary`, { token: await s.token("pm3") })).body;
+    expect(sum).toMatchObject({ total: 2, trophy: 1, me: { pos: 2, score: 700, maxTier: 10 } });
+
+    const token = await s.token("pmgp", { email: "pmgp@example.com" });
+    expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "머지gp" } })).status).toBe(200);
+    const play = async (b: string) =>
+      s.http(pathOf(b), { method: "POST", token, body: { ...row, ticket: await ticket("pmgp", b, 600) } });
+    expect((await play("pixelmerge:endless")).body.gp).toBeUndefined();
+    expect((await play(day)).body).toMatchObject({ gp: 300 });
+    expect((await play(day)).body.gp).toBeUndefined();
   });
 });

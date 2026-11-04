@@ -8,7 +8,7 @@ import { LEVERAGES } from "@/lib/stock/coin";
 import loveImg from "@/img/menu/love.jpg";
 import suspectImg from "@/img/menu/suspect.jpg";
 import stockImg from "@/img/menu/stock.jpg";
-import casefileImg from "@/img/menu/casefile.jpg";
+import pixelmergeImg from "@/img/menu/pixelmerge.jpg";
 import workDeliveryImg from "@/img/Page/info/work/work-delivery.webp";
 import workPaymentImg from "@/img/Page/info/work/work-payment.webp";
 import workSecurityImg from "@/img/Page/info/work/work-security.webp";
@@ -256,55 +256,41 @@ export const MORE_DETAILS: Record<number, DetailConfig> = {
 
   20: {
     eyebrow: "game · gunmo.my",
-    name: "오늘의 사건 파일",
-    lead: "저택 도면과 시간대 동선표, 진술과 증거 문서로 알리바이를 깨는 하루 한 판 살인 사건 추리 퍼즐.",
+    name: "픽셀 머지",
+    lead: "PIXEL FIGHT 캐릭터 공을 병에 떨어뜨려 같은 캐릭터끼리 합치는 물리 머지 퍼즐. 합칠 때마다 그 캐릭터 기술이 터집니다.",
     period: "2026.11 –",
-    play: "/games/casefile/",
-    cover: casefileImg,
-    coverAlt: "오늘의 사건 파일",
+    play: "/games/pixelmerge/",
+    cover: pixelmergeImg,
+    coverAlt: "픽셀 머지 — 병에 쌓인 캐릭터 공",
     stats: [
-      { value: "4단계", label: "쉬움 · 보통 · 어려움 · 지옥" },
-      { value: "최대 5명", label: "용의자 (방 · 물건도 같은 수)" },
-      { value: "범인만", label: "거짓 진술 — 증거 문서는 모두 참" },
-      { value: "하루 1판", label: "사건별 랭킹" },
+      { value: "11단계", label: "도트 → 캐릭터 8명 → 트로피" },
+      { value: "8가지", label: "합칠 때 터지는 캐릭터 기술" },
+      { value: "매일", label: "모두 같은 순서의 오늘의 판" },
+      { value: "2개", label: "랭킹 (오늘의 판 · 무한 모드)" },
     ],
     overview: [
-      "시간대마다 누가 어느 방에 있었는지, 각자 무엇을 가졌는지를 동선표에 채워 범인을 밝혀냅니다. 한 시간대엔 방 하나에 한 명, 시간대가 바뀌면 제자리이거나 문으로 바로 이어진 방으로만 움직일 수 있습니다.",
-      "범인 한 명을 찍어 맞히는 게임이 아니라 동선표를 통째로 제출합니다. 처음에 잘 찍으면 빨리 깨지는 구조를 피하려고, 진술만으로 범인이 바로 나오는 판은 생성 단계에서 버립니다.",
+      "떨어뜨린 공이 같은 단계끼리 닿으면 다음 단계로 합쳐지고, 점선 위에 공이 2초 머물면 끝납니다. 머리 쓸 일 없이 계속 떨어뜨리게 만드는 게 목표였습니다.",
+      "단계마다 캐릭터 기술을 붙였습니다 — 이그나 화염구는 주변을 밀어내고, 제나 번개는 가까운 같은 공을 끌어와 연쇄를 만들고, 포르테 앙코르는 직전 기술을 한 번 더 씁니다. 1.1초 안에 이어 합치면 연쇄 점수가 붙습니다.",
     ],
     stack: [
-      { group: "화면", items: ["React · TypeScript", "도면 · 동선표 · 증거 문서", "효과음 7종 (ElevenLabs)"] },
-      { group: "엔진", items: ["사건 생성기 + 풀이기", "Web Worker 생성"] },
-      { group: "서버", items: ["Express · MongoDB — 사건별 랭킹 · GP"] },
+      { group: "화면", items: ["React · TypeScript · Canvas", "matter-js 물리", "GPT 도트 공 그림 · ElevenLabs 효과음 · Gemini 배경음악"] },
+      { group: "서버", items: ["Express · MongoDB — 날짜별 · 전체 랭킹, 오늘의 판 회원 GP"] },
     ],
-    flow: {
-      title: "사건이 만들어지는 과정",
-      steps: [
-        { title: "정답 세계", sub: "동선 · 물건 · 범인" },
-        { title: "진술", sub: "범인만 거짓" },
-        { title: "버리기", sub: "진술만으로 범인이 나오면", accent: true },
-        { title: "단서 더하고 빼기", sub: "해가 하나 될 때까지" },
-      ],
-      notes: [
-        "해가 가장 많이 줄어드는 단서부터 더하고, 해가 하나가 되면 빼도 되는 단서를 다시 뺌",
-        "범인을 알아도 표가 절반 넘게 정해지는 판도 버림 — 마지막까지 채울 게 남게",
-      ],
-    },
     features: [
       {
         title: "게임",
         items: [
-          "사건 배경마다 다른 도면 · 피해자 · 날씨 · 등장인물 관계, 키 · 손잡이 같은 현실적인 인물 단서",
-          "입문 사건 · 사건별 랭킹 · 회원 GP · 로딩 화면",
+          "오늘의 판: 날짜 시드로 모두 같은 공 순서, 하루 중 최고 점수로 랭킹 · 처음 끝낸 회원 GP",
+          "무한 모드: 매판 랜덤 · 전체 랭킹, 연속 기록 · 진화표 · 공유",
         ],
       },
     ],
     troubles: [
       {
-        title: "처음에 잘 찍으면 끝나는 퍼즐",
-        problem: "범인만 거짓말하는 구조는 범인을 먼저 맞혀 버리면 나머지를 안 풀어도 됐다.",
-        cause: "정답 제출이 범인 한 명이었고, 진술만 봐도 범인이 드러나는 판이 섞였다.",
-        solution: "동선표 전체를 제출하게 바꾸고, 생성 단계에서 진술만으로 범인이 정해지는 판과 범인을 알면 표가 절반 넘게 정해지는 판을 버렸다.",
+        title: "물리 게임의 랭킹 검증",
+        problem: "점수는 브라우저의 물리 계산에서 나와서 서버가 다시 돌려 볼 수 없었다.",
+        cause: "같은 시드라도 기기마다 프레임 · 부동소수 차이로 판이 조금씩 달라진다.",
+        solution: "판 시작 티켓으로 걸린 시간을 재고, 걸린 시간 대비 떨어뜨린 공 수 · 공 하나당 점수 상한으로 말이 안 되는 기록만 거른다.",
       },
     ],
   },

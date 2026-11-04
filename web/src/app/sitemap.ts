@@ -26,7 +26,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { path: "/games/rspeed/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/games/mine/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/games/suspect/", priority: 0.6, changeFrequency: "weekly" },
-    { path: "/games/casefile/", priority: 0.6, changeFrequency: "weekly" },
+    { path: "/games/pixelmerge/", priority: 0.6, changeFrequency: "weekly" },
     { path: "/games/board/", priority: 0.6, changeFrequency: "monthly" },
     { path: "/games/fight/", priority: 0.5, changeFrequency: "monthly" },
     { path: "/games/rhythm/", priority: 0.5, changeFrequency: "monthly" },

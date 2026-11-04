@@ -1001,6 +1001,10 @@ export function pointReason(r: Pick<PointLogRow, "reason" | "ref">): string {
       const tier = ({ easy: "쉬움", normal: "보통", hard: "어려움", hell: "지옥" } as Record<string, string>)[t] ?? t;
       return `오늘의 사건 파일 · ${+d.slice(4, 6)}/${+d.slice(6, 8)} ${tier}`;
     }
+    case "pixelmerge": {
+      const d = r.ref ?? "";
+      return `픽셀 머지 · ${+d.slice(4, 6)}/${+d.slice(6, 8)} 오늘의 판`;
+    }
     default:
       return r.reason;
   }
