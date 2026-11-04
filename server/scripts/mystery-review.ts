@@ -220,6 +220,13 @@ async function review(c: MysteryCase): Promise<{ ok: boolean; md: string }> {
 /** 서술문 → 질문문 (대충: 끝을 "~인가요?"로). 검수용이라 어색해도 됨 */
 function toQuestion(s: string): string {
   const t = s.replace(/\.$/, "").trim();
+  // "받는다" → "받나요", "올린다" → "올리나요" (ㄴ다 → 받침 ㄴ 떼고 나요)
+  if (t.endsWith("는다")) return `${t.slice(0, -2)}나요?`;
+  const m = /^(.*)(.)다$/.exec(t);
+  if (m) {
+    const code = m[2].charCodeAt(0) - 0xac00;
+    if (code >= 0 && code < 11172 && code % 28 === 4) return `${m[1]}${String.fromCharCode(0xac00 + code - 4)}나요?`;
+  }
   if (/(다|음|임)$/.test(t)) return t.replace(/(했다|였다|있었다|없었다|이었다|왔다|갔다|않았다|됐다|했었다|이다|다)$/, (m) => ({ 했다: "했나요", 였다: "였나요", 있었다: "있었나요", 없었다: "없었나요", 이었다: "이었나요", 왔다: "왔나요", 갔다: "갔나요", 않았다: "않았나요", 됐다: "됐나요", 했었다: "했나요", 이다: "인가요", 다: "나요" })[m] ?? "인가요") + "?";
   return `${t}인가요?`;
 }
