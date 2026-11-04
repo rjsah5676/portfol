@@ -1634,12 +1634,39 @@ export function codeSchool(ctx: LotCtx, b: Building): Out {
   roof(TW + 0.2, TD, 2.0, tm(tileTex("#d0644e", "#c2593f", "#8a3a2a", 3, 4)), 0, TH + 0.25, TZ, { alongZ: true, over: 0.45, cap: terraDark });
   const TF = TZ + TD / 2;
   clock(1.25, "#c8644a", 0, TOP + 1.65, TF + 0.04);
+  // 교기: 남색 바탕 · 금색 테 · 펼친 책 + 별 (학교 표시)
   flag(0, TH + 2.35, TZ, 2.2, grey, K.mine(new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: ctx.grad, side: THREE.DoubleSide, map: own(tex(64, 40, (g) => {
-    g.fillStyle = "#ffffff";
+    g.fillStyle = "#2f4f9e";
     g.fillRect(0, 0, 64, 40);
-    g.fillStyle = "#e0584a";
+    g.strokeStyle = "#f2c14e";
+    g.lineWidth = 2.5;
+    g.strokeRect(2.5, 2.5, 59, 35);
+    // 펼친 책
+    g.fillStyle = "#ffffff";
     g.beginPath();
-    g.arc(32, 20, 10, 0, Math.PI * 2);
+    g.moveTo(32, 30);
+    g.quadraticCurveTo(24, 25, 16, 27);
+    g.lineTo(16, 17);
+    g.quadraticCurveTo(24, 15, 32, 20);
+    g.quadraticCurveTo(40, 15, 48, 17);
+    g.lineTo(48, 27);
+    g.quadraticCurveTo(40, 25, 32, 30);
+    g.fill();
+    g.strokeStyle = "#2f4f9e";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(32, 20);
+    g.lineTo(32, 30);
+    g.stroke();
+    // 별
+    g.fillStyle = "#f2c14e";
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5,
+        r = i % 2 ? 2.2 : 5;
+      g.lineTo(32 + Math.cos(a) * r, 11 + Math.sin(a) * r);
+    }
+    g.closePath();
     g.fill();
   })) })), 1.3, 0.8);
   // 탑 2 · 3층 긴 창

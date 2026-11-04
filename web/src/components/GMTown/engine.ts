@@ -1,3 +1,4 @@
+import { CURSOR } from "./cursors";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneRig } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -725,7 +726,7 @@ export class TownEngine {
     this.shift = false;
   };
 
-  private pickTarget(px: number, py: number): Building | "board" | null {
+  private pickTarget(px: number, py: number, skip: Building | null = null): Building | "board" | null {
     if (!this.town) return null;
     this.ray.setFromCamera(
       new THREE.Vector2((px / this.cw) * 2 - 1, -(py / this.ch) * 2 + 1),
@@ -733,6 +734,7 @@ export class TownEngine {
     );
     let best: { d: number; b: Building } | null = null;
     for (const v of this.town.buildings) {
+      if (v.b === skip) continue;
       const hit = this.ray.intersectObject(v.pick, false)[0];
       if (hit && (!best || hit.distance < best.d)) best = { d: hit.distance, b: v.b };
     }
@@ -745,7 +747,9 @@ export class TownEngine {
   }
 
   private tap(px: number, py: number) {
-    const t = this.pickTarget(px, py);
+    // 내가 건물 뒤에 가려져 있으면 그 건물은 안 누름 (반투명 몸 근처를 눌러도 건물로 걸어가 버리지 않게)
+    const occ = this.me ? this.blocker(this.me.x, this.me.y) : null;
+    const t = this.pickTarget(px, py, occ?.b ?? null);
     if (this.overview) this.setOverview(false);
     if (t === "board") return this.walkTo(BOARD.x + 0.6, BOARD.y + 0.6, "board");
     if (t) return this.walkTo(doorFront(t).x, doorFront(t).y, t);
@@ -848,19 +852,19 @@ export class TownEngine {
     }
     if (e.pointerType !== "mouse") return;
     if (this.drag) {
-      if (Math.hypot(px - this.drag.x, py - this.drag.y) > 3) this.canvas.style.cursor = "grabbing";
+      if (Math.hypot(px - this.drag.x, py - this.drag.y) > 3) this.canvas.style.cursor = CURSOR.turn;
       this.camYaw = this.drag.yaw - (px - this.drag.x) * ROT_PER_PX;
       this.camPitch = this.clampPitch(this.drag.pitch + (py - this.drag.y) * ROT_PER_PX * 0.7);
       return;
     }
     const p = this.pickTarget(px, py);
     this.hover = p && p !== "board" ? p : null;
-    this.canvas.style.cursor = p ? "pointer" : "default";
+    this.canvas.style.cursor = p ? CURSOR.point : CURSOR.normal;
   };
   private onUp = (e: PointerEvent) => {
     if (this.drag && e.pointerType === "mouse") {
       this.drag = null;
-      this.canvas.style.cursor = "default";
+      this.canvas.style.cursor = CURSOR.normal;
       return;
     }
     if (this.joy && e.pointerId === this.joy.id) {

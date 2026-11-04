@@ -25,7 +25,6 @@ export const PPM = 4;
 let base: HTMLCanvasElement | null = null;
 
 const mix = (a: number[], b: number[], k: number) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
-const rgb = (c: number[]) => `rgb(${c[0]},${c[1]},${c[2]})`;
 
 /** 땅 · 언덕 · 강 · 길 · 건물 그린 지도 (처음 한 번 만들고 계속 씀) */
 export function townBase(): HTMLCanvasElement {
