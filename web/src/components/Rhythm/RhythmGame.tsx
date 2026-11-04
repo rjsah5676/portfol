@@ -286,6 +286,36 @@ export default function RhythmGame() {
     if (autoKey.current) saveAutoSync(autoKey.current, next);
     setAuto(next);
   }, []);
+  // 설정 창의 판정 싱크: 이 기기 프로필의 자동 싱크 값을 보여 줌 (자동 싱크를 끄면 거기서부터 직접 조절)
+  const [judgeView, setJudgeView] = useState<number | null>(null);
+  const judgeKey = useRef("");
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let alive = true;
+    audio()
+      .then((ctx) => {
+        if (!alive) return;
+        const key = autoSyncProfile(
+          window.matchMedia("(pointer: coarse)").matches,
+          (ctx as AudioContext & { outputLatency?: number }).outputLatency
+        );
+        judgeKey.current = key;
+        setJudgeView(loadAutoSync(key).judge);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [settingsOpen]);
+  const onJudge = useCallback((v: number) => {
+    const key = judgeKey.current;
+    if (!key) return;
+    // 직접 맞춘 값은 '맞춰진' 걸로 — 자동 싱크를 다시 켜도 처음부터 다시 맞추지 않고 이 값에서 판 끝마다 조금씩
+    const next = { ...loadAutoSync(key), judge: v, ready: true };
+    saveAutoSync(key, next);
+    setJudgeView(v);
+    if (autoKey.current === key) setAuto(next);
+  }, []);
   // 노트 두께는 그리기 모듈에 바로 반영 (플레이 화면·미리보기 공용)
   useEffect(() => setNoteSize(settings.noteSize), [settings.noteSize]);
   useEffect(() => setSfxVolume(settings.sfx), [settings.sfx]);
@@ -1527,7 +1557,10 @@ export default function RhythmGame() {
                 clearAutoSync();
                 migratedAuto.current = null;
                 setAuto({ judge: 0, offset: 0 });
+                setJudgeView(0);
               }}
+              judge={judgeView}
+              onJudge={onJudge}
             />
           )}
         </div>

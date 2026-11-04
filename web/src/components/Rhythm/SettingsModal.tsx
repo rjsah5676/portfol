@@ -139,6 +139,8 @@ export default function SettingsModal({
   owned = [],
   onShop,
   onCalibrate,
+  judge = null,
+  onJudge,
 }: {
   settings: Settings;
   setSettings: Dispatch<SetStateAction<Settings>>;
@@ -151,6 +153,9 @@ export default function SettingsModal({
   onCalibrate?: (on: boolean) => void;
   /** 자동 싱크(치는 동안 쌓인 값)를 지움 */
   onResetAuto?: () => void;
+  /** 판정 싱크(ms): 이 기기의 자동 싱크 값 (모르면 null) — 자동 싱크를 끄면 onJudge 로 직접 조절 */
+  judge?: number | null;
+  onJudge?: (v: number) => void;
 }) {
   const [tab, setTab] = useState<Tab>("play");
   const [autoCleared, setAutoCleared] = useState(false);
@@ -505,7 +510,7 @@ export default function SettingsModal({
           {tab === "sync" && (
             <>
               <SyncRow
-                label="싱크"
+                label="음악 싱크"
                 hint="노트가 소리보다 먼저 오면 +, 늦게 오면 −"
                 value={settings.sync}
                 disabled={false}
@@ -561,6 +566,19 @@ export default function SettingsModal({
                   ))}
                 </div>
               </Row>
+              {judge !== null && onJudge && (
+                <SyncRow
+                  label="판정 싱크"
+                  hint={
+                    settings.autoSync
+                      ? "자동 싱크가 맞춘 값 — 끄면 여기서부터 직접 조절"
+                      : "누르는 타이밍 기준 — 늦게 누르는 편이면 +, 일찍 누르면 −"
+                  }
+                  value={judge}
+                  disabled={settings.autoSync}
+                  onChange={onJudge}
+                />
+              )}
               {onResetAuto && (
                 <div className="flex items-center justify-between gap-[1cqw] border-t border-white/[0.06] py-[1cqw]">
                   <p className=" text-[1cqw] leading-relaxed text-white/40">
