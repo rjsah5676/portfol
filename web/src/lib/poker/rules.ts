@@ -147,7 +147,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
-export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula" | "jinwoo-ramen" | "jeongmin-detective" | "sera-nurse";
+export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula" | "jinwoo-ramen" | "jeongmin-detective" | "sera-nurse" | "amy-china";
 export interface Skin {
   id: SkinId;
   char: CharId;
@@ -218,6 +218,17 @@ export const SKINS: Skin[] = [
     price: skinPrice("sera-nurse"),
     blurb: "주사 한 대면 돼요. …안 아프게 해 줄게. 도망만 안 가면.",
     line: "어디 아파? …내가 계속 옆에 있어 줄게.",
+    ready: true,
+    live: true,
+    emotes: true,
+  },
+  {
+    id: "amy-china",
+    char: "amy",
+    name: "치파오 에이미",
+    price: skinPrice("amy-china"),
+    blurb: "VIP룸 입장? …딱히 너 기다린 건 아니거든.",
+    line: "흥, 치파오가 어때서! …어울리긴 해?",
     ready: true,
     live: true,
     emotes: true,
