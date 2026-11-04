@@ -36,6 +36,8 @@ export interface Config {
   geminiApiKey: string;
   /** 무료 LLM: Groq 키 (gpt-oss). 비우면 Groq 없이. 둘 다 비우면 LLM 쓰는 게임이 꺼짐 */
   groqApiKey: string;
+  /** 사건 검수 스크립트 전용 Groq 키 (다른 계정 — 플레이 한도를 안 건드리게). 비우면 플레이 키 사용 */
+  groqApiKeyReview: string;
 }
 
 const list = (v: string | undefined) =>
@@ -81,5 +83,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     drainMs: env.DRAIN_MS?.trim() && Number.isFinite(Number(env.DRAIN_MS)) ? Math.max(0, Number(env.DRAIN_MS)) : mode === "production" ? 60_000 : 2_000,
     geminiApiKey: mode === "test" ? "" : env.GEMINI_API_KEY?.trim() ?? "",
     groqApiKey: mode === "test" ? "" : env.GROQ_API_KEY?.trim() ?? "",
+    groqApiKeyReview: mode === "test" ? "" : env.GROQ_API_KEY_REVIEW?.trim() ?? "",
   };
 }

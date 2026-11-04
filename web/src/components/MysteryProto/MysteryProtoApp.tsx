@@ -24,6 +24,8 @@ interface PublicCase {
   submitLimit: number;
   clueCount: number;
   rubricCount: number;
+  bonusCount: number;
+  credit?: string;
 }
 
 interface View {
@@ -33,7 +35,7 @@ interface View {
   used: number;
   clues: { id: string; body: string }[];
   nextClueAt: number | null;
-  submissions: { passed: number; total: number; failed: { label: string; status: FailStatus }[]; same: boolean }[];
+  submissions: { passed: number; total: number; failed: { label: string; status: FailStatus }[]; bonus: string[]; bonusTotal: number; same: boolean }[];
   status: "playing" | "solved" | "gave_up";
   truth: string | null;
   stats: { questions: number; submissions: number; ms: number };
@@ -477,7 +479,7 @@ export default function MysteryProtoApp() {
 
       {/* 정답 제출 */}
       <Sheet open={sheet === "submit"} onClose={() => setSheet(null)} title={`SUBMIT · 남은 제출 ${submitsLeft}회`}>
-        <p className="text-sm text-white/60">알아낸 전말을 자유롭게 적어 주세요. 핵심 {c.rubricCount}가지를 모두 맞히면 해결이에요.</p>
+        <p className="text-sm text-white/60">알아낸 전말을 자유롭게 적어 주세요. 핵심 {c.rubricCount}가지를 모두 맞히면 해결이에요.{c.bonusCount > 0 ? ` 세부 사항 ${c.bonusCount}가지는 보너스예요.` : ""}</p>
         <textarea
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
@@ -502,8 +504,16 @@ export default function MysteryProtoApp() {
               <span className={`${mono} text-[10px] text-white/40`}>최근 채점 · {view.submissions.length}번째 제출</span>
               <span className="text-sm">
                 인정 <b className={last.passed === last.total ? "text-emerald-300" : "text-[#E9C98B]"}>{last.passed}</b>/{last.total}
+                {last.bonusTotal > 0 && (
+                  <span className="ml-2 text-xs text-white/45">
+                    보너스 {last.bonus.length}/{last.bonusTotal}
+                  </span>
+                )}
               </span>
             </div>
+            {last.bonus.length > 0 && (
+              <p className="mt-2 text-xs text-white/50">세부 사항 인정: {last.bonus.join(" · ")}</p>
+            )}
             {last.failed.length > 0 && (
               <ul className="mt-2 space-y-1">
                 {last.failed.map((f, i) => (
@@ -518,7 +528,7 @@ export default function MysteryProtoApp() {
         )}
         {view.submissions.length > 1 && (
           <p className="mt-2 text-[11px] text-white/35">
-            지난 제출: {view.submissions.slice(0, -1).map((s) => `${s.passed}/${s.total}`).join(" → ")}
+            지난 제출: {view.submissions.slice(0, -1).map((s) => `${s.passed}/${s.total}${s.bonusTotal > 0 ? `(+${s.bonus.length})` : ""}`).join(" → ")}
           </p>
         )}
       </Sheet>
@@ -532,6 +542,7 @@ export default function MysteryProtoApp() {
           <span>단서 {view.clues.length}</span>
         </div>
         <p className="mt-3 text-sm leading-relaxed whitespace-pre-line text-white/85">{view.truth}</p>
+        {c.credit && <p className={`${mono} mt-3 text-[11px] text-white/35`}>{c.credit}</p>}
         <button onClick={leave} className="mt-5 w-full rounded-lg border border-white/10 bg-white/5 py-2.5 text-sm hover:bg-white/10">
           다른 사건 하기
         </button>
