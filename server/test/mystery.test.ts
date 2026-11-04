@@ -52,7 +52,7 @@ describe("예/아니오 추리 — 판 진행 (가짜 AI)", () => {
       return JSON.stringify({ items: boxes.rubric.map((r, i) => ({ id: r.id, status: all || i === 0 ? "passed" : "missing" })) });
     }
     const q = req.user.split("<question>")[1] ?? "";
-    if (q.includes("누가")) return '{"verdict":"INVALID"}';
+    if (q.includes("왜")) return '{"verdict":"INVALID"}';
     if (q.includes("그리고")) return '{"verdict":"SPLIT"}';
     return '{"verdict":"YES","facts":["f01"],"beliefs":[]}';
   };
@@ -74,7 +74,7 @@ describe("예/아니오 추리 — 판 진행 (가짜 AI)", () => {
     expect(b.verdict).toBe("YES"); // 같은 핵심 사실은 두 번째부터 도장 없음
     expect(calls.length).toBe(before); // 캐시
 
-    expect((await g.ask(v0.id, "누가 신고했어?")).view.used).toBe(2); // INVALID 는 차감 안 함
+    expect((await g.ask(v0.id, "왜 신고했어?")).view.used).toBe(2); // INVALID 는 차감 안 함
     expect((await g.ask(v0.id, "할머니고 그리고 범인이 있어?")).verdict).toBe("SPLIT");
 
     let v = b.view;
