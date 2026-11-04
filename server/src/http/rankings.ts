@@ -5,7 +5,7 @@ import {
   janggiScore,
   omokScore,
 } from "../../../web/src/lib/aiScore";
-import { TOTAL_SEC as MELON_SEC } from "../../../web/src/lib/melon/logic";
+import { TOTAL_SEC as MELON_SEC, DAY_RE as MELON_DAY_RE, kstDay as melonDay } from "../../../web/src/lib/melon/logic";
 import type { Captcha } from "../captcha";
 import type { Deps } from "../deps";
 import { AppError, bad, notFound, unauthenticated } from "../errors";
@@ -53,6 +53,7 @@ import { clearSuspectHall, sortHall, suspectHall, type HallSort } from "./suspec
  *   GET  /api/rankings/rhythm-bp?limit=10          회원 BP 랭킹 (곡별 최고 BP 상위 20곡 합)
  *   GET  /api/rankings/suspect/:case/summary       용의자 사건 요약 (푼 사람 · 완벽 · 중간 기록 · 내 순위)
  *   GET  /api/rankings/suspect-hall?tier&sort      용의자 누적 랭킹 (푼 사건 수 · 1위 횟수)
+ *   GET  /api/rankings/melon/:board[/summary]      멜론게임 데일리(YYYYMMDD) · 통합(all) 순위 / 요약
  *   POST /api/rankings/tickets  { board }           게임을 시작할 때: 1회용 티켓 발급 (로그인 필요)
  *   POST /api/rankings/:board   { …기록, ticket }   기록 등록 (로그인 필요)
  *   POST /api/rankings/rhythm/:chart
@@ -136,6 +137,8 @@ interface Board {
   split?: { field: string; of: (d: Data) => string; valid: (v: string) => boolean };
   /** 첫 기록만 남김 (오늘의 용의자: 다시 풀면 답을 알고 푸는 거라) */
   firstOnly?: boolean;
+  /** 이 컬렉션에 날짜(day, 한국 시간)마다 사람당 최고 기록을 하나 더 남김 (데일리 랭킹) */
+  daily?: string;
 }
 
 /** AI 대국: 상대 단계 */
@@ -145,11 +148,12 @@ const aiSec = (d: Data) => d.seconds;
 
 export const BOARDS: Record<string, Board> = {
   // 멜론게임 (지운 멜론 수, 판 전체 21x12=252개)
-  // 한 판은 정해진 시간(약 2분)이 다 지나야 끝남
+  // 한 판은 정해진 시간(약 2분)이 다 지나야 끝남. 이 컬렉션이 통합(역대) 순위, melon_daily 가 데일리
   score: {
     sort: { score: -1 },
     schema: z.strictObject({ name, score: int.min(0).max(252) }),
     minSec: () => MELON_SEC,
+    daily: "melon_daily",
   },
   // 지뢰찾기 (클리어 시간, 초)
   minesweeper_rankings: {
@@ -538,14 +542,15 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
 
     if (board.split) scope = { ...scope, [board.split.field]: board.split.of(data) };
     const [field, dir] = Object.entries(board.sort)[0];
-    return mutex.run(`${col}:${JSON.stringify(scope)}:${user.uid}`, async () => {
-      const mine = await db.col(col).findOne({ ...scope, uid: user.uid });
-      if (mine && board.firstOnly) return { id: mine._id, kept: true };
+    /** c 컬렉션의 sc 범위에서 그 사람의 기록 하나만 (더 좋을 때만 바꿈) */
+    const keep = async (c: string, sc: Record<string, string>) => {
+      const mine = await db.col(c).findOne({ ...sc, uid: user.uid });
+      if (mine && board.firstOnly) return { id: mine._id, kept: true as const };
       if (!mine) {
         const _id = newId();
-        await db.col(col).insertOne({
+        await db.col(c).insertOne({
           _id,
-          ...scope,
+          ...sc,
           ...data,
           ...owner,
           createdAt: new Date(),
@@ -555,16 +560,30 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
       // 이미 올린 기록보다 좋을 때만 바꿈 (dir -1 = 클수록 좋음, 1 = 작을수록 좋음)
       const better =
         dir === -1 ? data[field] > mine[field] : data[field] < mine[field];
-      if (!better) return { id: mine._id, kept: true };
+      if (!better) return { id: mine._id, kept: true as const };
       await db
-        .col(col)
+        .col(c)
         .replaceOne(
           { _id: mine._id },
-          { ...scope, ...data, ...owner, createdAt: new Date() },
+          { ...sc, ...data, ...owner, createdAt: new Date() },
         );
       return { id: mine._id };
+    };
+    return mutex.run(`${col}:${JSON.stringify(scope)}:${user.uid}`, async () => {
+      const out = await keep(col, scope);
+      // 데일리: 통합 기록은 못 넘어도 오늘 최고면 오늘 순위에 남김
+      if (board.daily) await keep(board.daily, { day: melonDay(now) });
+      return out;
     });
   }
+
+  /** 멜론게임 순위 범위: YYYYMMDD = 그날(데일리), all = 통합 */
+  const melonScope = (b: string) =>
+    b === "all"
+      ? { col: "score", q: {} }
+      : MELON_DAY_RE.test(b)
+        ? { col: "melon_daily", q: { day: b } }
+        : null;
 
   r.post(
     "/tickets",
@@ -865,6 +884,69 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
         clean: agg?.clean ?? 0,
         median: mid?.score ?? null,
         avgWrong: agg ? Math.round(agg.wrong * 10) / 10 : null,
+        me,
+      };
+    }),
+  );
+
+  // 멜론게임 순위 (board = YYYYMMDD 데일리 | all 통합). 등록은 POST /score 하나로 둘 다 (BOARDS.score.daily)
+  r.get(
+    "/melon/:board",
+    h(async (req) => {
+      const m = melonScope(String(req.params.board));
+      if (!m) throw bad();
+      const docs = await db
+        .col(m.col)
+        .find(m.q)
+        .sort({ score: -1, createdAt: 1 })
+        .limit(limitOf(req.query.limit))
+        .toArray();
+      return rows(db, docs);
+    }),
+  );
+  // 요약: 한 사람 · 중간 점수 · 평균 점수 + 내 순위
+  r.get(
+    "/melon/:board/summary",
+    h(async (req) => {
+      const m = melonScope(String(req.params.board));
+      if (!m) throw bad();
+      const col = db.col(m.col);
+      const [agg] = await col
+        .aggregate<{ n: number; avg: number }>([
+          { $match: m.q },
+          { $group: { _id: null, n: { $sum: 1 }, avg: { $avg: "$score" } } },
+        ])
+        .toArray();
+      const total = agg?.n ?? 0;
+      const mid = total
+        ? await col
+            .find(m.q)
+            .sort({ score: -1, createdAt: 1 })
+            .skip(Math.floor((total - 1) / 2))
+            .limit(1)
+            .project<{ score: number }>({ score: 1 })
+            .next()
+        : null;
+      const user = await userOf(auth, req).catch(() => null);
+      const mine = user ? await col.findOne({ ...m.q, uid: user.uid }) : null;
+      const me = mine
+        ? {
+            id: mine._id,
+            pos:
+              (await col.countDocuments({
+                ...m.q,
+                $or: [
+                  { score: { $gt: mine.score } },
+                  { score: mine.score, createdAt: { $lt: mine.createdAt } },
+                ],
+              })) + 1,
+            score: mine.score,
+          }
+        : null;
+      return {
+        total,
+        median: mid?.score ?? null,
+        avg: agg ? Math.round(agg.avg * 10) / 10 : null,
         me,
       };
     }),

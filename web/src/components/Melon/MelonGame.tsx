@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import tm1 from "@/img/melongame/tm1.png";
 import tm2 from "@/img/melongame/tm2.png";
 import tm3 from "@/img/melongame/tm3.png";
@@ -19,17 +19,11 @@ import "@/css/Page/melon.css";
 import GameHeader from "@/components/GameHeader";
 import { MELON_GUIDE } from "@/data/gameGuides";
 import { lockScroll } from "@/lib/scrollLock";
-import {
-  getTopMelonScores,
-  addMelonScore,
-  toMelonScore,
-  type MelonScore,
-  type MelonScoreRow,
-} from "@/firestore/melonGame";
+import { addMelonScore, toMelonScore, type MelonScoreRow } from "@/firestore/melonGame";
 import { useInitial } from "@/lib/api/InitialData";
 import { beginRun } from "@/lib/api/rankRun";
-import RankList from "@/components/RankList";
 import { useAutoRank } from "@/lib/useAutoRank";
+import { useMelonRank } from "./MelonRank";
 import { LEVEL } from "@/lib/soundLevel";
 import {
   CELL,
@@ -125,17 +119,16 @@ export default function MelonGame() {
     rotRef.current ? [y - PAD, x - PAD] : [x - PAD, y - PAD];
   /** 크게 보기: 사이트 헤더·메뉴를 가리고 판을 화면 가득 (가능하면 전체화면 + 세로 고정 → 판을 돌린 세로 모양으로 길게) */
   const [big, setBig] = useState(false);
-  const [rankOpen, setRankOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("menu");
   const [score, setScore] = useState(0);
   const [timeLeft, setTimeLeft] = useState(TIME_START);
   const [ready, setReady] = useState(false);
   const [vol, setVol] = useState<Volume>(DEFAULT_VOL);
   const [volOpen, setVolOpen] = useState(false);
-  // 서버가 미리 읽어둔 랭킹으로 시작 (games/melongame/layout.tsx). 없으면 아래에서 읽어옴
-  const initialRanks = useInitial<MelonScoreRow[]>("rankings");
-  const [ranks, setRanks] = useState<MelonScore[] | null>(() =>
-    initialRanks ? initialRanks.map(toMelonScore) : null
+  // 랭킹 (데일리 · 통합). 서버가 미리 읽어 둔 오늘 데일리로 시작 (games/melongame/layout.tsx)
+  const initialDaily = useInitial<{ day: string; rows?: MelonScoreRow[] }>("daily");
+  const rank = useMelonRank(
+    initialDaily?.rows ? { day: initialDaily.day, rows: initialDaily.rows.map(toMelonScore) } : null
   );
   const [name, setName] = useState("");
   const [submitState, setSubmitState] = useState<"idle" | "sending" | "done" | "error">("idle");
@@ -168,12 +161,6 @@ export default function MelonGame() {
     end: HTMLAudioElement;
   } | null>(null);
 
-  const loadRanks = useCallback(() => {
-    getTopMelonScores(10)
-      .then(setRanks)
-      .catch(() => setRanks([]));
-  }, []);
-
   // ── 이미지·소리 준비 ──
   useEffect(() => {
     let left = MELON_SRC.length + 1;
@@ -204,7 +191,6 @@ export default function MelonGame() {
 
     boardRef.current = createBoard(); // 메뉴 뒤에 깔리는 장식용 판
     layerDirty.current = true;
-    loadRanks();
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -215,7 +201,7 @@ export default function MelonGame() {
           el.currentTime = 0;
         });
     };
-  }, [loadRanks]);
+  }, []);
 
   // 볼륨 반영·저장
   useEffect(() => {
@@ -567,9 +553,10 @@ export default function MelonGame() {
     drag.current = null;
   };
 
-  // ── 랭킹 ──
-  const tenth = ranks && ranks.length >= 10 ? ranks[9].score : 0;
-  const qualifies = phase === "over" && ranks !== null && score > tenth;
+  // ── 랭킹 ── 비회원은 오늘 데일리 10위 안이면 이름을 받음 (올리면 통합에도 같이 반영)
+  const daily = rank.todayRows;
+  const tenth = daily && daily.length >= 10 ? daily[9].score : 0;
+  const qualifies = phase === "over" && !!daily && score > tenth;
   const submit = async () => {
     const n = name.trim();
     if (n.length < 1 || n.length > 9 || submitState === "sending") return;
@@ -577,14 +564,14 @@ export default function MelonGame() {
     try {
       await addMelonScore(n, score);
       setSubmitState("done");
-      loadRanks();
+      rank.reload();
     } catch {
       setSubmitState("error");
     }
   };
 
   // 회원은 이름을 묻지 않고 끝나면 바로 등록 (서버가 내 최고 기록만 남김)
-  const auto = useAutoRank(phase === "over", (nick) => addMelonScore(nick, score).then(loadRanks));
+  const auto = useAutoRank(phase === "over", (nick) => addMelonScore(nick, score).then(rank.reload));
 
   const secLeft = Math.max(0, (timeLeft / TIME_STEP) * (TICK_MS / 1000));
   const ratio = Math.max(0, Math.min(1, timeLeft / TIME_START));
@@ -614,34 +601,7 @@ export default function MelonGame() {
           desc="합이 10·20이 되게 묶어 터뜨리는 2분 타임어택"
           tags={["랭킹모드", "숫자 퍼즐", "웹 퍼즐게임"]}
           guide={MELON_GUIDE}
-          rank={{
-            top: ranks
-              ?.slice(0, 3)
-              .map((r) => ({
-                name: r.name,
-                member: r.member,
-                avatar: r.avatar,
-                value: `${r.score}점`,
-              })),
-            open: rankOpen,
-            onOpenChange: setRankOpen,
-            render: () =>
-              ranks === null ? (
-                <p className="text-sm text-white/35">불러오는 중…</p>
-              ) : (
-                <RankList
-                  menu={false}
-                  skip={3}
-                  rows={ranks.map((r) => ({
-                    name: r.name,
-                    member: r.member,
-                    avatar: r.avatar,
-                    value: `${r.score}점`,
-                    date: r.createdAt,
-                  }))}
-                />
-              ),
-          }}
+          rank={rank.spec}
         />
       </div>
       <div
@@ -802,7 +762,7 @@ export default function MelonGame() {
                     }}
                   >
                     <p className="text-sm text-[#6B8F4E] sm:text-base">
-                      🎉 10위 안에 들었어요! 이름을 남겨주세요
+                      🎉 오늘 10위 안에 들었어요! 이름을 남겨주세요
                     </p>
                     <div className="flex gap-2">
                       <input
@@ -833,7 +793,7 @@ export default function MelonGame() {
                   <button type="button" onClick={start} className={greenBtn}>
                     다시하기
                   </button>
-                  <button type="button" onClick={() => setRankOpen(true)} className={plainBtn}>
+                  <button type="button" onClick={() => rank.openRank()} className={plainBtn}>
                     🏆 랭킹
                   </button>
                   <button type="button" onClick={quit} className={plainBtn}>

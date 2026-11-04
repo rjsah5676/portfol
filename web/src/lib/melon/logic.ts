@@ -57,3 +57,21 @@ export function cellsIn(board: Board, g: Range): { c: number; r: number; v: numb
 }
 
 export const isClear = (sum: number) => sum === 10 || sum === 20;
+
+// ── 데일리 랭킹 날짜 (한국 시간 기준, 서버 · 화면이 같이 씀) ──
+
+/** 데일리 랭킹을 시작한 날 (이전 날짜는 고를 수 없음) */
+export const FIRST_DAY = "20261104";
+export const DAY_RE = /^\d{8}$/;
+/** 한국 시간 날짜 YYYYMMDD (offset = 며칠 뒤) */
+export function kstDay(t = Date.now(), offset = 0): string {
+  return new Date(t + 9 * 3600e3 + offset * 864e5).toISOString().slice(0, 10).replace(/-/g, "");
+}
+export function shiftDay(d: string, n: number): string {
+  const t = new Date(Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8)) + n * 864e5);
+  return `${t.getUTCFullYear()}${String(t.getUTCMonth() + 1).padStart(2, "0")}${String(t.getUTCDate()).padStart(2, "0")}`;
+}
+export const dayLabel = (d: string) => `${+d.slice(4, 6)}월 ${+d.slice(6, 8)}일`;
+const WEEK = "일월화수목금토";
+export const weekdayOf = (d: string) =>
+  WEEK[new Date(Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8))).getUTCDay()];

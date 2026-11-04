@@ -19,6 +19,7 @@ const heading = "mb-4 font-mono text-xs text-[#8B84FF]";
 /** 랭킹 컬렉션 → 화면 이름 */
 export const BOARD_LABEL: Record<string, string> = {
   score: "멜론 게임",
+  melon_daily: "멜론 게임 데일리",
   minesweeper_rankings: "지뢰찾기",
   suspect_rankings: "오늘의 용의자",
   suspect: "오늘의 용의자",

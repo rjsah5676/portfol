@@ -27,6 +27,8 @@ export const RANK_COLLECTIONS = [
   // 오늘의 사건 파일: 날짜_난이도(case)마다 사람당 첫 기록 하나
   "casefile_rankings",
   "pixelmerge_rankings",
+  // 멜론게임 데일리: 날짜(day)마다 사람당 최고 기록 하나 (통합은 score)
+  "melon_daily",
 ] as const;
 export const ROOM_COLLECTIONS = ["chess_rooms", "janggi_rooms", "omok_rooms"] as const;
 
@@ -112,6 +114,8 @@ async function ensureIndexes({ db }: Database) {
   idx("casefile_rankings", { case: 1, uid: 1 });
   idx("pixelmerge_rankings", { board: 1, score: -1 });
   idx("pixelmerge_rankings", { board: 1, uid: 1 });
+  idx("melon_daily", { day: 1, score: -1 });
+  idx("melon_daily", { day: 1, uid: 1 });
   // 랭킹 티켓: 사람별 최근 발급 수 확인, 8일 지나면 자동 삭제(유효 기간 7일)
   idx("rank_tickets", { uid: 1, createdAt: -1 });
   idx("rank_tickets", { createdAt: 1 }, { expireAfterSeconds: 8 * 24 * 60 * 60 });

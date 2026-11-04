@@ -97,6 +97,17 @@ const SOURCES: Source[] = [
     columns: ["name", "score"],
     sort: ["score", "desc"],
     editable: true,
+    note: "통합(역대) 순위. 사람마다 가장 높은 점수 하나",
+  },
+  {
+    key: "melon_daily",
+    label: "멜론게임 데일리",
+    group: "랭킹",
+    path: () => "melon_daily",
+    columns: ["name", "day", "score"],
+    sort: ["score", "desc"],
+    editable: true,
+    note: "day = 날짜(한국 시간). 날짜마다 사람당 가장 높은 점수 하나",
   },
   {
     key: "rhythm",

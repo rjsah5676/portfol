@@ -35,10 +35,25 @@ export const toMelonScore = (x: MelonScoreRow): MelonScore => ({
   createdAt: toDate(x.createdAt),
 });
 
-export async function getTopMelonScores(count = 10): Promise<MelonScore[]> {
-  const rows = await api<MelonScoreRow[]>(`${MELON_SCORES_PATH}?limit=${count}`);
+/** 순위 범위: YYYYMMDD = 그날(데일리), all = 통합 (server/src/http/rankings.ts /melon/:board) */
+export const melonRankPath = (b: string) => `/api/rankings/melon/${b}`;
+
+export async function getMelonRanking(b: string, limit = 50): Promise<MelonScore[]> {
+  const rows = await api<MelonScoreRow[]>(`${melonRankPath(b)}?limit=${limit}`);
   return rows.map(toMelonScore);
 }
+
+/** 한 범위 요약 — 내 기록(me)은 로그인(비회원 익명 포함)했을 때만 */
+export interface MelonSummary {
+  total: number;
+  median: number | null;
+  avg: number | null;
+  me: { id: string; pos: number; score: number } | null;
+}
+export const getMelonSummary = (b: string) =>
+  api<MelonSummary>(`${melonRankPath(b)}/summary`, { auth: true });
+
+/** 한 번 올리면 통합 · 오늘 데일리에 같이 반영됨 (각각 내 최고 기록만 남음) */
 
 export async function addMelonScore(name: string, score: number): Promise<void> {
   await submitRun(BOARD, MELON_SCORES_PATH, { name, score });
