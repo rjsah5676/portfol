@@ -198,7 +198,7 @@ export default function PixelMergeApp() {
         title="픽셀 머지"
         en="PIXEL MERGE"
         accent="#FFCF4A"
-        desc="같은 캐릭터끼리 합쳐서 트로피까지 — 오늘의 판 · 무한 모드 랭킹"
+        desc="같은 캐릭터끼리 합쳐서 황금 건모까지 — 오늘의 판 · 무한 모드 랭킹"
         tags={["머지 퍼즐", "물리 퍼즐", "데일리", "픽셀파이트"]}
         className="mx-auto w-full max-w-[520px]"
         rank={rankSpec}
@@ -533,7 +533,7 @@ function Over({
   const share = async () => {
     const text = [
       `🟡 픽셀 머지 ${run.mode === "daily" ? `오늘의 판 #${dayNo(run.day)}` : "무한 모드"}`,
-      `${fmt(r.score)}점 · 최고 ${TIERS[r.maxTier].name}${r.trophies ? ` · 트로피 ${r.trophies}개` : ""}`,
+      `${fmt(r.score)}점 · 최고 ${TIERS[r.maxTier].name}${r.trophies ? ` · 황금 건모 ${r.trophies}번` : ""}`,
       "https://gunmo.my/games/pixelmerge/",
     ].join("\n");
     try {
@@ -559,8 +559,8 @@ function Over({
           <dd>{r.drops}개</dd>
           {r.trophies > 0 && (
             <>
-              <dt>트로피</dt>
-              <dd>{r.trophies}개</dd>
+              <dt>황금 건모</dt>
+              <dd>{r.trophies}번</dd>
             </>
           )}
         </dl>

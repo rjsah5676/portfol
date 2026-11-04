@@ -130,7 +130,7 @@ export function usePixelMergeRank(ready: boolean, today: string) {
               ["한 사람", sum ? `${sum.total}명` : "–", ""],
               ["중간 점수", sum?.median != null ? fmt(sum.median) : "–", ""],
               [
-                "트로피 달성",
+                "황금 건모",
                 sum ? `${sum.trophy}명` : "–",
                 sum?.total ? `${pct(sum.trophy, sum.total)}%` : "",
               ],

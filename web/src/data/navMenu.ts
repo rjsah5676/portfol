@@ -138,7 +138,7 @@ export const NAV_GROUPS: NavGroup[] = [
         href: "/games/pixelmerge",
         image: imgPixelmerge,
         label: "픽셀 머지",
-        desc: "같은 캐릭터끼리 합쳐 트로피까지, 오늘의 판 · 무한 모드 랭킹",
+        desc: "같은 캐릭터끼리 합쳐 황금 건모까지, 오늘의 판 · 무한 모드 랭킹",
         icon: "px:pixelmerge",
         badge: "NEW",
       },

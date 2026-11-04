@@ -225,7 +225,7 @@ export class MergeGame {
         this.score += gain;
         this.trophies++;
         this.pop(x, y, `+${gain}`, "#ffcf4a", 26);
-        this.pop(W / 2, H * 0.34, "우승 트로피!", "#ffcf4a", 32);
+        this.pop(W / 2, H * 0.34, "황금 건모 강림!", "#ffcf4a", 32);
         this.hooks.sfx?.("trophy");
         this.confetti(x, y);
       } else {
