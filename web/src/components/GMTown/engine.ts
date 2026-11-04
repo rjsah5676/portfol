@@ -359,6 +359,8 @@ export class TownEngine {
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
     alphaMap: blobTex(),
+    // 발밑 동그란 그림자는 안 씀 (해 그림자만)
+    visible: false,
   });
   private ray = new THREE.Raycaster();
   private walk: Uint8Array;
