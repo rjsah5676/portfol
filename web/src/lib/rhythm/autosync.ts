@@ -155,11 +155,48 @@ try {
 } catch {}
 export type AutoSyncStore = Record<string, AutoSyncState>;
 
-/** 프로필 키: 입력 방식 × 출력 지연(10ms 단위, 모르면 na) */
+/** 출력 지연이 이 이상이면 블루투스 등 무선 출력으로 봄(초) — 유선·내장은 10~50ms, 블루투스는 150ms 넘음 */
+const WIRELESS_LATENCY = 0.1;
+
+/**
+ * 프로필 키: 입력 방식 × 출력 종류(wired · bt, 모르면 na).
+ * 예전엔 출력 지연을 10ms 단위로 나눴는데, 같은 스피커도 outputLatency 가 경계(45ms 등)에서 판마다 흔들려
+ * 프로필이 둘로 갈라졌음 → 곡을 시작할 때마다 다른 쪽 값을 불러와 첫 마디들 판정이 어긋남 (실제로 key:4 59ms · key:5 76ms)
+ */
 export function autoSyncProfile(touch: boolean, outputLatencySec: number | undefined) {
-  const ol = outputLatencySec === undefined ? "na" : String(Math.round(outputLatencySec * 100));
-  return `${touch ? "touch" : "key"}:${ol}`;
+  const out =
+    outputLatencySec === undefined ? "na" : outputLatencySec < WIRELESS_LATENCY ? "wired" : "bt";
+  return `${touch ? "touch" : "key"}:${out}`;
 }
+
+/** 예전 10ms 단위 프로필(key:4 · key:5 …)을 wired · bt 로 합침 (같은 쪽끼리 평균) — 한 번만, 숫자 키가 없으면 그대로 */
+function migrateLatencyBuckets() {
+  const all = JSON.parse(localStorage.getItem(AUTO_SYNC_KEY) ?? "null") as AutoSyncStore | null;
+  if (!all) return;
+  const groups = new Map<string, AutoSyncState[]>();
+  for (const [k, v] of Object.entries(all)) {
+    const m = /^(key|touch):(\d+)$/.exec(k);
+    if (!m) continue;
+    const to = autoSyncProfile(m[1] === "touch", Number(m[2]) / 100);
+    groups.set(to, [...(groups.get(to) ?? []), v]);
+    delete all[k];
+  }
+  if (!groups.size) return;
+  const avg = (xs: number[]) =>
+    Math.round(xs.reduce((a, b) => a + (Number(b) || 0), 0) / xs.length);
+  for (const [to, list] of groups) {
+    // 새 키에 이미 값이 있으면(다른 탭에서 먼저 옮김) 그것도 같이 평균
+    const withCur = all[to] ? [...list, all[to]] : list;
+    all[to] = {
+      judge: avg(withCur.map((s) => s.judge)),
+      offset: avg(withCur.map((s) => s.offset)),
+    };
+  }
+  localStorage.setItem(AUTO_SYNC_KEY, JSON.stringify(all));
+}
+try {
+  if (typeof window !== "undefined") migrateLatencyBuckets();
+} catch {}
 
 export function loadAutoSync(key: string): AutoSyncState {
   try {

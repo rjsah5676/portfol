@@ -24,6 +24,7 @@ export const PATCHES: Patch[] = [
       "REDLINE FEVER — 160 BPM 유로비트 (EASY 3 ~ ABYSS 20)",
       "Hairpin Phantom — 145 BPM 드리프트 펑크 (EASY 3 ~ ABYSS 19)",
       "둘 다 AI 자작곡(tunee.ai), REDLINE FEVER 는 2분 34초로 줄임",
+      "곡을 바꿔 칠 때 가끔 첫 부분 판정이 어긋나던 것 수정 (자동 싱크가 같은 스피커인데 두 벌로 갈라져 있었음)",
     ],
   },
   {
