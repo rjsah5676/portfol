@@ -564,8 +564,8 @@ export default function SettingsModal({
               {onResetAuto && (
                 <div className="flex items-center justify-between gap-[1cqw] border-t border-white/[0.06] py-[1cqw]">
                   <p className=" text-[1cqw] leading-relaxed text-white/40">
-                    이어폰을 바꿨거나 판정이 예전보다 어긋나는 느낌이면 자동 싱크를 처음부터 다시
-                    맞추게 하세요.
+                    모니터·키보드를 바꿨거나 판정이 예전보다 어긋나는 느낌이면 자동 싱크를 처음부터
+                    다시 맞추게 하세요.
                   </p>
                   <button
                     type="button"

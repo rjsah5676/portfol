@@ -11,11 +11,10 @@
  * 위 두 단계는 처음(프로필이 아직 안 맞춰졌을 때)만. 한 번 맞춰진 뒤엔 고정(hold):
  *  - 판 도중엔 판정 기준을 안 옮김 — 스트림에서 당겨 치는 버릇까지 따라가면 기준이 흔들리고 FAST/SLOW 가 의미 없어짐
  *  - 판이 끝날 때 그 판의 쏠림(스트림 말고 띄엄띄엄한 노트 기준)만큼 다음 판을 조금 옮김
- *  - 판 도중에 이어폰을 바꾸는 경우: 출력 지연을 아는 브라우저는 Stage 가 지연 변화를 보고 시계를 고침(판정 기준은 그대로).
- *    여기선 그 밖의 경우(사파리 등)만 — 못 쳐서 어긋난 것과 헷갈리지 않게 아주 좁게:
- *    띄엄띄엄한 노트 16개씩 두 번 연속, 평소 기준보다 100ms 넘게(GREAT 창 90ms 밖) 늦거나 빠르면서 흔들림(MAD) 30ms 안.
- *    기준이 이미 그 사람 평소 쏠림에 맞춰져 있어서, 거기서 100ms 넘게 고르게 어긋나는 건 실력이 아니라 기기 쪽
- *  - 판 끝 조정도 보통은 한 판에 15ms 까지. 판 전체가 60ms 넘게 고르게(MAD 25 안) 어긋났을 때만 한 번에
+ *  - 이어폰(소리 지연)은 신경 안 씀: 대부분 노트를 보고 치므로 판정 기준(손·입력·화면 지연)과 상관없고, 소리와 화면이
+ *    어긋나는 건 음악 싱크(수동 · 출력 지연) 몫
+ *  - 판 끝 조정은 보통 한 판에 15ms 까지. 판 전체가 60ms 넘게 고르게(MAD 25 안) 어긋났을 때만 한 번에
+ *    (모니터 · 키보드를 바꾼 경우 — 못 쳐서 밀린 판은 흔들림이 커서 안 걸림)
  * 자동 싱크를 끄면(설정) 저장된 값 그대로 고정 — 직접 맞추는 사람용.
  */
 export const AUTO_SYNC = {
@@ -41,13 +40,8 @@ export const AUTO_SYNC = {
   graceSec: 20,
   limit: 400,
   /**
-   * 고정 단계: 판 도중엔 안 옮김. 띄엄띄엄한 노트 every 개마다 중앙값이 breakMs 넘게 어긋나고 흔들림이 breakMad 안이면
-   * 기기가 바뀐 걸로 의심 — breakHits 번 연속이면 그 쏠림만큼 한 번에 옮김 (계속 따라가지는 않음)
-   */
-  hold: { every: 16, breakMs: 100, breakMad: 30, breakHits: 2 },
-  /**
    * 판 끝 조정: 그 판 쏠림 × gain (한 판에 stepMax 까지). 띄엄띄엄한 노트가 minSparse 개 안 되면 전체 minAll 개로.
-   * 판 전체가 bigMs 넘게 고르게(MAD bigMad 안) 어긋났으면 기기가 바뀐 걸로 보고 한 번에
+   * 판 전체가 bigMs 넘게 고르게(MAD bigMad 안) 어긋났으면 모니터 · 키보드가 바뀐 걸로 보고 한 번에
    */
   settle: { gain: 0.5, stepMax: 15, minMs: 3, minSparse: 24, minAll: 48, bigMs: 60, bigMad: 25 },
   /** 앞뒤 노트(다른 레인 포함) 간격이 이보다 좁으면 스트림 — 판 끝 조정에서 뺌(당겨 치는 버릇이 섞여서) */
@@ -106,7 +100,6 @@ export class AutoSyncTracker {
   /** hold: 이미 맞춰진 프로필 — 판 도중엔 안 옮기고 판 끝에 settleStep 만큼 */
   phase: AutoSyncPhase | "hold";
   private lockHits = 0;
-  private breakHits = 0;
   private seen = 0;
   /** 꺼져 있으면(설정) 기록만 하고 안 옮김 */
   readonly enabled: boolean;
@@ -135,30 +128,8 @@ export class AutoSyncTracker {
     this.taps.push(dSec);
     if (sparse) this.sparse.push(dSec);
     if (!this.enabled) return 0;
-    if (this.phase === "hold") {
-      // 스트림 노트는 당겨 치는 버릇이 섞여서 안 봄
-      if (!sparse) return 0;
-      const H = AUTO_SYNC.hold;
-      if (this.sparse.length - this.seen < H.every) return 0;
-      this.seen = this.sparse.length;
-      const { med, mad } = spreadOf(this.sparse.slice(-H.every));
-      if (mad > H.breakMad || Math.abs(med) <= H.breakMs) {
-        this.breakHits = 0;
-        return 0;
-      }
-      if (++this.breakHits < H.breakHits) return 0;
-      this.breakHits = 0;
-      // 기기가 바뀐 듯 → 그 쏠림만큼 한 번에 옮기고 다시 고정. 앞 기록은 옛 기기 것이라 버림(판 끝 조정에 안 섞이게)
-      const m = spreadOf(this.sparse.slice(-H.every * H.breakHits)).med;
-      const to = Math.max(-AUTO_SYNC.limit, Math.min(AUTO_SYNC.limit, this.judge + Math.round(m)));
-      const step = to - this.judge;
-      this.judge = to;
-      this.moved += step;
-      this.taps = [];
-      this.sparse = [];
-      this.seen = 0;
-      return step;
-    }
+    // 고정: 판 도중엔 안 옮김 (모아 두기만 — 판 끝에 settleStep)
+    if (this.phase === "hold") return 0;
     const cfg = AUTO_SYNC[this.phase];
     if (this.taps.length - this.seen < cfg.every) return 0;
     this.seen = this.taps.length;
