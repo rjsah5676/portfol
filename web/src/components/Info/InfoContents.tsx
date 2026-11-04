@@ -12,6 +12,8 @@ import OhsoriProject from "./OhsoriProject";
 import PixelFightProject from "./PixelFightProject";
 import SketchQuizProject from "./SketchQuizProject";
 import YorijoriProject from "./YorijoriProject";
+import DetailPage from "./DetailPage";
+import { MORE_DETAILS } from "./moreProjects";
 
 // 프로젝트 idx(data/projects.ts) → 상세 페이지 컴포넌트
 const PROJECT_PAGES: Record<number, ComponentType> = {
@@ -32,7 +34,10 @@ const PROJECT_PAGES: Record<number, ComponentType> = {
 
 function InfoContents({ idx }: { idx: number }) {
   const Page = PROJECT_PAGES[idx];
-  return Page ? <Page /> : null;
+  if (Page) return <Page />;
+  // 데이터로만 만든 상세 페이지 (게임 · 실무)
+  const more = MORE_DETAILS[idx];
+  return more ? <DetailPage c={more} /> : null;
 }
 
 export default InfoContents;

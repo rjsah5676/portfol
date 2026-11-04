@@ -12,6 +12,14 @@ import yoriJoriImg from "@/img/Page/info/YoriJori.png";
 import pokerImg from "@/img/Page/info/poker/title.webp";
 import sketchImg from "@/img/Page/info/sketch/title.webp";
 import defenseImg from "@/img/Page/info/defense/title.webp";
+import loveImg from "@/img/menu/love.jpg";
+import suspectImg from "@/img/menu/suspect.jpg";
+import stockImg from "@/img/menu/stock.jpg";
+import casefileImg from "@/img/menu/casefile.jpg";
+import workDeliveryImg from "@/img/Page/info/work/work-delivery.webp";
+import workPaymentImg from "@/img/Page/info/work/work-payment.webp";
+import workSecurityImg from "@/img/Page/info/work/work-security.webp";
+import workMsaImg from "@/img/Page/info/work/work-msa.webp";
 
 export interface Project {
   /** 상세 페이지 주소: /infoPage/<idx> */
@@ -175,10 +183,99 @@ export const gameProjects: Project[] = [
     period: "2026.10 –",
     playLink: "/games/defense/",
   },
+  {
+    idx: 17,
+    name: "올인 러브",
+    imgLink: loveImg,
+    title: "ANIME POKER 외전 미연시 [올인 러브]",
+    desc: "홀덤펍 딜러의 4주. 딜링 · 텔 읽기 · 각본 홀덤 미니게임, 히로인 셋 · 엔딩 수집 · 이벤트 CG",
+    tech: ["TypeScript", "React", "대본 DSL", "ElevenLabs"],
+    period: "2026.10 –",
+    playLink: "/games/love/",
+  },
+  {
+    idx: 18,
+    name: "오늘의 용의자",
+    imgLink: suspectImg,
+    title: "하루 한 판 추리 퍼즐 [오늘의 용의자]",
+    desc: "단서만으로 범인을 가려내는 데일리 퍼즐. 풀이기가 찍기 없이 끝까지 풀리는 판만 내고 난이도도 잼",
+    tech: ["TypeScript", "React", "Web Worker", "MongoDB"],
+    period: "2026.10 –",
+    playLink: "/games/suspect/",
+  },
+  {
+    idx: 19,
+    name: "주식게임",
+    imgLink: stockImg,
+    title: "생성 차트 주식 대전 [주식게임]",
+    desc: "차트 하나로 50턴 솔로 · 레버리지 코인 · 친구와 봇이 섞인 7분 실시간 대전. 모드별 차트 생성기와 사람처럼 매매하는 봇",
+    tech: ["TypeScript", "Canvas", "socket.io", "MongoDB"],
+    period: "2026.11 –",
+    playLink: "/games/stock/",
+  },
+  {
+    idx: 20,
+    name: "오늘의 사건 파일",
+    imgLink: casefileImg,
+    title: "살인 사건 추리 퍼즐 [오늘의 사건 파일]",
+    desc: "저택 도면과 시간대 동선표, 진술과 증거 문서로 알리바이를 깨는 하루 한 판 퍼즐",
+    tech: ["TypeScript", "React", "Web Worker"],
+    period: "2026.11 –",
+    playLink: "/games/casefile/",
+  },
+];
+
+// 실무 (회사 이름 · 내부 코드 이름 없이)
+export const workProjects: Project[] = [
+  {
+    idx: 21,
+    name: "다중 배송지",
+    imgLink: workDeliveryImg,
+    title: "여러 배송지 주문 · 선물하기 [다중 배송지 V2]",
+    desc: "한 주문을 여러 배송지로. 엑셀 일괄 등록 · 배송 가능 지역/지정일 검증 · 결제 전 배송 불가 검사, 선물하기 N:M 확장",
+    tech: ["React", "TypeScript", "Java", "MyBatis", "Apache POI"],
+    period: "2026.08",
+    role: "실무 · 프론트 · 백엔드",
+  },
+  {
+    idx: 22,
+    name: "결제 · 장바구니",
+    imgLink: workPaymentImg,
+    title: "결제 · 장바구니 프론트엔드 [결제 · 장바구니]",
+    desc: "결제 상태를 스토어 하나로, PG 세션 · 콜백 흐름 정리, 포인트 · 예치금 규칙, 장바구니 체크 동기화 큐, 쿠폰 최적 조합",
+    tech: ["Next.js", "React", "TypeScript", "Zustand"],
+    period: "2026.08",
+    role: "실무 · 프론트엔드",
+  },
+  {
+    idx: 23,
+    name: "보안 · 권한",
+    imgLink: workSecurityImg,
+    title: "보안 · 인증 · 권한 [보안 · 권한]",
+    desc: "저장형 XSS 허용 목록 정화, 로그인 실패 잠금, 휴대폰 본인인증(모놀리스 · MSA), 하드코딩 역할 체크 → 행위 단위 권한키",
+    tech: ["Java", "Spring", "JSP", "Redis"],
+    period: "2026.08",
+    role: "실무 · 백엔드",
+  },
+  {
+    idx: 24,
+    name: "MSA 백엔드",
+    imgLink: workMsaImg,
+    title: "MSA 서비스 · 알림 · 이벤트 API [MSA 백엔드]",
+    desc: "JWT 인증 전환, 다중 DataSource, 쿠버네티스 뒤의 URL, 알림 메시지 분할 발송, 레거시와 맞물린 이벤트 API",
+    tech: ["Spring Boot", "JPA", "Feign", "Kubernetes"],
+    period: "2026.08 – 2026.09",
+    role: "실무 · 백엔드",
+  },
 ];
 
 /** 포트폴리오에 보이는 프로젝트 전부 */
-export const allProjects: Project[] = [...teamProjects, ...personalProjects, ...gameProjects];
+export const allProjects: Project[] = [
+  ...workProjects,
+  ...teamProjects,
+  ...personalProjects,
+  ...gameProjects,
+];
 
 // 포트폴리오 목록에서는 뺐지만 상세 페이지는 남겨 둔 것 (아카이브·소개에서 링크)
 const unlistedProjects: Project[] = [

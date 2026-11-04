@@ -2,16 +2,17 @@
 
 import { useState, useSyncExternalStore } from "react";
 import Link from "next/link";
-import { gameProjects, personalProjects, teamProjects, type Project } from "@/data/projects";
+import { gameProjects, personalProjects, teamProjects, workProjects, type Project } from "@/data/projects";
 
 /*
- * 포트폴리오 목록 (team / personal / games).
+ * 포트폴리오 목록 (work / team / personal / games).
  *   넓은 화면: 왼쪽에 이름을 크게 쌓고, 마우스를 올린(또는 Tab 으로 고른) 프로젝트가 오른쪽 미리보기에 나옴. 이름을 누르면 상세 페이지.
  *   좁은 화면: 프로젝트마다 화면 캡처 + 설명을 차례로.
- * 탭은 주소의 #team / #personal / #games 로 기억 → 링크로 바로 열 수 있고 뒤로가기로 돌아감.
+ * 탭은 주소의 #work / #team / #personal / #games 로 기억 → 링크로 바로 열 수 있고 뒤로가기로 돌아감.
  */
 
 const TABS = [
+  { key: "work", desc: "실무에서 맡은 것 (커머스 플랫폼)", list: workProjects },
   { key: "team", desc: "팀으로 만든 것", list: teamProjects },
   { key: "personal", desc: "혼자 만든 것", list: personalProjects },
   { key: "games", desc: "이 사이트에서 바로 해 볼 수 있는 게임", list: gameProjects },
