@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneRig } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { CHARS, CHAR_TALL, IDLE_MS, WALK_MS, sheetOf, type Sheet } from "@/lib/gmtown/chars";
-import type { ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
+import type { CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
 import {
   BOARD,
   BOUNDS,
@@ -510,6 +510,18 @@ export class TownEngine {
     const old = this.others.get(p.id);
     if (old) this.dropView(old);
     this.others.set(p.id, this.avatarOf(p));
+  }
+  /** 누가 캐릭터를 바꿈 (나 포함) → 그 사람 모델을 새로 */
+  setChar(id: string, c: CharId) {
+    const a = id === this.me?.id ? this.me : this.others.get(id);
+    if (!a || a.c === c) return;
+    this.dropView(a);
+    a.c = c;
+    this.needModel(c);
+  }
+  /** 내 캐릭터 */
+  myChar(): CharId | null {
+    return this.me?.c ?? null;
   }
   leave(id: string) {
     const a = this.others.get(id);

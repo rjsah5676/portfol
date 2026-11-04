@@ -8,7 +8,7 @@ import GameIcon from "@/components/GameIcon";
 import GameLoader from "@/components/GameLoader";
 import { NAV_GROUPS } from "@/data/navMenu";
 import { rpc, subscribe } from "@/lib/api/socket";
-import { charFiles } from "@/lib/gmtown/chars";
+import { CHARS, charFiles } from "@/lib/gmtown/chars";
 import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
 import { BUILDINGS, CHAT_MAX, PLAZA, isLot, warps, type BStyle, type Building, type Warp } from "@/lib/gmtown/world";
 import { TownEngine } from "./engine";
@@ -88,34 +88,66 @@ function pickedChar(): CharId {
 const navItem = (href: string | null) =>
   href ? (NAV_GROUPS.flatMap((g) => g.items).find((i) => i.href === href) ?? null) : null;
 
-function usePhone() {
-  const [phone, setPhone] = useState(false);
+/** 진짜 전체화면이 되는 기기인지 (아이폰 사파리는 안 됨 → 전체화면 안내 없이 가로 화면만) */
+const canFullscreen = () =>
+  typeof document !== "undefined" &&
+  !!(
+    document.fullscreenEnabled ||
+    (document as Document & { webkitFullscreenEnabled?: boolean }).webkitFullscreenEnabled
+  );
+
+/*
+ * 화면 틀 (포커와 같은 방식): PC 는 사이트 머리말 · 게임 머리말 아래 상자 (⛶ 로 전체화면),
+ * 폰은 가로 전용 — 전체화면부터 (안 되는 기기는 가로면 화면을 덮어 그림), 세로면 「가로로 돌려 주세요」.
+ */
+export default function GMTownApp() {
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [scr, setScr] = useState({ w: 0, h: 0, touch: false });
   useEffect(() => {
     const on = () =>
-      setPhone(
-        matchMedia("(pointer: coarse)").matches &&
-          Math.min(window.innerWidth, window.innerHeight) < 600
-      );
+      setScr({ w: window.innerWidth, h: window.innerHeight, touch: matchMedia("(pointer: coarse)").matches });
     on();
     window.addEventListener("resize", on);
     return () => window.removeEventListener("resize", on);
   }, []);
-  return phone;
-}
-
-export default function GMTownApp() {
-  const phone = usePhone();
+  const phone = scr.touch && Math.min(scr.w, scr.h) < 600;
+  const land = scr.w > scr.h * 1.2;
+  const [fsReal, setFsReal] = useState(false);
+  const [pseudoFs, setPseudoFs] = useState(false);
+  const [canFs, setCanFs] = useState(true);
   useEffect(() => {
-    if (!phone) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 브라우저에서만 알 수 있는 값
+    setCanFs(canFullscreen());
+  }, []);
+  useEffect(() => {
+    const on = () => setFsReal(!!rootRef.current && document.fullscreenElement === rootRef.current);
+    document.addEventListener("fullscreenchange", on);
+    return () => document.removeEventListener("fullscreenchange", on);
+  }, []);
+  const fs = fsReal || pseudoFs;
+  const toggleFs = useCallback(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    if (pseudoFs) return setPseudoFs(false);
+    if (document.fullscreenElement) return void document.exitFullscreen().catch(() => {});
+    // 폰: 전체화면이 되면 가로로 고정 (되는 기기만 — 안 되면 「가로로 돌려 주세요」)
+    const lockLand = () => {
+      if (!matchMedia("(pointer: coarse)").matches) return;
+      const o = window.screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> };
+      void o?.lock?.("landscape").catch(() => {});
+    };
+    if (typeof el.requestFullscreen === "function")
+      el.requestFullscreen({ navigationUI: "hide" }).then(lockLand, () => setPseudoFs(true));
+    else setPseudoFs(true);
+  }, [pseudoFs]);
+  // 무대 위에 사이트의 떠 있는 메뉴 버튼이 겹치지 않게
+  useEffect(() => {
     document.body.classList.add("game-full");
     return () => document.body.classList.remove("game-full");
-  }, [phone]);
-  // PC: 화면 높이 그대로 쓰고, 들어오면 마을이 화면에 꽉 차게 내려 줌 (사이트 머리말은 위로 스크롤하면 보임)
-  const wrap = useRef<HTMLDivElement | null>(null);
+  }, []);
+  // PC: 위에 붙어 있는 사이트 메뉴 높이만큼 비우고 화면 높이 그대로
   const [navH, setNavH] = useState(64);
   useEffect(() => {
-    if (phone || !wrap.current) return;
-    // 위에 붙어 있는 사이트 메뉴 높이만큼 비움
     let h = 0;
     for (const el of document.querySelectorAll<HTMLElement>("header, nav")) {
       const pos = getComputedStyle(el).position;
@@ -125,19 +157,50 @@ export default function GMTownApp() {
           el.getBoundingClientRect().height + Math.max(0, parseFloat(getComputedStyle(el).top) || 0)
         );
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 화면에 그려진 메뉴 높이
     setNavH(h);
-    const top = wrap.current.getBoundingClientRect().top + window.scrollY;
-    window.scrollTo({ top: Math.max(0, top - h), behavior: "smooth" });
-  }, [phone]);
-  const box = phone
-    ? "fixed inset-0 z-[60]"
-    : "relative mx-auto min-h-[480px] w-full max-w-[1600px] overflow-hidden rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.35)]";
-  const boxStyle = phone ? undefined : { height: `calc(100dvh - ${navH + 20}px)` };
+  }, []);
+  // 폰을 눕혔는데 전체화면이 아니면(아이폰 등) 사이트 위를 덮어 전체화면처럼
+  const cover = pseudoFs || (phone && land && !fsReal);
+  const full = cover || fsReal;
+  const fsGate = phone && !fs && canFs;
+  const rotate = phone && !land && !fsGate;
+  const outer = cover
+    ? "fixed inset-0 z-[100] bg-black"
+    : fsReal
+      ? "h-full w-full bg-black"
+      : "mx-auto w-full max-w-[1600px] px-0 pb-6 sm:px-3";
+  const box = full
+    ? "relative h-full w-full overflow-hidden"
+    : "relative mx-auto min-h-[420px] w-full overflow-hidden sm:rounded-2xl sm:shadow-[0_10px_40px_rgba(0,0,0,0.35)]";
+  const boxStyle = full
+    ? undefined
+    : { height: phone ? "calc(100dvh - 104px)" : `calc(100dvh - ${navH + 20}px)` };
   return (
-    <div ref={wrap} className={phone ? "" : "px-2 pt-2 pb-6 sm:px-4"}>
+    <div ref={rootRef} className={outer}>
       <GameLoader tasks={preload} title="GMTOWN" accent="#F2C14E" className={box} style={boxStyle}>
         <div className={`gmt ${box}`} style={{ background: "#3f7d4a", ...boxStyle }}>
-          <Town phone={phone} />
+          <Town phone={phone} fs={fs} canFs={canFs} toggleFs={toggleFs} />
+          {fsGate && (
+            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_40%,rgba(40,34,60,0.92),rgba(8,8,14,0.97))] p-6 text-center">
+              <div className="gmt-lo-title text-[30px] leading-none">GMTOWN</div>
+              <p className="text-[13px] text-white/75">웹 3D 실험용 놀이터 — 가로 전체화면으로 놀아요</p>
+              <button
+                type="button"
+                onClick={toggleFs}
+                className="gmt-gold-btn mt-1 flex h-12 cursor-pointer items-center gap-2 rounded-xl px-6 text-[15px] font-extrabold"
+              >
+                <span>⛶</span> 전체화면으로 플레이
+              </button>
+            </div>
+          )}
+          {rotate && (
+            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-2 bg-[#0b0a12]/95 p-6 text-center">
+              <div className="text-[44px]">📱↻</div>
+              <p className="font-['Black_Han_Sans',sans-serif] text-[22px] leading-tight text-white">폰을 가로로 돌려 주세요</p>
+              <p className="text-[12px] text-white/60">마을은 가로 화면에서 돌아다닐 수 있어요</p>
+            </div>
+          )}
         </div>
       </GameLoader>
     </div>
@@ -146,7 +209,17 @@ export default function GMTownApp() {
 
 type Near = Building | "board" | null;
 
-function Town({ phone }: { phone: boolean }) {
+function Town({
+  phone,
+  fs,
+  canFs,
+  toggleFs,
+}: {
+  phone: boolean;
+  fs: boolean;
+  canFs: boolean;
+  toggleFs: () => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const uiRef = useRef<HTMLCanvasElement | null>(null);
   const miniRef = useRef<HTMLCanvasElement | null>(null);
@@ -174,6 +247,10 @@ function Town({ phone }: { phone: boolean }) {
   const [tab, setTab] = useState<ChatTab>("all");
   const [region, setRegion] = useState("GMTOWN 마을");
   const [lastWarp, setLastWarp] = useState(0);
+  const [myC, setMyC] = useState<CharId>("amy");
+  const [picker, setPicker] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소(주소 · localStorage)에서만 알 수 있는 값
+  useEffect(() => setMyC(pickedChar()), []);
   const chatEnd = useRef<HTMLDivElement | null>(null);
   const addSys = useCallback((text: string) => setSys((l) => [...l.slice(-29), { at: Date.now(), text }]), []);
   // 엔진 훅(키 입력)이 지금 값을 보게
@@ -267,7 +344,10 @@ function Town({ phone }: { phone: boolean }) {
             else if (t === "mv") engine.moves(d as MoveWire[]);
             else if (t === "snap")
               engine.snap((d as { x: number; y: number }).x, (d as { x: number; y: number }).y);
-            else if (t === "chat") {
+            else if (t === "char") {
+              const v = d as { id: string; c: CharId };
+              engine.setChar(v.id, v.c);
+            } else if (t === "chat") {
               engine.chat(d as ChatWire);
               setLog((l) => [...l.slice(-39), d as ChatWire]);
             }
@@ -312,25 +392,26 @@ function Town({ phone }: { phone: boolean }) {
     const on = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         if (cardRef.current) setCard(null);
+        else if (picker) setPicker(false);
         else if (mapOpen) setMapOpen(false);
         else if (chanList) setChanList(null);
         else if (overview) engine?.setOverview(false);
         inputRef.current?.blur();
         return;
       }
-      if (e.key === "Enter" && document.activeElement !== inputRef.current && !cardRef.current && !mapOpen) {
+      if (e.key === "Enter" && document.activeElement !== inputRef.current && !cardRef.current && !mapOpen && !picker) {
         e.preventDefault();
         inputRef.current?.focus();
       }
     };
     window.addEventListener("keydown", on);
     return () => window.removeEventListener("keydown", on);
-  }, [chanList, overview, engine, mapOpen]);
+  }, [chanList, overview, engine, mapOpen, picker]);
 
   useEffect(() => {
-    engine?.setTyping(typing || !!card || !!chanList || mapOpen);
-    engine?.setMapOpen(mapOpen);
-  }, [engine, typing, card, chanList, mapOpen]);
+    engine?.setTyping(typing || !!card || !!chanList || mapOpen || picker);
+    engine?.setMapOpen(mapOpen || picker);
+  }, [engine, typing, card, chanList, mapOpen, picker]);
 
   // 채팅창: 새 줄이 오면 맨 아래로
   useEffect(() => {
@@ -346,6 +427,18 @@ function Town({ phone }: { phone: boolean }) {
         addSys(`${w.name} 앞으로 순간이동했어요.`);
       },
       (e) => say((e as Error).message || "이동하지 못했어요.")
+    );
+  };
+  const pickChar = (c: CharId) => {
+    setPicker(false);
+    if (c === myC) return;
+    try {
+      localStorage.setItem("gmtown:c", c);
+    } catch {}
+    setMyC(c);
+    void rpc("gmtown.char", { c }).then(
+      () => addSys(`${CHARS[c].name}(으)로 바꿨어요.`),
+      (e) => say((e as Error).message || "바꾸지 못했어요.")
     );
   };
   const walkTo = (w: Warp) => {
@@ -401,6 +494,17 @@ function Town({ phone }: { phone: boolean }) {
           </Link>
         )}
         {/* 세로 폰(좁은 화면)은 채널 칩 · 작은 지도와 겹쳐서 이름판은 뺌 */}
+        <button
+          type="button"
+          onClick={() => setPicker(true)}
+          aria-label="캐릭터 바꾸기"
+          title="캐릭터 바꾸기"
+          className="pointer-events-auto relative h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-full p-[2px]"
+          style={{ background: "linear-gradient(160deg,#f3d68e,#8a6a2c 45%,#f0cf86)" }}
+        >
+          <img src={pickPic(myC)} alt="" className="h-full w-full rounded-full bg-[#1a1726] object-cover object-[50%_12%]" draggable={false} />
+          <span className="absolute right-0 bottom-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1726] text-[9px] ring-1 ring-[#e9cf8e]">↻</span>
+        </button>
         <div className="gmt-glass flex h-9 items-center rounded-full px-4 max-[520px]:hidden">
           <span className="gmt-brand text-[18px] leading-none">GMTOWN</span>
         </div>
@@ -416,6 +520,17 @@ function Town({ phone }: { phone: boolean }) {
           <span className="text-white/60">· {count}명</span>
           <span className="text-white/50">▾</span>
         </button>
+        {canFs && (
+          <button
+            type="button"
+            onClick={toggleFs}
+            aria-label={fs ? "전체화면 끄기" : "전체화면"}
+            title={fs ? "전체화면 끄기" : "전체화면"}
+            className="gmt-glass pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[15px]"
+          >
+            {fs ? "🗗" : "⛶"}
+          </button>
+        )}
       </div>
 
       {/* 오른쪽 위: 원형 지도 (누르면 전체 지도) · 지역 이름 · 채널 · 당기기 · 밀기 */}
@@ -591,6 +706,9 @@ function Town({ phone }: { phone: boolean }) {
         />
       )}
 
+      {/* 캐릭터 바꾸기 */}
+      {picker && <CharPicker cur={myC} phone={phone} onPick={pickChar} onClose={() => setPicker(false)} />}
+
       {/* 건물 카드 */}
       {card && <Card near={card} onClose={() => setCard(null)} />}
 
@@ -670,6 +788,90 @@ function Town({ phone }: { phone: boolean }) {
           {toast}
         </div>
       )}
+    </div>
+  );
+}
+
+const PICK_INFO: Record<CharId, { tag: string; color: string }> = {
+  amy: { tag: "금발 트윈테일 · 하늘색 크롭티", color: "#7fc4ff" },
+  mio: { tag: "파란 긴머리 · 고딕 로리타", color: "#8fa8ff" },
+  sera: { tag: "분홍 긴머리 · 붉은 리본 드레스", color: "#ff8fb8" },
+};
+const pickPic = (c: CharId) => `/gmtown/char/pick_${c}.webp`;
+
+function CharPicker({ cur, phone, onPick, onClose }: { cur: CharId; phone: boolean; onPick: (c: CharId) => void; onClose: () => void }) {
+  const [sel, setSel] = useState<CharId>(cur);
+  return (
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/55 p-3" onClick={onClose}>
+      <div
+        className={`gmt-lo gmt-pop relative flex flex-col overflow-hidden rounded-xl ${phone ? "h-full w-full" : "w-[min(100%,820px)]"}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative flex h-11 shrink-0 items-center justify-center border-b border-[#c9a45c]/30 bg-gradient-to-b from-[#2a2438] to-[#16141f]">
+          <span className="text-[#c9a45c]/70">❖</span>
+          <b className="gmt-lo-title mx-3 text-[19px]">캐릭터 선택</b>
+          <span className="text-[#c9a45c]/70">❖</span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            className="absolute right-2 flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-[18px] text-white/80 hover:bg-white/10"
+          >
+            ✕
+          </button>
+        </div>
+        <div className={`grid min-h-0 flex-1 grid-cols-3 gap-2.5 p-3 ${phone ? "" : "sm:gap-4 sm:p-5"}`}>
+          {CHAR_PICK.map((c) => {
+            const on = c === sel;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setSel(c)}
+                onDoubleClick={() => onPick(c)}
+                className={`group relative flex min-h-0 cursor-pointer flex-col overflow-hidden rounded-lg border-2 text-left transition-transform ${
+                  on ? "scale-[1.02] border-[#ffe7a8] shadow-[0_0_24px_rgba(242,193,78,0.35)]" : "border-white/10 hover:border-[#c9a45c]/60"
+                }`}
+                style={{ background: `linear-gradient(180deg, ${PICK_INFO[c].color}33, #14121c 70%)` }}
+              >
+                <img
+                  src={pickPic(c)}
+                  alt={CHARS[c].name}
+                  className={`w-full object-cover object-top ${phone ? "min-h-0 flex-1" : "aspect-[4/5]"} ${on ? "" : "opacity-80 saturate-75 group-hover:opacity-100"}`}
+                  draggable={false}
+                />
+                <div className="border-t border-white/10 bg-black/45 px-2.5 py-2">
+                  <div className="flex items-center gap-1.5">
+                    <b className={`text-[15px] ${on ? "text-[#FFE6A0]" : "text-white"}`}>{CHARS[c].name}</b>
+                    {c === cur && (
+                      <span className="rounded bg-[#4FD1A5]/20 px-1.5 py-[1px] text-[10px] font-bold text-[#9be7c4]">지금</span>
+                    )}
+                  </div>
+                  {!phone && <div className="mt-0.5 truncate text-[11px] text-white/55">{PICK_INFO[c].tag}</div>}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[#c9a45c]/20 bg-black/25 px-3 py-2.5">
+          <span className="mr-auto text-[11.5px] text-white/50">같은 채널 사람들에게도 바로 바뀌어 보여요</span>
+          <button
+            type="button"
+            onClick={onClose}
+            className="gmt-dark-btn h-9 cursor-pointer rounded-lg px-4 text-[13px] font-bold"
+          >
+            닫기
+          </button>
+          <button
+            type="button"
+            disabled={sel === cur}
+            onClick={() => onPick(sel)}
+            className="gmt-gold-btn h-9 cursor-pointer rounded-lg px-5 text-[13px] font-extrabold disabled:cursor-not-allowed"
+          >
+            {sel === cur ? "선택됨" : `${CHARS[sel].name}(으)로 바꾸기`}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -22,6 +22,7 @@ import imgDdlToJava from "@/img/menu/ddl-to-java.jpg";
 import imgJsonToJava from "@/img/menu/json-to-java.jpg";
 import imgMybatisLog from "@/img/menu/mybatis-log.jpg";
 import imgRegex from "@/img/menu/regex.jpg";
+import imgAnimetown from "@/img/menu/animetown.jpg";
 
 // 상단 nav 메뉴 정의 — Nav 드롭다운과 대제목 클릭 시 나오는 목록(허브) 페이지가 같이 씀
 
@@ -183,6 +184,14 @@ export const NAV_GROUPS: NavGroup[] = [
         label: "반응속도 테스트",
         desc: "파란색이 되는 순간 클릭, 5회 평균",
         icon: "⚡",
+      },
+      {
+        href: "/games/animetown",
+        image: imgAnimetown,
+        label: "ANIME TOWN",
+        desc: "웹 3D 실험용 놀이터, 3D 캐릭터로 마을을 걷고 같은 채널 사람들과 이야기",
+        icon: "🏘️",
+        badge: "ALPHA",
       },
     ],
   },

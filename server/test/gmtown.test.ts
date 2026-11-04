@@ -216,6 +216,23 @@ describe("광장", () => {
     b.close();
   });
 
+  it("캐릭터 바꾸기: 같은 채널에 char · 다시 들어온 사람도 새 캐릭터로 보임 · 없는 캐릭터는 거절", async () => {
+    const a = await member();
+    const b = await member();
+    const sa = await a.sub<TownSnap>("gmtown.ch", { ch: 8, c: "amy" });
+    const sb = await b.sub<TownSnap>("gmtown.ch", { ch: 8 });
+    await a.rpc("gmtown.char", { c: "sera" });
+    const ev = await sb.wait((e) => e.t === "char" && e.d.id === sa.data.me);
+    expect(ev.d.c).toBe("sera");
+    const c = await member();
+    const sc = await c.sub<TownSnap>("gmtown.ch", { ch: 8 });
+    expect(sc.data.players.find((p) => p.id === sa.data.me)?.c).toBe("sera");
+    expect(await code(a.rpc("gmtown.char", { c: "nobody" }))).toBe("BAD_REQUEST");
+    a.close();
+    b.close();
+    c.close();
+  });
+
   it("채팅: 같은 채널 모두에게 · 너무 빠르면 거절 · 길면 자름 · 다른 채널엔 안 감", async () => {
     const a = await member();
     const b = await member();

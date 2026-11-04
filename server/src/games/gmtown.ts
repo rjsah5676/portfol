@@ -187,6 +187,18 @@ export function registerGmtown({ gateway }: Deps, opts: GmtownOptions = {}) {
     return null;
   });
 
+  // 캐릭터 바꾸기 (같은 채널 모두에게 char)
+  gateway.rpc("gmtown.char", (ctx, raw) => {
+    const p = bySock.get(ctx.socket.id);
+    if (!p) throw bad("마을에 들어와야 바꿀 수 있어요.");
+    const { c } = z.object({ c: z.enum(["amy", "mio", "sera"]) }).parse(raw);
+    if (p.c !== c) {
+      p.c = c;
+      gateway.emit(keyOf(p.ch), "char", { id: p.id, c });
+    }
+    return null;
+  });
+
   // 전체 지도에서 고른 곳으로 순간이동 (정해진 자리만 · 몇 초에 한 번)
   gateway.rpc("gmtown.warp", (ctx, raw) => {
     const p = bySock.get(ctx.socket.id);

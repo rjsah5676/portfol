@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import GMTownApp from "@/components/GMTown/GMTownApp";
-
+// 예전 주소 → 게임 목록의 ANIME TOWN
 export default function Page() {
-  return <GMTownApp />;
+  redirect("/games/animetown/");
 }
