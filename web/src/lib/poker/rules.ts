@@ -147,7 +147,7 @@ export const charOf = (id: unknown): CharId => (CHAR_IDS.includes(id as CharId) 
  * + (live) 로비 대기 영상 idle.webp · 터치 반응 touch-1~3.webp.
  * ready = 그림이 들어왔는지. false 면 원래 캐릭터 그림으로 보임 (사고 입는 것은 됨).
  */
-export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula" | "jinwoo-ramen" | "jeongmin-detective" | "sera-nurse" | "amy-china";
+export type SkinId = "amy-summer" | "yeonseo-summer" | "taeyang-ts" | "mio-dracula" | "jinwoo-ramen" | "jeongmin-detective" | "sera-nurse" | "amy-china" | "yeonseo-maid";
 export interface Skin {
   id: SkinId;
   char: CharId;
@@ -231,6 +231,18 @@ export const SKINS: Skin[] = [
     line: "흥, 치파오가 어때서! …어울리긴 해?",
     ready: true,
     live: true,
+    emotes: true,
+  },
+  // 그림 · 음성 · 이모티콘은 전용, 로비 움직이는 그림 없음 (전신 그림 한 장)
+  {
+    id: "yeonseo-maid",
+    char: "yeonseo",
+    name: "메이드 연서",
+    price: skinPrice("yeonseo-maid"),
+    blurb: "어서 오세요, 주인님. …오늘 판은 제가 모실게요.",
+    line: "메, 메이드복이라니요… 이번만이에요. …어울려요?",
+    ready: true,
+    live: false,
     emotes: true,
   },  // 일반 스킨 (그림 + 로비 대기 · 앉은 대기 움직임만 — 음성 · 이모티콘은 원래 캐릭터 것, 터치 반응 없음)
   {
