@@ -1253,7 +1253,8 @@ export class TownEngine {
         .replace("void main() {", "uniform float uInk;\nvarying float vInkZ;\nvoid main() {")
         .replace(
           "#include <project_vertex>",
-          // 법선 방향(3D)으로, 그 깊이에서 화면 uInk px 만큼 + 카메라 반대쪽으로 2.5cm 더 (화면 위치는 그대로, 깊이만)
+          // 법선 방향(3D)으로, 그 깊이에서 화면 uInk px 만큼 + 카메라 반대쪽으로 15cm 더 (화면 위치는 그대로, 깊이만)
+          // → 턱 밑 · 팔 안쪽처럼 몸 앞에 겹친 곳엔 선이 안 생기고 바깥 윤곽에만
           // → 옷 · 머리 겹 사이가 얇은 곳에서 안쪽 겹의 껍데기가 바깥 겹을 뚫고 검은 점으로 보이지 않게
           `#include <project_vertex>
 float inkW = uInk * max( -mvPosition.z, 0.05 );
@@ -1263,7 +1264,7 @@ vec3 inkN = -normalize( transformedNormal );
 vec3 inkN = normalize( transformedNormal );
 #endif
 vec3 inkP = mvPosition.xyz + inkN * inkW;
-inkP += normalize( mvPosition.xyz ) * ( inkW * 2.0 + 0.05 );
+inkP += normalize( mvPosition.xyz ) * ( inkW * 2.0 + 0.15 );
 gl_Position = projectionMatrix * vec4( inkP, 1.0 );
 vInkZ = inkN.z;`
         );
