@@ -32,6 +32,13 @@ export interface HouseWire {
   owner?: string;
 }
 
+/** 화면 위 돈 표시 (gmtown.wallet — 회원만, 게스트는 null): 사이트 GP · 포커 칩(금고 포함) · 주식게임 총자산 */
+export interface WalletWire {
+  gp: number;
+  chips: number;
+  stock: number;
+}
+
 export interface PlayerWire {
   /** 이 마을에서만 쓰는 짧은 id (uid 아님) */
   id: string;

@@ -9,7 +9,8 @@ import GameLoader from "@/components/GameLoader";
 import { NAV_GROUPS } from "@/data/navMenu";
 import { rpc, subscribe } from "@/lib/api/socket";
 import { CHARS, charFiles } from "@/lib/gmtown/chars";
-import type { ChannelList, CharId, ChatWire, HouseWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
+import type { ChannelList, CharId, ChatWire, HouseWire, MoveWire, PlayerWire, TownSnap, WalletWire } from "@/lib/gmtown/types";
+import { fmtWon } from "@/lib/stock/money";
 import { BUILDINGS, CHAT_MAX, PLAZA, isLot, npcById, warps, type BStyle, type Building, type NpcId, type Warp } from "@/lib/gmtown/world";
 import { TownEngine } from "./engine";
 import MapModal from "./MapModal";
@@ -259,6 +260,11 @@ function Town({
   const hClick = useRef<((c: { cx: number; cy: number }) => void) | null>(null);
   const [meName, setMeName] = useState("나");
   const [hFloor, setHFloor] = useState(0);
+  /** 화면 위 돈 (회원만) */
+  const [wallet, setWallet] = useState<WalletWire | null>(null);
+  const loadWallet = useCallback(() => {
+    void rpc<WalletWire | null>("gmtown.wallet").then(setWallet, () => {});
+  }, []);
   /** 받은 집 초대 (몇 초 동안 카드) */
   const [invite, setInvite] = useState<{ from: string; name: string; at: number } | null>(null);
   const houseRef = useRef<{ in: boolean; room: string | null }>({ in: false, room: null });
@@ -364,6 +370,7 @@ function Town({
               setHouse(null);
             }
             engine.reset(s);
+            loadWallet();
             // 우리 집 건물은 계약해야 섬
             void rpc<HouseWire>("gmtown.house").then(
               (h) => engine.setHomeBuilt(h.tier > 0),
@@ -415,7 +422,19 @@ function Town({
       dead = true;
       off?.();
     };
-  }, [engine, want, retry]);
+  }, [engine, want, retry, loadWallet]);
+
+  // 돈은 다른 게임에서 바뀌니 가끔 · 창으로 돌아올 때 다시 읽음
+  useEffect(() => {
+    if (status !== "on") return;
+    const t = window.setInterval(loadWallet, 30_000);
+    const vis = () => document.visibilityState === "visible" && loadWallet();
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", vis);
+    };
+  }, [status, loadWallet]);
 
   // 작은 지도
   useEffect(() => {
@@ -501,6 +520,7 @@ function Town({
         engine?.exitHouse(r.x, r.y);
         setHouse(null);
         setHouseDoor(false);
+        loadWallet();
       },
       (e) => say((e as Error).message || "나가지 못했어요.")
     );
@@ -619,6 +639,33 @@ function Town({
           </button>
         )}
       </div>
+
+      {/* 왼쪽 위 둘째 줄: 돈 (GP · 포커 칩 · 증권) */}
+      {wallet && !house && (
+        <div className={`pointer-events-none absolute left-3 flex items-center gap-1.5 top-[62px]`}>
+          {(
+            [
+              { k: "gp", icon: "/pixelmerge/balls/gp.webp", label: "GP", v: wallet.gp, tip: `${wallet.gp.toLocaleString("ko-KR")} GP`, c: "#FFE6A0" },
+              { k: "chips", icon: "/poker/card/chip-red-top.webp", label: "포커 칩", v: wallet.chips, tip: `포커 칩 ${fmtWon(wallet.chips)}`, c: "#ffd0d0" },
+              { k: "stock", icon: null, label: "증권", v: wallet.stock, tip: `주식게임 총자산 ${fmtWon(wallet.stock)}`, c: "#a8f0c8" },
+            ] as const
+          ).map((m) => (
+            <div key={m.k} title={m.tip} className="gmt-lo-soft pointer-events-auto flex h-7 items-center gap-1.5 rounded-full pr-2.5 pl-1 text-[12px] font-extrabold">
+              {m.icon ? (
+                <img src={m.icon} alt="" className="h-5 w-5 rounded-full" draggable={false} />
+              ) : (
+                <svg viewBox="0 0 20 20" className="h-5 w-5" aria-hidden>
+                  <circle cx="10" cy="10" r="9.5" fill="#1f7a55" stroke="#9be7c4" strokeWidth="1" />
+                  <path d="M4.5 13.5 8 10l2.5 2.2L15 7.2" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M12.2 7h2.9v2.9" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+              {!phone && <span className="text-[10.5px] font-bold text-white/55">{m.label}</span>}
+              <span style={{ color: m.c }}>{m.k === "gp" ? m.v.toLocaleString("ko-KR") : shortWon(m.v)}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* 오른쪽 위: 원형 지도 (누르면 전체 지도) · 지역 이름 · 채널 · 당기기 · 밀기 */}
       <div className={`absolute top-2.5 right-2.5 flex flex-col items-end gap-1 ${house ? "hidden" : ""}`}>
@@ -833,7 +880,10 @@ function Town({
 
       {/* 건물 카드 */}
       {card && isNpc(card) && (
-        <NpcDialog id={card} phone={phone} onClose={() => setCard(null)} onSys={addSys} onGoHome={enterHome} onBought={() => engine?.setHomeBuilt(true)} />
+        <NpcDialog id={card} phone={phone} onClose={() => setCard(null)} onSys={addSys} onGoHome={enterHome} onBought={() => {
+            engine?.setHomeBuilt(true);
+            loadWallet();
+          }} />
       )}
       {card && !isNpc(card) && <Card near={card} onClose={() => setCard(null)} onHome={enterHome} />}
 
@@ -922,6 +972,16 @@ const PICK_INFO: Record<CharId, { tag: string; color: string }> = {
   mio: { tag: "파란 긴머리 · 고딕 로리타", color: "#8fa8ff" },
   sera: { tag: "분홍 긴머리 · 붉은 리본 드레스", color: "#ff8fb8" },
 };
+/** 큰 돈 짧게: 1.23억 · 4,567만 · 1.2조 */
+function shortWon(n: number): string {
+  const a = Math.abs(n),
+    sg = n < 0 ? "-" : "";
+  const trim = (v: number, d: number) => (d ? v.toFixed(d).replace(/\.?0+$/, "") : Math.floor(v).toLocaleString("ko-KR"));
+  if (a >= 1e12) return `${sg}${trim(a / 1e12, 2)}조`;
+  if (a >= 1e8) return `${sg}${trim(a / 1e8, a >= 1e10 ? 0 : 2)}억`;
+  if (a >= 1e4) return `${sg}${Math.floor(a / 1e4).toLocaleString("ko-KR")}만`;
+  return `${sg}${Math.round(a).toLocaleString("ko-KR")}`;
+}
 const pickPic = (c: CharId) => `/gmtown/char/pick_${c}.webp`;
 
 function CharPicker({ cur, phone, onPick, onClose }: { cur: CharId; phone: boolean; onPick: (c: CharId) => void; onClose: () => void }) {

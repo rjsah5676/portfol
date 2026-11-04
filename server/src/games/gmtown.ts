@@ -4,9 +4,11 @@ import type { Deps } from "../deps";
 import { AppError, bad } from "../errors";
 import { newId } from "../ids";
 import { CHANNEL_CAP, CHAT_MAX, HOUSE_TIERS, MAX_CHANNELS, RADIUS, RUN_SPEED, SPAWN, WARP_GAP_MS, blocked, houseTier, warpById } from "../../../web/src/lib/gmtown/world";
-import type { ChannelList, CharId, ChatWire, HouseWire, MoveWire, PlayerWire, TownSnap } from "../../../web/src/lib/gmtown/types";
+import type { ChannelList, CharId, ChatWire, HouseWire, MoveWire, PlayerWire, TownSnap, WalletWire } from "../../../web/src/lib/gmtown/types";
 import { HOME_AT, STARTER, checkLayout, enterAt, fitLayout, furnById, starterInv, type Placed } from "../../../web/src/lib/gmtown/house";
 import { buildingById, doorFront } from "../../../web/src/lib/gmtown/world";
+import { START_MONEY } from "../../../web/src/lib/poker/rules";
+import { START_CASH } from "../../../web/src/lib/stock/money";
 
 /*
  * GMTOWN — 사이트 마을 광장. 채널(최대 40명)마다 서로 보이고 · 걷고 · 말함.
@@ -355,6 +357,19 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
     }
     chans.get(p.ch)?.dirty.add(p.sock);
     return { x: r2(d.x), y: r2(d.y) };
+  });
+
+  // 화면 위 돈 표시: GP · 포커 칩(금고 포함) · 주식게임 총자산 (각 게임 지갑을 읽기만 함)
+  const usersCol = db.col<{ money?: number; poker?: { vault?: number }; stk?: { cash?: number; held?: number; coinHeld?: number } }>("users");
+  gateway.rpc("gmtown.wallet", async (ctx): Promise<WalletWire | null> => {
+    if (!ctx.nick) return null;
+    const d = await usersCol.findOne({ _id: ctx.uid }, { projection: { money: 1, "poker.vault": 1, stk: 1 } });
+    const s = d?.stk;
+    return {
+      gp: (await points.get(ctx.uid))?.points ?? 0,
+      chips: (d?.money ?? START_MONEY) + (d?.poker?.vault ?? 0),
+      stock: s?.cash === undefined ? START_CASH : s.cash + Math.max(0, s.held ?? 0) + Math.max(0, s.coinHeld ?? 0),
+    };
   });
 
   // 캐릭터 바꾸기 (같은 채널 모두에게 char)

@@ -382,6 +382,20 @@ describe("광장", () => {
     g.close();
   });
 
+  it("돈 표시: 회원은 GP · 포커 칩(금고 포함) · 주식 총자산, 게스트는 없음", async () => {
+    const g = await guest();
+    await g.sub<TownSnap>("gmtown.ch", { ch: 13 });
+    expect(await g.rpc("gmtown.wallet")).toBeNull();
+    g.close();
+    const a = await member();
+    const uid = lastUid;
+    await a.sub<TownSnap>("gmtown.ch", { ch: 13 });
+    await srv.db.col("users").updateOne({ _id: uid }, { $set: { points: 1234, money: 5_000_000, "poker.vault": 1_000_000, stk: { cash: 70_000_000, held: 20_000_000, coinHeld: 5_000_000 } } });
+    const w = await a.rpc<{ gp: number; chips: number; stock: number }>("gmtown.wallet");
+    expect(w).toEqual({ gp: 1234, chips: 6_000_000, stock: 95_000_000 });
+    a.close();
+  });
+
   it("채팅: 같은 채널 모두에게 · 너무 빠르면 거절 · 길면 자름 · 다른 채널엔 안 감", async () => {
     const a = await member();
     const b = await member();
