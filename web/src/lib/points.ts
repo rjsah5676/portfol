@@ -154,8 +154,8 @@ export const SHOP: ShopItem[] = [
     kind: "skin",
     ref: "yeonseo-maid",
     name: "메이드 연서",
-    price: 10_000,
-    was: 15_000,
+    price: 30_000,
+    was: 50_000,
   },
   {
     id: "poker.skin.jinwoo-ramen",
