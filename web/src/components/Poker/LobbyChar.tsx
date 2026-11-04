@@ -14,10 +14,27 @@ import { hasSound, playVoiceCut } from "@/lib/poker/sfx";
  */
 
 const TOUCH_N = 3;
-/** 터치 반응 영상 한 편 길이 (6초, 끝나면 대기로). 끝날 때까지 다시 눌러도 무시 */
+/** 터치 반응 영상 길이를 못 읽었을 때 쓰는 길이 (보통은 webp 에 적힌 실제 길이, 끝나면 대기로). 끝날 때까지 다시 눌러도 무시 */
 const TOUCH_MS = 6000;
 /** 터치 영상이 끝나기 이만큼 전에 대기 영상을 처음부터 다시 틀어 둠 (가려진 채로 받아 그릴 여유, 3장쯤) */
 const IDLE_LEAD_MS = 200;
+
+/** 움직이는 webp 한 바퀴 길이(ms) — 장면(ANMF)마다 적힌 시간을 더함. 못 읽으면 0 */
+async function webpMs(b: Blob): Promise<number> {
+  try {
+    const v = new DataView(await b.arrayBuffer());
+    let ms = 0;
+    for (let p = 12; p + 8 <= v.byteLength; ) {
+      const id = String.fromCharCode(v.getUint8(p), v.getUint8(p + 1), v.getUint8(p + 2), v.getUint8(p + 3));
+      const size = v.getUint32(p + 4, true);
+      if (id === "ANMF") ms += v.getUint8(p + 20) | (v.getUint8(p + 21) << 8) | (v.getUint8(p + 22) << 16);
+      p += 8 + size + (size & 1);
+    }
+    return ms;
+  } catch {
+    return 0;
+  }
+}
 
 export default function LobbyChar({
   look,
@@ -45,6 +62,8 @@ export default function LobbyChar({
   // 터치 영상이 그려질 준비가 됐는지 (그 전까지는 대기 그림을 그대로 보여 줘서 깜빡임 없게)
   const [touchReady, setTouchReady] = useState(false);
   const blobs = useRef<Record<number, Blob>>({});
+  // 터치 영상마다 실제 길이 (못 읽으면 TOUCH_MS)
+  const durs = useRef<Record<number, number>>({});
   const busyUntil = useRef(0);
   const touchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   // 터치 영상이 끝날 때 대기 영상을 첫 장면부터 다시 틀기 (터치 영상 끝 = 대기 첫 장면으로 맞춰 둠).
@@ -74,6 +93,9 @@ export default function LobbyChar({
         .then((b) => {
           if (!alive) return;
           blobs.current[i] = b;
+          void webpMs(b).then((ms) => {
+            if (ms > 0) durs.current[i] = ms;
+          });
           setTouches((p) => (p.includes(i) ? p : [...p, i]));
         })
         .catch(() => {});
@@ -113,16 +135,17 @@ export default function LobbyChar({
     else greet();
     setTouchReady(false);
     setTouchUrl(URL.createObjectURL(blobs.current[pick]));
-    busyUntil.current = Date.now() + TOUCH_MS;
+    const len = durs.current[pick] || TOUCH_MS;
+    busyUntil.current = Date.now() + len;
     clearTimeout(touchTimer.current);
-    touchTimer.current = setTimeout(() => setTouchUrl(""), TOUCH_MS);
+    touchTimer.current = setTimeout(() => setTouchUrl(""), len);
     // 끝나기 조금 전에 (터치 영상 뒤에 가려진 채로) 대기 영상을 처음부터 새로 틀어 둠 — 받아 그리는 시간 여유
     clearTimeout(idleTimer.current);
     idleTimer.current = setTimeout(() => {
       if (!idleBlob.current) return;
       setIdleReady(false);
       setIdleUrl(URL.createObjectURL(idleBlob.current));
-    }, TOUCH_MS - IDLE_LEAD_MS);
+    }, len - IDLE_LEAD_MS);
   };
 
   const imgCls = `pk-lobbychar-img ${bust ? "pk-lobbychar-bust" : ""}`;
