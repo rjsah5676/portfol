@@ -7,6 +7,12 @@
  *  - 추적: 맞은 뒤엔 24탭마다 조금씩(최대 10ms)만 — 스트림에서 빨라지는 버릇까지 쫓아 출렁이지 않게
  * 움직일지는 중앙값이 "표본 오차"보다 뚜렷이 큰지로 판단(2·SE). 흔들림이 큰 초보도 n이 쌓이면 보정되고,
  * 숙련자는 작은 쏠림까지 보정된다. 완전히 엉망인 입력(MAD가 아주 큼)엔 움직이지 않는다.
+ *
+ * 위 두 단계는 처음(프로필이 아직 안 맞춰졌을 때)만. 한 번 맞춰진 뒤엔 고정(hold):
+ *  - 판 도중엔 판정 기준을 안 옮김 — 스트림에서 당겨 치는 버릇까지 따라가면 기준이 흔들리고 FAST/SLOW 가 의미 없어짐
+ *  - 판이 끝날 때 그 판의 쏠림(스트림 말고 띄엄띄엄한 노트 기준)만큼 다음 판을 조금 옮김
+ *  - 그래도 판 도중에 크게(30ms↑) 어긋난 게 두 번 연속 보이면(이어폰을 바꿨는데 같은 프로필 등) 그때만 획득 단계로
+ * 자동 싱크를 끄면(설정) 저장된 값 그대로 고정 — 직접 맞추는 사람용.
  */
 export const AUTO_SYNC = {
   /** 가까운 노트를 찾는 범위(초): MISS여도 보정에 쓰이도록 판정 창보다 넓게 */
@@ -30,14 +36,22 @@ export const AUTO_SYNC = {
   /** 그 유예도 곡 시작 뒤 이 시간(초)까지만 (가만히 있으면 안 죽는 일이 없게) */
   graceSec: 20,
   limit: 400,
+  /** 고정 단계: 판 도중엔 안 옮기고, every 탭마다 크게(breakMs↑) 어긋났는지만 봄 — breakHits 번 연속이면 획득 단계로 */
+  hold: { every: 24, breakMs: 30, breakHits: 2 },
+  /** 판 끝 조정: 그 판 쏠림 × gain (한 판에 stepMax 까지). 띄엄띄엄한 노트가 minSparse 개 안 되면 전체 minAll 개로 */
+  settle: { gain: 0.5, stepMax: 15, minMs: 3, minSparse: 24, minAll: 48 },
+  /** 앞뒤 노트(다른 레인 포함) 간격이 이보다 좁으면 스트림 — 판 끝 조정에서 뺌(당겨 치는 버릇이 섞여서) */
+  denseGap: 0.15,
 } as const;
 
-/** 자동 싱크가 들고 있는 값 — 둘 다 사용자에겐 안 보임 */
+/** 자동 싱크가 들고 있는 값 — 사용자에겐 안 보임 */
 export interface AutoSyncState {
   /** 타격 싱크(ms): 판정만 옮김 (손·입력 지연) */
   judge: number;
   /** 음악 싱크(ms): 노트 화면+판정을 같이 옮김 (소리 지연) */
   offset: number;
+  /** 한 번 맞춰짐 → 다음 판부터 고정(판 도중엔 안 옮김). 없으면 값이 0이 아닐 때 맞춰진 걸로 봄(예전 저장값) */
+  ready?: boolean;
 }
 
 /** 중앙값(ms)과 중앙값 주변 흔들림(MAD, ms) */
@@ -77,20 +91,55 @@ export function autoSyncStep(tapsSec: number[], judge: number, phase: AutoSyncPh
  */
 export class AutoSyncTracker {
   taps: number[] = [];
-  phase: AutoSyncPhase = "acquire";
+  /** 스트림이 아닌(앞뒤 간격 넉넉한) 노트에서 나온 차이만 — 판 끝 조정용 */
+  private sparse: number[] = [];
+  /** hold: 이미 맞춰진 프로필 — 판 도중엔 안 옮기고 판 끝에 settleStep 만큼 */
+  phase: AutoSyncPhase | "hold";
   private lockHits = 0;
+  private breakHits = 0;
   private seen = 0;
+  /** 꺼져 있으면(설정) 기록만 하고 안 옮김 */
+  readonly enabled: boolean;
   /** 이 판에서 옮긴 합계(ms) */
   moved = 0;
-  constructor(public judge: number) {}
+  constructor(
+    public judge: number,
+    opt: { ready?: boolean; enabled?: boolean } = {}
+  ) {
+    this.enabled = opt.enabled ?? true;
+    this.phase = opt.ready ? "hold" : "acquire";
+  }
 
   /** 아직 싱크가 잡히기 전인지 (이 동안은 HP가 바닥나도 안 끝남) */
   get grace() {
-    return this.phase === "acquire" && this.taps.length < AUTO_SYNC.graceTaps;
+    return this.enabled && this.phase === "acquire" && this.taps.length < AUTO_SYNC.graceTaps;
   }
 
-  push(dSec: number): number {
+  /** 다음 판을 고정(hold)으로 시작해도 되는지 — 획득 단계를 벗어났으면 */
+  get ready() {
+    return this.phase !== "acquire";
+  }
+
+  /** @param sparse 스트림이 아닌 노트에서 나온 차이인지 (판 끝 조정에 씀) */
+  push(dSec: number, sparse = true): number {
     this.taps.push(dSec);
+    if (sparse) this.sparse.push(dSec);
+    if (!this.enabled) return 0;
+    if (this.phase === "hold") {
+      const H = AUTO_SYNC.hold;
+      if (this.taps.length - this.seen < H.every) return 0;
+      this.seen = this.taps.length;
+      const { med, mad } = spreadOf(this.taps.slice(-H.every));
+      if (mad > AUTO_SYNC.madMax || Math.abs(med) <= H.breakMs) {
+        this.breakHits = 0;
+        return 0;
+      }
+      if (++this.breakHits < H.breakHits) return 0;
+      // 판 도중에도 크게 어긋남 → 획득 단계로 (바로 한 번 보정)
+      this.phase = "acquire";
+      this.lockHits = 0;
+      this.seen = this.taps.length - AUTO_SYNC.acquire.every;
+    }
     const cfg = AUTO_SYNC[this.phase];
     if (this.taps.length - this.seen < cfg.every) return 0;
     this.seen = this.taps.length;
@@ -114,7 +163,32 @@ export class AutoSyncTracker {
     this.moved += stepMs;
     const s = stepMs / 1000;
     for (let i = 0; i < this.taps.length; i++) this.taps[i] -= s;
+    for (let i = 0; i < this.sparse.length; i++) this.sparse[i] -= s;
     if (this.taps.length > 200) this.taps.splice(0, this.taps.length - 200);
+  }
+
+  /**
+   * 판 끝 조정(ms): 고정(hold)으로 친 판의 쏠림만큼 다음 판 타격 싱크를 옮김 (판 도중엔 안 움직였으니 판 전체가 같은 기준).
+   * 스트림에서 당겨 치는 버릇은 빼고 띄엄띄엄한 노트로 — 모자라면 전체로, 그것도 모자라면 안 옮김.
+   * 몇 번 불러도(일시정지 → 끝) 그때까지 모인 걸로 다시 계산할 뿐 쌓이지 않음
+   */
+  settleStep(): number {
+    if (!this.enabled || this.phase !== "hold") return 0;
+    const S = AUTO_SYNC.settle;
+    const pick =
+      this.sparse.length >= S.minSparse
+        ? this.sparse
+        : this.taps.length >= S.minAll
+          ? this.taps
+          : null;
+    if (!pick) return 0;
+    const { med, mad } = spreadOf(pick);
+    if (mad > AUTO_SYNC.madMax) return 0;
+    const se = (1.858 * Math.max(mad, 3)) / Math.sqrt(pick.length);
+    if (Math.abs(med) < Math.max(S.minMs, 2 * se)) return 0;
+    const step = Math.round(Math.max(-S.stepMax, Math.min(S.stepMax, med * S.gain)));
+    const to = Math.max(-AUTO_SYNC.limit, Math.min(AUTO_SYNC.limit, this.judge + step));
+    return to - this.judge;
   }
 }
 
@@ -204,16 +278,22 @@ export function loadAutoSync(key: string): AutoSyncState {
     const s = all?.[key];
     const clamp = (v: unknown) =>
       Math.max(-AUTO_SYNC.limit, Math.min(AUTO_SYNC.limit, Number(v) || 0));
-    if (s) return { judge: clamp(s.judge), offset: clamp(s.offset) };
+    if (s) {
+      const judge = clamp(s.judge);
+      const offset = clamp(s.offset);
+      // ready 가 없는 예전 저장값: 값이 쌓여 있으면 맞춰진 걸로
+      const ready = typeof s.ready === "boolean" ? s.ready : judge !== 0 || offset !== 0;
+      return { judge, offset, ready };
+    }
   } catch {}
-  return { judge: 0, offset: 0 };
+  return { judge: 0, offset: 0, ready: false };
 }
 
 export function saveAutoSync(key: string, s: AutoSyncState) {
   try {
     const all =
       (JSON.parse(localStorage.getItem(AUTO_SYNC_KEY) ?? "null") as AutoSyncStore | null) ?? {};
-    all[key] = { judge: Math.round(s.judge), offset: Math.round(s.offset) };
+    all[key] = { judge: Math.round(s.judge), offset: Math.round(s.offset), ready: !!s.ready };
     localStorage.setItem(AUTO_SYNC_KEY, JSON.stringify(all));
   } catch {}
 }

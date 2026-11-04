@@ -314,6 +314,8 @@ interface Props {
   /** 자동 싱크가 들고 있는 값(사용자에겐 안 보임) — 판 끝·일시정지 때 onAutoSync로 돌려줌 */
   auto: AutoSyncState;
   onAutoSync: (next: AutoSyncState) => void;
+  /** 자동 싱크 켜짐(기본) — 끄면 auto 값 그대로 고정, 안 옮기고 안 돌려줌 */
+  autoSync?: boolean;
   /** 타격음 볼륨 0~1 (0이면 끔) */
   hitVolume: number;
   hitSound: HitSound;
@@ -356,6 +358,7 @@ export default function Stage({
   sync,
   auto,
   onAutoSync,
+  autoSync = true,
   hitVolume,
   hitSound,
   skin,
@@ -450,8 +453,10 @@ export default function Stage({
     const live: LiveSettings = { speed, music: musicVolume, hit: hitVolume };
     // 싱크: 음악 싱크 = 수동 + 자동(소리 지연 몫), 타격 싱크 = 자동(손 지연 몫). 자동은 치는 동안 움직임
     const outputLatency = (ctx as AudioContext & { outputLatency?: number }).outputLatency;
-    let autoOffset = decayOffset(auto.offset, outputLatency !== undefined);
-    const tracker = new AutoSyncTracker(auto.judge);
+    // 자동 싱크를 끄면 저장된 값 그대로 (음악 싱크 되돌리기도 안 함)
+    let autoOffset = autoSync ? decayOffset(auto.offset, outputLatency !== undefined) : auto.offset;
+    // 이미 맞춰진 프로필(ready)이면 판 도중엔 고정, 판 끝에 조금 옮김 — 처음이면 치는 동안 맞춤
+    const tracker = new AutoSyncTracker(auto.judge, { ready: auto.ready, enabled: autoSync });
     /** 이 판에서 누른 횟수 — 아무것도 안 누르는데 초반 유예로 안 죽는 일이 없게 */
     let presses = 0;
     /** 플레이 데이터 내보내기용 입력 기록: [판정 기준 시각ms, 레인, 1=누름 0=뗌, 타격 싱크ms] */
@@ -465,13 +470,24 @@ export default function Stage({
     let reported: AutoSyncState | null = null;
     const reportAuto = () => {
       if (autoplay) return; // 자동 연주엔 입력이 없어 보정할 게 없음
+      if (!autoSync) return; // 꺼져 있으면 저장된 값 그대로
+      // 고정(hold)으로 친 판은 판 끝 조정을 더함 (일시정지 → 끝처럼 여러 번 불려도 그때까지 모인 걸로 다시 계산)
+      const judge = tracker.judge + tracker.settleStep();
       // 출력 지연을 아는 브라우저는 소리 지연이 이미 빠져 있어서 타격 싱크를 음악 싱크로 넘기지 않음
       // (넘기면 판정 쏠림이 노트 화면까지 밀어 버리고, 다시 안 돌아와서 오래 쌓일수록 어긋남)
-      const next =
-        outputLatency === undefined
-          ? splitSync(tracker.judge, autoOffset, AUTO_SYNC.handCapNoLatency)
-          : { judge: tracker.judge, offset: autoOffset };
-      if (reported && reported.judge === next.judge && reported.offset === next.offset) return;
+      const next: AutoSyncState = {
+        ...(outputLatency === undefined
+          ? splitSync(judge, autoOffset, AUTO_SYNC.handCapNoLatency)
+          : { judge, offset: autoOffset }),
+        ready: tracker.ready,
+      };
+      if (
+        reported &&
+        reported.judge === next.judge &&
+        reported.offset === next.offset &&
+        reported.ready === next.ready
+      )
+        return;
       reported = next;
       onAutoSync(next);
     };
@@ -880,10 +896,29 @@ export default function Stage({
       );
       if (Math.abs(best) > room / 2 - 0.02) return null;
       laneMatched[lane] = bi;
+      matchedT = arr[bi];
       return best;
     };
+    /** nearestDiff 가 방금 붙인 노트 시각 */
+    let matchedT = 0;
+    // 줄(동시치기는 한 줄) 시각 — 앞뒤 줄 간격이 좁은(스트림) 노트는 판 끝 싱크 조정에서 뺌
+    const rowTimes: number[] = [];
+    for (const t of chart.notes.map((n) => n.t).sort((a, b) => a - b))
+      if (!rowTimes.length || t - rowTimes[rowTimes.length - 1] > 0.004) rowTimes.push(t);
+    const isSparse = (t: number) => {
+      let lo = 0;
+      let hi = rowTimes.length - 1;
+      while (lo < hi) {
+        const m = (lo + hi) >> 1;
+        if (rowTimes[m] < t - 0.004) lo = m + 1;
+        else hi = m;
+      }
+      const prev = lo > 0 ? t - rowTimes[lo - 1] : Infinity;
+      const next = lo + 1 < rowTimes.length ? rowTimes[lo + 1] - t : Infinity;
+      return Math.min(prev, next) >= AUTO_SYNC.denseGap;
+    };
     const autoSyncTap = (d: number) => {
-      const step = tracker.push(d);
+      const step = tracker.push(d, isSparse(matchedT));
       if (step === 0) return;
       // 지금까지 모은 기록도 새 싱크 기준으로 (결과 화면 평균이 남은 쏠림만 보이게)
       for (let i = 0; i < diffs.length; i++) diffs[i] -= step / 1000;

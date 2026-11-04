@@ -53,6 +53,11 @@ export interface Settings {
    * 자동 싱크(치는 동안 시스템이 알아서 맞추는 값, 화면엔 안 보임)와는 별개로 그 위에 더해짐
    */
   sync: number;
+  /**
+   * 자동 싱크 켜짐(기본): 처음엔 치는 동안 맞추고, 맞춰진 뒤엔 판 도중엔 고정 · 판 끝마다 조금씩.
+   * 끄면 지금까지 맞춘 값 그대로 고정 (직접 맞추는 사람용)
+   */
+  autoSync: boolean;
   /** 타격음 볼륨 0~1 */
   hit: number;
   /** 음악 볼륨 0~1 */
@@ -508,8 +513,7 @@ export default function SettingsModal({
               />
               <div className="flex items-center justify-between gap-[1cqw] py-[1cqw]">
                 <p className=" text-[1cqw] leading-relaxed text-white/40">
-                  치는 타이밍은 플레이 중에 시스템이 알아서 맞춰요(자동 싱크). 그래도 노트와 소리가
-                  어긋나 보이면 여기서 직접 맞추세요 — 자동 싱크 위에 더해져요.
+                  노트와 소리가 어긋나 보이면 여기서 직접 맞추세요 — 자동 싱크 위에 더해져요.
                 </p>
                 <button
                   type="button"
@@ -530,6 +534,33 @@ export default function SettingsModal({
                   초기화
                 </button>
               </div>
+              <Row
+                label="자동 싱크"
+                hint={
+                  settings.autoSync
+                    ? "처음 몇 판은 치는 동안 맞추고, 맞춰진 뒤엔 판이 끝날 때마다 조금씩 맞춰요"
+                    : "지금까지 맞춘 값으로 고정 — 판정 기준이 안 움직여요"
+                }
+              >
+                <div className="flex gap-[0.6cqw]">
+                  {[
+                    { on: true, label: "켜기" },
+                    { on: false, label: "끄기" },
+                  ].map((o) => (
+                    <button
+                      key={o.label}
+                      type="button"
+                      className={chip(settings.autoSync === o.on)}
+                      onClick={() => {
+                        set({ autoSync: o.on });
+                        sfx("ui-move", 0.5);
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </Row>
               {onResetAuto && (
                 <div className="flex items-center justify-between gap-[1cqw] border-t border-white/[0.06] py-[1cqw]">
                   <p className=" text-[1cqw] leading-relaxed text-white/40">
