@@ -233,7 +233,6 @@ export const SKINS: Skin[] = [
     live: true,
     emotes: true,
   },
-  // 그림 · 음성 · 이모티콘은 전용, 로비 움직이는 그림 없음 (전신 그림 한 장)
   {
     id: "yeonseo-maid",
     char: "yeonseo",
@@ -242,7 +241,7 @@ export const SKINS: Skin[] = [
     blurb: "어서 오세요, 주인님. …오늘 판은 제가 모실게요.",
     line: "메, 메이드복이라니요… 이번만이에요. …어울려요?",
     ready: true,
-    live: false,
+    live: true,
     emotes: true,
   },  // 일반 스킨 (그림 + 로비 대기 · 앉은 대기 움직임만 — 음성 · 이모티콘은 원래 캐릭터 것, 터치 반응 없음)
   {
