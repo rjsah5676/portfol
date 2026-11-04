@@ -590,24 +590,31 @@ function flatten(x: number, y: number, h: number): number {
 export const STAIR_STEP = 0.22;
 /** 계단 길 위인지 (길 너비 안) */
 export function onStairs(x: number, y: number): boolean {
-  // 큰길(돌길) 위는 계단 아님
+  let st = false;
+  for (const p of PATHS) {
+    if (!p.stairs) continue;
+    for (let i = 0; i < p.pts.length - 1 && !st; i++) {
+      const [ax, ay] = p.pts[i],
+        [bx, by] = p.pts[i + 1];
+      if (segDist(x, y, ax, ay, bx, by) < p.w / 2) st = true;
+    }
+  }
+  if (!st) return false;
+  // 큰길(돌길) 위는 계단 아님 — 단, 길 가장자리가 가파르게 올라가는 곳(성 계단 첫 칸 앞)은 계단으로 (안 그러면 벼랑이라 못 올라감)
   for (const p of PATHS) {
     if (p.kind !== "stone") continue;
     for (let i = 0; i < p.pts.length - 1; i++) {
       const [ax, ay] = p.pts[i],
         [bx, by] = p.pts[i + 1];
-      if (segDist(x, y, ax, ay, bx, by) < p.w / 2) return false;
+      if (segDist(x, y, ax, ay, bx, by) < p.w / 2) {
+        const e = 0.5,
+          gx = terrainH(x + e, y) - terrainH(x - e, y),
+          gy = terrainH(x, y + e) - terrainH(x, y - e);
+        return gx * gx + gy * gy > (2 * e * 0.6) ** 2;
+      }
     }
   }
-  for (const p of PATHS) {
-    if (!p.stairs) continue;
-    for (let i = 0; i < p.pts.length - 1; i++) {
-      const [ax, ay] = p.pts[i],
-        [bx, by] = p.pts[i + 1];
-      if (segDist(x, y, ax, ay, bx, by) < p.w / 2) return true;
-    }
-  }
-  return false;
+  return true;
 }
 /** 계단 칸 윗면 높이 (땅 높이를 한 칸씩 올림) */
 export const stairTop = (h: number) => Math.ceil(h / STAIR_STEP - 1e-4) * STAIR_STEP;
