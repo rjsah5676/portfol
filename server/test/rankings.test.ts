@@ -565,6 +565,16 @@ describe("랭킹: 오늘의 용의자", () => {
     expect((await play("gp2", `suspect:${kstDay()}_easy`, row)).body.gp).toBeUndefined();
   });
 
+  it("대형 지옥(bighell) 사건도 받고 회원 GP 1500", async () => {
+    const bh = `suspect:${kstDay()}_bighell`;
+    const token = await s.token("gp3", { email: "gp3@example.com" });
+    expect((await s.http("/api/me/nick", { method: "PUT", token, body: { nick: "탐정bh" } })).status).toBe(200);
+    const res = await s.http(pathOf(bh), { method: "POST", token, body: { ...row, ticket: await ticket("gp3", bh, 600) } });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ gp: 1500 });
+    expect((await s.http(`${pathOf(bh)}/summary`)).status).toBe(200);
+  });
+
   it("사건 요약(푼 사람 · 완벽 · 중간 기록 · 내 순위) · 누적 랭킹(해결 수 · 1위 횟수)", async () => {
     const big = (d: number) => `suspect:${kstDay(Date.now(), d)}_big`;
     const fast = { name: "빠름", time: 60, miss: 0, hint: 0, score: 60 };

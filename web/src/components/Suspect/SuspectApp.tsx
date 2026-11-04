@@ -61,7 +61,15 @@ interface Run {
 }
 type Phase = "play" | "result" | "review";
 
-const DOTS: Record<TierId, number> = { intro: 0, easy: 1, normal: 2, hard: 3, hell: 4, big: 3 };
+const DOTS: Record<TierId, number> = {
+  intro: 0,
+  easy: 1,
+  normal: 2,
+  hard: 3,
+  hell: 4,
+  big: 3,
+  bighell: 4,
+};
 const TIER_COLOR: Record<TierId, string> = {
   intro: "var(--sky)",
   easy: "var(--inno)",
@@ -70,6 +78,7 @@ const TIER_COLOR: Record<TierId, string> = {
   hell: "var(--crim)",
   // 놋쇠색(--brass)은 종이 위 글자로 흐려서 더 진하게
   big: "#8a5f1f",
+  bighell: "var(--crim)",
 };
 /** 5칸 넘는 판(대형 사건)은 무대를 넓혀서 카드가 4칸 판과 같은 폭이 되게 */
 const isWide = (t: TierId) => TIERS[t].cols >= 5;
@@ -362,7 +371,7 @@ export default function SuspectApp() {
             <>
               <p className="sp-hand m-0 text-[22px]">용의자를 불러 모으는 중…</p>
               <p className="m-0 text-[13px] text-[var(--ink2)]">
-                {run.tier === "hell"
+                {run.tier === "hell" || run.tier === "bighell"
                   ? "지옥 난이도는 조건이 까다로워서 몇 초 걸릴 수 있어요"
                   : run.tier === "big"
                     ? "용의자 30명을 한자리에 모으는 중"
@@ -560,7 +569,7 @@ function Home({
               <button
                 key={t}
                 type="button"
-                className={`sp-card sp-tier cursor-pointer${isWide(t) ? " is-big" : ""}`}
+                className={`sp-card sp-tier cursor-pointer${isWide(t) ? " is-big" : ""}${t === "bighell" ? " is-hell" : ""}`}
                 style={{ borderTopColor: TIER_COLOR[t] }}
                 onClick={() => onDaily(t)}
               >

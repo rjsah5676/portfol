@@ -879,6 +879,12 @@
       linear-gradient(100deg, rgba(179, 139, 77, 0.18), transparent 60%),
       var(--card);
   }
+  .sp-tier.is-big.is-hell {
+    background:
+      var(--grain),
+      linear-gradient(100deg, rgba(178, 34, 34, 0.16), transparent 60%),
+      var(--card);
+  }
   .sp-tier.is-big > * {
     grid-column: 1;
   }

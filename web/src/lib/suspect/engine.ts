@@ -68,7 +68,7 @@ export const ALL_FACES = JOBS.flatMap((job) =>
   (["m", "f"] as const).map((sex) => faceOf({ job, sex }))
 );
 
-export type TierId = "intro" | "easy" | "normal" | "hard" | "hell" | "big";
+export type TierId = "intro" | "easy" | "normal" | "hard" | "hell" | "big" | "bighell";
 
 export interface TierSpec {
   id: TierId;
@@ -203,7 +203,7 @@ export const TIERS: Record<TierId, TierSpec> = {
   },
   /*
    * 대형 사건: 5×6 = 30명, 규칙은 어려움 수준 (범인 · 조합 추론 단계는 판 크기만큼 1.5배).
-   * 지옥 규칙을 30명에 얹으면 만드는 데 PC 에서도 최대 9초라 어려움 규칙으로 (0.1초 안쪽)
+   * 30명에 지옥 규칙을 얹은 판은 아래 「대형 지옥」 (조합 추론 기준을 1.5배로 키우면 PC 에서도 9초라 10단계로)
    */
   big: {
     id: "big",
@@ -230,10 +230,48 @@ export const TIERS: Record<TierId, TierSpec> = {
     },
     ranked: true,
   },
+  /*
+   * 대형 지옥: 5×6 에 지옥 단서 가중치 · 조합 추론 10단계 이상 (지옥과 같은 기준 — 30명 판은 풀이 단계가 15~18개라 비율로도 지옥급).
+   *  조합 15단계 이상으로 올리면 거의 못 채우고 9초씩 걸려서 10에서 멈춤 (PC 기준 보통 0.1초 · 최대 0.4초)
+   */
+  bighell: {
+    id: "bighell",
+    label: "대형 지옥",
+    desc: "30명 · 5×6 큰 판 · 지옥 규칙",
+    cols: 5,
+    rows: 6,
+    crim: [11, 16],
+    perRound: 2,
+    combo: [10, 99],
+    weights: {
+      nb: 12,
+      otherNb: 12,
+      row: 6,
+      col: 6,
+      dir: 14,
+      job: 12,
+      edge: 5,
+      corner: 3,
+      xor: 10,
+      same: 4,
+      diff: 4,
+      parity: 14,
+    },
+    ranked: true,
+  },
 };
-export const RANKED_TIERS: TierId[] = ["easy", "normal", "hard", "hell", "big"];
+export const RANKED_TIERS: TierId[] = ["easy", "normal", "hard", "hell", "big", "bighell"];
+/** 난이도가 처음 열린 날 (없으면 FIRST_CASE_DAY) — 명예의 전당 「열린 사건 수」 */
+export const TIER_SINCE: Partial<Record<TierId, string>> = { bighell: "20261104" };
 /** 오늘의 사건을 풀어 랭킹에 처음 올리면 회원에게 주는 GP (사건마다 한 번 — server/src/http/rankings.ts) */
-export const DAILY_GP: Partial<Record<TierId, number>> = { easy: 200, normal: 300, hard: 500, hell: 1000, big: 700 };
+export const DAILY_GP: Partial<Record<TierId, number>> = {
+  easy: 200,
+  normal: 300,
+  hard: 500,
+  hell: 1000,
+  big: 700,
+  bighell: 1500,
+};
 export const isTier = (v: string): v is TierId => Object.hasOwn(TIERS, v);
 
 const NAMES = [
@@ -861,4 +899,4 @@ export const scoreOf = (time: number, miss: number, hint: number) =>
 
 /** 랭킹 칸 이름 "YYYYMMDD_tier" */
 export const caseKey = (day: string, tier: TierId) => `${day}_${tier}`;
-export const CASE_RE = /^(\d{8})_(easy|normal|hard|hell|big)$/;
+export const CASE_RE = /^(\d{8})_(easy|normal|hard|hell|big|bighell)$/;

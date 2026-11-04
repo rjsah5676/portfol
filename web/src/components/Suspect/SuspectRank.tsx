@@ -10,6 +10,7 @@ import {
   FIRST_CASE_DAY,
   RANKED_TIERS,
   shiftDay,
+  TIER_SINCE,
   TIERS,
   weekdayOf,
   type TierId,
@@ -63,6 +64,9 @@ const pct = (a: number, b: number) => (b ? Math.round((a / b) * 100) : 0);
 const hhmm = (d: Date | null) =>
   d ? `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}` : "";
 const fullDay = (d: string) => `${dayLabel(d)} (${weekdayOf(d)})`;
+/** 오늘까지 열린 사건 수 (난이도마다 처음 연 날부터 — 대형 지옥은 늦게 생김) */
+const openedCases = (today: string, tiers: TierId[]) =>
+  tiers.reduce((n, t) => n + caseNo(today) - caseNo(TIER_SINCE[t] ?? FIRST_CASE_DAY) + 1, 0);
 
 const pill = (on: boolean) =>
   `cursor-pointer rounded-full border px-3 py-1 text-xs whitespace-nowrap ${
@@ -218,7 +222,7 @@ export function useSuspectRank(ready: boolean, today: string, store: Store | nul
                 [
                   "풀린 사건",
                   hall ? `${hall.cases}건` : "–",
-                  `열린 ${caseNo(today) * (hallTier === "all" ? RANKED_TIERS.length : 1)}건 중`,
+                  `열린 ${openedCases(today, hallTier === "all" ? RANKED_TIERS : [hallTier])}건 중`,
                 ],
                 ["총 풀이", hall ? `${hall.solves}번` : "–"],
               ]}
