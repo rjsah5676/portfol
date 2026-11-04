@@ -41,7 +41,7 @@ const AMY_DIRS: CharDef["dirs"] = {
 
 export const CHARS: Record<CharId, CharDef> = {
   amy: { name: "에이미", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/amy3d.glb", dirs: AMY_DIRS },
-  mio: { name: "미오", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/mio3d.glb", eyeBand: [0.4, 0.72], dirs: AMY_DIRS },
+  mio: { name: "미오", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/mio3d.glb", eyeBand: [0.47, 0.72], dirs: AMY_DIRS },
   // 세라: 얼굴 비워서 뽑은 모델 + 그려 넣은 눈 · 눈썹 → 눈썹도 앞머리 위로 비침
   sera: { name: "세라", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/sera3d.glb", eyeBand: [0.37, 0.7], dirs: AMY_DIRS },
 };
