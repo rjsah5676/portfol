@@ -39,7 +39,8 @@ export function mysteryProtoRouter({ cfg, db, auth }: Deps, injected?: Mystery):
       log: (doc) => void logs.insertOne({ _id: orderedId(), ...doc }).catch(() => {}),
     });
 
-  const test = cfg.env === "test";
+  // 레이트 리밋은 운영에서만 (로컬에서 판정 정확도 스크립트가 연달아 물어볼 수 있게)
+  const test = cfg.env !== "production";
   const askLimit = test ? [] : [limit(60_000, 20, "질문이 너무 빨라요. 잠시 후 다시 물어봐 주세요.")];
   const submitLimit = test ? [] : [limit(60_000, 6, "제출이 너무 잦아요. 잠시 후 다시 해 주세요.")];
   const startLimit = test ? [] : [limit(10 * 60_000, 30, "판을 너무 자주 열었어요. 잠시 후 다시 해 주세요.")];
