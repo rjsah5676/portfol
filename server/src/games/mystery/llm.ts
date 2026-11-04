@@ -10,22 +10,29 @@ export interface ModelSpec {
   id: string;
   provider: Provider;
   model: string;
-  /** gemini: 생각 토큰 상한 (lite 는 설정 불가 → undefined) / groq gpt-oss: reasoning_effort */
+  /** gemini: 생각 토큰 상한 (lite 는 설정 불가 → undefined) / groq: reasoning_effort (qwen 은 none 으로 생각 끔) */
   thinking?: number;
-  effort?: "low" | "medium" | "high";
+  effort?: "none" | "low" | "medium" | "high";
 }
 
-/** 질문 판정: 빠른 순. gpt-oss-120b(Groq)가 1초 안팎이라 먼저 */
+/*
+ * 무료 한도 (2026-11-05 확인): Groq 는 모델마다 따로 분당 8,000토큰 · 하루 1,000회, Gemini 3.5 Flash 무료는 하루 20회뿐.
+ * 판정 한 번 ≈ 2,000토큰 → 모델 하나로 분당 약 4문. 그래서 판정은 Groq 모델 셋을 돌려 쓰고 Gemini 는 맨 끝 비상용.
+ */
+
+/** 질문 판정: 한도가 차면 다음 모델로 (모델마다 한도가 따로라 합쳐 분당 약 12문 · 하루 약 3,000문) */
 export const JUDGE_MODELS: ModelSpec[] = [
   { id: "gpt-oss-120b", provider: "groq", model: "openai/gpt-oss-120b", effort: "medium" },
-  { id: "gemini-flash", provider: "gemini", model: "gemini-3.5-flash", thinking: 1024 },
+  { id: "qwen-27b", provider: "groq", model: "qwen/qwen3.8-27b", effort: "none" },
   { id: "gpt-oss-20b", provider: "groq", model: "openai/gpt-oss-20b", effort: "medium" },
+  { id: "gemini-flash", provider: "gemini", model: "gemini-3.5-flash", thinking: 1024 },
 ];
 
-/** 정답 채점: 한 판에 몇 번뿐이라 느려도 꼼꼼한 쪽 먼저 */
+/** 정답 채점: 한 판에 몇 번뿐이라 꼼꼼한 쪽 먼저 */
 export const GRADE_MODELS: ModelSpec[] = [
-  { id: "gemini-flash", provider: "gemini", model: "gemini-3.5-flash", thinking: 2048 },
   { id: "gpt-oss-120b", provider: "groq", model: "openai/gpt-oss-120b", effort: "medium" },
+  { id: "gemini-flash", provider: "gemini", model: "gemini-3.5-flash", thinking: 2048 },
+  { id: "qwen-27b", provider: "groq", model: "qwen/qwen3.8-27b", effort: "none" },
 ];
 
 export interface LlmKeys {
@@ -93,7 +100,7 @@ export function createLlm(keys: LlmKeys): LlmCall {
           { role: "system", content: req.system },
           { role: "user", content: req.user },
         ],
-        ...(oss ? { reasoning_effort: spec.effort ?? "low" } : {}),
+        ...(spec.effort ? { reasoning_effort: spec.effort } : oss ? { reasoning_effort: "low" } : {}),
       }
     );
     return String(j?.choices?.[0]?.message?.content ?? "");

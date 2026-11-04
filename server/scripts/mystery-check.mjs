@@ -16,6 +16,13 @@ const REPEAT = Math.max(1, Number(opt("repeat", "1")) || 1);
 const only = args.filter((a) => !a.startsWith("--"));
 const spec = JSON.parse(readFileSync(new URL("./mystery-check.json", import.meta.url), "utf8"));
 
+class HttpError extends Error {
+  constructor(status, message) {
+    super(`${status} ${message}`);
+    this.status = status;
+  }
+}
+
 async function call(path, body) {
   const res = await fetch(`${BASE}/api/mystery-proto${path}`, {
     method: body ? "POST" : "GET",
@@ -23,14 +30,43 @@ async function call(path, body) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const j = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(`${res.status} ${j?.error?.message ?? ""}`);
+  if (!res.ok) throw new HttpError(res.status, j?.error?.message ?? "");
   return j;
+}
+
+/** 개발 서버가 파일 변경으로 다시 켜지는 중이면 (연결 거부) 뜰 때까지 기다림 */
+async function waitServer() {
+  for (let i = 0; i < 60; i++) {
+    try {
+      await call("/status");
+      return;
+    } catch {
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+  }
+  throw new Error("서버가 60초 동안 안 뜸");
+}
+
+/** 판은 서버 메모리라 서버가 다시 켜지면 사라짐 → 새 판을 열고 그 요청만 다시 */
+async function withPlay(caseId, holder, fn) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (!holder.id) holder.id = (await call("/start", { caseId })).id;
+      return await fn(holder.id);
+    } catch (e) {
+      const restarted = !(e instanceof HttpError) || e.status === 404;
+      if (!restarted || attempt === 2) throw e;
+      await waitServer();
+      holder.id = null;
+    }
+  }
 }
 
 const FAMILY = { Y: ["YES", "KEY_YES"], N: ["NO", "KEY_NO"] };
 const allowed = (ok) => ok.flatMap((v) => FAMILY[v] ?? [v]);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+await waitServer();
 const status = await call("/status");
 if (!status.enabled) {
   console.error("게임이 꺼져 있음 — server/.env 에 GEMINI_API_KEY 또는 GROQ_API_KEY 를 넣고 서버를 다시 켜 주세요.");
@@ -49,12 +85,12 @@ for (const [caseId, t] of Object.entries(spec.cases)) {
   console.log(`\n■ ${caseId}`);
   const answers = t.ask.map(() => []);
   for (let rep = 0; rep < REPEAT; rep++) {
-    const play = await call("/start", { caseId });
+    const play = { id: null };
     for (const [i, item] of t.ask.entries()) {
       const t0 = Date.now();
       let verdict;
       try {
-        verdict = (await call("/ask", { id: play.id, question: item.q, noCache: true })).verdict;
+        verdict = (await withPlay(caseId, play, (id) => call("/ask", { id, question: item.q, noCache: true }))).verdict;
       } catch (e) {
         verdict = `ERROR(${e.message})`;
       }
@@ -64,7 +100,8 @@ for (const [caseId, t] of Object.entries(spec.cases)) {
       if (good) askOk++;
       else misses.push({ caseId, q: item.q, got: verdict, ok: item.ok });
       console.log(`  ${good ? "✓" : "✗"} ${String(Date.now() - t0).padStart(5)}ms  ${verdict.padEnd(10)} ${item.q}${good ? "" : `   (기대: ${item.ok.join("/")})`}`);
-      await sleep(300);
+      // 무료 한도(모델당 분당 약 4문)를 넘기지 않게 사람 속도로
+      await sleep(Number(opt("gap", "6000")));
     }
   }
   if (REPEAT > 1) {
@@ -76,10 +113,9 @@ for (const [caseId, t] of Object.entries(spec.cases)) {
     }
   }
   for (const g of t.grade ?? []) {
-    const play = await call("/start", { caseId });
     const t0 = Date.now();
     try {
-      const v = await call("/submit", { id: play.id, answer: g.a });
+      const v = await withPlay(caseId, { id: null }, (id) => call("/submit", { id, answer: g.a }));
       const s = v.submissions.at(-1);
       const good = g.passed !== undefined ? s.passed === g.passed : s.passed <= g.passedMax;
       gradeTotal++;
