@@ -1257,10 +1257,15 @@ export class TownEngine {
           // → 옷 · 머리 겹 사이가 얇은 곳에서 안쪽 겹의 껍데기가 바깥 겹을 뚫고 검은 점으로 보이지 않게
           `#include <project_vertex>
 float inkW = uInk * max( -mvPosition.z, 0.05 );
-vec3 inkP = mvPosition.xyz + normalize( transformedNormal ) * inkW;
+#ifdef FLIP_SIDED
+vec3 inkN = -normalize( transformedNormal );
+#else
+vec3 inkN = normalize( transformedNormal );
+#endif
+vec3 inkP = mvPosition.xyz + inkN * inkW;
 inkP += normalize( mvPosition.xyz ) * ( inkW * 2.0 + 0.05 );
 gl_Position = projectionMatrix * vec4( inkP, 1.0 );
-vInkZ = normalize( transformedNormal ).z;`
+vInkZ = inkN.z;`
         );
       // 껍데기 중 정반대(뒤쪽)를 보는 면은 버림: 외곽선은 옆을 보는 면에서만 생김.
       // 뒤쪽 면은 몸 · 옷의 작은 틈이나 얇은 겹을 지나 앞으로 비쳐서 검은 점 · 머리끝 찌꺼기가 됐음
