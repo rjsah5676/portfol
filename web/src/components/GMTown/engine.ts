@@ -431,6 +431,7 @@ export class TownEngine {
         if (this.dead) return s.dispose();
         this.town = s;
         this.applyHome();
+        if (this.me && !this.house) this.clearView(this.me.x, this.me.y);
         const size = this.phone ? 1024 : 2048;
         s.sun.shadow.mapSize.set(size, size);
         // 이제 지평선이 보이니 하늘 공 + 먼 곳은 안개로 (먼 나무도 덜 그림)
@@ -524,6 +525,7 @@ export class TownEngine {
         this.sent.at = 0;
         this.sent.m = -1;
       } else this.cam = { x: this.me.x, y: this.me.y };
+      this.clearView(this.me.x, this.me.y);
     }
   }
   join(p: PlayerWire) {
@@ -574,12 +576,106 @@ export class TownEngine {
     this.me.x = x;
     this.me.y = y;
     this.path = [];
-    // 순간이동: 카메라도 바로 (마을을 가로질러 미끄러지지 않게)
+    // 순간이동: 카메라도 바로 (마을을 가로질러 미끄러지지 않게) · 건물에 가리지 않는 쪽으로 돌려 둠
     if (far) {
       this.cam = { x, y };
       this.camHSet = false;
       this.goal = null;
+      this.clearView(x, y);
     }
+  }
+  /**
+   * 카메라가 건물 속이거나 건물 · 언덕에 가려 나를 못 보면, 가장 가까운 안 가리는 쪽으로 시점을 돌림.
+   * 건물 문 앞이면 문 바깥쪽(건물을 등진 쪽)부터 봄. (첫 입장 · 순간이동 · 집에서 나올 때)
+   */
+  clearView(x: number, y: number) {
+    if (!this.town || this.house) return;
+    const door = doorAt(x, y);
+    let prefer = this.camYaw;
+    if (door && !isLot(door)) {
+      const f = doorFront(door);
+      prefer = Math.atan2(f.x - (door.x + door.w / 2), f.y - (door.y + door.d / 2));
+    }
+    // 가릴 수 있는 것: 보이는 마을 조각 전부 (땅 · 사람 · 표시 고리 · 하늘은 빼고)
+    const town = this.town;
+    const skip = new Set<THREE.Object3D>([town.ground, town.doorRing, town.goalRing]);
+    for (const a of [...this.others.values(), ...this.npcs, ...(this.me ? [this.me] : [])]) {
+      if (a.rig) skip.add(a.rig.root);
+      if (a.view) for (const m of [a.view.mesh, a.view.ghost, a.view.shadow]) skip.add(m);
+    }
+    const solid: THREE.Object3D[] = [];
+    const walk = (o: THREE.Object3D) => {
+      if (!o.visible || skip.has(o)) return;
+      const m = o as THREE.Mesh;
+      if (m.isMesh && (m.material as THREE.Material).visible !== false && (m.geometry.boundingSphere?.radius ?? 1) > 0.15) solid.push(m);
+      for (const c of o.children) walk(c);
+    };
+    for (const c of town.scene.children) if (!(c as THREE.Light).isLight) walk(c);
+    const pitch = Math.max(12 * DEG, this.clampPitch(this.camPitch));
+    const dist = this.baseDist * this.zoom;
+    const gh = heightAt(x, y);
+    /** 가림 점수: 0 = 깨끗. 건물 속 · 나를 못 봄은 크게, 화면 둘레를 덮는 가까운 물건은 하나에 1 */
+    const score = (yaw: number) => {
+      const cp = Math.cos(pitch);
+      const c = new THREE.Vector3(x + cp * Math.sin(yaw) * dist, gh + LOOK_H + Math.sin(pitch) * dist, y + cp * Math.cos(yaw) * dist);
+      // 건물 속
+      for (const v of town.buildings) {
+        const b = v.b;
+        if (c.x > b.x - 0.3 && c.x < b.x + b.w + 0.3 && c.z > b.y - 0.3 && c.z < b.y + b.d + 0.3 && c.y < heightAt(b.x + b.w / 2, b.y + b.d / 2) + Math.max(2.2, b.h) + 1) return 1000;
+      }
+      // 나(가슴 · 머리)까지 가는 길에 건물 · 언덕 · 물건
+      for (const h of [0.9, 1.6]) {
+        const to = new THREE.Vector3(x, gh + h, y);
+        const d = to.clone().sub(c);
+        const len = d.length();
+        for (let t = 0.1; t < 0.95; t += 0.05) {
+          const px = c.x + d.x * t,
+            pz = c.z + d.z * t;
+          if (c.y + d.y * t < heightAt(px, pz) + 0.2) return 500;
+        }
+        this.ray.set(c, d.normalize());
+        this.ray.far = len - 0.4;
+        for (const v of town.buildings) if (this.ray.intersectObject(v.pick, false).length) return 500;
+        if (this.ray.intersectObjects(solid, false).length) return 300;
+        // 반대로도 (카메라가 무엇 속에 들어가 있으면 안쪽에서 쏜 선은 안 맞음)
+        this.ray.set(to, d.clone().negate());
+        this.ray.far = len;
+        if (this.ray.intersectObjects(solid, false).some((q) => q.distance > 0.45)) return 300;
+      }
+      // 화면 둘레가 카메라 바로 앞 물건에 덮이는지 (기둥 · 간판 · 탁자가 화면 한쪽을 가림)
+      const to = new THREE.Vector3(x, gh + 1.2, y);
+      const f = to.clone().sub(c);
+      const fl = f.length();
+      f.normalize();
+      const right = new THREE.Vector3().crossVectors(f, new THREE.Vector3(0, 1, 0)).normalize();
+      const up = new THREE.Vector3().crossVectors(right, f);
+      let n = 0;
+      for (const u of [-0.62, -0.31, 0, 0.31, 0.62])
+        for (const w of [-0.3, -0.15, 0, 0.15, 0.3]) {
+          if (!u && !w) continue;
+          const dir = f.clone().addScaledVector(right, u).addScaledVector(up, w).normalize();
+          this.ray.set(c, dir);
+          this.ray.far = fl * 0.6;
+          if (this.ray.intersectObjects(solid, false).length) n++;
+        }
+      return n;
+    };
+    let best = prefer,
+      bestS = Infinity;
+    for (let k = 0; k <= 12 && bestS > 0; k++) {
+      for (const sg of k ? [1, -1] : [1]) {
+        const yaw = prefer + sg * k * 15 * DEG;
+        const sc = score(yaw);
+        if (sc < bestS) {
+          bestS = sc;
+          best = yaw;
+          if (!sc) break;
+        }
+      }
+      // 지금 쪽이 조금만 덮이면 (가장자리 1~2 줄) 그대로
+      if (!k && bestS <= 2) break;
+    }
+    this.camYaw = best;
   }
   /** 지도 창 · 원형 지도가 그릴 것: 나 (보는 쪽) · 다른 사람 · 시점 방향 */
   mapState() {
@@ -978,6 +1074,7 @@ export class TownEngine {
       me.faceTo = me.face = 0;
       this.cam = { x, y };
       this.camHSet = false;
+      this.clearView(x, y);
       this.sent.at = 0;
       this.sent.m = -1;
     }
@@ -1877,6 +1974,11 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     const town = this.town;
     if (!town) return null;
     const o = this.camera.position;
+    // 카메라가 건물 상자 안이면 (안에서 쏜 선은 상자에 안 맞음) 그 건물
+    for (const v of town.buildings) {
+      const b = v.b;
+      if (o.x > b.x && o.x < b.x + b.w && o.z > b.y && o.z < b.y + b.d && o.y < v.pick.position.y + v.pick.scale.y * Math.max(2.2, b.h) / 2) return v;
+    }
     for (const h of [0.9, 1.6]) {
       const d = this.bv.set(x - o.x, this.hAt(x, y) + h - o.y, y - o.z);
       const far = d.length() - 0.3;
