@@ -73,6 +73,11 @@ async function review(c: MysteryCase): Promise<{ ok: boolean; md: string }> {
 
   // 1. lint
   const issues = lintCase(c, [...CASES, ...CANDIDATES].filter((o) => o.id !== c.id));
+  // 그림 파일이 web/public 에 있는지 (lint 는 파일 시스템을 안 보니 여기서)
+  const webPublic = path.resolve("../web/public");
+  for (const img of [c.cover, ...c.clues.map((cl) => cl.image)].filter((s): s is string => !!s)) {
+    if (!existsSync(path.join(webPublic, img))) issues.push({ level: "warn", code: "image", message: `그림 파일 없음: web/public${img}` });
+  }
   const errs = issues.filter((i) => i.level === "error");
   sections.push({
     title: `정적 검수 — 오류 ${errs.length} · 경고 ${issues.length - errs.length}`,

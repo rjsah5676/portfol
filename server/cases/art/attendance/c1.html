@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 390px; height: 844px; background: #B2C7D9; font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; color: #111; overflow: hidden; }
+  .status { height: 44px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; font-size: 14px; font-weight: 700; background: #B2C7D9; }
+  .top { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 14px; background: #B2C7D9; }
+  .top .back { font-size: 22px; }
+  .top .title { font-size: 17px; font-weight: 700; }
+  .top .cnt { color: #5a6b7a; font-size: 14px; }
+  .top .icons { margin-left: auto; letter-spacing: 10px; color: #333; font-size: 18px; }
+  .chat { padding: 6px 12px 0; }
+  .date { text-align: center; margin: 14px 0 10px; }
+  .date span { background: rgba(0,0,0,.14); color: #fff; font-size: 11px; padding: 4px 12px; border-radius: 12px; }
+  .msg { display: flex; gap: 8px; margin: 8px 0; align-items: flex-start; }
+  .av { width: 38px; height: 38px; border-radius: 15px; background: #d9d9d9; flex: none; position: relative; overflow: hidden; }
+  .av::before { content: ""; position: absolute; left: 12px; top: 7px; width: 14px; height: 14px; border-radius: 50%; background: #fff; }
+  .av::after { content: ""; position: absolute; left: 6px; top: 23px; width: 26px; height: 22px; border-radius: 13px 13px 0 0; background: #fff; }
+  .av.b { background: #8ab4f8; } .av.c { background: #f5b971; } .av.d { background: #9fd3a8; }
+  .name { font-size: 12px; color: #333; margin-bottom: 3px; }
+  .row { display: flex; align-items: flex-end; gap: 5px; }
+  .bubble { background: #fff; border-radius: 4px 14px 14px 14px; padding: 8px 11px; font-size: 14px; line-height: 1.35; max-width: 230px; }
+  .time { font-size: 10px; color: #556; }
+  .me { justify-content: flex-end; }
+  .me .row { flex-direction: row-reverse; }
+  .me .bubble { background: #FEE500; border-radius: 14px 4px 14px 14px; }
+  .bottom { position: absolute; bottom: 0; left: 0; right: 0; height: 64px; background: #fff; display: flex; align-items: center; padding: 0 12px; gap: 10px; }
+  .bottom .plus { font-size: 22px; color: #666; }
+  .bottom .input { flex: 1; height: 36px; border-radius: 18px; background: #f2f2f2; }
+  .bottom .send { width: 36px; height: 36px; border-radius: 50%; background: #FEE500; }
+</style></head>
+<body>
+  <div class="status"><span>7:02</span><span>▲▲ ▮▮▮ ▭</span></div>
+  <div class="top"><span class="back">‹</span><span class="title">한빛종합건설 전체</span><span class="cnt">14</span><span class="icons">⌕≡</span></div>
+  <div class="chat">
+    <div class="date"><span>2023년 11월 6일 월요일</span></div>
+    <div class="msg"><div class="av"></div><div><div class="name">박성훈</div><div class="row"><div class="bubble">출근했습니다</div><span class="time">오전 7:00</span></div></div></div>
+    <div class="msg"><div class="av c"></div><div><div class="name">최 이사</div><div class="row"><div class="bubble">오늘 자재 입고 10시입니다. 1층 창고 비워두세요</div><span class="time">오전 8:41</span></div></div></div>
+    <div class="msg me"><div><div class="row"><div class="bubble">넵</div><span class="time">오전 8:43</span></div></div></div>
+
+    <div class="date"><span>2025년 3월 14일 금요일</span></div>
+    <div class="msg"><div class="av"></div><div><div class="name">박성훈</div><div class="row"><div class="bubble">출근했습니다</div><span class="time">오전 7:00</span></div></div></div>
+    <div class="msg"><div class="av b"></div><div><div class="name">김 대표</div><div class="row"><div class="bubble">이번 주 금요일 회식 7시. 빠지는 사람 미리 말하세요</div><span class="time">오전 9:12</span></div></div></div>
+    <div class="msg"><div class="av d"></div><div><div class="name">이수정</div><div class="row"><div class="bubble">성훈님은 아직도 지방이세요? ㅋㅋ 회식 때 한 번 보고 싶네</div><span class="time">오전 9:15</span></div></div></div>
+    <div class="msg"><div class="av b"></div><div><div class="name">김 대표</div><div class="row"><div class="bubble">거기 현장 아직 안 끝났어요. 신경 쓰지 마세요</div><span class="time">오전 9:16</span></div></div></div>
+
+    <div class="date"><span>2026년 11월 5일 목요일</span></div>
+    <div class="msg"><div class="av"></div><div><div class="name">박성훈</div><div class="row"><div class="bubble">출근했습니다</div><span class="time">오전 7:00</span></div></div></div>
+  </div>
+  <div class="bottom"><span class="plus">＋</span><div class="input"></div><div class="send"></div></div>
+</body></html>

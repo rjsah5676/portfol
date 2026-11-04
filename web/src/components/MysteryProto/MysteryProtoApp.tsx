@@ -26,6 +26,8 @@ interface PublicCase {
   rubricCount: number;
   bonusCount: number;
   credit?: string;
+  /** 표지 삽화 */
+  cover?: string;
   /** 후보 사건 (관리자 · 개발 모드에만 뜸) */
   candidate?: boolean;
 }
@@ -35,7 +37,7 @@ interface View {
   case: PublicCase;
   questions: { text: string; verdict: Verdict }[];
   used: number;
-  clues: { id: string; body: string }[];
+  clues: { id: string; body: string; image?: string }[];
   nextClueAt: number | null;
   submissions: { passed: number; total: number; failed: { label: string; status: FailStatus }[]; bonus: string[]; bonusTotal: number; same: boolean }[];
   status: "playing" | "solved" | "gave_up";
@@ -295,6 +297,9 @@ export default function MysteryProtoApp() {
                 <span>질문 {c.questionLimit} · 단서 {c.clueCount}</span>
               </div>
               <div className="mt-1.5 text-lg font-bold group-hover:text-[#E9C98B]">{c.title}</div>
+              {c.cover && (
+                <img src={c.cover} alt="" className="mt-2 aspect-[3/2] w-full rounded-md object-cover" />
+              )}
               <p className="mt-1 text-sm leading-relaxed text-white/70">{c.prompt}</p>
             </button>
           ))}
@@ -320,6 +325,9 @@ export default function MysteryProtoApp() {
           <span className="ml-auto lg:hidden">{expanded ? "접기 ▲" : "펼치기 ▼"}</span>
         </div>
         <div className="mt-1 font-bold">{c.title}</div>
+        {c.cover && (
+          <img src={c.cover} alt="" className={`mt-2 w-full rounded-md ${expanded ? "" : "hidden lg:block"}`} />
+        )}
         <p className={`mt-1 text-sm leading-relaxed text-white/80 ${expanded ? "" : "line-clamp-2 lg:line-clamp-none"}`}>{c.prompt}</p>
       </button>
       <div className={`${mono} mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/50`}>
@@ -474,6 +482,9 @@ export default function MysteryProtoApp() {
             {view.clues.map((cl, i) => (
               <li key={cl.id} className="rounded-lg border border-white/10 bg-white/[0.03] p-3">
                 <div className={`${mono} text-[10px] text-[#C9A15B]`}>단서 {i + 1}</div>
+                {cl.image && (
+                  <img src={cl.image} alt="" className="mt-2 w-full rounded-md border border-white/10" />
+                )}
                 <p className="mt-1 text-sm leading-relaxed text-white/85">{cl.body}</p>
               </li>
             ))}

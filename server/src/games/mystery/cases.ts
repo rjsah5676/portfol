@@ -40,6 +40,8 @@ export interface Clue {
   body: string;
   /** 단서의 역할: 질문거리(사실) / 판을 뒤집는 조각(reveal, 단서 없인 못 푸는 항목을 열어 줌) / 사실상 해답 요약(마지막 구제용) */
   role?: "fact" | "reveal" | "rescue";
+  /** 그림 단서. web/public 기준 경로 (예: /mystery/attendance/c1.png). body 는 그림 설명·캡션 */
+  image?: string;
 }
 
 /** 기대 판정 셋 — 검수 스크립트가 돌리고, example 인 것은 판정 프롬프트에 예시로도 들어감 */
@@ -78,6 +80,8 @@ export interface MysteryCase {
   expected?: { ask: ExpectedJudgement[]; grade?: ExpectedGrade[] };
   /** 외부 작품 모티브면 카드에 고지 (예: "영화 〈…〉 모티브 일부, 실제 줄거리와 무관") */
   credit?: string;
+  /** 표지 삽화 (web/public 기준 경로). 문제문과 같이 보이며 그림 자체가 단서 — 이상한 점·보너스 소품을 심는다 */
+  cover?: string;
   /** cases/candidates 에서 읽은 후보 (로더가 붙임, 파일엔 안 씀) */
   candidate?: boolean;
 }

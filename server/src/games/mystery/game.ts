@@ -71,6 +71,8 @@ export interface PublicCase {
   /** 보너스 항목 수 */
   bonusCount: number;
   credit?: string;
+  /** 표지 삽화 경로 */
+  cover?: string;
   /** 후보 사건 (개발 모드 · 관리자 목록에만) */
   candidate?: boolean;
 }
@@ -80,7 +82,7 @@ export interface MysteryView {
   case: PublicCase;
   questions: { text: string; verdict: Verdict }[];
   used: number;
-  clues: { id: string; body: string }[];
+  clues: { id: string; body: string; image?: string }[];
   nextClueAt: number | null;
   submissions: {
     /** 정답 항목 중 인정된 수 */
@@ -280,6 +282,7 @@ export const publicCase = (c: MysteryCase): PublicCase => ({
   rubricCount: requiredRubric(c).length,
   bonusCount: bonusRubric(c).length,
   ...(c.credit ? { credit: c.credit } : {}),
+  ...(c.cover ? { cover: c.cover } : {}),
   ...(c.candidate ? { candidate: true } : {}),
 });
 
@@ -318,7 +321,7 @@ export function createMystery(opts: MysteryOptions) {
       case: publicCase(p.c),
       questions: p.questions.map((q) => ({ text: q.text, verdict: q.verdict })),
       used: n,
-      clues: p.c.clues.filter((cl) => done || cl.unlockAt <= n).map((cl) => ({ id: cl.id, body: cl.body })),
+      clues: p.c.clues.filter((cl) => done || cl.unlockAt <= n).map((cl) => ({ id: cl.id, body: cl.body, ...(cl.image ? { image: cl.image } : {}) })),
       nextClueAt: done ? null : (next?.unlockAt ?? null),
       submissions: p.submissions.map((s, i) => {
         // 정답 항목만 인정 수 · 미인정 목록에 들어감. 보너스는 맞힌 라벨만 따로
