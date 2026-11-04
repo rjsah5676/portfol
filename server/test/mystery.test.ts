@@ -71,7 +71,7 @@ describe("예/아니오 추리 — 판 진행 (가짜 AI)", () => {
 
     const before = calls.length;
     const b = await g.ask(v0.id, "상자 밑에 뭔가 있었나");
-    expect(b.verdict).toBe("KEY_YES");
+    expect(b.verdict).toBe("YES"); // 같은 핵심 사실은 두 번째부터 도장 없음
     expect(calls.length).toBe(before); // 캐시
 
     expect((await g.ask(v0.id, "누가 신고했어?")).view.used).toBe(2); // INVALID 는 차감 안 함

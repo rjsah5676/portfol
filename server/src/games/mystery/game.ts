@@ -208,11 +208,30 @@ export function parseJudge(c: MysteryCase, j: any): Omit<Judged, "model"> | null
   };
 }
 
-/** 모델 판정 → 화면 판정. KEY 는 사실 목록으로 서버가 정함 */
-export function finalVerdict(c: MysteryCase, j: Omit<Judged, "model">): Verdict {
-  if (j.raw === "YES" && j.facts.some((id) => c.facts.find((f) => f.id === id)?.key)) return "KEY_YES";
-  if (j.raw === "NO" && j.beliefs.length) return "KEY_NO";
+/**
+ * 모델 판정 → 화면 판정. KEY 는 사실 목록으로 서버가 정함.
+ * 이 판에서 처음 짚은 핵심 사실 · 처음 깬 오답 가설일 때만 KEY (같은 걸 또 물으면 그냥 YES/NO — 도장이 흔해지면 손맛이 죽음)
+ */
+export function finalVerdict(
+  c: MysteryCase,
+  j: Omit<Judged, "model">,
+  seen: { facts: Set<string>; beliefs: Set<string> } = { facts: new Set(), beliefs: new Set() }
+): Verdict {
+  const isKey = (id: string) => !!c.facts.find((f) => f.id === id)?.key;
+  if (j.raw === "YES" && j.facts.some((id) => isKey(id) && !seen.facts.has(id))) return "KEY_YES";
+  if (j.raw === "NO" && j.beliefs.some((id) => !seen.beliefs.has(id))) return "KEY_NO";
   return j.raw;
+}
+
+/** 이 판에서 이미 도장을 받은 핵심 사실 · 오답 가설 */
+function seenKeys(c: MysteryCase, questions: { verdict: Verdict; facts: string[]; beliefs: string[] }[]) {
+  const facts = new Set<string>();
+  const beliefs = new Set<string>();
+  for (const q of questions) {
+    if (q.verdict === "KEY_YES") for (const id of q.facts) if (c.facts.find((f) => f.id === id)?.key) facts.add(id);
+    if (q.verdict === "KEY_NO") for (const id of q.beliefs) beliefs.add(id);
+  }
+  return { facts, beliefs };
 }
 
 export function parseGrade(c: MysteryCase, j: any): { id: string; status: GradeStatus }[] | null {
@@ -365,7 +384,7 @@ export function createMystery(opts: MysteryOptions) {
             while (cache.size > MAX_CACHE) cache.delete(cache.keys().next().value!);
           }
         }
-        const verdict = finalVerdict(p.c, judged);
+        const verdict = finalVerdict(p.c, judged, seenKeys(p.c, p.questions));
         p.questions.push({ ...judged, text, verdict, cached, at: now() });
         log({ kind: "ask", caseId: p.c.id, caseVersion: p.c.version, playId: p.id, text, result: { verdict, raw: judged.raw, facts: judged.facts, beliefs: judged.beliefs }, model: judged.model, cached, at: new Date(now()) });
         return { verdict, view: view(p) };
