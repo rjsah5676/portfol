@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { drawWithFonts } from "./canvasFont";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
@@ -127,8 +128,11 @@ function canvasTex(
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  draw(c.getContext("2d")!, w, h);
-  const t = new THREE.CanvasTexture(c);
+  let t: THREE.CanvasTexture | null = null;
+  drawWithFonts(c, draw, () => {
+    if (t) t.needsUpdate = true;
+  });
+  t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   if (pixel) {
     t.magFilter = THREE.NearestFilter;
@@ -1463,17 +1467,17 @@ if ( vFade > 0.01 ) {
         c.fillStyle = "#1b2a66";
         c.fillRect(0, 0, W, H);
       }
-      c.font = '400 78px "Black Han Sans", sans-serif';
+      c.font = '400 70px "Black Han Sans", sans-serif';
       c.textAlign = "center";
       c.textBaseline = "middle";
       c.lineWidth = 10;
       c.strokeStyle = "#0b1030";
-      c.strokeText("GMTOWN", W / 2, H / 2 + 4);
+      c.strokeText("ANIME TOWN", W / 2, H / 2 + 4);
       const gr = c.createLinearGradient(0, 10, 0, H - 10);
       gr.addColorStop(0, "#fff1b8");
       gr.addColorStop(1, "#f2b33e");
       c.fillStyle = gr;
-      c.fillText("GMTOWN", W / 2, H / 2 + 4);
+      c.fillText("ANIME TOWN", W / 2, H / 2 + 4);
     });
     own(sign);
     // 모델 아치는 간판 판이 더 크고 높음 (남색 판 가운데 · 앞면)
@@ -1573,13 +1577,24 @@ if ( vFade > 0.01 ) {
     };
     const inv = new THREE.Matrix4(),
       rel = new THREE.Matrix4();
+    // 켜고 끄는 조각 묶음(userData.bakeRoot — 예: 우리 집 / 분양 중 터)은 그 묶음 안에서 따로 합침
+    const roots: THREE.Object3D[] = [];
     for (const G of groups) {
+      roots.push(G);
+      G.traverse((o) => o !== G && o.userData.bakeRoot && roots.push(o));
+    }
+    const rootOf = (o: THREE.Object3D) => {
+      for (let p: THREE.Object3D | null = o.parent; p; p = p.parent) if (p.userData.bakeRoot || groups.includes(p as THREE.Group)) return p;
+      return null;
+    };
+    for (const G of roots) {
       G.updateMatrixWorld(true);
       inv.copy(G.matrixWorld).invert();
       const bins = new Map<string, { mat: THREE.Material; cast: boolean; recv: boolean; geos: THREE.BufferGeometry[]; srcs: THREE.Mesh[] }>();
       G.traverse((o) => {
         const m = o as THREE.Mesh;
         if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh || (m as THREE.SkinnedMesh).isSkinnedMesh) return;
+        if (rootOf(m) !== G) return;
         if (Array.isArray(m.material) || !m.visible || moving.has(m) || pinned(m)) return;
         if (m.geometry.morphAttributes.position) return;
         rel.multiplyMatrices(inv, m.matrixWorld);

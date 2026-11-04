@@ -1,31 +1,59 @@
 import * as THREE from "three";
-import { CELL, FURNITURE, doorCells, footprint, furnById, roomOf, type FurnKind, type Placed } from "@/lib/gmtown/house";
+import {
+  CELL,
+  FLOOR_H,
+  FURNITURE,
+  HOME_AT,
+  LV_STAIR,
+  enterAt,
+  footprint,
+  furnById,
+  houseGeo,
+  levelH,
+  nextLevel,
+  stairT,
+  type FurnKind,
+  type HouseGeo,
+  type Placed,
+} from "@/lib/gmtown/house";
 
 /*
- * 집 안 장면 (심즈식) — 마을 장면 안 멀리 떨어진 곳(HOME_AT)에 방 하나를 지음. 마을 해 · 그림자 · 캐릭터 그대로 씀.
+ * 집 안 장면 (심즈식) — 마을 장면 안 멀리 떨어진 곳(HOME_AT)에 방을 지음. 마을 해 · 그림자 · 캐릭터 그대로 씀.
  * 벽: 카메라 쪽을 보는 벽은 낮게 잘라서(컷어웨이) 방 안이 보이게. 가구: 코드로 만든 툰 덩어리 + 외곽선.
- * 좌표: 방 왼쪽 위 = (ox, oy) (땅 x, y). 칸 (cx, cy) 의 가운데 = ox + (cx + 0.5) * CELL.
+ * 좌표: 칸 (0, 0) 의 왼쪽 위 = (ox, oy) (땅 x, y). 칸 (cx, cy) 의 가운데 = ox + (cx + 0.5) * CELL.
+ * 2층 집: 왼쪽 벽 계단으로 오르내림 (lib/gmtown/house.ts nextLevel). 1층에 있으면 2층은 통째로 숨김 (심즈처럼).
+ * 정원 주택: 집 앞 마당 (잔디 · 돌길 · 울타리 · 대문) — 나가기는 대문에서.
  */
 
-export const HOME_AT = { x: -400, y: -400 };
+export { HOME_AT };
 const WALL_H = 2.6;
 const WALL_T = 0.16;
 const INK = 0x2b2433;
 
 export interface HouseScene {
   group: THREE.Group;
-  /** 방 왼쪽 위 (땅 좌표) · 크기(m) */
-  ox: number;
-  oy: number;
+  geo: HouseGeo;
+  /** 집 가운데 (마당 포함) · 크기(m) — 카메라용 */
   wm: number;
   dm: number;
-  /** 들어왔을 때 서는 곳 (문 안쪽) */
+  /** 뒤 배경 색 */
+  bg: number;
+  /** 들어왔을 때 서는 곳 */
   enter: { x: number; y: number };
-  /** 문에 닿았는지 (나가기) */
+  /** 나가는 곳(문 · 대문)에 닿았는지 */
   atDoor(x: number, y: number): boolean;
-  /** 몸 반지름 r 이 들어갈 수 없는 곳 */
+  /** 몸 반지름 r 이 (지금 층에서) 들어갈 수 없는 곳 */
   blocked(x: number, y: number, r: number): boolean;
-  /** 땅 좌표 → 칸 */
+  /** 움직인 뒤 (계단 오르내림 · 2층 보이기) */
+  moved(x: number, y: number): void;
+  /** 지금 층 (0 · 1 · 2 = 계단 위) · 발 높이 */
+  level(): number;
+  heightAt(x: number, y: number): number;
+  /** 보이는 층 (꾸미기 · 누르기 바닥) */
+  viewFloor(): number;
+  /** 꾸미기에서 볼 층을 고름 (null = 내가 있는 층) */
+  setView(f: number | null): void;
+  /** 땅 좌표 → 칸 (보이는 층) */
   cellAt(x: number, y: number): { cx: number; cy: number } | null;
   setLayout(layout: Placed[]): void;
   /** 꾸미기: 놓을 가구 미리 보기 (null 이면 숨김) · 놓을 수 있는지 색 */
@@ -59,12 +87,15 @@ function canvasTex(w: number, h: number, draw: (g: CanvasRenderingContext2D) => 
 }
 
 export function buildHouse(tier: number, layout: Placed[]): HouseScene {
-  const R = roomOf(tier);
-  const wm = R.w * CELL,
-    dm = R.d * CELL;
-  const ox = HOME_AT.x - wm / 2,
-    oy = HOME_AT.y - dm / 2;
+  const geo = houseGeo(tier);
+  const { ox, oy, wm, dm, w: GW, d: GD, gd: GGD, stair: S, yard } = geo;
+  const ym = geo.gd * CELL;
   const group = new THREE.Group();
+  /** 1층 · 2층 */
+  const L0 = new THREE.Group(),
+    L1 = new THREE.Group();
+  group.add(L0, L1);
+  L1.visible = false;
   const disp: { dispose(): void }[] = [];
   const own = <T extends { dispose(): void }>(x: T) => (disp.push(x), x);
   const G = own(grad());
@@ -77,18 +108,18 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
   };
   const inkM = own(new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide }));
   /** 덩어리 + 외곽선 (뒤집은 껍데기를 살짝 키움) */
-  const solid = (geo: THREE.BufferGeometry, m: THREE.Material, ink = 0.02) => {
-    own(geo);
+  const solid = (g0: THREE.BufferGeometry, m: THREE.Material, ink = 0.02) => {
+    own(g0);
     const g = new THREE.Group();
-    const a = new THREE.Mesh(geo, m);
+    const a = new THREE.Mesh(g0, m);
     a.castShadow = true;
     a.receiveShadow = true;
     g.add(a);
     if (ink) {
-      geo.computeBoundingBox();
+      g0.computeBoundingBox();
       const s = new THREE.Vector3();
-      geo.boundingBox!.getSize(s);
-      const k = new THREE.Mesh(geo, inkM);
+      g0.boundingBox!.getSize(s);
+      const k = new THREE.Mesh(g0, inkM);
       k.scale.set(1 + ink / Math.max(0.05, s.x), 1 + ink / Math.max(0.05, s.y), 1 + ink / Math.max(0.05, s.z));
       g.add(k);
     }
@@ -109,8 +140,15 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
     o.position.set(x, y, z);
     return o;
   };
+  const plane = (w: number, d: number, m: THREE.Material, x: number, y: number, z: number) => {
+    const p = new THREE.Mesh(own(new THREE.PlaneGeometry(w, d)), m);
+    p.rotation.x = -Math.PI / 2;
+    p.position.set(x, y, z);
+    p.receiveShadow = true;
+    return p;
+  };
 
-  // ── 바닥: 나무 마루 ──
+  // ── 바닥: 나무 마루 (1층 · 2층) ──
   const floorT = own(
     canvasTex(
       256,
@@ -127,22 +165,46 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
           g.fillRect((off + 128) % 256, i * 32, 2, 32);
         }
       },
-      wm / 2,
-      dm / 2
+      1,
+      1
     )
   );
-  const floor = new THREE.Mesh(own(new THREE.PlaneGeometry(wm, dm)), toon(0xffffff, { map: floorT }));
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(HOME_AT.x, 0, HOME_AT.y);
-  floor.receiveShadow = true;
-  group.add(floor);
-  // 바깥 바닥 (방 밖이 허공으로 안 보이게) — 어두운 판
-  const under = new THREE.Mesh(own(new THREE.PlaneGeometry(wm + 40, dm + 40)), toon(0x2a2433));
-  under.rotation.x = -Math.PI / 2;
-  under.position.set(HOME_AT.x, -0.02, HOME_AT.y);
-  group.add(under);
+  /** 마루 판 하나 (텍스처 반복은 크기에 맞춰) */
+  const floorM = (w: number, d: number) => {
+    const t = own(floorT.clone());
+    t.repeat.set(w / 2, d / 2);
+    t.needsUpdate = true;
+    return toon(0xffffff, { map: t });
+  };
+  L0.add(plane(wm, dm, floorM(wm, dm), ox + wm / 2, 0, oy + dm / 2));
 
-  // ── 벽: 파스텔 벽지 + 걸레받이, 뒤벽에 창문, 앞벽 가운데 문 ──
+  // 바깥 (방 밖이 허공으로 안 보이게) — 원룸 · 투룸 · 2층 집은 어두운 판, 정원 주택은 넓은 잔디
+  const grassT = own(
+    canvasTex(
+      128,
+      128,
+      (g) => {
+        g.fillStyle = "#8fcf6a";
+        g.fillRect(0, 0, 128, 128);
+        for (let i = 0; i < 260; i++) {
+          g.fillStyle = i % 3 ? "rgba(70,140,60,0.35)" : "rgba(200,240,150,0.45)";
+          g.fillRect((i * 53) % 128, (i * 97) % 128, 2, 4);
+        }
+      },
+      1,
+      1
+    )
+  );
+  const grassM = (w: number, d: number) => {
+    const t = own(grassT.clone());
+    t.repeat.set(w / 1.6, d / 1.6);
+    t.needsUpdate = true;
+    return toon(0xffffff, { map: t });
+  };
+  if (yard) group.add(plane(wm + 60, ym + 60, toon(0x6fae55), HOME_AT.x, -0.03, HOME_AT.y));
+  else group.add(plane(wm + 40, ym + 40, toon(0x2a2433), HOME_AT.x, -0.02, HOME_AT.y));
+
+  // ── 벽: 파스텔 벽지 + 걸레받이 ──
   const paper = own(
     canvasTex(
       128,
@@ -159,58 +221,82 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
       1
     )
   );
-  type Wall = { g: THREE.Group; n: THREE.Vector3 };
+  const paper2 = own(
+    canvasTex(
+      128,
+      128,
+      (g) => {
+        g.fillStyle = "#e6f0ea";
+        g.fillRect(0, 0, 128, 128);
+        g.fillStyle = "#d5e6dc";
+        for (let y = 0; y < 128; y += 32) g.fillRect(0, y, 128, 10);
+        g.fillStyle = "rgba(255,255,255,0.7)";
+        for (let y = 20; y < 128; y += 32) for (let x = 8; x < 128; x += 24) g.fillRect(x, y, 4, 4);
+      },
+      1,
+      1
+    )
+  );
+  type Wall = { g: THREE.Group; n: THREE.Vector3; lv: number };
   const walls: Wall[] = [];
-  const wallM = (len: number) => {
-    const t = paper.clone();
-    own(t);
+  const wallM = (len: number, tex: THREE.Texture) => {
+    const t = own(tex.clone());
     t.repeat.set(len / 1.2, WALL_H / 1.2);
     t.needsUpdate = true;
     return toon(0xffffff, { map: t });
   };
   const trim = toon(0xb98a5e);
-  const mkWall = (x0: number, y0: number, x1: number, y1: number, nx: number, ny: number, gap?: [number, number]) => {
+  const siding = toon(0xfff4e2);
+  /** 벽 하나 (x0,y0 → x1,y1, 바깥 법선 nx,ny, 문 틈 gap = 따라가는 거리 [a, b]) — base: 바닥 높이 */
+  const mkWall = (
+    parent: THREE.Group,
+    lv: number,
+    base: number,
+    tex: THREE.Texture,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    nx: number,
+    ny: number,
+    gap?: [number, number],
+    outside = false
+  ) => {
     const g = new THREE.Group();
+    g.position.y = base;
     const len = Math.hypot(x1 - x0, y1 - y0);
+    const horiz = Math.abs(y1 - y0) < 1e-6;
+    const at = (a: number) => ({ x: x0 + ((x1 - x0) * a) / len, y: y0 + ((y1 - y0) * a) / len });
     const along = (a: number, b: number) => {
       const l = b - a;
       if (l <= 0.01) return;
-      const cx = x0 + ((x1 - x0) * (a + b)) / 2 / len,
-        cy = y0 + ((y1 - y0) * (a + b)) / 2 / len;
-      const horiz = Math.abs(y1 - y0) < 1e-6;
+      const c = at((a + b) / 2);
       const w = horiz ? l : WALL_T,
         d = horiz ? WALL_T : l;
-      g.add(box(w, WALL_H, d, wallM(l), cx, 0, cy, 0.03));
-      g.add(box(horiz ? l : WALL_T + 0.03, 0.14, horiz ? WALL_T + 0.03 : l, trim, cx + nx * 0.01, 0, cy + ny * 0.01, 0.0));
+      g.add(box(w, WALL_H, d, wallM(l, tex), c.x, 0, c.y, 0.03));
+      g.add(box(horiz ? l : WALL_T + 0.03, 0.14, horiz ? WALL_T + 0.03 : l, trim, c.x - nx * 0.01, 0, c.y - ny * 0.01, 0.0));
+      // 바깥에서 보이는 벽(마당 쪽): 바깥 면에 판자 외벽
+      if (outside) g.add(box(horiz ? l : 0.03, WALL_H, horiz ? 0.03 : l, siding, c.x + nx * (WALL_T / 2 + 0.015), 0, c.y + ny * (WALL_T / 2 + 0.015), 0.0));
     };
     if (gap) {
       along(0, gap[0]);
       along(gap[1], len);
-      // 문 위 상인방
-      const cx = x0 + ((x1 - x0) * (gap[0] + gap[1])) / 2 / len,
-        cy = y0 + ((y1 - y0) * (gap[0] + gap[1])) / 2 / len;
-      const top = box(gap[1] - gap[0], 0.5, WALL_T, wallM(gap[1] - gap[0]), cx, WALL_H - 0.5, cy, 0.03);
-      g.add(top);
-      g.add(box(gap[1] - gap[0] + 0.16, 0.12, WALL_T + 0.06, trim, cx, WALL_H - 0.56, cy, 0.01));
+      const c = at((gap[0] + gap[1]) / 2);
+      g.add(box(gap[1] - gap[0], 0.5, WALL_T, wallM(gap[1] - gap[0], tex), c.x, WALL_H - 0.5, c.y, 0.03));
+      g.add(box(gap[1] - gap[0] + 0.16, 0.12, WALL_T + 0.06, trim, c.x, WALL_H - 0.56, c.y, 0.01));
+      for (const s of [gap[0], gap[1]]) {
+        const p = at(s);
+        g.add(box(0.1, WALL_H - 0.5, WALL_T + 0.06, trim, p.x, 0, p.y, 0.01));
+      }
     } else along(0, len);
-    group.add(g);
-    walls.push({ g, n: new THREE.Vector3(nx, 0, ny) });
+    parent.add(g);
+    walls.push({ g, n: new THREE.Vector3(nx, 0, ny), lv });
     return g;
   };
   const x0 = ox,
     x1 = ox + wm,
     y0 = oy,
     y1 = oy + dm;
-  const back = mkWall(x0 - WALL_T / 2, y0 - WALL_T / 2, x1 + WALL_T / 2, y0 - WALL_T / 2, 0, -1);
-  mkWall(x0 - WALL_T / 2, y0, x0 - WALL_T / 2, y1, -1, 0);
-  mkWall(x1 + WALL_T / 2, y0, x1 + WALL_T / 2, y1, 1, 0);
-  const dc = doorCells(tier);
-  const front = mkWall(x0 - WALL_T / 2, y1 + WALL_T / 2, x1 + WALL_T / 2, y1 + WALL_T / 2, 0, 1, [
-    dc.x0 * CELL + WALL_T / 2,
-    (dc.x1 + 1) * CELL + WALL_T / 2,
-  ]);
-  void front;
-  // 뒤벽 창문 (하늘 · 커튼)
   const sky = own(
     canvasTex(64, 64, (g) => {
       const gr = g.createLinearGradient(0, 0, 0, 64);
@@ -226,26 +312,128 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
       g.fill();
     })
   );
-  const winN = Math.max(1, Math.floor(wm / 3.2));
-  for (let i = 0; i < winN; i++) {
-    const cx = ox + (wm * (i + 0.5)) / winN;
-    const glass = new THREE.Mesh(own(new THREE.PlaneGeometry(1.1, 0.95)), new THREE.MeshBasicMaterial({ map: sky }));
-    own(glass.material as THREE.Material);
-    glass.position.set(cx, 1.55, y0 + 0.005);
-    back.add(glass);
-    back.add(box(1.24, 0.08, 0.06, trim, cx, 1.04, y0 + 0.02, 0.01));
-    back.add(box(1.24, 0.08, 0.06, trim, cx, 1.98, y0 + 0.02, 0.01));
-    back.add(box(0.07, 1.0, 0.06, trim, cx - 0.585, 1.04, y0 + 0.02, 0.01));
-    back.add(box(0.07, 1.0, 0.06, trim, cx + 0.585, 1.04, y0 + 0.02, 0.01));
-    back.add(box(0.05, 0.95, 0.04, trim, cx, 1.06, y0 + 0.02, 0.0));
-    back.add(box(1.4, 0.06, 0.18, trim, cx, 1.0, y0 + 0.09, 0.01));
-    const cur = toon(0xf4b7c8);
-    back.add(box(0.26, 1.15, 0.05, cur, cx - 0.72, 0.95, y0 + 0.06, 0.015));
-    back.add(box(0.26, 1.15, 0.05, cur, cx + 0.72, 0.95, y0 + 0.06, 0.015));
+  const skyM = own(new THREE.MeshBasicMaterial({ map: sky }));
+  /** 뒤벽 창문 (하늘 · 커튼) */
+  const windows = (back: THREE.Group, cur: number) => {
+    const winN = Math.max(1, Math.floor(wm / 3.2));
+    for (let i = 0; i < winN; i++) {
+      const cx = ox + (wm * (i + 0.5)) / winN;
+      const glass = new THREE.Mesh(own(new THREE.PlaneGeometry(1.1, 0.95)), skyM);
+      glass.position.set(cx, 1.55, y0 + 0.005);
+      back.add(glass);
+      back.add(box(1.24, 0.08, 0.06, trim, cx, 1.04, y0 + 0.02, 0.01));
+      back.add(box(1.24, 0.08, 0.06, trim, cx, 1.98, y0 + 0.02, 0.01));
+      back.add(box(0.07, 1.0, 0.06, trim, cx - 0.585, 1.04, y0 + 0.02, 0.01));
+      back.add(box(0.07, 1.0, 0.06, trim, cx + 0.585, 1.04, y0 + 0.02, 0.01));
+      back.add(box(0.05, 0.95, 0.04, trim, cx, 1.06, y0 + 0.02, 0.0));
+      back.add(box(1.4, 0.06, 0.18, trim, cx, 1.0, y0 + 0.09, 0.01));
+      const c = toon(cur);
+      back.add(box(0.26, 1.15, 0.05, c, cx - 0.72, 0.95, y0 + 0.06, 0.015));
+      back.add(box(0.26, 1.15, 0.05, c, cx + 0.72, 0.95, y0 + 0.06, 0.015));
+    }
+  };
+  const dcx0 = ox + geo.door.x0 * CELL,
+    dcx1 = ox + (geo.door.x1 + 1) * CELL;
+  // 1층 벽
+  windows(mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y0 - WALL_T / 2, x1 + WALL_T / 2, y0 - WALL_T / 2, 0, -1), 0xf4b7c8);
+  mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y0, x0 - WALL_T / 2, y1, -1, 0);
+  mkWall(L0, 0, 0, paper, x1 + WALL_T / 2, y0, x1 + WALL_T / 2, y1, 1, 0);
+  mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y1 + WALL_T / 2, x1 + WALL_T / 2, y1 + WALL_T / 2, 0, 1, [dcx0 - x0 + WALL_T / 2, dcx1 - x0 + WALL_T / 2], !!yard);
+  // 문 깔개
+  L0.add(box(dcx1 - dcx0, 0.02, 0.5, toon(0x9b6b4a), (dcx0 + dcx1) / 2, 0, y1 - 0.3, 0.0));
+
+  // ── 마당 (정원 주택) ──
+  if (yard) {
+    const yy0 = y1,
+      yy1 = oy + ym;
+    L0.add(plane(wm, yy1 - yy0, grassM(wm, yy1 - yy0), ox + wm / 2, 0.002, (yy0 + yy1) / 2));
+    // 문 → 대문 돌길
+    const stoneM = toon(0xd9d2c4);
+    for (let y = yy0 + 0.35; y < yy1 - 0.1; y += 0.55) {
+      L0.add(cyl(0.26, 0.27, 0.03, stoneM, (dcx0 + dcx1) / 2 - 0.16, 0, y, 10, 0.012));
+      L0.add(cyl(0.22, 0.23, 0.03, stoneM, (dcx0 + dcx1) / 2 + 0.2, 0, y + 0.25, 10, 0.012));
+    }
+    // 하얀 울타리 (양옆 · 앞, 앞 가운데 대문)
+    const fenceM = toon(0xfffaf0);
+    const fence = (ax: number, ay: number, bx: number, by: number) => {
+      const len = Math.hypot(bx - ax, by - ay);
+      const n = Math.max(1, Math.round(len / 0.32));
+      for (let i = 0; i <= n; i++) {
+        const t = i / n;
+        L0.add(box(0.08, 0.72, 0.05, fenceM, ax + (bx - ax) * t, 0, ay + (by - ay) * t, 0.012));
+      }
+      const h = Math.abs(by - ay) < 1e-6;
+      for (const y of [0.22, 0.52]) L0.add(box(h ? len : 0.04, 0.06, h ? 0.04 : len, fenceM, (ax + bx) / 2, y, (ay + by) / 2, 0.01));
+    };
+    fence(x0 - 0.05, yy0 + 0.1, x0 - 0.05, yy1);
+    fence(x1 + 0.05, yy0 + 0.1, x1 + 0.05, yy1);
+    fence(x0 - 0.05, yy1, dcx0 - 0.05, yy1);
+    fence(dcx1 + 0.05, yy1, x1 + 0.05, yy1);
+    // 대문 기둥 · 우편함
+    for (const x of [dcx0 - 0.08, dcx1 + 0.08]) {
+      L0.add(box(0.16, 0.95, 0.16, fenceM, x, 0, yy1, 0.015));
+      L0.add(ball(0.08, toon(0xe8c25a), x, 1.0, yy1, 0.01));
+    }
+    L0.add(box(0.05, 0.9, 0.05, toon(0x8f5e36), dcx1 + 0.45, 0, yy1 - 0.15, 0.01));
+    L0.add(box(0.32, 0.24, 0.22, toon(0xe86a6a), dcx1 + 0.45, 0.9, yy1 - 0.15, 0.015));
+    // 울타리 밖 덤불
+    for (let i = 0; i < 9; i++) {
+      const x = x0 - 1.2 - (i % 2) * 0.5,
+        y = yy0 + ((yy1 - yy0) * i) / 8;
+      L0.add(ball(0.45 + (i % 3) * 0.12, toon(0x4f9a46), x, 0.3, y, 0.02));
+      L0.add(ball(0.42 + ((i + 1) % 3) * 0.12, toon(0x5aa84d), x1 + 1.2 + (i % 2) * 0.5, 0.3, y + 0.3, 0.02));
+    }
   }
-  // 문 바깥 깔개
-  const mat = box((dc.x1 - dc.x0 + 1) * CELL, 0.02, 0.5, toon(0x9b6b4a), ox + ((dc.x0 + dc.x1 + 1) / 2) * CELL, 0, y1 - 0.3, 0.0);
-  group.add(mat);
+
+  // ── 2층 · 계단 ──
+  const SLAB = FLOOR_H - WALL_H;
+  if (S) {
+    const sx0 = ox + S.x0 * CELL,
+      sx1 = ox + S.x1 * CELL,
+      sy0 = oy + S.y0 * CELL,
+      sy1 = oy + S.y1 * CELL;
+    // 계단 (14 단, 앞 → 뒤로 올라감)
+    const N = 14,
+      run = (sy1 - sy0) / N,
+      rise = FLOOR_H / N;
+    const stepM = toon(0xc58b55),
+      sideM = toon(0xf3e3c8);
+    for (let i = 0; i < N; i++) {
+      const ya = sy1 - (i + 1) * run;
+      L0.add(box(sx1 - sx0 - 0.02, rise * (i + 1), run + 0.01, i % 2 ? stepM : toon(0xcf9560), (sx0 + sx1) / 2, 0, ya + run / 2, 0.012));
+    }
+    // 오른쪽 옆판 · 난간 (기울어진 손잡이)
+    for (let i = 1; i < N; i += 3) {
+      const y = sy1 - (i + 0.5) * run;
+      L0.add(box(0.05, 0.9, 0.05, toon(0x8f5e36), sx1 - 0.06, rise * (i + 1), y, 0.01));
+    }
+    const rail = box(0.07, 0.06, Math.hypot(sy1 - sy0, FLOOR_H) + 0.1, toon(0x8f5e36), 0, 0, 0, 0.012);
+    rail.position.set(sx1 - 0.06, 0.9 + FLOOR_H / 2 + 0.05, (sy0 + sy1) / 2);
+    rail.rotation.x = Math.atan2(FLOOR_H, sy1 - sy0);
+    L0.add(rail);
+    void sideM;
+    // 2층 바닥판 (계단 구멍만 빼고) — 판 위가 FLOOR_H
+    const slab = (ax: number, ay: number, bx: number, by: number) => {
+      if (bx - ax < 0.01 || by - ay < 0.01) return;
+      L1.add(box(bx - ax, SLAB, by - ay, toon(0xe9d9c2), (ax + bx) / 2, WALL_H, (ay + by) / 2, 0.0));
+      L1.add(plane(bx - ax, by - ay, floorM(bx - ax, by - ay), (ax + bx) / 2, FLOOR_H + 0.002, (ay + by) / 2));
+    };
+    slab(x0, y0, x1, sy0);
+    slab(x0, sy1, x1, y1);
+    slab(sx1, sy0, x1, sy1);
+    // 구멍 둘레 난간 (오른쪽 · 앞) — 위쪽 끝(뒤)은 드나드는 곳이라 열림
+    const railM = toon(0x8f5e36),
+      openTo = sy0 + 2 * CELL;
+    for (let y = openTo; y <= sy1 + 0.01; y += 0.4) L1.add(box(0.05, 0.9, 0.05, railM, sx1 + 0.03, FLOOR_H, y, 0.01));
+    L1.add(box(0.07, 0.06, sy1 - openTo, railM, sx1 + 0.03, FLOOR_H + 0.9, (openTo + sy1) / 2, 0.012));
+    for (let x = sx0 + 0.1; x <= sx1 + 0.01; x += 0.4) L1.add(box(0.05, 0.9, 0.05, railM, x, FLOOR_H, sy1 + 0.03, 0.01));
+    L1.add(box(sx1 - sx0, 0.06, 0.07, railM, (sx0 + sx1) / 2, FLOOR_H + 0.9, sy1 + 0.03, 0.012));
+    // 2층 벽 (문 없음 · 연두 벽지)
+    windows(mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y0 - WALL_T / 2, x1 + WALL_T / 2, y0 - WALL_T / 2, 0, -1), 0xa9d8f0);
+    mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y0, x0 - WALL_T / 2, y1, -1, 0);
+    mkWall(L1, 1, FLOOR_H, paper2, x1 + WALL_T / 2, y0, x1 + WALL_T / 2, y1, 1, 0);
+    mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y1 + WALL_T / 2, x1 + WALL_T / 2, y1 + WALL_T / 2, 0, 1, undefined, !!yard);
+  }
 
   // ── 가구 ──
   const F = {
@@ -263,6 +451,11 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
     terra: toon(0xc8714a),
     black: toon(0x2a2a33),
     gold: toon(0xe8c25a),
+    coral: toon(0xff8f7a),
+    coralD: toon(0xf26f6f, { side: THREE.DoubleSide }),
+    soil: toon(0x6b4a33),
+    stone: toon(0xd9d6cf),
+    water: toon(0x7fc8f0, { emissive: 0x1a4a6a }),
     screen: toon(0x334a7a, { emissive: 0x1f3a6a }),
     lampS: toon(0xfff1c2, { emissive: 0x8a6a20 }),
   };
@@ -409,14 +602,96 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
       g.add(box(0.5, 0.04, 0.34, F.black, 0, 0.42, d / 2 - 0.25, 0.01));
       return g;
     },
+    tree: (w) => {
+      const g = new THREE.Group();
+      g.add(cyl(0.11, 0.15, 1.1, F.woodD, 0, 0, 0, 10));
+      g.add(ball(w * 0.42, F.green, 0, 1.45, 0));
+      g.add(ball(w * 0.3, F.greenD, w * 0.2, 1.75, 0.08));
+      g.add(ball(w * 0.28, F.green, -w * 0.18, 1.8, -0.06));
+      g.add(ball(0.05, F.pink, w * 0.3, 1.5, w * 0.25, 0.0));
+      g.add(ball(0.05, F.pink, -w * 0.25, 1.62, w * 0.22, 0.0));
+      return g;
+    },
+    flowers: (w, d) => {
+      const g = new THREE.Group();
+      g.add(box(w - 0.06, 0.16, d - 0.06, F.woodD, 0, 0, 0));
+      g.add(box(w - 0.16, 0.04, d - 0.16, F.soil, 0, 0.16, 0, 0.0));
+      const cols = [F.pink, F.gold, F.white, F.purple, F.coral];
+      for (let i = 0; i < 9; i++) {
+        const x = -w / 2 + 0.16 + ((w - 0.32) * i) / 8,
+          z = (i % 2 ? 0.07 : -0.07) * (d / 0.5);
+        g.add(cyl(0.012, 0.012, 0.2, F.greenD, x, 0.18, z, 5, 0.0));
+        g.add(ball(0.055, cols[i % cols.length], x, 0.42, z, 0.01));
+      }
+      return g;
+    },
+    bench: (w, d) => {
+      const g = new THREE.Group();
+      for (let i = 0; i < 3; i++) g.add(box(w - 0.1, 0.04, 0.1, F.wood, 0, 0.42, -0.12 + i * 0.12, 0.012));
+      for (let i = 0; i < 2; i++) {
+        const b = box(w - 0.1, 0.04, 0.09, F.wood, 0, 0.62 + i * 0.16, -d / 2 + 0.1, 0.012);
+        b.rotation.x = -0.15;
+        g.add(b);
+      }
+      for (const sx of [-1, 1]) {
+        g.add(box(0.06, 0.42, 0.34, F.black, sx * (w / 2 - 0.12), 0, 0, 0.01));
+        g.add(box(0.06, 0.5, 0.05, F.black, sx * (w / 2 - 0.12), 0.42, -d / 2 + 0.08, 0.0));
+      }
+      return g;
+    },
+    parasol: (w) => {
+      const g = new THREE.Group();
+      g.add(cyl(0.42, 0.42, 0.05, F.white, 0, 0.68, 0, 20));
+      g.add(cyl(0.05, 0.05, 0.68, F.white, 0, 0, 0, 8, 0.0));
+      g.add(cyl(0.22, 0.25, 0.04, F.white, 0, 0, 0, 14, 0.01));
+      g.add(cyl(0.025, 0.025, 2.1, F.woodD, 0, 0.7, 0, 6, 0.0));
+      const top = solid(new THREE.ConeGeometry(w * 0.48, 0.45, 8, 1, true), F.coralD, 0.02);
+      top.position.set(0, 2.55, 0);
+      g.add(top);
+      for (const a of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
+        const c = box(0.36, 0.05, 0.36, F.mint, Math.sin(a) * 0.68, 0.42, Math.cos(a) * 0.68, 0.015);
+        g.add(c);
+        g.add(box(0.36, 0.42, 0.04, F.mint, Math.sin(a) * 0.86, 0.42, Math.cos(a) * 0.86, 0.01).rotateY(a));
+        for (const s of [-1, 1]) g.add(box(0.03, 0.42, 0.03, F.white, Math.sin(a) * 0.68 + Math.cos(a) * s * 0.15, 0, Math.cos(a) * 0.68 - Math.sin(a) * s * 0.15, 0.0));
+      }
+      return g;
+    },
+    fountain: (w) => {
+      const g = new THREE.Group();
+      g.add(cyl(w * 0.47, w * 0.5, 0.36, F.stone, 0, 0, 0, 22));
+      g.add(cyl(w * 0.4, w * 0.4, 0.02, F.water, 0, 0.32, 0, 22, 0.0));
+      g.add(cyl(0.12, 0.16, 0.6, F.stone, 0, 0.3, 0, 12));
+      g.add(cyl(0.42, 0.3, 0.12, F.stone, 0, 0.88, 0, 16));
+      g.add(cyl(0.34, 0.34, 0.02, F.water, 0, 0.97, 0, 16, 0.0));
+      g.add(ball(0.1, F.water, 0, 1.12, 0, 0.0));
+      g.add(cyl(0.03, 0.06, 0.25, F.water, 0, 0.98, 0, 8, 0.0));
+      return g;
+    },
+    hedge: (w, d) => {
+      const g = new THREE.Group();
+      g.add(box(w - 0.08, 0.7, d - 0.1, F.greenD, 0, 0, 0, 0.03));
+      for (let i = 0; i < 3; i++) g.add(ball(0.17, F.green, -w / 2 + 0.22 + i * ((w - 0.44) / 2), 0.72, 0, 0.015));
+      return g;
+    },
   };
 
   const cellX = (cx: number) => ox + cx * CELL;
   const cellY = (cy: number) => oy + cy * CELL;
-  const furnG = new THREE.Group();
-  group.add(furnG);
+  const furnG = [new THREE.Group(), new THREE.Group()];
+  L0.add(furnG[0]);
+  L1.add(furnG[1]);
+  const rowsOf = (f: number) => (f ? GD : GGD);
   let cur: Placed[] = [];
-  let occ = new Uint8Array(R.w * R.d);
+  const occ = [new Uint8Array(GW * GGD), new Uint8Array(GW * GD)];
+  /** 계단 칸 막기: 1층은 아래 두 줄만 열림, 2층은 위 두 줄만 열림 (나머지는 난간) */
+  const stairOcc = () => {
+    if (!S) return;
+    for (let y = S.y0; y < S.y1; y++)
+      for (let x = S.x0; x < S.x1; x++) {
+        if (y < S.y1 - 2) occ[0][y * GW + x] = 1;
+        if (y >= S.y0 + 2) occ[1][y * GW + x] = 1;
+      }
+  };
   /** 놓인 가구 하나 그리기 (그룹 가운데 = 차지한 칸 가운데) */
   const make = (p: { i: FurnKind; cx: number; cy: number; r: number }) => {
     const f = furnById(p.i)!;
@@ -429,34 +704,46 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
     return wrap;
   };
   const setLayout = (layout: Placed[]) => {
-    for (const c of [...furnG.children]) furnG.remove(c);
+    for (const g of furnG) for (const c of [...g.children]) g.remove(c);
     cur = layout.map((p) => ({ ...p }));
-    occ = new Uint8Array(R.w * R.d);
+    occ[0].fill(0);
+    occ[1].fill(0);
+    stairOcc();
     for (const p of cur) {
       const f = furnById(p.i);
-      if (!f) continue;
-      furnG.add(make({ i: p.i, cx: p.x, cy: p.y, r: p.r }));
+      const fl = p.f ?? 0;
+      if (!f || (fl && !S)) continue;
+      const m = make({ i: p.i, cx: p.x, cy: p.y, r: p.r });
+      m.position.y = fl * FLOOR_H;
+      furnG[fl].add(m);
       if (f.flat) continue;
       const fp = footprint(f, p.r);
-      for (let y = p.y; y < p.y + fp.d; y++) for (let x = p.x; x < p.x + fp.w; x++) if (x >= 0 && y >= 0 && x < R.w && y < R.d) occ[y * R.w + x] = 1;
+      for (let y = p.y; y < p.y + fp.d; y++)
+        for (let x = p.x; x < p.x + fp.w; x++) if (x >= 0 && y >= 0 && x < GW && y < rowsOf(fl)) occ[fl][y * GW + x] = 1;
     }
   };
   setLayout(layout);
 
-  // 꾸미기: 칸 선 · 미리 보기
-  const gridLines = new THREE.LineSegments(
-    own(
-      new THREE.BufferGeometry().setFromPoints(
-        [
-          ...Array.from({ length: R.w + 1 }, (_, i) => [new THREE.Vector3(cellX(i), 0.012, oy), new THREE.Vector3(cellX(i), 0.012, oy + dm)]),
-          ...Array.from({ length: R.d + 1 }, (_, i) => [new THREE.Vector3(ox, 0.012, cellY(i)), new THREE.Vector3(ox + wm, 0.012, cellY(i))]),
-        ].flat()
-      )
-    ),
-    own(new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }))
-  );
-  gridLines.visible = false;
-  group.add(gridLines);
+  // 꾸미기: 칸 선 (층마다) · 미리 보기
+  const gridOf = (f: number) => {
+    const rows = rowsOf(f),
+      h = f * FLOOR_H + 0.012;
+    const l = new THREE.LineSegments(
+      own(
+        new THREE.BufferGeometry().setFromPoints(
+          [
+            ...Array.from({ length: GW + 1 }, (_, i) => [new THREE.Vector3(cellX(i), h, oy), new THREE.Vector3(cellX(i), h, cellY(rows))]),
+            ...Array.from({ length: rows + 1 }, (_, i) => [new THREE.Vector3(ox, h, cellY(i)), new THREE.Vector3(ox + wm, h, cellY(i))]),
+          ].flat()
+        )
+      ),
+      own(new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }))
+    );
+    l.visible = false;
+    group.add(l);
+    return l;
+  };
+  const grids = S ? [gridOf(0), gridOf(1)] : [gridOf(0)];
   const ghostG = new THREE.Group();
   group.add(ghostG);
   const ghostOk = own(new THREE.MeshBasicMaterial({ color: 0x6ff0b0, transparent: true, opacity: 0.35, depthWrite: false }));
@@ -465,43 +752,95 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
   selBox.visible = false;
   group.add(selBox);
   let ghostKey = "";
+  let building = false;
+  let selNo: number | null = null;
 
-  const dcx0 = cellX(dc.x0),
-    dcx1 = cellX(dc.x1 + 1);
+  // ── 층 · 부딪힘 ──
+  let lv = 0;
+  let myX = 0,
+    myY = 0;
+  let viewSet: number | null = null;
+  const view = () => (viewSet ?? (lv === 1 || (lv === LV_STAIR && levelH(geo, lv, myX, myY) > FLOOR_H * 0.5) ? 1 : 0));
+  const showLevels = () => {
+    const v = S ? view() : 0;
+    L1.visible = v === 1;
+    for (let i = 0; i < grids.length; i++) grids[i].visible = building && i === v;
+  };
+  const yEnd = oy + ym;
+  /** 층 f 바닥에서 부딪힘 (방 · 벽 · 가구 · 계단 칸) */
+  const blockedOn = (f: number, x: number, y: number, r: number) => {
+    if (x < ox + r || x > ox + wm - r || y < oy + r) return true;
+    if (f === 0) {
+      const inDoor = x - r > dcx0 - 0.02 && x + r < dcx1 + 0.02;
+      // 나가는 곳 (마당이면 대문, 아니면 문)은 바깥으로 0.1m 까지
+      if (y > yEnd - r && !(inDoor && y < yEnd + 0.1)) return true;
+      // 마당 있는 집: 집 앞벽 (문 틈만)
+      if (yard && Math.abs(y - y1) < r + WALL_T / 2 && !inDoor) return true;
+    } else if (y > y1 - r) return true;
+    const rows = rowsOf(f);
+    const c0 = Math.floor((x - r - ox) / CELL),
+      c1 = Math.floor((x + r - ox) / CELL),
+      r0 = Math.floor((y - r - oy) / CELL),
+      r1 = Math.floor((y + r - oy) / CELL);
+    for (let cy = r0; cy <= r1; cy++)
+      for (let cx = c0; cx <= c1; cx++) {
+        if (cx < 0 || cy < 0 || cx >= GW || cy >= rows) continue;
+        if (!occ[f][cy * GW + cx]) continue;
+        const qx = Math.max(cellX(cx), Math.min(x, cellX(cx + 1))),
+          qy = Math.max(cellY(cy), Math.min(y, cellY(cy + 1)));
+        if ((x - qx) ** 2 + (y - qy) ** 2 < (r * 0.85) ** 2) return true;
+      }
+    return false;
+  };
+  const sx1 = S ? ox + S.x1 * CELL : 0,
+    sy0 = S ? oy + S.y0 * CELL : 0,
+    sy1 = S ? oy + S.y1 * CELL : 0;
+  const blocked = (x: number, y: number, r: number) => {
+    if (!S) return blockedOn(0, x, y, r);
+    const t = stairT(geo, x, y);
+    if (lv === 0) return t !== null ? t >= 0.3 || x < ox + r : blockedOn(0, x, y, r);
+    if (lv === 1) return t !== null ? t <= 0.7 || x < ox + r : blockedOn(1, x, y, r);
+    // 계단 위
+    if (t !== null) return x < ox + r || (t > 0.3 && t < 0.7 && x + r * 0.8 > sx1);
+    if (y > sy1) return blockedOn(0, x, y, r);
+    if (y < sy0) return blockedOn(1, x, y, r);
+    const tt = (sy1 - y) / (sy1 - sy0);
+    return tt < 0.3 ? blockedOn(0, x, y, r) : tt > 0.7 ? blockedOn(1, x, y, r) : true;
+  };
+
+  const ent = enterAt(tier);
   return {
     group,
-    ox,
-    oy,
+    geo,
     wm,
-    dm,
-    enter: { x: (dcx0 + dcx1) / 2, y: y1 - 0.7 },
-    atDoor: (x, y) => x > dcx0 && x < dcx1 && y > y1 - 0.25,
-    blocked(x, y, r) {
-      // 방 밖 (문은 바깥으로 0.1m 까지 — 나가기 판정용)
-      const inDoor = x - r > dcx0 - 0.02 && x + r < dcx1 + 0.02;
-      if (x < ox + r || x > ox + wm - r || y < oy + r) return true;
-      if (y > oy + dm - r && !(inDoor && y < oy + dm + 0.1)) return true;
-      const c0 = Math.floor((x - r - ox) / CELL),
-        c1 = Math.floor((x + r - ox) / CELL),
-        r0 = Math.floor((y - r - oy) / CELL),
-        r1 = Math.floor((y + r - oy) / CELL);
-      for (let cy = r0; cy <= r1; cy++)
-        for (let cx = c0; cx <= c1; cx++) {
-          if (cx < 0 || cy < 0 || cx >= R.w || cy >= R.d) continue;
-          if (!occ[cy * R.w + cx]) continue;
-          // 칸과 원이 겹치는지
-          const qx = Math.max(cellX(cx), Math.min(x, cellX(cx + 1))),
-            qy = Math.max(cellY(cy), Math.min(y, cellY(cy + 1)));
-          if ((x - qx) ** 2 + (y - qy) ** 2 < (r * 0.85) ** 2) return true;
-        }
-      return false;
+    dm: ym,
+    bg: yard ? 0x9fd6f5 : 0x1e1a28,
+    enter: ent,
+    atDoor: (x, y) => lv === 0 && x > dcx0 && x < dcx1 && y > yEnd - 0.25,
+    blocked,
+    moved(x, y) {
+      myX = x;
+      myY = y;
+      if (S) lv = nextLevel(geo, lv, x, y);
+      showLevels();
+    },
+    level: () => lv,
+    heightAt: (x, y) => (S ? levelH(geo, lv, x, y) : 0),
+    viewFloor: () => (S ? view() : 0),
+    setView(f) {
+      viewSet = f;
+      showLevels();
     },
     cellAt(x, y) {
+      const f = S ? view() : 0;
       const cx = Math.floor((x - ox) / CELL),
         cy = Math.floor((y - oy) / CELL);
-      return cx >= 0 && cy >= 0 && cx < R.w && cy < R.d ? { cx, cy } : null;
+      return cx >= 0 && cy >= 0 && cx < GW && cy < rowsOf(f) ? { cx, cy } : null;
     },
-    setLayout,
+    setLayout(l) {
+      setLayout(l);
+      this.setBuild(building, selNo);
+    },
     setGhost(g) {
       if (!g) {
         ghostG.visible = false;
@@ -520,23 +859,25 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
         });
         ghostG.add(m);
       }
-      ghostG.position.set(g.cx * CELL, 0.01, g.cy * CELL);
+      ghostG.position.set(g.cx * CELL, (S ? view() : 0) * FLOOR_H + 0.01, g.cy * CELL);
       ghostG.visible = true;
     },
     setBuild(on, sel = null) {
-      gridLines.visible = on;
+      building = on;
+      selNo = sel;
+      showLevels();
       const p = sel != null ? cur[sel] : null;
       if (on && p) {
         const fp = footprint(furnById(p.i)!, p.r);
         selBox.scale.set(fp.w * CELL + 0.08, 1, fp.d * CELL + 0.08);
-        selBox.position.set(cellX(p.x) + (fp.w * CELL) / 2, 0.02, cellY(p.y) + (fp.d * CELL) / 2);
+        selBox.position.set(cellX(p.x) + (fp.w * CELL) / 2, (p.f ?? 0) * FLOOR_H + 0.02, cellY(p.y) + (fp.d * CELL) / 2);
         selBox.visible = true;
       } else selBox.visible = false;
     },
     update(eye) {
       // 카메라 쪽(벽 바깥 법선이 카메라 쪽) 벽은 걸레받이 높이로
-      const cx = HOME_AT.x,
-        cz = HOME_AT.y;
+      const cx = ox + wm / 2,
+        cz = oy + dm / 2;
       for (const w of walls) {
         const d = (eye.x - cx) * w.n.x + (eye.z - cz) * w.n.z;
         const want = d > 0.5 ? 0.08 : 1;

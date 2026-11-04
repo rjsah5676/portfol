@@ -4,12 +4,13 @@
  * 앞면 = 로컬 +z · 앞면 길이 = 로컬 x · 바닥 = y 0 (scene3d 건물과 같은 약속)
  */
 import * as THREE from "three";
+import { drawWithFonts } from "./canvasFont";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { type Building, faceRot, frontLen, heightAt } from "@/lib/gmtown/world";
 
 const INK = 0x2b2433;
 /** 역 이름판 (마을 이름 바뀌면 여기만) */
-export const STATION_NAME = "GMTOWN 역";
+export const STATION_NAME = "ANIME TOWN 역";
 
 type Own = <T extends { dispose(): void }>(x: T) => T;
 export interface LotCtx {
@@ -25,8 +26,11 @@ function tex(w: number, h: number, draw: Draw, rx = 1, ry = 1): THREE.CanvasText
   const c = document.createElement("canvas");
   c.width = w;
   c.height = h;
-  draw(c.getContext("2d")!, w, h);
-  const t = new THREE.CanvasTexture(c);
+  let t: THREE.CanvasTexture | null = null;
+  drawWithFonts(c, draw, () => {
+    if (t) t.needsUpdate = true;
+  });
+  t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 8;
   if (rx !== 1 || ry !== 1) {
@@ -1272,7 +1276,8 @@ export function codeHome(ctx: LotCtx, b: Building): Out {
       x = Math.sin(i * 0.9) * 0.35 - (i > 2 ? (i - 2) * 0.45 : 0);
     cyl(0.42, 0.42, 0.08, stepM, x, 0.06, z, 10, 0.02);
   }
-  // ── 집 ──
+  // ── 집 ── (계약해야 섬 — 그 전엔 같은 자리에 「분양 중」 터, setHomeBuilt)
+  const n0 = K.G.children.length;
   const F1 = 3.0,
     TOP = 5.8;
   box(HW + 0.2, 0.55, HD + 0.2, stone, 0, 0, HZ, 0.05);
@@ -1401,6 +1406,51 @@ export function codeHome(ctx: LotCtx, b: Building): Out {
   })), gx, TOP + 0.75, HF + 0.13);
   box(1.0, 3.3, 1.0, stone, 3.4, TOP + 0.3, HZ - 1.4, 0.05);
   box(1.15, 0.2, 1.15, mt(0xb4634a), 3.4, TOP + 3.55, HZ - 1.4, 0.03);
+  const houseG = new THREE.Group();
+  houseG.name = "homeHouse";
+  houseG.userData.bakeRoot = true;
+  for (const c of K.G.children.slice(n0)) houseG.add(c);
+  K.G.add(houseG);
+  houseG.visible = false;
+  // 분양 중 터: 기초 돌판 · 말뚝과 줄 · 안내판 · 벽돌 더미
+  const lotG = new THREE.Group();
+  lotG.name = "homeLot";
+  lotG.userData.bakeRoot = true;
+  K.G.add(lotG);
+  box(HW + 0.2, 0.3, HD + 0.2, stone, 0, 0, HZ, 0.05, lotG);
+  box(HW - 0.6, 0.04, HD - 0.6, mt(0xd8c9a8), 0, 0.3, HZ, 0.0, lotG);
+  const tape = mt(0xffc93c);
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    box(0.12, 1.0, 0.12, wood, sx * (HW / 2 + 0.4), 0, HZ + sz * (HD / 2 + 0.4), 0.02, lotG);
+    box(0.16, 0.12, 0.16, mt(0xe0483a), sx * (HW / 2 + 0.4), 1.0, HZ + sz * (HD / 2 + 0.4), 0.01, lotG);
+  }
+  box(HW + 0.8, 0.06, 0.04, tape, 0, 0.8, HZ + HD / 2 + 0.4, 0.0, lotG);
+  box(HW + 0.8, 0.06, 0.04, tape, 0, 0.8, HZ - HD / 2 - 0.4, 0.0, lotG);
+  box(0.04, 0.06, HD + 0.8, tape, -HW / 2 - 0.4, 0.8, HZ, 0.0, lotG);
+  box(0.04, 0.06, HD + 0.8, tape, HW / 2 + 0.4, 0.8, HZ, 0.0, lotG);
+  const brick = mt(0xc8714a);
+  for (let i = 0; i < 9; i++) box(0.5, 0.22, 0.26, brick, 2.6 + (i % 3) * 0.54, 0.3 + Math.floor(i / 3) * 0.23, HZ + 1.2, 0.015, lotG);
+  for (let i = 0; i < 4; i++) box(2.4, 0.12, 0.22, wood, -2.6, 0.3 + i * 0.13, HZ + 0.6 + (i % 2) * 0.05, 0.012, lotG);
+  const board = new THREE.Group();
+  board.position.set(0, 0.3, HZ + HD / 2 - 0.6);
+  lotG.add(board);
+  for (const dx of [-0.9, 0.9]) box(0.12, 2.0, 0.12, wood, dx, 0, 0, 0.02, board);
+  box(2.4, 1.3, 0.1, white, 0, 1.0, 0, 0.03, board);
+  plane(2.2, 1.1, cut(tex(320, 160, (g, w, h) => {
+    g.fillStyle = "#fffaf0";
+    g.fillRect(0, 0, w, h);
+    g.fillStyle = "#3fae86";
+    g.fillRect(0, 0, w, 54);
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.fillStyle = "#ffffff";
+    g.font = '400 40px "Black Han Sans", sans-serif';
+    g.fillText("분양 중", w / 2, 29);
+    g.fillStyle = "#4a3a2a";
+    g.font = '800 24px "Nanum Gothic", sans-serif';
+    g.fillText("내 집을 갖고 싶다면", w / 2, 88);
+    g.fillText("부동산 민트에게!", w / 2, 124);
+  }), true), 0, 1.65, 0.06, 0, board);
   // ── 흰 울타리 (뾰족 말뚝 · 한 덩어리로 합쳐 그리기) ──
   const posts: THREE.BufferGeometry[] = [],
     inks: THREE.BufferGeometry[] = [];
@@ -1475,7 +1525,11 @@ export function codeHome(ctx: LotCtx, b: Building): Out {
   const sign = new THREE.Group();
   sign.position.set(-3.3, 2.05, zf - 0.6);
   K.G.add(sign);
-  plane(1.4, 0.7, cut(textTex("우리 집", { w: 200, h: 100, bg: "#e9d3a8", fg: "#6b4429", border: "#a8794a", font: '400 50px "Black Han Sans", sans-serif', r: 12 }), true), 0, -0.5, 0.04, 0, sign);
+  const signOn = plane(1.4, 0.7, cut(textTex("우리 집", { w: 200, h: 100, bg: "#e9d3a8", fg: "#6b4429", border: "#a8794a", font: '400 50px "Black Han Sans", sans-serif', r: 12 }), true), 0, -0.5, 0.04, 0, sign);
+  signOn.name = "homeSignOn";
+  signOn.visible = false;
+  const signOff = plane(1.4, 0.7, cut(textTex("분양 중", { w: 200, h: 100, bg: "#d8f0e4", fg: "#2f7a5e", border: "#3fae86", font: '400 50px "Black Han Sans", sans-serif', r: 12 }), true), 0, -0.5, 0.04, 0, sign);
+  signOff.name = "homeSignOff";
   anims.push((t) => (sign.rotation.x = Math.sin(t * 1.4) * 0.05));
   // 개집 (빨간 지붕) · 밥그릇
   const DX = 5.6,
@@ -1544,6 +1598,19 @@ export function codeHome(ctx: LotCtx, b: Building): Out {
   ] as [number, number, number, THREE.Material | null][])
     bush(x, 0.1, z, s, leaf, f ?? undefined);
   return K.done();
+}
+
+/** 우리 집 건물: 계약했으면 집, 아니면 분양 중 터 (사람마다 다르게 보임) */
+export function setHomeBuilt(group: THREE.Object3D, on: boolean) {
+  for (const [n, v] of [
+    ["homeHouse", on],
+    ["homeSignOn", on],
+    ["homeLot", !on],
+    ["homeSignOff", !on],
+  ] as [string, boolean][]) {
+    const o = group.getObjectByName(n);
+    if (o) o.visible = v;
+  }
 }
 
 // ───────────── 언덕 위 학교: 시계탑 · 벚꽃 ─────────────

@@ -220,7 +220,7 @@ export default function MapModal({
         <div className="relative flex h-11 shrink-0 items-center justify-center border-b border-[#c9a45c]/30 bg-gradient-to-b from-[#2a2438] to-[#16141f]">
           <span className="absolute left-3 text-[11px] text-white/55">{ch ? `${ch}채널` : ""}</span>
           <span className="text-[#c9a45c]/70">❖</span>
-          <b className="gmt-lo-title mx-3 text-[19px]">GMTOWN 전체 지도</b>
+          <b className="gmt-lo-title mx-3 text-[19px]">ANIME TOWN 전체 지도</b>
           <span className="text-[#c9a45c]/70">❖</span>
           <div className="absolute right-2 flex items-center gap-2">
             {!phone && (

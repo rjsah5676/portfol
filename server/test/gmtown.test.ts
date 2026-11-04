@@ -12,6 +12,7 @@ import {
   warps,
 } from "../../web/src/lib/gmtown/world";
 import type { ChannelList, TownSnap } from "../../web/src/lib/gmtown/types";
+import { checkLayout, enterAt, fitLayout, houseGeo, levelH, nextLevel, LV_STAIR, CELL, FLOOR_H } from "../../web/src/lib/gmtown/house";
 import {
   RpcError,
   sleep,
@@ -289,7 +290,7 @@ describe("광장", () => {
     expect(ev.d.on).toBe(true);
     const c = await member();
     const sc = await c.sub<TownSnap>("gmtown.ch", { ch: 10 });
-    expect(sc.data.players.find((p) => p.id === sa.data.me)?.home).toBe(true);
+    expect(sc.data.players.find((p) => p.id === sa.data.me)?.home).toBeTruthy();
     const out = await a.rpc<{ x: number; y: number }>("gmtown.house.leave");
     const ev2 = await sb.wait((e) => e.t === "home" && e.d.id === sa.data.me && e.d.on === false);
     expect(ev2.d.x).toBeCloseTo(out.x, 1);
@@ -297,6 +298,88 @@ describe("광장", () => {
     a.close();
     b.close();
     c.close();
+  });
+
+  it("2층 집 · 정원: 계단 자리 · 층 · 마당 가구 검사, 넓히면 안 맞는 가구는 빠짐, 계단으로 오르내림", () => {
+    const inv = { bed: 2, sofa: 1, tree: 1, chair: 1, rug: 1 };
+    // 2층은 3단계부터
+    expect(checkLayout(2, [{ i: "sofa", x: 6, y: 0, r: 0, f: 1 }], inv)).not.toBeNull();
+    expect(checkLayout(3, [{ i: "sofa", x: 6, y: 0, r: 0, f: 1 }], inv)).toBeNull();
+    // 계단 자리 (1층 · 2층 구멍) — 러그도 안 됨
+    const g = houseGeo(3);
+    expect(checkLayout(3, [{ i: "sofa", x: 0, y: g.stair!.y0 + 2, r: 0 }], inv)).toContain("계단");
+    expect(checkLayout(3, [{ i: "rug", x: 0, y: g.stair!.y0, r: 0, f: 1 }], inv)).toContain("계단");
+    // 정원 가구는 마당에만, 집 가구는 집 안에만, 의자는 어디든
+    const g4 = houseGeo(4);
+    expect(checkLayout(3, [{ i: "tree", x: 10, y: 0, r: 0 }], inv)).not.toBeNull();
+    expect(checkLayout(4, [{ i: "tree", x: 3, y: g4.d + 2, r: 0 }], inv)).toBeNull();
+    expect(checkLayout(4, [{ i: "tree", x: 3, y: 2, r: 0 }], inv)).not.toBeNull();
+    expect(checkLayout(4, [{ i: "sofa", x: 3, y: g4.d + 2, r: 0 }], inv)).not.toBeNull();
+    expect(checkLayout(4, [{ i: "chair", x: 3, y: g4.d + 2, r: 0 }], inv)).toBeNull();
+    expect(checkLayout(4, [{ i: "tree", x: 3, y: g4.d - 1, r: 0 }], inv)).not.toBeNull();
+    // 대문 가는 길
+    expect(checkLayout(4, [{ i: "chair", x: g4.door.x0, y: g4.gd - 3, r: 0 }], inv)).not.toBeNull();
+    // 넓힐 때: 계단 자리에 있던 소파는 빠지고 침대는 그대로
+    const kept = fitLayout(3, [{ i: "bed", x: 6, y: 0, r: 0 }, { i: "sofa", x: 0, y: 6, r: 0 }], inv);
+    expect(kept.map((p) => p.i)).toEqual(["bed"]);
+    // 계단: 아래에서 들어가 위로 나오면 2층 (높이 0 → FLOOR_H)
+    const s = g.stair!;
+    const x = g.ox + ((s.x0 + s.x1) / 2) * CELL;
+    let lv = 0;
+    for (let y = g.oy + (s.y1 + 0.5) * CELL; y > g.oy + (s.y0 - 1) * CELL; y -= 0.1) {
+      lv = nextLevel(g, lv, x, y);
+      if (lv === LV_STAIR) expect(levelH(g, lv, x, y)).toBeGreaterThanOrEqual(0);
+    }
+    expect(lv).toBe(1);
+    expect(levelH(g, lv, x, g.oy)).toBe(FLOOR_H);
+    for (let y = g.oy + (s.y0 - 0.5) * CELL; y < g.oy + (s.y1 + 1) * CELL; y += 0.1) lv = nextLevel(g, lv, x, y);
+    expect(lv).toBe(0);
+    // 들어오는 곳 (정원 주택은 대문 안쪽)
+    expect(enterAt(4).y).toBeGreaterThan(g4.oy + g4.dm);
+  });
+
+  it("친구 초대: 초대받은 사람만 놀러 감 · 같은 집 사람은 집 안 움직임(층)을 봄 · 주인이 가구를 바꾸면 hlayout", async () => {
+    const a = await member();
+    const ua = lastUid;
+    const b = await member();
+    const g = await guest();
+    const sa = await a.sub<TownSnap>("gmtown.ch", { ch: 12 });
+    const sb = await b.sub<TownSnap>("gmtown.ch", { ch: 12 });
+    const sg = await g.sub<TownSnap>("gmtown.ch", { ch: 12 });
+    // 집이 없으면 초대 못 함 · 게스트는 초대 못 함
+    expect(await code(a.rpc("gmtown.house.invite", { to: sb.data.me }))).toBe("BAD_REQUEST");
+    expect(await code(g.rpc("gmtown.house.invite", { to: sa.data.me }))).toBe("FORBIDDEN");
+    await srv.db.col("users").updateOne({ _id: ua }, { $set: { points: 20_000 } });
+    const h = await a.rpc<{ layout: object[] }>("gmtown.house.buy", { tier: 1 });
+    const me = await a.rpc<{ room: string }>("gmtown.house.enter");
+    // 초대 없이는 못 감
+    expect(await code(b.rpc("gmtown.house.visit", { from: sa.data.me }))).toBe("FORBIDDEN");
+    await a.rpc("gmtown.house.invite", { to: sb.data.me });
+    const inv = await sb.wait((e) => e.t === "invite");
+    expect(inv.d.from).toBe(sa.data.me);
+    // 다른 사람(게스트)은 이 초대로 못 감
+    expect(await code(g.rpc("gmtown.house.visit", { from: sa.data.me }))).toBe("FORBIDDEN");
+    const v = await b.rpc<{ room: string; owner: string; tier: number; layout: unknown[] }>("gmtown.house.visit", { from: sa.data.me });
+    expect(v.room).toBe(me.room);
+    expect(v.tier).toBe(1);
+    expect(v.owner).toBeTruthy();
+    const ev = await sa.wait((e) => e.t === "home" && e.d.id === sb.data.me && e.d.on === true);
+    expect(ev.d.room).toBe(me.room);
+    // 집 안에서 걸음 (층 포함) — 같은 채널에 mv
+    const at = enterAt(1);
+    await b.rpc("gmtown.move", { x: at.x, y: at.y - 0.5, d: 0, m: 1, f: 0 });
+    const mv = await sa.wait((e) => e.t === "mv" && e.d.some((r: unknown[]) => r[0] === sb.data.me));
+    const row = mv.d.find((r: unknown[]) => r[0] === sb.data.me);
+    expect(row[2]).toBeCloseTo(at.y - 0.5, 1);
+    expect(row[5]).toBe(0);
+    // 주인이 가구를 옮기면 놀러 온 사람에게 hlayout
+    await a.rpc("gmtown.house.save", { layout: h.layout.slice(0, 2) });
+    const hl = await sb.wait((e) => e.t === "hlayout");
+    expect(hl.d.room).toBe(me.room);
+    expect(hl.d.layout.length).toBe(2);
+    a.close();
+    b.close();
+    g.close();
   });
 
   it("채팅: 같은 채널 모두에게 · 너무 빠르면 거절 · 길면 자름 · 다른 채널엔 안 감", async () => {

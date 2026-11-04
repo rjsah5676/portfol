@@ -1,10 +1,11 @@
 import { z } from "zod";
+import type { Socket } from "socket.io";
 import type { Deps } from "../deps";
 import { AppError, bad } from "../errors";
 import { newId } from "../ids";
 import { CHANNEL_CAP, CHAT_MAX, HOUSE_TIERS, MAX_CHANNELS, RADIUS, RUN_SPEED, SPAWN, WARP_GAP_MS, blocked, houseTier, warpById } from "../../../web/src/lib/gmtown/world";
 import type { ChannelList, CharId, ChatWire, HouseWire, MoveWire, PlayerWire, TownSnap } from "../../../web/src/lib/gmtown/types";
-import { STARTER, checkLayout, furnById, starterInv, type Placed } from "../../../web/src/lib/gmtown/house";
+import { HOME_AT, STARTER, checkLayout, enterAt, fitLayout, furnById, starterInv, type Placed } from "../../../web/src/lib/gmtown/house";
 import { buildingById, doorFront } from "../../../web/src/lib/gmtown/world";
 
 /*
@@ -41,8 +42,12 @@ interface P {
   chatAt: number;
   /** 마지막 순간이동 시각 */
   warpAt: number;
-  /** 자기 집 안 (마을에선 안 보임 · 움직임 안 받음) */
-  home: boolean;
+  /** 들어가 있는 집 id (마을에선 안 보임) · 집 안 층 */
+  home: string | null;
+  f: number;
+  /** 이 사람 연결 (나에게만 보내기) */
+  so: Socket;
+  inviteAt: number;
 }
 
 interface Chan {
@@ -74,7 +79,7 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
     if (!c) chans.set(n, (c = { players: new Map(), chat: [], dirty: new Set() }));
     return c;
   };
-  const wire = (p: P): PlayerWire => ({ id: p.id, name: p.name, guest: p.guest, c: p.c, x: r2(p.x), y: r2(p.y), d: p.d, m: p.m, ...(p.home ? { home: true } : {}) });
+  const wire = (p: P): PlayerWire => ({ id: p.id, name: p.name, guest: p.guest, c: p.c, x: r2(p.x), y: r2(p.y), d: p.d, m: p.m, ...(p.home ? { home: p.home } : {}) });
 
   /** 들어갈 채널: 고른 채널(꽉 찼으면 거절) 또는 자리가 있는 가장 낮은 채널 */
   function pick(want: number | null, sock: string): number {
@@ -143,7 +148,7 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
         const uid = ctx.uid;
         const guest = !ctx.nick;
         const at = args.x !== undefined && args.y !== undefined && !blocked(args.x, args.y) ? { x: args.x, y: args.y } : spawnAt();
-        p = { id: newId(8), sock, uid, name: ctx.name(`손님${guestNo(uid)}`, 10), guest, c: args.c ?? "amy", x: at.x, y: at.y, d: 0, m: 0, ch: n, bank: BANK_MAX, at: now(), chatAt: 0, warpAt: 0, home: false };
+        p = { id: newId(8), sock, uid, name: ctx.name(`손님${guestNo(uid)}`, 10), guest, c: args.c ?? "amy", x: at.x, y: at.y, d: 0, m: 0, ch: n, bank: BANK_MAX, at: now(), chatAt: 0, warpAt: 0, home: null, f: 0, so: ctx.socket as Socket, inviteAt: 0 };
         c.players.set(sock, p);
         bySock.set(sock, p);
         gateway.emit(keyOf(n), "join", wire(p));
@@ -157,11 +162,17 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
   });
   gateway.onDisconnect((ctx) => remove(ctx.socket.id));
 
-  const MoveArgs = z.object({ x: z.number().finite(), y: z.number().finite(), d: z.number().int().min(0).max(7), m: z.union([z.literal(0), z.literal(1), z.literal(2)]) });
+  const MoveArgs = z.object({
+    x: z.number().finite(),
+    y: z.number().finite(),
+    d: z.number().int().min(0).max(7),
+    m: z.union([z.literal(0), z.literal(1), z.literal(2)]),
+    f: z.number().int().min(0).max(2).optional(),
+  });
 
   gateway.rpc("gmtown.move", (ctx, raw) => {
     const p = bySock.get(ctx.socket.id);
-    if (!p || p.home) return null;
+    if (!p) return null;
     const a = MoveArgs.parse(raw);
     const t = now();
     p.bank = Math.min(BANK_MAX, p.bank + ((t - p.at) / 1000) * RUN_SPEED * 1.4);
@@ -176,7 +187,8 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
       y = p.y + (a.y - p.y) * k;
       snap = true;
     }
-    if (blocked(x, y, RADIUS * 0.6, true)) {
+    // 집 안: 집 자리 둘레만 (방 · 가구 부딪힘은 화면이 봄)
+    if (p.home ? Math.abs(x - HOME_AT.x) > 16 || Math.abs(y - HOME_AT.y) > 16 : blocked(x, y, RADIUS * 0.6, true)) {
       x = p.x;
       y = p.y;
       snap = true;
@@ -186,6 +198,7 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
     p.y = y;
     p.d = a.d;
     p.m = a.m;
+    p.f = p.home ? (a.f ?? 0) : 0;
     chans.get(p.ch)?.dirty.add(p.sock);
     if (snap) gateway.emitTo(ctx.socket, keyOf(p.ch), "snap", { x: r2(x), y: r2(y) });
     return null;
@@ -208,14 +221,15 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
     if (!ctx.nick) throw new AppError("FORBIDDEN", "집 계약은 회원만 할 수 있어요. 로그인해 주세요.", 403);
     const { tier } = z.object({ tier: z.number().int().min(1).max(HOUSE_TIERS.length) }).parse(raw);
     const h = houseTier(tier)!;
-    const cur = await houseOf(ctx.uid);
+    const old = await houses.findOne({ _id: ctx.uid });
+    const cur = old?.tier ?? 0;
     if (tier <= cur) throw new AppError("ALREADY", "이미 계약한 집이에요.", 409);
     if (tier !== cur + 1) throw bad("한 단계씩 올릴 수 있어요.");
     // GP 먼저 (모자라면 여기서 멈춤) → 단계 올림. 그 사이 다른 창에서 먼저 올렸으면 GP 되돌림
     await points.spend(ctx.uid, h.price, "gmtown", `house:${tier}`);
     const r = await houses.updateOne(
       { _id: ctx.uid, tier: cur },
-      cur === 0 ? { $set: { tier, at: now(), inv: starterInv(), layout: STARTER } } : { $set: { tier, at: now() } },
+      cur === 0 ? { $set: { tier, at: now(), inv: starterInv(), layout: STARTER } } : { $set: { tier, at: now(), layout: fitLayout(tier, (old?.layout ?? []) as Placed[], old?.inv ?? {}) } },
       { upsert: cur === 0 }
     ).catch(() => null);
     if (!r || (r.modifiedCount === 0 && r.upsertedCount === 0)) {
@@ -237,8 +251,10 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
   });
   const PlacedArgs = z.object({
     layout: z
-      .array(z.object({ i: z.string().max(30), x: z.number().int(), y: z.number().int(), r: z.number().int().min(0).max(3) }))
-      .max(120),
+      .array(
+        z.object({ i: z.string().max(30), x: z.number().int(), y: z.number().int(), r: z.number().int().min(0).max(3), f: z.number().int().min(0).max(1).optional() })
+      )
+      .max(160),
   });
   gateway.rpc("gmtown.house.save", async (ctx, raw) => {
     if (!ctx.nick) throw new AppError("FORBIDDEN", "회원만 꾸밀 수 있어요.", 403);
@@ -248,6 +264,10 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
     const why = checkLayout(h.tier, layout as Placed[], h.inv ?? {});
     if (why) throw bad(why);
     await houses.updateOne({ _id: ctx.uid }, { $set: { layout: layout as Placed[] } });
+    // 같은 집에 놀러 와 있는 사람들에게 바뀐 가구
+    const me = bySock.get(ctx.socket.id);
+    const room = roomOf(ctx.uid);
+    if (me) for (const q of chan(me.ch).players.values()) if (q !== me && q.home === room) gateway.emitTo(q.so, keyOf(q.ch), "hlayout", { room, layout });
     return null;
   });
   // 집에 들어감 · 나옴 (같은 채널 사람들에게 home — 들어가 있는 동안은 마을에서 안 보임)
@@ -255,16 +275,69 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
     const b = buildingById("home");
     return b ? doorFront(b) : SPAWN;
   };
+  /** 집 id (주인 uid 는 안 보이게 — 서버가 켜져 있는 동안 같은 값) */
+  const rooms = new Map<string, string>();
+  const roomOf = (uid: string) => {
+    let r = rooms.get(uid);
+    if (!r) rooms.set(uid, (r = newId(10)));
+    return r;
+  };
+  /** 집 안으로: 들어가는 자리 · 같은 채널에 home */
+  const goIn = (p: P, room: string, tier: number) => {
+    const at = enterAt(tier);
+    p.x = at.x;
+    p.y = at.y;
+    p.f = 0;
+    p.m = 0;
+    p.bank = BANK_MAX;
+    p.at = now();
+    if (p.home !== room) {
+      p.home = room;
+      gateway.emit(keyOf(p.ch), "home", { id: p.id, on: true, room });
+    }
+  };
   gateway.rpc("gmtown.house.enter", async (ctx) => {
     const p = bySock.get(ctx.socket.id);
     if (!p) throw bad("마을에 들어와야 해요.");
     const w = await houseWire(ctx.uid, !ctx.nick);
     if (w.tier < 1) throw bad("아직 계약한 집이 없어요.");
-    if (!p.home) {
-      p.home = true;
-      gateway.emit(keyOf(p.ch), "home", { id: p.id, on: true });
-    }
-    return w;
+    const room = roomOf(ctx.uid);
+    goIn(p, room, w.tier);
+    return { ...w, room };
+  });
+  // 친구 초대 · 놀러 가기 — 초대는 5분 동안 (그 사이엔 몇 번이든 들어감)
+  const INVITE_MS = 5 * 60_000;
+  /** "초대받은 연결|주인 uid" → 끝나는 시각 */
+  const invites = new Map<string, number>();
+  gateway.rpc("gmtown.house.invite", async (ctx, raw) => {
+    const p = bySock.get(ctx.socket.id);
+    if (!p) throw bad("마을에 들어와야 해요.");
+    if (!ctx.nick) throw new AppError("FORBIDDEN", "회원만 초대할 수 있어요.", 403);
+    const { to } = z.object({ to: z.string().max(20) }).parse(raw);
+    const q = [...chan(p.ch).players.values()].find((x) => x.id === to);
+    if (!q || q === p) throw bad("같은 채널에 있는 사람만 초대할 수 있어요.");
+    if ((await houseOf(ctx.uid)) < 1) throw bad("먼저 집을 계약해 주세요.");
+    const t = now();
+    if (t - p.inviteAt < 2000) throw new AppError("RATE_LIMITED", "조금 있다가 다시 초대해 주세요.", 429);
+    p.inviteAt = t;
+    for (const [k, v] of invites) if (v < t) invites.delete(k);
+    invites.set(`${q.sock}|${ctx.uid}`, t + INVITE_MS);
+    gateway.emitTo(q.so, keyOf(q.ch), "invite", { from: p.id, name: p.name });
+    return null;
+  });
+  gateway.rpc("gmtown.house.visit", async (ctx, raw) => {
+    const p = bySock.get(ctx.socket.id);
+    if (!p) throw bad("마을에 들어와야 해요.");
+    const { from } = z.object({ from: z.string().max(20) }).parse(raw);
+    const host = [...chan(p.ch).players.values()].find((x) => x.id === from);
+    if (!host) throw bad("초대한 사람이 마을을 떠났어요.");
+    const until = invites.get(`${p.sock}|${host.uid}`) ?? 0;
+    if (until < now()) throw new AppError("FORBIDDEN", "초대가 끝났어요. 다시 초대받아 주세요.", 403);
+    const h = await houseWire(host.uid, false);
+    if (h.tier < 1) throw bad("그 집은 아직 없어요.");
+    const room = roomOf(host.uid);
+    goIn(p, room, h.tier);
+    return { ...h, gp: ctx.nick ? ((await points.get(ctx.uid))?.points ?? 0) : null, inv: {}, room, owner: host.name };
   });
   gateway.rpc("gmtown.house.leave", (ctx) => {
     const p = bySock.get(ctx.socket.id);
@@ -275,8 +348,9 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
     p.m = 0;
     p.bank = BANK_MAX;
     p.at = now();
+    p.f = 0;
     if (p.home) {
-      p.home = false;
+      p.home = null;
       gateway.emit(keyOf(p.ch), "home", { id: p.id, on: false, x: r2(d.x), y: r2(d.y) });
     }
     chans.get(p.ch)?.dirty.add(p.sock);
@@ -351,7 +425,7 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
       const out: MoveWire[] = [];
       for (const sock of c.dirty) {
         const p = c.players.get(sock);
-        if (p) out.push([p.id, r2(p.x), r2(p.y), p.d, p.m]);
+        if (p) out.push(p.home ? [p.id, r2(p.x), r2(p.y), p.d, p.m, p.f] : [p.id, r2(p.x), r2(p.y), p.d, p.m]);
       }
       c.dirty.clear();
       if (out.length) gateway.emit(keyOf(n), "mv", out);

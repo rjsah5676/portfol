@@ -39,7 +39,7 @@ function regionName(x: number, y: number): string {
       best = w;
     }
   }
-  return best ? best.name : y < 60 ? "북쪽 언덕" : "GMTOWN 마을";
+  return best ? best.name : y < 60 ? "북쪽 언덕" : "ANIME TOWN";
 }
 
 const preload = () => [
@@ -180,12 +180,12 @@ export default function GMTownApp() {
     : { height: phone ? "calc(100dvh - 104px)" : `calc(100dvh - ${navH + 20}px)` };
   return (
     <div ref={rootRef} className={outer}>
-      <GameLoader tasks={preload} title="GMTOWN" accent="#F2C14E" className={box} style={boxStyle}>
+      <GameLoader tasks={preload} title="ANIME TOWN" accent="#F2C14E" className={box} style={boxStyle}>
         <div className={`gmt ${box}`} style={{ background: "#3f7d4a", ...boxStyle }}>
           <Town phone={phone} fs={fs} canFs={canFs} toggleFs={toggleFs} />
           {fsGate && (
             <div className="absolute inset-0 z-40 flex flex-col items-center justify-center gap-3 bg-[radial-gradient(circle_at_50%_40%,rgba(40,34,60,0.92),rgba(8,8,14,0.97))] p-6 text-center">
-              <div className="gmt-lo-title text-[30px] leading-none">GMTOWN</div>
+              <div className="gmt-lo-title text-[30px] leading-none">ANIME TOWN</div>
               <p className="text-[13px] text-white/75">웹 3D 실험용 놀이터 — 가로 전체화면으로 놀아요</p>
               <button
                 type="button"
@@ -248,7 +248,7 @@ function Town({
   const [mapOpen, setMapOpen] = useState(false);
   const [sys, setSys] = useState<SysLine[]>([]);
   const [tab, setTab] = useState<ChatTab>("all");
-  const [region, setRegion] = useState("GMTOWN 마을");
+  const [region, setRegion] = useState("ANIME TOWN");
   const [lastWarp, setLastWarp] = useState(0);
   const [myC, setMyC] = useState<CharId>("amy");
   const [picker, setPicker] = useState(false);
@@ -258,10 +258,18 @@ function Town({
   const [hHover, setHHover] = useState<{ cx: number; cy: number } | null>(null);
   const hClick = useRef<((c: { cx: number; cy: number }) => void) | null>(null);
   const [meName, setMeName] = useState("나");
-  const houseRef = useRef<{ in: boolean }>({ in: false });
+  const [hFloor, setHFloor] = useState(0);
+  /** 받은 집 초대 (몇 초 동안 카드) */
+  const [invite, setInvite] = useState<{ from: string; name: string; at: number } | null>(null);
+  const houseRef = useRef<{ in: boolean; room: string | null }>({ in: false, room: null });
   useEffect(() => {
-    houseRef.current = { in: !!house };
+    houseRef.current = { in: !!house, room: house?.room ?? null };
   }, [house]);
+  useEffect(() => {
+    if (!invite) return;
+    const t = window.setTimeout(() => setInvite((v) => (v === invite ? null : v)), 30_000);
+    return () => window.clearTimeout(t);
+  }, [invite]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소(주소 · localStorage)에서만 알 수 있는 값
   useEffect(() => setMyC(pickedChar()), []);
   const chatEnd = useRef<HTMLDivElement | null>(null);
@@ -298,7 +306,8 @@ function Town({
         onHouseDoor: (at) => setHouseDoor(at),
         onHouseHover: (c) => setHHover(c),
         onHouseClick: (c) => hClick.current?.(c),
-        send: (x, y, d, m) => void rpc("gmtown.move", { x, y, d, m }).catch(() => {}),
+        onHouseFloor: (f) => setHFloor(f),
+        send: (x, y, d, m, f) => void rpc("gmtown.move", { x, y, d, m, ...(f !== undefined ? { f } : {}) }).catch(() => {}),
         onOverview: (on) => setOverview(on),
         onMap: () => !houseRef.current.in && setMapOpen((o) => !o),
         onError: (m) => {
@@ -355,6 +364,11 @@ function Town({
               setHouse(null);
             }
             engine.reset(s);
+            // 우리 집 건물은 계약해야 섬
+            void rpc<HouseWire>("gmtown.house").then(
+              (h) => engine.setHomeBuilt(h.tier > 0),
+              () => {}
+            );
             setMeName(s.players.find((p) => p.id === s.me)?.name ?? "나");
             setCh(s.ch);
             setCount(s.players.length);
@@ -369,8 +383,18 @@ function Town({
             else if (t === "snap")
               engine.snap((d as { x: number; y: number }).x, (d as { x: number; y: number }).y);
             else if (t === "home") {
-              const v = d as { id: string; on: boolean };
-              engine.setAway(v.id, v.on);
+              const v = d as { id: string; on: boolean; room?: string };
+              engine.setAway(v.id, v.on, v.room ?? null);
+            } else if (t === "invite") {
+              const v = d as { from: string; name: string };
+              setInvite({ ...v, at: Date.now() });
+              setSys((l) => [...l.slice(-29), { at: Date.now(), text: `${v.name}님이 집에 초대했어요! 🏠` }]);
+            } else if (t === "hlayout") {
+              const v = d as { room: string; layout: HouseWire["layout"] };
+              if (houseRef.current.room === v.room) {
+                engine.houseLayout(v.layout as never);
+                setHouse((h) => (h ? { ...h, layout: v.layout } : h));
+              }
             } else if (t === "char") {
               const v = d as { id: string; c: CharId };
               engine.setChar(v.id, v.c);
@@ -449,12 +473,26 @@ function Town({
     setCard(null);
     void rpc<HouseWire>("gmtown.house.enter").then(
       (w) => {
-        engine?.enterHouse(w.tier, w.layout as never);
-        setHouse({ ...w, owner: meName });
+        engine?.enterHouse(w.tier, w.layout as never, w.room ?? null);
+        setHouse({ ...w, owner: meName, guest: false });
         setMapOpen(false);
         addSys("내 집에 들어왔어요. 🔨 꾸미기로 가구를 놓아 보세요!");
       },
       (e) => say((e as Error).message || "들어가지 못했어요.")
+    );
+  };
+  /** 초대받은 집으로 놀러 가기 */
+  const visit = (from: string) => {
+    setInvite(null);
+    setCard(null);
+    void rpc<HouseWire>("gmtown.house.visit", { from }).then(
+      (w) => {
+        engine?.enterHouse(w.tier, w.layout as never, w.room ?? null);
+        setHouse({ ...w, owner: w.owner ?? "친구", guest: true });
+        setMapOpen(false);
+        addSys(`${w.owner ?? "친구"}님의 집에 놀러 왔어요! 🎉`);
+      },
+      (e) => say((e as Error).message || "놀러 가지 못했어요.")
     );
   };
   const leaveHome = () => {
@@ -527,7 +565,7 @@ function Town({
       <canvas
         ref={canvasRef}
         className="absolute inset-0 block touch-none"
-        aria-label="GMTOWN 마을"
+        aria-label="ANIME TOWN"
       />
       <canvas ref={uiRef} className="pointer-events-none absolute inset-0 block" aria-hidden />
 
@@ -551,11 +589,11 @@ function Town({
           className="pointer-events-auto relative h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-full p-[2px]"
           style={{ background: "linear-gradient(160deg,#f3d68e,#8a6a2c 45%,#f0cf86)" }}
         >
-          <img src={pickPic(myC)} alt="" className="h-full w-full rounded-full bg-[#1a1726] object-cover object-[50%_12%]" draggable={false} />
+          <img src={`/poker/char/${myC}/profile.webp`} alt="" className="h-full w-full rounded-full bg-[#1a1726] object-cover object-center" draggable={false} />
           <span className="absolute right-0 bottom-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1726] text-[9px] ring-1 ring-[#e9cf8e]">↻</span>
         </button>
         <div className="gmt-glass flex h-9 items-center rounded-full px-4 max-[520px]:hidden">
-          <span className="gmt-brand text-[18px] leading-none">GMTOWN</span>
+          <span className="gmt-brand text-[18px] leading-none">ANIME TOWN</span>
         </div>
         <button
           type="button"
@@ -733,14 +771,32 @@ function Town({
           say={say}
           hover={hHover}
           clickRef={hClick}
+          floor={hFloor}
         />
+      )}
+
+      {/* 집 초대 받음 */}
+      {invite && (
+        <div className="gmt-lo gmt-pop absolute top-14 left-1/2 z-20 flex w-[min(92%,380px)] -translate-x-1/2 items-center gap-3 rounded-xl px-3 py-2.5">
+          <span className="text-[26px]">💌</span>
+          <div className="min-w-0 flex-1">
+            <b className="block truncate text-[13.5px]">{invite.name}님의 집 초대</b>
+            <span className="text-[11px] text-white/60">놀러 오래요! (5분 안에 갈 수 있어요)</span>
+          </div>
+          <button type="button" onClick={() => visit(invite.from)} className="gmt-gold-btn h-8 shrink-0 cursor-pointer rounded-lg px-3 text-[12px] font-extrabold">
+            놀러 가기
+          </button>
+          <button type="button" onClick={() => setInvite(null)} aria-label="초대 닫기" className="gmt-dark-btn h-8 w-8 shrink-0 cursor-pointer rounded-lg text-[12px]">
+            ✕
+          </button>
+        </div>
       )}
 
       {/* 처음 온 사람 도움말 */}
       {help && status === "on" && (
         <div className="gmt-pop absolute top-16 left-1/2 w-[min(92%,460px)] -translate-x-1/2">
           <div className="gmt-glass rounded-2xl px-5 py-4 text-[13px] leading-relaxed">
-            <b className="gmt-brand text-[17px]">GMTOWN 에 오신 걸 환영해요</b>
+            <b className="gmt-brand text-[17px]">ANIME TOWN 에 오신 걸 환영해요</b>
             <p className="mt-1 text-white/85">
               {phone
                 ? "왼쪽 아래 조이스틱으로 걸어요(끝까지 밀면 뛰어요) · 화면을 한 손가락으로 끌면 시점이 돌아가고, 두 손가락으로 돌리고 벌려서 당겨요 · 지도 버튼에서 가고 싶은 곳으로 순간이동해요."
@@ -777,7 +833,7 @@ function Town({
 
       {/* 건물 카드 */}
       {card && isNpc(card) && (
-        <NpcDialog id={card} phone={phone} onClose={() => setCard(null)} onSys={addSys} onGoHome={enterHome} />
+        <NpcDialog id={card} phone={phone} onClose={() => setCard(null)} onSys={addSys} onGoHome={enterHome} onBought={() => engine?.setHomeBuilt(true)} />
       )}
       {card && !isNpc(card) && <Card near={card} onClose={() => setCard(null)} onHome={enterHome} />}
 
@@ -835,7 +891,7 @@ function Town({
       {status !== "on" && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#0d1220]/70">
           <div className="gmt-glass rounded-2xl px-6 py-5 text-center">
-            <div className="gmt-brand text-[22px]">GMTOWN</div>
+            <div className="gmt-brand text-[22px]">ANIME TOWN</div>
             <p className="mt-1 text-[13px] text-white/80">
               {status === "error" ? err : "마을에 들어가는 중…"}
             </p>
@@ -1049,7 +1105,7 @@ function Card({ near, onClose, onHome }: { near: Building | "board"; onClose: ()
           </span>
           <div>
             <div className="gmt-brand text-[22px] leading-tight">마을 안내판</div>
-            <div className="text-[12px] text-white/60">GMTOWN 둘러보기</div>
+            <div className="text-[12px] text-white/60">ANIME TOWN 둘러보기</div>
           </div>
         </div>
         <ul className="mt-4 space-y-1.5 text-[13px] leading-relaxed text-white/85">

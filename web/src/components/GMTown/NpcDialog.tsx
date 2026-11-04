@@ -11,7 +11,7 @@ import { HOUSE_TIERS, houseTier, npcById, type HouseTier, type NpcId } from "@/l
  * 1~4 숫자 키로 고르기 · Esc 닫기 (닫기는 GMTownApp 이 Esc 로).
  */
 
-type View = "talk" | "list" | "confirm" | "done";
+type View = "talk" | "info" | "list" | "confirm" | "done";
 const fmt = (n: number) => n.toLocaleString("ko-KR");
 
 export default function NpcDialog({
@@ -20,6 +20,7 @@ export default function NpcDialog({
   onClose,
   onSys,
   onGoHome,
+  onBought,
 }: {
   id: NpcId;
   phone: boolean;
@@ -28,6 +29,8 @@ export default function NpcDialog({
   onSys: (t: string) => void;
   /** 내 집으로 들어가기 */
   onGoHome: () => void;
+  /** 계약함 (마을의 우리 집 건물이 섬) */
+  onBought?: () => void;
 }) {
   const npc = npcById(id)!;
   const [house, setHouse] = useState<HouseWire | null>(null);
@@ -68,6 +71,7 @@ export default function NpcDialog({
       (h) => {
         setHouse(h);
         setBusy(false);
+        onBought?.();
         onSys(`${pick.name} 계약 완료! (${fmt(pick.price)} GP)`);
         say(
           tier === 0
@@ -92,7 +96,7 @@ export default function NpcDialog({
             gold: true,
             on: () =>
               guest
-                ? say("집 계약은 회원만 할 수 있어요. 로그인하고 오시면 바로 도와드릴게요!")
+                ? say("집 계약은 회원만 할 수 있어요. 로그인하고 오시면 바로 도와드릴게요!", "info")
                 : say(
                     tier
                       ? `지금은 ${houseTier(tier)!.name}에 사시죠? ${next ? `다음은 ${next.name}이에요.` : "벌써 제일 좋은 집이에요!"}`
@@ -108,9 +112,22 @@ export default function NpcDialog({
                 },
               ]
             : []),
-          { label: "이 마을 집은 어떤 곳이에요?", on: () => say("집은 사람마다 따로예요. 입구는 여기 하나지만, 들어가면 나만의 집! 단계별로 넓히고 친구도 부를 수 있게 될 거예요.") },
+          {
+            label: "이 마을 집은 어떤 곳이에요?",
+            on: () =>
+              say(
+                "집은 사람마다 따로예요! 저기 「우리 집」 문으로 들어가면 나만의 집이 나와요. 가구를 사서 꾸미고, 2층 집 · 정원 주택으로 넓히고, 같은 채널 친구를 초대할 수도 있어요 💌",
+                "info"
+              ),
+          },
           { label: "그냥 구경했어요", on: onClose },
         ]
+      : view === "info"
+        ? [
+            { label: "알겠어요!", gold: true, on: () => say("또 궁금한 거 있으면 물어보세요!", "talk") },
+            { label: "집 보러 왔어요", on: () => (guest ? say("집 계약은 회원만 할 수 있어요. 로그인하고 오시면 바로 도와드릴게요!", "info") : say(tier ? "지금 나와 있는 매물이에요." : "지금 나와 있는 매물이에요. 처음엔 원룸부터 계약할 수 있어요!", "list")) },
+            { label: "고마워요, 안녕!", on: onClose },
+          ]
       : view === "list"
         ? [
             ...(next

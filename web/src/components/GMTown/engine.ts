@@ -34,8 +34,9 @@ import {
   type Building,
 } from "@/lib/gmtown/world";
 import { buildTown, type TownScene } from "./scene3d";
+import { setHomeBuilt } from "./lotBuildings";
 import { HOME_AT, buildHouse, type HouseScene } from "./houseScene";
-import type { Placed } from "@/lib/gmtown/house";
+import { FLOOR_H, levelH, type Placed } from "@/lib/gmtown/house";
 
 /*
  * GMTOWN 엔진 — three.js 쿼터뷰 장면 위에 사람들을 세우고, 내 캐릭터를 움직이고, 다른 사람을 부드럽게 보여 줌.
@@ -65,7 +66,7 @@ export interface EngineHooks {
   /** E · 스페이스 */
   onInteract(): void;
   /** 내 위치 보내기 */
-  send(x: number, y: number, d: number, m: 0 | 1 | 2): void;
+  send(x: number, y: number, d: number, m: 0 | 1 | 2, f?: number): void;
   /** 마을 전체 지도를 켜고 끔 (엔진이 스스로 끌 때도) */
   onOverview(on: boolean): void;
   /** M · 작은 지도: 전체 지도 창 열고 닫기 */
@@ -75,6 +76,8 @@ export interface EngineHooks {
   /** 집 안 꾸미기: 마우스가 가리키는 칸 · 누른 칸 */
   onHouseHover?(cell: { cx: number; cy: number } | null): void;
   onHouseClick?(cell: { cx: number; cy: number }): void;
+  /** 집 안: 보이는 층이 바뀜 (꾸미기는 이 층에) */
+  onHouseFloor?(f: number): void;
   /** 3D 를 못 여는 기기 · 파일을 못 받음 */
   onError(msg: string): void;
 }
@@ -138,8 +141,11 @@ interface Avatar {
   c: ModelId;
   /** 마을 NPC (서버에 없는, 제자리에 서 있는 사람) */
   npc?: Npc;
-  /** 자기 집 안에 들어가 있음 (마을에선 안 보임) */
+  /** 집 안에 들어가 있음 (마을에선 안 보임) · 들어간 집 */
   away?: boolean;
+  room?: string | null;
+  /** 집 안 층 (0 · 1 · 2 = 계단) */
+  lv?: number;
   x: number;
   y: number;
   d: number;
@@ -424,6 +430,7 @@ export class TownEngine {
       (s) => {
         if (this.dead) return s.dispose();
         this.town = s;
+        this.applyHome();
         const size = this.phone ? 1024 : 2048;
         s.sun.shadow.mapSize.set(size, size);
         // 이제 지평선이 보이니 하늘 공 + 먼 곳은 안개로 (먼 나무도 덜 그림)
@@ -544,9 +551,10 @@ export class TownEngine {
   }
   moves(list: MoveWire[]) {
     const t = performance.now();
-    for (const [id, x, y, d, m] of list) {
+    for (const [id, x, y, d, m, f] of list) {
       const a = this.others.get(id);
       if (!a) continue;
+      a.lv = f ?? 0;
       const l = a.samples[a.samples.length - 1];
       // 순간이동 (멀리 한 번에) → 지나가는 길을 그리지 않고 바로 그 자리로
       if (l && Math.hypot(x - l.x, y - l.y) > 6) a.samples.length = 0;
@@ -659,6 +667,7 @@ export class TownEngine {
       samples: [{ t: performance.now(), x: p.x, y: p.y, d: p.d, m: p.m }],
       bubble: null,
       away: !!p.home,
+      room: p.home ?? null,
     };
   }
 
@@ -698,7 +707,7 @@ export class TownEngine {
       d = this.ray.ray.direction;
     if (this.house) {
       if (d.y >= -1e-4) return null;
-      const t = -o.y / d.y;
+      const t = (this.house.viewFloor() * FLOOR_H - o.y) / d.y;
       return { x: o.x + d.x * t, y: o.z + d.z * t };
     }
     // 땅까지 걸어가며 찾기 (0.6m 씩 → 넘으면 반으로 나눠 좁힘). 지평선 위를 누르면 없음
@@ -881,8 +890,23 @@ export class TownEngine {
   private hoverCell = "";
   /** 서 있는 높이 (집 안은 바닥 0) */
   private hAt(x: number, y: number) {
-    return this.house ? 0 : heightAt(x, y);
+    return this.house ? this.house.heightAt(x, y) : heightAt(x, y);
   }
+  /** 이 사람의 발 높이 (집 안 다른 사람은 그 사람 층으로) */
+  private footH(a: Avatar) {
+    if (this.house && a !== this.me) return levelH(this.house.geo, a.lv ?? 0, a.x, a.y);
+    return this.hAt(a.x, a.y);
+  }
+  /** 집 안에서 이 사람이 보임 (같은 집 · 숨긴 2층이 아님) */
+  private seenInHouse(a: Avatar) {
+    if (!this.house) return false;
+    if (a === this.me) return true;
+    if (!a.away || a.room !== this.room) return false;
+    return this.house.viewFloor() === 1 || this.footH(a) < FLOOR_H * 0.6;
+  }
+  /** 들어가 있는 집 (내 집 · 놀러 간 집) */
+  private room: string | null = null;
+  private houseFloor = -1;
   /** 부딪힘 (집 안은 방 · 가구) */
   private bl(x: number, y: number) {
     return this.house ? this.house.blocked(x, y, RADIUS) : blocked(x, y);
@@ -891,7 +915,7 @@ export class TownEngine {
     return !!this.house;
   }
   /** 내 집으로 들어감: 마을은 숨기고 멀리 떨어진 곳에 방을 지어서 그리로 */
-  enterHouse(tier: number, layout: Placed[]) {
+  enterHouse(tier: number, layout: Placed[], room: string | null = null) {
     const town = this.town,
       me = this.me;
     if (!town || !me) return;
@@ -907,8 +931,12 @@ export class TownEngine {
         this.hiddenTown.push(o);
       }
     }
+    // 다른 사람은 모델을 새로 (같은 집 사람만 다시 보임)
+    for (const a of this.others.values()) this.dropView(a);
     town.scene.add(h.group);
     this.house = h;
+    this.room = room;
+    this.houseFloor = -1;
     this.townLook = {
       fog: town.scene.fog as THREE.Fog | null,
       bg: town.scene.background as THREE.Color | null,
@@ -917,7 +945,7 @@ export class TownEngine {
       zoom: this.zoom,
     };
     town.scene.fog = null;
-    town.scene.background = new THREE.Color(0x1e1a28);
+    town.scene.background = new THREE.Color(h.bg);
     this.houseDist = Math.max(h.wm, h.dm) * 0.9 + 3.5;
     this.camPitch = 46 * DEG;
     this.camYaw = 35 * DEG;
@@ -925,6 +953,9 @@ export class TownEngine {
     me.x = h.enter.x;
     me.y = h.enter.y;
     me.faceTo = me.face = Math.PI;
+    h.moved(me.x, me.y);
+    this.sent.at = 0;
+    this.sent.m = -1;
     this.path = [];
     this.goal = null;
     this.keys.clear();
@@ -957,6 +988,8 @@ export class TownEngine {
     if (!h) return;
     h.dispose();
     this.house = null;
+    this.room = null;
+    for (const a of this.others.values()) if (a.away) this.dropView(a);
     for (const o of this.hiddenTown) o.visible = true;
     this.hiddenTown = [];
     if (town && this.townLook) {
@@ -984,11 +1017,32 @@ export class TownEngine {
     this.house?.setGhost(g);
   }
   /** 다른 사람이 자기 집에 들어감 / 나옴 */
-  setAway(id: string, on: boolean) {
+  setAway(id: string, on: boolean, room: string | null = null) {
     const a = this.others.get(id);
     if (!a) return;
     a.away = on;
-    if (on) this.dropView(a);
+    a.room = on ? room : null;
+    a.lv = 0;
+    a.samples.length = Math.min(a.samples.length, 1);
+    this.dropView(a);
+  }
+  /** 우리 집 건물: 계약했으면 집, 아니면 분양 중 터 */
+  private homeBuilt = false;
+  setHomeBuilt(on: boolean) {
+    this.homeBuilt = on;
+    this.applyHome();
+  }
+  private applyHome() {
+    const v = this.town?.buildings.find((q) => q.b.id === "home");
+    if (v) setHomeBuilt(v.group, this.homeBuilt);
+  }
+  /** 꾸미기에서 볼 층 (null = 내가 있는 층) */
+  setHouseView(f: number | null) {
+    this.house?.setView(f);
+  }
+  /** 같은 채널 사람들 (초대 목록) */
+  people(): { id: string; name: string; guest: boolean; here: boolean }[] {
+    return [...this.others.values()].map((a) => ({ id: a.id, name: a.name, guest: a.guest, here: !!this.room && a.away === true && a.room === this.room }));
   }
   setMapOpen(on: boolean) {
     this.mapOpen = on;
@@ -1373,18 +1427,24 @@ export class TownEngine {
           : 1.15;
       // 보내기 (0.1초마다, 바뀐 게 있을 때만)
       const m = moving ? (running ? 2 : 1) : 0;
+      if (this.house) this.house.moved(me.x, me.y);
+      const lv = this.house ? this.house.level() : 0;
       if (
-        !this.house &&
         now - this.sent.at >= 100 &&
         (Math.hypot(me.x - this.sent.x, me.y - this.sent.y) > 0.01 ||
           me.d !== this.sent.d ||
           m !== this.sent.m)
       ) {
         this.sent = { x: me.x, y: me.y, d: me.d, m, at: now };
-        this.hooks.send(Math.round(me.x * 100) / 100, Math.round(me.y * 100) / 100, me.d, m);
+        this.hooks.send(Math.round(me.x * 100) / 100, Math.round(me.y * 100) / 100, me.d, m, this.house ? lv : undefined);
       }
       // 집 안: 문에 닿으면 나가기
       if (this.house) {
+        const vf = this.house.viewFloor();
+        if (vf !== this.houseFloor) {
+          this.houseFloor = vf;
+          this.hooks.onHouseFloor?.(vf);
+        }
         const at = this.house.atDoor(me.x, me.y);
         if (at !== this.houseDoor) {
           this.houseDoor = at;
@@ -1797,7 +1857,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     let df = ((to - f + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     f += df * Math.min(1, dt * 14);
     a.face = f;
-    const gh = this.hAt(a.x, a.y);
+    const gh = this.footH(a);
     r.root.position.set(a.x, gh + 0.02, a.y);
     r.root.rotation.y = f;
     r.shadow.position.set(a.x, gh + 0.015, a.y);
@@ -1958,10 +2018,10 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
         m.material.map = t;
         m.material.needsUpdate = true;
       }
-      m.position.set(a.x, this.hAt(a.x, a.y) + 0.05, a.y);
+      m.position.set(a.x, this.footH(a) + 0.05, a.y);
       m.scale.x = flip ? -1 : 1;
     }
-    v.shadow.position.set(a.x, this.hAt(a.x, a.y) + 0.06, a.y);
+    v.shadow.position.set(a.x, this.footH(a) + 0.06, a.y);
   }
 
   private render(now: number, dt: number) {
@@ -2046,7 +2106,10 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       const inkPx = INK_PX * Math.max(0.35, Math.min(1.15, this.baseDist / this.dist));
       this.inkU.uInk.value = (inkPx * 2 * Math.tan((cam.fov * DEG) / 2)) / Math.max(1, this.ch);
       // 사람
-      for (const a of this.others.values()) if (!a.away && !this.house) this.placeAvatar(a, dt);
+      for (const a of this.others.values()) {
+        if (this.house ? this.seenInHouse(a) : !a.away) this.placeAvatar(a, dt);
+        else if (this.house && (a.rig || a.view)) this.dropView(a);
+      }
       for (const a of this.house ? [] : this.npcs) {
         const n = a.npc!,
           me = this.me;
@@ -2100,9 +2163,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     const o = this.camera.position;
     const far = (a: Avatar) => Math.hypot(a.x - o.x, a.y - o.z);
     const people = this.house
-      ? this.me
-        ? [this.me]
-        : []
+      ? [...[...this.others.values()].filter((a) => this.seenInHouse(a)), ...(this.me ? [this.me] : [])]
       : [...[...this.others.values()].filter((a) => !a.away), ...this.npcs, ...(this.me ? [this.me] : [])];
     // 가까운 사람 이름표가 위에 오게 (먼 사람부터 그림)
     people.sort((a, b) => far(b) - far(a));
@@ -2114,7 +2175,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       if (this.overview && a !== this.me) continue;
       // 카메라 뒤
       if ((a.x - o.x) * fwdX + (a.y - o.z) * fwdY < 0.3) continue;
-      const s = this.screen(a.x, a.y, headH);
+      const s = this.screen(a.x, a.y, headH + (this.house ? this.footH(a) - this.hAt(a.x, a.y) : 0));
       if (s.x < -80 || s.x > this.cw + 80 || s.y < -40 || s.y > this.ch + 120) continue;
       const sz = Math.max(0.72, Math.min(1, (this.baseDist * 1.3) / Math.max(1, far(a))));
       ctx.save();
