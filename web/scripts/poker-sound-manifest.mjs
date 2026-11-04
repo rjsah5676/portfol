@@ -3,11 +3,10 @@
 // 이름 = 확장자 뺀 상대 경로 (예: "sfx-deal", "voice/jinwoo/jinwoo-call-big")
 import { readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("../public/poker/sound", import.meta.url).pathname.replace(
-  /^\/([A-Za-z]:)/,
-  "$1"
-);
+// fileURLToPath: 경로에 한글이 있어도 그대로 (URL.pathname 은 %EC… 로 인코딩돼서 못 찾음)
+const ROOT = fileURLToPath(new URL("../public/poker/sound", import.meta.url));
 const out = {};
 const walk = (dir) => {
   for (const f of readdirSync(dir)) {
