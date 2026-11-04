@@ -34,6 +34,8 @@ import {
   type Building,
 } from "@/lib/gmtown/world";
 import { buildTown, type TownScene } from "./scene3d";
+import { HOME_AT, buildHouse, type HouseScene } from "./houseScene";
+import type { Placed } from "@/lib/gmtown/house";
 
 /*
  * GMTOWN 엔진 — three.js 쿼터뷰 장면 위에 사람들을 세우고, 내 캐릭터를 움직이고, 다른 사람을 부드럽게 보여 줌.
@@ -68,6 +70,11 @@ export interface EngineHooks {
   onOverview(on: boolean): void;
   /** M · 작은 지도: 전체 지도 창 열고 닫기 */
   onMap?(): void;
+  /** 집 안: 문에 닿음 / 떨어짐 (나가기) */
+  onHouseDoor?(at: boolean): void;
+  /** 집 안 꾸미기: 마우스가 가리키는 칸 · 누른 칸 */
+  onHouseHover?(cell: { cx: number; cy: number } | null): void;
+  onHouseClick?(cell: { cx: number; cy: number }): void;
   /** 3D 를 못 여는 기기 · 파일을 못 받음 */
   onError(msg: string): void;
 }
@@ -131,6 +138,8 @@ interface Avatar {
   c: ModelId;
   /** 마을 NPC (서버에 없는, 제자리에 서 있는 사람) */
   npc?: Npc;
+  /** 자기 집 안에 들어가 있음 (마을에선 안 보임) */
+  away?: boolean;
   x: number;
   y: number;
   d: number;
@@ -649,6 +658,7 @@ export class TownEngine {
       phase: Math.random() * 1000,
       samples: [{ t: performance.now(), x: p.x, y: p.y, d: p.d, m: p.m }],
       bubble: null,
+      away: !!p.home,
     };
   }
 
@@ -686,8 +696,13 @@ export class TownEngine {
     );
     const o = this.ray.ray.origin,
       d = this.ray.ray.direction;
+    if (this.house) {
+      if (d.y >= -1e-4) return null;
+      const t = -o.y / d.y;
+      return { x: o.x + d.x * t, y: o.z + d.z * t };
+    }
     // 땅까지 걸어가며 찾기 (0.6m 씩 → 넘으면 반으로 나눠 좁힘). 지평선 위를 누르면 없음
-    const above = (t: number) => o.y + d.y * t - heightAt(o.x + d.x * t, o.z + d.z * t);
+    const above = (t: number) => o.y + d.y * t - this.hAt(o.x + d.x * t, o.z + d.z * t);
     let a = 0,
       b = -1;
     for (let t = 0.6; t < 500; t += 0.6)
@@ -705,7 +720,7 @@ export class TownEngine {
   }
   /** 땅 위 점 (높이 h) → 화면 px */
   private screen(x: number, y: number, h = 0): { x: number; y: number } {
-    const v = new THREE.Vector3(x, heightAt(x, y) + h, y).project(this.camera);
+    const v = new THREE.Vector3(x, this.hAt(x, y) + h, y).project(this.camera);
     return { x: ((v.x + 1) / 2) * this.cw, y: ((1 - v.y) / 2) * this.ch };
   }
 
@@ -780,6 +795,16 @@ export class TownEngine {
   }
 
   private tap(px: number, py: number) {
+    if (this.house) {
+      const g = this.ground(px, py);
+      if (!g) return;
+      if (this.build) {
+        const c = this.house.cellAt(g.x, g.y);
+        if (c) this.hooks.onHouseClick?.(c);
+        return;
+      }
+      return this.walkTo(g.x, g.y, null);
+    }
     // 내가 건물 뒤에 가려져 있으면 그 건물은 안 누름 (반투명 몸 근처를 눌러도 건물로 걸어가 버리지 않게)
     const occ = this.me ? this.blocker(this.me.x, this.me.y) : null;
     const t = this.pickTarget(px, py, occ?.b ?? null);
@@ -827,18 +852,144 @@ export class TownEngine {
       return;
     }
     // 왼쪽 = 시점 돌리기 (끌기), 오른쪽 = 그곳으로 걷기 · 건물로 가기
-    if (e.button === 0 && !this.overview) {
+    if (e.button === 0 && this.house && this.build) {
+      this.drag = { x: px, y: py, yaw: this.camYaw, pitch: this.camPitch };
+      this.buildClick = { x: px, y: py };
+      this.canvas.setPointerCapture(e.pointerId);
+    } else if (e.button === 0 && !this.overview) {
       this.drag = { x: px, y: py, yaw: this.camYaw, pitch: this.camPitch };
       this.canvas.setPointerCapture(e.pointerId);
     } else if (e.button === 2 || (e.button === 0 && this.overview)) this.tap(px, py);
   };
   private onMenu = (e: MouseEvent) => e.preventDefault();
+  private buildClick: { x: number; y: number } | null = null;
   /** 폰 조이스틱 가운데 (왼쪽 아래 — 노치 · 둥근 모서리 피해서) */
   private joyAt() {
     return { x: Math.max(JOY_R + 22, this.cw * 0.09 + JOY_R * 0.6), y: this.ch - JOY_R - 26 };
   }
   /** 지도 창이 열려 있음 (조이스틱 숨김 · 입력 멈춤) */
   private mapOpen = false;
+
+  // ───────────── 집 안 (심즈식) ─────────────
+  private house: HouseScene | null = null;
+  /** 집에 들어갈 때 숨긴 마을 것들 · 되돌릴 시점 */
+  private hiddenTown: THREE.Object3D[] = [];
+  private townLook: { fog: THREE.Fog | null; bg: THREE.Color | THREE.Texture | null; yaw: number; pitch: number; zoom: number } | null = null;
+  private houseDist = 9;
+  private build = false;
+  private houseDoor = false;
+  private hoverCell = "";
+  /** 서 있는 높이 (집 안은 바닥 0) */
+  private hAt(x: number, y: number) {
+    return this.house ? 0 : heightAt(x, y);
+  }
+  /** 부딪힘 (집 안은 방 · 가구) */
+  private bl(x: number, y: number) {
+    return this.house ? this.house.blocked(x, y, RADIUS) : blocked(x, y);
+  }
+  inHouse() {
+    return !!this.house;
+  }
+  /** 내 집으로 들어감: 마을은 숨기고 멀리 떨어진 곳에 방을 지어서 그리로 */
+  enterHouse(tier: number, layout: Placed[]) {
+    const town = this.town,
+      me = this.me;
+    if (!town || !me) return;
+    if (this.house) this.dropHouse();
+    const h = buildHouse(tier, layout);
+    this.hiddenTown = [];
+    const keep = new Set<THREE.Object3D>([town.sun, town.sun.target]);
+    if (me.rig) keep.add(me.rig.root);
+    for (const o of town.scene.children) {
+      if (keep.has(o) || (o as THREE.Light).isLight) continue;
+      if (o.visible) {
+        o.visible = false;
+        this.hiddenTown.push(o);
+      }
+    }
+    town.scene.add(h.group);
+    this.house = h;
+    this.townLook = {
+      fog: town.scene.fog as THREE.Fog | null,
+      bg: town.scene.background as THREE.Color | null,
+      yaw: this.camYaw,
+      pitch: this.camPitch,
+      zoom: this.zoom,
+    };
+    town.scene.fog = null;
+    town.scene.background = new THREE.Color(0x1e1a28);
+    this.houseDist = Math.max(h.wm, h.dm) * 0.9 + 3.5;
+    this.camPitch = 46 * DEG;
+    this.camYaw = 35 * DEG;
+    this.zoom = 1;
+    me.x = h.enter.x;
+    me.y = h.enter.y;
+    me.faceTo = me.face = Math.PI;
+    this.path = [];
+    this.goal = null;
+    this.keys.clear();
+    this.cam = { x: HOME_AT.x, y: HOME_AT.y };
+    this.camHSet = false;
+    this.houseDoor = false;
+    this.build = false;
+    if (this.near) {
+      this.near = null;
+      this.hooks.onNear(null);
+    }
+  }
+  /** 집에서 나옴: 마을 그대로 되돌리고 (x, y) 에 섬 */
+  exitHouse(x: number, y: number) {
+    const me = this.me;
+    this.dropHouse();
+    if (me) {
+      me.x = x;
+      me.y = y;
+      me.faceTo = me.face = 0;
+      this.cam = { x, y };
+      this.camHSet = false;
+      this.sent.at = 0;
+      this.sent.m = -1;
+    }
+  }
+  private dropHouse() {
+    const town = this.town,
+      h = this.house;
+    if (!h) return;
+    h.dispose();
+    this.house = null;
+    for (const o of this.hiddenTown) o.visible = true;
+    this.hiddenTown = [];
+    if (town && this.townLook) {
+      town.scene.fog = this.townLook.fog;
+      town.scene.background = this.townLook.bg;
+      this.camYaw = this.townLook.yaw;
+      this.camPitch = this.townLook.pitch;
+      this.zoom = this.townLook.zoom;
+    }
+    this.townLook = null;
+    this.build = false;
+    this.path = [];
+  }
+  houseLayout(layout: Placed[]) {
+    this.house?.setLayout(layout);
+  }
+  /** 꾸미기 모드 (칸 선 · 누르면 onHouseClick) — sel: 고른 가구 번호 */
+  setBuild(on: boolean, sel: number | null = null) {
+    this.build = on;
+    this.house?.setBuild(on, sel);
+    if (on) this.path = [];
+    if (!on) this.house?.setGhost(null);
+  }
+  setGhost(g: Parameters<HouseScene["setGhost"]>[0]) {
+    this.house?.setGhost(g);
+  }
+  /** 다른 사람이 자기 집에 들어감 / 나옴 */
+  setAway(id: string, on: boolean) {
+    const a = this.others.get(id);
+    if (!a) return;
+    a.away = on;
+    if (on) this.dropView(a);
+  }
   setMapOpen(on: boolean) {
     this.mapOpen = on;
     if (on) {
@@ -895,11 +1046,31 @@ export class TownEngine {
       this.camPitch = this.clampPitch(this.drag.pitch + (py - this.drag.y) * ROT_PER_PX * 0.7);
       return;
     }
+    if (this.house) {
+      if (this.build) {
+        const g = this.ground(px, py);
+        const c = g ? this.house.cellAt(g.x, g.y) : null;
+        const k = c ? `${c.cx},${c.cy}` : "";
+        if (k !== this.hoverCell) {
+          this.hoverCell = k;
+          this.hooks.onHouseHover?.(c);
+        }
+      }
+      this.canvas.style.cursor = CURSOR.normal;
+      return;
+    }
     const p = this.pickTarget(px, py);
     this.hover = p && typeof p !== "string" ? p : null;
     this.canvas.style.cursor = p ? CURSOR.point : CURSOR.normal;
   };
   private onUp = (e: PointerEvent) => {
+    if (this.buildClick && e.pointerType === "mouse") {
+      const r = this.canvas.getBoundingClientRect();
+      const px = e.clientX - r.left,
+        py = e.clientY - r.top;
+      if (Math.hypot(px - this.buildClick.x, py - this.buildClick.y) < 5) this.tap(px, py);
+      this.buildClick = null;
+    }
     if (this.drag && e.pointerType === "mouse") {
       this.drag = null;
       this.canvas.style.cursor = CURSOR.normal;
@@ -922,7 +1093,7 @@ export class TownEngine {
       e.type === "pointerup" &&
       Math.hypot(t.x - t.sx, t.y - t.sy) < 12
     ) {
-      const b = this.pickTarget(t.x, t.y);
+      const b = this.house ? true : this.pickTarget(t.x, t.y);
       if (b) this.tap(t.x, t.y);
     }
   };
@@ -938,6 +1109,12 @@ export class TownEngine {
   /** 그곳까지 걸어감 (goal 이 있으면 닿았을 때 onArrive) */
   walkTo(x: number, y: number, goal: Building | "board" | NpcId | null) {
     if (!this.me) return;
+    if (this.house) {
+      this.path = [{ x, y }];
+      this.goal = null;
+      this.runPath = false;
+      return;
+    }
     const p = this.findPath(this.me.x, this.me.y, x, y);
     this.path = p;
     this.goal = goal;
@@ -1154,11 +1331,11 @@ export class TownEngine {
         ny = me.y + vy * speed * h;
       const ox = me.x,
         oy = me.y;
-      if (!blocked(nx, ny)) {
+      if (!this.bl(nx, ny)) {
         me.x = nx;
         me.y = ny;
-      } else if (!blocked(nx, me.y)) me.x = nx;
-      else if (!blocked(me.x, ny)) me.y = ny;
+      } else if (!this.bl(nx, me.y)) me.x = nx;
+      else if (!this.bl(me.x, ny)) me.y = ny;
       const moved = Math.hypot(me.x - ox, me.y - oy);
       // 길을 따라가다 막히면 포기
       if (this.path.length && moved < speed * h * 0.2) {
@@ -1197,6 +1374,7 @@ export class TownEngine {
       // 보내기 (0.1초마다, 바뀐 게 있을 때만)
       const m = moving ? (running ? 2 : 1) : 0;
       if (
+        !this.house &&
         now - this.sent.at >= 100 &&
         (Math.hypot(me.x - this.sent.x, me.y - this.sent.y) > 0.01 ||
           me.d !== this.sent.d ||
@@ -1205,11 +1383,19 @@ export class TownEngine {
         this.sent = { x: me.x, y: me.y, d: me.d, m, at: now };
         this.hooks.send(Math.round(me.x * 100) / 100, Math.round(me.y * 100) / 100, me.d, m);
       }
+      // 집 안: 문에 닿으면 나가기
+      if (this.house) {
+        const at = this.house.atDoor(me.x, me.y);
+        if (at !== this.houseDoor) {
+          this.houseDoor = at;
+          this.hooks.onHouseDoor?.(at);
+        }
+      }
       // 문 앞
-      const b = doorAt(me.x, me.y);
-      const npc = NPCS.find((n) => Math.hypot(me.x - n.x, me.y - n.y) < n.talk);
+      const b = this.house ? null : doorAt(me.x, me.y);
+      const npc = this.house ? undefined : NPCS.find((n) => Math.hypot(me.x - n.x, me.y - n.y) < n.talk);
       const nb: Building | "board" | NpcId | null =
-        npc?.id ?? b ?? (Math.hypot(me.x - BOARD.x, me.y - BOARD.y) < 1.5 ? "board" : null);
+        npc?.id ?? b ?? (!this.house && Math.hypot(me.x - BOARD.x, me.y - BOARD.y) < 1.5 ? "board" : null);
       if (nb !== this.near) {
         this.near = nb;
         this.hooks.onNear(nb);
@@ -1218,7 +1404,11 @@ export class TownEngine {
     // 카메라: 지도면 마을 가운데, 아니면 나를 따라감 (문 앞이면 건물 쪽(화면 위)으로 조금)
     let tx = this.cam.x,
       ty = this.cam.y;
-    if (this.overview) {
+    if (this.house) {
+      // 집 안: 방 가운데를 보되 나를 반쯤 따라감
+      tx = HOME_AT.x + ((me?.x ?? HOME_AT.x) - HOME_AT.x) * 0.45;
+      ty = HOME_AT.y + ((me?.y ?? HOME_AT.y) - HOME_AT.y) * 0.45;
+    } else if (this.overview) {
       tx = (BOUNDS.x0 + BOUNDS.x1) / 2;
       ty = (BOUNDS.y0 + BOUNDS.y1) / 2;
     } else if (me) {
@@ -1232,7 +1422,7 @@ export class TownEngine {
     const k = Math.min(1, dt * (this.overview ? 4 : 7));
     this.cam.x += (tx - this.cam.x) * k;
     this.cam.y += (ty - this.cam.y) * k;
-    const want = this.overview ? OV_DIST : this.baseDist * this.zoom;
+    const want = this.house ? this.houseDist * this.zoom : this.overview ? OV_DIST : this.baseDist * this.zoom;
     this.dist += (want - this.dist) * Math.min(1, dt * 6);
     this.ovK += ((this.overview ? 1 : 0) - this.ovK) * Math.min(1, dt * 5);
 
@@ -1607,7 +1797,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     let df = ((to - f + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
     f += df * Math.min(1, dt * 14);
     a.face = f;
-    const gh = heightAt(a.x, a.y);
+    const gh = this.hAt(a.x, a.y);
     r.root.position.set(a.x, gh + 0.02, a.y);
     r.root.rotation.y = f;
     r.shadow.position.set(a.x, gh + 0.015, a.y);
@@ -1628,7 +1818,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     if (!town) return null;
     const o = this.camera.position;
     for (const h of [0.9, 1.6]) {
-      const d = this.bv.set(x - o.x, heightAt(x, y) + h - o.y, y - o.z);
+      const d = this.bv.set(x - o.x, this.hAt(x, y) + h - o.y, y - o.z);
       const far = d.length() - 0.3;
       if (far <= 0) continue;
       this.ray.set(o, d.normalize());
@@ -1768,10 +1958,10 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
         m.material.map = t;
         m.material.needsUpdate = true;
       }
-      m.position.set(a.x, heightAt(a.x, a.y) + 0.05, a.y);
+      m.position.set(a.x, this.hAt(a.x, a.y) + 0.05, a.y);
       m.scale.x = flip ? -1 : 1;
     }
-    v.shadow.position.set(a.x, heightAt(a.x, a.y) + 0.06, a.y);
+    v.shadow.position.set(a.x, this.hAt(a.x, a.y) + 0.06, a.y);
   }
 
   private render(now: number, dt: number) {
@@ -1780,10 +1970,10 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     // 카메라
     const cam = this.camera;
     const k = this.ovK;
-    const near = this.clampPitch(this.camPitch);
+    const near = this.house ? Math.max(28 * DEG, Math.min(72 * DEG, this.camPitch)) : this.clampPitch(this.camPitch);
     const pitch = near + (OV_PITCH - near) * k;
     // 보는 점: 서 있는 땅 높이 + 가슴 (언덕을 오르면 같이 올라감, 부드럽게)
-    const gh = heightAt(this.cam.x, this.cam.y);
+    const gh = this.hAt(this.cam.x, this.cam.y);
     this.camH += (gh - this.camH) * Math.min(1, dt * 8);
     if (!this.camHSet) {
       this.camH = gh;
@@ -1798,7 +1988,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     if (up < 0) cam.position.copy(target).addScaledVector(flatDir.setY(0).normalize(), this.dist * Math.cos(up));
     else cam.position.copy(target).addScaledVector(this.camDir, this.dist);
     // 카메라가 언덕 속으로 들어가지 않게
-    const floor = heightAt(cam.position.x, cam.position.z) + (up < 0 ? 0.45 : 0.8);
+    const floor = this.hAt(cam.position.x, cam.position.z) + (up < 0 ? 0.45 : 0.8);
     if (up < 0) cam.position.y = Math.max(floor, target.y - 0.3);
     if (cam.position.y < floor) cam.position.y = floor;
     cam.far = this.dist + 300;
@@ -1813,8 +2003,10 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       );
       cam.lookAt(look);
     } else cam.lookAt(target);
+    this.house?.update(cam.position);
     // 카메라와 보는 점 사이 나무는 성기게 (지도 볼 땐 끔)
-    if (k < 0.5) town?.setView(cam.position, target);
+    if (this.house) town?.setView(FAR_AWAY, FAR_AWAY);
+    else if (k < 0.5) town?.setView(cam.position, target);
     else town?.setView(FAR_AWAY, FAR_AWAY);
     cam.updateMatrixWorld();
     this.vw = 2 * this.dist * Math.tan((cam.fov * DEG) / 2) * cam.aspect;
@@ -1854,8 +2046,8 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       const inkPx = INK_PX * Math.max(0.35, Math.min(1.15, this.baseDist / this.dist));
       this.inkU.uInk.value = (inkPx * 2 * Math.tan((cam.fov * DEG) / 2)) / Math.max(1, this.ch);
       // 사람
-      for (const a of this.others.values()) this.placeAvatar(a, dt);
-      for (const a of this.npcs) {
+      for (const a of this.others.values()) if (!a.away && !this.house) this.placeAvatar(a, dt);
+      for (const a of this.house ? [] : this.npcs) {
         const n = a.npc!,
           me = this.me;
         a.faceTo = me && Math.hypot(me.x - n.x, me.y - n.y) < n.talk * 2.2 ? Math.atan2(me.x - n.x, me.y - n.y) : n.face;
@@ -1881,7 +2073,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       town.doorRing.visible = !!ring;
       if (ring) {
         const f = doorFront(ring);
-        town.doorRing.position.set(f.x, heightAt(f.x, f.y) + 0.05, f.y);
+        town.doorRing.position.set(f.x, this.hAt(f.x, f.y) + 0.05, f.y);
         town.doorRing.scale.setScalar(1 + Math.sin(t * 5) * 0.08);
         (town.doorRing.material as THREE.MeshBasicMaterial).color.set(ring.accent);
       }
@@ -1889,7 +2081,7 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       const g = this.me && this.path.length ? this.path[this.path.length - 1] : null;
       town.goalRing.visible = !!g;
       if (g) {
-        town.goalRing.position.set(g.x, heightAt(g.x, g.y) + 0.05, g.y);
+        town.goalRing.position.set(g.x, this.hAt(g.x, g.y) + 0.05, g.y);
         town.goalRing.scale.setScalar(1 + Math.sin(t * 8) * 0.12);
       }
       town.tick(t);
@@ -1907,7 +2099,11 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
     if (!this.town) return;
     const o = this.camera.position;
     const far = (a: Avatar) => Math.hypot(a.x - o.x, a.y - o.z);
-    const people = [...this.others.values(), ...this.npcs, ...(this.me ? [this.me] : [])];
+    const people = this.house
+      ? this.me
+        ? [this.me]
+        : []
+      : [...[...this.others.values()].filter((a) => !a.away), ...this.npcs, ...(this.me ? [this.me] : [])];
     // 가까운 사람 이름표가 위에 오게 (먼 사람부터 그림)
     people.sort((a, b) => far(b) - far(a));
     // 이름표 높이: 3D 는 머리 위 리본까지

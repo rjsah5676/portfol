@@ -261,6 +261,44 @@ describe("광장", () => {
     a.close();
   });
 
+  it("집 안: 첫 계약에 기본 가구 · 가게 · 배치 저장(겹침 · 방 밖 · 개수 거절) · 들어가면 마을에서 안 보이고 나오면 문 앞", async () => {
+    const a = await member();
+    const uid = lastUid;
+    const b = await member();
+    const sa = await a.sub<TownSnap>("gmtown.ch", { ch: 10 });
+    const sb = await b.sub<TownSnap>("gmtown.ch", { ch: 10 });
+    expect(await code(a.rpc("gmtown.house.enter"))).toBe("BAD_REQUEST");
+    await srv.db.col("users").updateOne({ _id: uid }, { $set: { points: 20_000 } });
+    const h = await a.rpc<{ tier: number; inv: Record<string, number>; layout: unknown[] }>("gmtown.house.buy", { tier: 1 });
+    expect(h.inv.bed).toBe(1);
+    expect(h.layout.length).toBeGreaterThan(3);
+    // 가게
+    const h2 = await a.rpc<{ inv: Record<string, number>; gp: number }>("gmtown.house.shop", { id: "sofa" });
+    expect(h2.inv.sofa).toBe(1);
+    expect(h2.gp).toBe(20_000 - 5_000 - 3_000);
+    // 배치
+    const ok = [...(h.layout as object[]), { i: "sofa", x: 0, y: 5, r: 0 }];
+    expect(await code(a.rpc("gmtown.house.save", { layout: ok }))).toBe("OK");
+    expect(await code(a.rpc("gmtown.house.save", { layout: [...ok, { i: "sofa", x: 6, y: 0, r: 0 }] }))).toBe("BAD_REQUEST");
+    expect(await code(a.rpc("gmtown.house.save", { layout: [{ i: "bed", x: 10, y: 0, r: 0 }] }))).toBe("BAD_REQUEST");
+    expect(await code(a.rpc("gmtown.house.save", { layout: [{ i: "bed", x: 0, y: 0, r: 0 }, { i: "desk", x: 1, y: 1, r: 0 }] }))).toBe("BAD_REQUEST");
+    expect((await a.rpc<{ layout: unknown[] }>("gmtown.house")).layout.length).toBe(ok.length);
+    // 들어가기 · 나오기
+    await a.rpc("gmtown.house.enter");
+    const ev = await sb.wait((e) => e.t === "home" && e.d.id === sa.data.me);
+    expect(ev.d.on).toBe(true);
+    const c = await member();
+    const sc = await c.sub<TownSnap>("gmtown.ch", { ch: 10 });
+    expect(sc.data.players.find((p) => p.id === sa.data.me)?.home).toBe(true);
+    const out = await a.rpc<{ x: number; y: number }>("gmtown.house.leave");
+    const ev2 = await sb.wait((e) => e.t === "home" && e.d.id === sa.data.me && e.d.on === false);
+    expect(ev2.d.x).toBeCloseTo(out.x, 1);
+    expect(blocked(out.x, out.y)).toBe(false);
+    a.close();
+    b.close();
+    c.close();
+  });
+
   it("채팅: 같은 채널 모두에게 · 너무 빠르면 거절 · 길면 자름 · 다른 채널엔 안 감", async () => {
     const a = await member();
     const b = await member();

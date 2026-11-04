@@ -13,12 +13,16 @@ export type NpcModel = "agent";
 /** 3D 모델 종류 (사람 캐릭터 + NPC) */
 export type ModelId = CharId | NpcModel;
 
-/** 내 집 계약 상태 */
+/** 내 집 계약 상태 · 가진 가구 · 배치 (집 안은 사람마다 따로) */
 export interface HouseWire {
   /** 0 = 아직 없음, 1~ = HOUSE_TIERS 단계 */
   tier: number;
   /** 지금 GP (게스트는 null — 회원만 계약) */
   gp: number | null;
+  /** 가진 가구 개수 (놓은 것 포함) */
+  inv: Record<string, number>;
+  /** 놓은 가구 (lib/gmtown/house.ts Placed) */
+  layout: { i: string; x: number; y: number; r: number }[];
 }
 
 export interface PlayerWire {
@@ -28,6 +32,8 @@ export interface PlayerWire {
   /** 로그인 안 한 사람 */
   guest: boolean;
   c: CharId;
+  /** 자기 집 안에 들어가 있음 (마을에선 안 보임) */
+  home?: boolean;
   x: number;
   y: number;
   /** 바라보는 방향 0~7 (0 = 위, 시계 방향) */

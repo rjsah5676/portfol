@@ -19,12 +19,15 @@ export default function NpcDialog({
   phone,
   onClose,
   onSys,
+  onGoHome,
 }: {
   id: NpcId;
   phone: boolean;
   onClose: () => void;
   /** 채팅창 시스템 줄 */
   onSys: (t: string) => void;
+  /** 내 집으로 들어가기 */
+  onGoHome: () => void;
 }) {
   const npc = npcById(id)!;
   const [house, setHouse] = useState<HouseWire | null>(null);
@@ -38,7 +41,7 @@ export default function NpcDialog({
   const [skip, setSkip] = useState(false);
 
   useEffect(() => {
-    void rpc<HouseWire>("gmtown.house").then(setHouse, () => setHouse({ tier: 0, gp: null }));
+    void rpc<HouseWire>("gmtown.house").then(setHouse, () => setHouse({ tier: 0, gp: null, inv: {}, layout: [] }));
   }, []);
   // 한 글자씩 (시작 시각에서 지난 만큼)
   useEffect(() => {
@@ -68,7 +71,7 @@ export default function NpcDialog({
         onSys(`${pick.name} 계약 완료! (${fmt(pick.price)} GP)`);
         say(
           tier === 0
-            ? `계약 완료예요! 여기 ${pick.name} 열쇠요 🔑 집 안 꾸미기는 곧 열려요, 조금만 기다려 주세요!`
+            ? `계약 완료예요! 여기 ${pick.name} 열쇠요 🔑 기본 가구도 넣어 뒀어요. 바로 들어가 보실래요?`
             : `${pick.name}(으)로 넓혀 드렸어요! 이사 축하드려요 🎉`,
           "done"
         );
@@ -101,7 +104,7 @@ export default function NpcDialog({
             ? [
                 {
                   label: "내 집에 가고 싶어요",
-                  on: () => say("집 안은 지금 한창 공사 중이에요 🔨 곧 들어가서 꾸밀 수 있게 해 드릴게요!"),
+                  on: onGoHome,
                 },
               ]
             : []),
@@ -127,6 +130,7 @@ export default function NpcDialog({
               { label: "다시 생각할게요", on: () => say("천천히 골라 보세요!", "list") },
             ]
           : [
+              { label: "내 집 들어가 볼래요", gold: true, on: onGoHome },
               { label: "다른 집도 볼래요", on: () => say("지금 나와 있는 매물이에요.", "list") },
               { label: "고마워요!", on: onClose },
             ];

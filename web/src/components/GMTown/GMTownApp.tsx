@@ -9,11 +9,12 @@ import GameLoader from "@/components/GameLoader";
 import { NAV_GROUPS } from "@/data/navMenu";
 import { rpc, subscribe } from "@/lib/api/socket";
 import { CHARS, charFiles } from "@/lib/gmtown/chars";
-import type { ChannelList, CharId, ChatWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
+import type { ChannelList, CharId, ChatWire, HouseWire, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
 import { BUILDINGS, CHAT_MAX, PLAZA, isLot, npcById, warps, type BStyle, type Building, type NpcId, type Warp } from "@/lib/gmtown/world";
 import { TownEngine } from "./engine";
 import MapModal from "./MapModal";
 import NpcDialog from "./NpcDialog";
+import HouseHud, { type HouseState } from "./HouseHud";
 import { townFiles } from "./scene3d";
 import { drawMiniRound } from "./townMap";
 
@@ -251,6 +252,16 @@ function Town({
   const [lastWarp, setLastWarp] = useState(0);
   const [myC, setMyC] = useState<CharId>("amy");
   const [picker, setPicker] = useState(false);
+  // 집 안
+  const [house, setHouse] = useState<HouseState | null>(null);
+  const [houseDoor, setHouseDoor] = useState(false);
+  const [hHover, setHHover] = useState<{ cx: number; cy: number } | null>(null);
+  const hClick = useRef<((c: { cx: number; cy: number }) => void) | null>(null);
+  const [meName, setMeName] = useState("나");
+  const houseRef = useRef<{ in: boolean }>({ in: false });
+  useEffect(() => {
+    houseRef.current = { in: !!house };
+  }, [house]);
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 저장소(주소 · localStorage)에서만 알 수 있는 값
   useEffect(() => setMyC(pickedChar()), []);
   const chatEnd = useRef<HTMLDivElement | null>(null);
@@ -279,12 +290,17 @@ function Town({
         onNear: (b) => setNear(b),
         onArrive: (b) => setCard(b),
         onInteract: () => {
+          // 집 안의 E (문 앞 나가기) 는 HouseHud 가 받음
+          if (houseRef.current.in) return;
           if (cardRef.current) return;
           if (nearRef.current) setCard(nearRef.current);
         },
+        onHouseDoor: (at) => setHouseDoor(at),
+        onHouseHover: (c) => setHHover(c),
+        onHouseClick: (c) => hClick.current?.(c),
         send: (x, y, d, m) => void rpc("gmtown.move", { x, y, d, m }).catch(() => {}),
         onOverview: (on) => setOverview(on),
-        onMap: () => setMapOpen((o) => !o),
+        onMap: () => !houseRef.current.in && setMapOpen((o) => !o),
         onError: (m) => {
           setErr(m);
           setStatus("error");
@@ -333,7 +349,13 @@ function Town({
         { ch: want, c: pickedChar(), ...(at ?? {}) },
         {
           onSnapshot: (s) => {
+            // 집 안에서 다시 이어지면(채널 옮김 · 끊김) 마을로 나와서 시작
+            if (engine.inHouse()) {
+              engine.exitHouse(s.players.find((p) => p.id === s.me)?.x ?? 0, s.players.find((p) => p.id === s.me)?.y ?? 0);
+              setHouse(null);
+            }
             engine.reset(s);
+            setMeName(s.players.find((p) => p.id === s.me)?.name ?? "나");
             setCh(s.ch);
             setCount(s.players.length);
             setLog(s.chat);
@@ -346,7 +368,10 @@ function Town({
             else if (t === "mv") engine.moves(d as MoveWire[]);
             else if (t === "snap")
               engine.snap((d as { x: number; y: number }).x, (d as { x: number; y: number }).y);
-            else if (t === "char") {
+            else if (t === "home") {
+              const v = d as { id: string; on: boolean };
+              engine.setAway(v.id, v.on);
+            } else if (t === "char") {
               const v = d as { id: string; c: CharId };
               engine.setChar(v.id, v.c);
             } else if (t === "chat") {
@@ -420,6 +445,28 @@ function Town({
     chatEnd.current?.scrollIntoView({ block: "end" });
   }, [log, sys, tab]);
 
+  const enterHome = () => {
+    setCard(null);
+    void rpc<HouseWire>("gmtown.house.enter").then(
+      (w) => {
+        engine?.enterHouse(w.tier, w.layout as never);
+        setHouse({ ...w, owner: meName });
+        setMapOpen(false);
+        addSys("내 집에 들어왔어요. 🔨 꾸미기로 가구를 놓아 보세요!");
+      },
+      (e) => say((e as Error).message || "들어가지 못했어요.")
+    );
+  };
+  const leaveHome = () => {
+    void rpc<{ x: number; y: number }>("gmtown.house.leave").then(
+      (r) => {
+        engine?.exitHouse(r.x, r.y);
+        setHouse(null);
+        setHouseDoor(false);
+      },
+      (e) => say((e as Error).message || "나가지 못했어요.")
+    );
+  };
   const warpTo = (w: Warp) => {
     void rpc<{ x: number; y: number }>("gmtown.warp", { to: w.id }).then(
       (r) => {
@@ -536,7 +583,7 @@ function Town({
       </div>
 
       {/* 오른쪽 위: 원형 지도 (누르면 전체 지도) · 지역 이름 · 채널 · 당기기 · 밀기 */}
-      <div className="absolute top-2.5 right-2.5 flex flex-col items-end gap-1">
+      <div className={`absolute top-2.5 right-2.5 flex flex-col items-end gap-1 ${house ? "hidden" : ""}`}>
         <div className="gmt-lo-soft pointer-events-none flex h-6 items-center gap-1.5 rounded-full px-3 text-[11.5px] font-bold">
           <span className="text-[#FFE6A0]">{region}</span>
           {ch && <span className="text-white/55">· {ch}채널</span>}
@@ -623,7 +670,7 @@ function Town({
       />
 
       {/* 아래 가운데: 문 앞 */}
-      {near && !card && phone && (
+      {near && !card && !house && phone && (
         <button
           type="button"
           onClick={() => setCard(near)}
@@ -640,7 +687,7 @@ function Town({
           <span className="mt-0.5 text-[#FFE6A0]">{near === "board" ? "보기" : isNpc(near) ? "말 걸기" : "들어가기"}</span>
         </button>
       )}
-      {near && !card && !phone && (
+      {near && !card && !house && !phone && (
         <div className="gmt-pop pointer-events-auto absolute bottom-6 left-1/2 -translate-x-1/2">
 
           <button
@@ -672,6 +719,21 @@ function Town({
             )}
           </button>
         </div>
+      )}
+
+      {/* 집 안 */}
+      {house && engine && (
+        <HouseHud
+          engine={engine}
+          phone={phone}
+          house={house}
+          setHouse={setHouse}
+          atDoor={houseDoor}
+          onLeave={leaveHome}
+          say={say}
+          hover={hHover}
+          clickRef={hClick}
+        />
       )}
 
       {/* 처음 온 사람 도움말 */}
@@ -715,9 +777,9 @@ function Town({
 
       {/* 건물 카드 */}
       {card && isNpc(card) && (
-        <NpcDialog id={card} phone={phone} onClose={() => setCard(null)} onSys={addSys} />
+        <NpcDialog id={card} phone={phone} onClose={() => setCard(null)} onSys={addSys} onGoHome={enterHome} />
       )}
-      {card && !isNpc(card) && <Card near={card} onClose={() => setCard(null)} />}
+      {card && !isNpc(card) && <Card near={card} onClose={() => setCard(null)} onHome={enterHome} />}
 
       {/* 채널 고르기 */}
       {chanList && (
@@ -977,7 +1039,7 @@ function ChatBox({
   );
 }
 
-function Card({ near, onClose }: { near: Building | "board"; onClose: () => void }) {
+function Card({ near, onClose, onHome }: { near: Building | "board"; onClose: () => void; onHome: () => void }) {
   if (near === "board")
     return (
       <Sheet onClose={onClose}>
@@ -1068,6 +1130,16 @@ function Card({ near, onClose }: { near: Building | "board"; onClose: () => void
           >
             들어가기 →
           </Link>
+        )}
+        {b.id === "home" && (
+          <button
+            type="button"
+            onClick={onHome}
+            className="cursor-pointer rounded-full px-5 py-2 text-[13px] font-bold text-[#1A1408]"
+            style={{ background: "#F2C14E" }}
+          >
+            🏠 내 집 들어가기
+          </button>
         )}
       </div>
     </Sheet>
