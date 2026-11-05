@@ -66,6 +66,8 @@ export interface PublicCase {
   questionLimit: number;
   submitLimit: number;
   clueCount: number;
+  /** 단서가 열리는 질문 수 (공개 정보 — 진행 막대 눈금) */
+  clueAt: number[];
   /** 정답(해결) 항목 수 */
   rubricCount: number;
   /** 보너스 항목 수 */
@@ -294,6 +296,7 @@ export const publicCase = (c: MysteryCase): PublicCase => ({
   questionLimit: c.questionLimit,
   submitLimit: c.submitLimit,
   clueCount: c.clues.length,
+  clueAt: c.clues.map((cl) => cl.unlockAt),
   rubricCount: requiredRubric(c).length,
   bonusCount: bonusRubric(c).length,
   ...(c.credit ? { credit: c.credit } : {}),

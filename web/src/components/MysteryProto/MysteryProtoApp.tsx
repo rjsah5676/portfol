@@ -30,6 +30,8 @@ interface PublicCase {
   credit?: string;
   /** 표지 삽화 */
   cover?: string;
+  /** 단서가 열리는 질문 수 (진행 막대 눈금) */
+  clueAt?: number[];
   /** 후보 사건 (관리자 · 개발 모드에만 뜸) */
   candidate?: boolean;
 }
@@ -149,24 +151,6 @@ function Bar({ value, max, color = GOLD }: { value: number; max: number; color?:
   );
 }
 
-function Stat({ label, value, max, color, hint }: { label: string; value: number; max: number; color?: string; hint?: string }) {
-  return (
-    <div>
-      <div className={`${mono} flex items-baseline justify-between text-[10px] text-white/40`}>
-        <span>{label}</span>
-        <span>
-          <b className="text-sm text-white">{value}</b>
-          <span className="text-white/30">/{max}</span>
-          {hint && <span className="ml-1.5 text-white/30">{hint}</span>}
-        </span>
-      </div>
-      <div className="mt-1">
-        <Bar value={value} max={max} color={color} />
-      </div>
-    </div>
-  );
-}
-
 function Cover({ src, className = "" }: { src?: string; className?: string }) {
   if (src) return <img src={src} alt="" draggable={false} className={`block w-full object-cover ${className}`} />;
   return (
@@ -183,7 +167,6 @@ function VerdictChip({ v, big }: { v: Verdict; big?: boolean }) {
       <span
         className={`${display} inline-flex -rotate-2 items-center gap-1 rounded-md px-2.5 py-1 text-sm tracking-wide ring-2 ring-offset-2 ring-offset-[#0E1015] ${b.cls}`}
       >
-        <span className="text-[10px] opacity-70">핵심</span>
         {b.label}
       </span>
     );
@@ -620,7 +603,7 @@ export default function MysteryProtoApp() {
           {(["YES", "NO", "UNKNOWN", "UNRELATED"] as Verdict[]).map((v) => (
             <VerdictChip key={v} v={v} />
           ))}
-          <span className="text-white/25">· 핵심을 짚으면 큰 도장 · 판정이 이상하면 🚩</span>
+          <span className="text-white/25">· 중요한 걸 짚으면 큰 도장 · 판정이 이상하면 🚩</span>
         </div>
       </div>
     );
@@ -633,6 +616,10 @@ export default function MysteryProtoApp() {
   const submitsLeft = c.submitLimit - view.submissions.length;
   const last = view.submissions.at(-1);
   const keyHits = view.questions.filter((q) => isKey(q.verdict)).length;
+  const openClues = () => {
+    setNewClue(false);
+    setSheet("clues");
+  };
 
   const caseCard = (
     <div className={`${panel} overflow-hidden`}>
@@ -651,22 +638,66 @@ export default function MysteryProtoApp() {
           <p className={`mt-1.5 text-sm leading-relaxed text-white/80 ${expanded ? "" : "line-clamp-1 lg:line-clamp-none"}`}>{c.prompt}</p>
         </div>
       </button>
-      <div className="grid grid-cols-3 gap-3 border-t border-white/[0.06] px-3 py-3 sm:px-4 lg:grid-cols-1 lg:gap-3">
-        <Stat label="질문" value={view.used} max={c.questionLimit} />
-        <Stat label="단서" value={view.clues.length} max={c.clueCount} color="#9FB7FF" hint={view.nextClueAt !== null ? `다음 ${view.nextClueAt}문` : undefined} />
-        <Stat label="제출" value={view.submissions.length} max={c.submitLimit} color="#E0657A" />
+      <div className="space-y-3 border-t border-white/[0.06] px-3 py-3 sm:px-4">
+        {/* 질문 막대 + 단서가 열리는 자리 표시 */}
+        <div>
+          <div className={`${mono} flex items-baseline justify-between text-[10px] text-white/40`}>
+            <span>질문</span>
+            <span>
+              <b className="text-sm text-white">{view.used}</b>
+              <span className="text-white/30">/{c.questionLimit}</span>
+            </span>
+          </div>
+          <div className="relative mt-1.5 h-1.5 rounded-full bg-white/[0.07]">
+            <div className="h-full rounded-full bg-[#D9B25F] transition-[width] duration-500" style={{ width: `${Math.min(100, (view.used / c.questionLimit) * 100)}%` }} />
+            {(c.clueAt ?? []).map((at, i) => {
+              const open = view.used >= at || done;
+              return (
+                <span
+                  key={i}
+                  title={`단서 ${i + 1} · ${at}문`}
+                  className={`absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${open ? "border-[#9FB7FF] bg-[#9FB7FF]" : "border-[#9FB7FF]/60 bg-[#0E1015]"}`}
+                  style={{ left: `${(at / c.questionLimit) * 100}%` }}
+                />
+              );
+            })}
+          </div>
+        </div>
+        {/* 다음 단서 · 남은 제출 */}
+        <div className="flex items-center justify-between gap-3">
+          <button onClick={openClues} className="flex min-w-0 items-center gap-2 text-left">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#9FB7FF]/15 text-xs text-[#BFD0FF]">🔎</span>
+            <span className="min-w-0 text-xs leading-tight">
+              {view.nextClueAt !== null ? (
+                <>
+                  <span className="text-white/45">다음 단서까지 </span>
+                  <b className="text-sm text-[#BFD0FF]">{view.nextClueAt - view.used}</b>
+                  <span className="text-white/45">문</span>
+                </>
+              ) : (
+                <span className="text-white/45">단서 모두 공개</span>
+              )}
+              <span className={`${mono} block text-[10px] text-white/30`}>
+                단서 {view.clues.length}/{c.clueCount}
+              </span>
+            </span>
+          </button>
+          <div className="shrink-0 text-right">
+            <div className="flex justify-end gap-1">
+              {Array.from({ length: c.submitLimit }, (_, i) => (
+                <span key={i} className={`h-3.5 w-2.5 rounded-sm ${i < submitsLeft ? "bg-[#E0657A]" : "border border-white/15 bg-transparent"}`} />
+              ))}
+            </div>
+            <span className={`${mono} mt-1 block text-[10px] text-white/40`}>남은 제출 {submitsLeft}</span>
+          </div>
+        </div>
       </div>
       <p className={`${mono} hidden border-t border-white/[0.06] px-4 py-2.5 text-[10px] text-white/35 lg:block`}>
-        핵심 도장 {keyHits} · 정답 항목 {c.rubricCount}
+        큰 도장 {keyHits} · 정답 항목 {c.rubricCount}
         {c.bonusCount > 0 && ` · 보너스 ${c.bonusCount}`}
       </p>
     </div>
   );
-
-  const openClues = () => {
-    setNewClue(false);
-    setSheet("clues");
-  };
 
   /** 단서 · 제출 · 포기 (PC 는 사건 카드 아래, 폰은 입력창 아래) */
   const actions = (
