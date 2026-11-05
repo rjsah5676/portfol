@@ -10,6 +10,7 @@ import { registerFight } from "./games/fight";
 import { registerPoker, type PokerOptions } from "./games/poker";
 import { registerStock, type StockOptions } from "./games/stock";
 import { registerRhythmOnline } from "./games/rhythmOnline";
+import { registerPixelmergeBattle } from "./games/pixelmergeBattle";
 import { registerSketch } from "./games/sketch";
 import { registerMarble } from "./games/marble";
 import { registerSurvivor } from "./games/survivor";
@@ -63,6 +64,7 @@ export async function createAppServer(
   // 주식게임: 전용 지갑 · 포커 칩과는 주식게임 환전소로만 1:1 교환
   const stock = registerStock(deps, overrides.stock, { busy: poker.busy, refresh: poker.wallet.refresh });
   const rhythm = registerRhythmOnline(deps);
+  const mergeBattle = registerPixelmergeBattle(deps);
   const defense = registerDefense(deps);
   // GMTOWN 마을 광장 (게임 건물 · 채널 · 채팅) — 게스트도 들어옴
   const gmtown = registerGmtown(deps);
@@ -121,6 +123,7 @@ export async function createAppServer(
     poker.close();
     stock.close();
     rhythm.close();
+    mergeBattle.close();
     defense.close();
     marble.close();
     town.close();

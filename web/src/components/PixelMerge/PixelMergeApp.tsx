@@ -37,6 +37,7 @@ import {
   setSound,
 } from "@/lib/pixelmerge/sound";
 import { usePixelMergeRank, type RankTab } from "./PixelMergeRank";
+import PixelMergeBattle, { hasRoomInUrl } from "./PixelMergeBattle";
 
 /*
  * 픽셀 머지 — 화면
@@ -142,7 +143,7 @@ function Strip({ max, imgs }: { max: number; imgs: HTMLImageElement[] }) {
     <div className="pm-strip" aria-label="합치는 순서">
       {TIERS.map((t, i) => (
         <div key={t.key} className={i <= max ? "on" : ""}>
-          { }
+          {}
           <img src={imgs[i].src} alt={i <= max ? t.name : "?"} />
           <span>{i <= max ? t.name : "?"}</span>
         </div>
@@ -166,10 +167,19 @@ export default function PixelMergeApp() {
   const store = useStore(ready);
   const [today, setToday] = useState(() => kstDay());
   const [run, setRun] = useState<Run | null>(null);
+  /** 친구 대전 화면 (초대 링크 ?room= 으로 오면 바로) */
+  const [battle, setBattle] = useState(false);
   const { spec: rankSpec, openRank, reload: reloadRank } = usePixelMergeRank(ready, today);
   const stageRef = useRef<HTMLDivElement>(null);
 
   useEffect(prepareRuns, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 주소는 화면이 뜬 뒤에만 읽을 수 있음
+    if (hasRoomInUrl()) setBattle(true);
+  }, []);
+  useEffect(() => {
+    if (battle) stageRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [battle]);
   useEffect(() => {
     playBgm(!!run);
     return () => playBgm(false);
@@ -226,12 +236,18 @@ export default function PixelMergeApp() {
             onRank={(t, d) => openRank(t, d)}
             onRanked={reloadRank}
           />
+        ) : battle ? (
+          <PixelMergeBattle imgs={imgs} onHome={() => setBattle(false)} />
         ) : (
           <Home
             store={store}
             today={today}
             imgs={imgs}
             onStart={start}
+            onBattle={() => {
+              playSfx("tap");
+              setBattle(true);
+            }}
             onRank={(t) => openRank(t)}
           />
         )}
@@ -247,19 +263,21 @@ function Home({
   today,
   imgs,
   onStart,
+  onBattle,
   onRank,
 }: {
   store: Store;
   today: string;
   imgs: HTMLImageElement[];
   onStart: (m: Mode) => void;
+  onBattle: () => void;
   onRank: (t: RankTab) => void;
 }) {
   const d = store.days[today];
   return (
     <div className="pm-home">
       <div className="pm-hero">
-        { }
+        {}
         {[2, 5, 9, 3, 7].map((t, i) => (
           <img key={t} src={imgs[t].src} alt="" className={`b b${i}`} />
         ))}
@@ -288,6 +306,13 @@ function Home({
           <b>무한 모드</b>
           <span>공 순서는 매판 달라요 · 전체 랭킹</span>
           <em>{store.endless ? `내 최고 ${fmt(store.endless)}점` : "아직 기록 없음"}</em>
+        </button>
+        <button type="button" className="pm-mode battle" onClick={onBattle}>
+          <small>친구끼리 · 최대 6명</small>
+          <b>친구 대전</b>
+          <span>
+            링크로 친구를 불러서 같은 공으로 동시에 · 마지막까지 살아남으면 1등 (일반 · 방해 모드)
+          </span>
         </button>
       </div>
       <div className="pm-row">
@@ -420,7 +445,7 @@ function Play({
         </div>
         <div className="nx">
           <small>다음</small>
-          { }
+          {}
           <img src={imgs[next].src} alt={TIERS[next].name} />
         </div>
         <SoundBtn />

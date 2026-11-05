@@ -48,6 +48,8 @@ export interface GameHooks {
   onTier?: (t: number) => void;
   onOver?: (r: Result) => void;
   sfx?: (name: Sfx, rate?: number) => void;
+  /** 합쳐질 때마다 (nt = 새로 생긴 단계, 황금 건모 둘이 사라지면 LAST + 1) — 대전 방해 공 계산용 */
+  onMerge?: (nt: number, combo: number) => void;
 }
 
 interface Fx {
@@ -95,6 +97,9 @@ export class MergeGame {
   private lastSkill: SkillId | null = null;
   private canDrop = true;
   private dropTimer = 0;
+  private junkTimers: number[] = [];
+  /** 마지막으로 떨어뜨린 시각 (대전 자동 드롭) */
+  lastDropAt = performance.now();
   aimX = W / 2;
   cur: number;
   next: number;
@@ -159,7 +164,50 @@ export class MergeGame {
   destroy() {
     cancelAnimationFrame(this.raf);
     clearTimeout(this.dropTimer);
+    for (const t of this.junkTimers) clearTimeout(t);
     this.M.Engine.clear(this.engine);
+  }
+
+  /** 대전: 내 병 모양 [점수, 들고 있는 공, 겨눈 x, 위험 0/1, (단계, x, y, 각도×10) × 공 수] */
+  snapshot(): number[] {
+    const out = [this.score, this.cur, Math.round(this.clampX(this.cur)), this.danger > 0 ? 1 : 0];
+    for (const b of this.balls)
+      out.push(
+        b.tier,
+        Math.round(b.position.x),
+        Math.round(b.position.y),
+        Math.round(b.angle * 10) % 999
+      );
+    return out;
+  }
+
+  /** 대전 방해 공: 도트 공 n개가 병 위쪽 여기저기서 조금씩 시간차로 떨어짐 */
+  junk(n: number, from?: string) {
+    if (this.dead) return;
+    this.pop(
+      W / 2,
+      LINE_Y + 46,
+      from ? `${from}의 방해 공 ×${n}!` : `방해 공 ×${n}!`,
+      "#ff4d6d",
+      20
+    );
+    this.shake = Math.max(this.shake, 6);
+    for (let i = 0; i < n; i++)
+      this.junkTimers.push(
+        window.setTimeout(() => {
+          if (this.dead) return;
+          const r = TIERS[0].r;
+          const b = this.makeBall(
+            WALL + r + 2 + Math.random() * (W - WALL * 2 - r * 2 - 4),
+            TOP_Y - 30,
+            0
+          );
+          // 방해 공은 떨어진 순간부터 넘침 계산에서 빼 주는 시간(1.2초)을 같이 받음
+          b.born = performance.now();
+          this.M.Body.setVelocity(b, { x: (Math.random() - 0.5) * 2, y: 2 });
+          this.burst(b.position.x, b.position.y, "#ff4d6d", 6);
+        }, 120 * i)
+      );
   }
 
   private clampX(t: number) {
@@ -171,6 +219,7 @@ export class MergeGame {
     this.makeBall(this.clampX(this.cur), TOP_Y, this.cur);
     this.hooks.sfx?.("drop");
     this.drops++;
+    this.lastDropAt = performance.now();
     this.canDrop = false;
     this.cur = this.next;
     this.next = this.pick();
@@ -228,6 +277,7 @@ export class MergeGame {
         this.pop(W / 2, H * 0.34, "황금 건모 강림!", "#ffcf4a", 32);
         this.hooks.sfx?.("trophy");
         this.confetti(x, y);
+        this.hooks.onMerge?.(LAST + 1, this.combo);
       } else {
         const nt = t + 1,
           gain = Math.round(pts(nt) * mult);
@@ -242,6 +292,7 @@ export class MergeGame {
         // 큰 공일수록 낮은 소리
         this.hooks.sfx?.("merge", 1.35 - nt * 0.06);
         this.skill(nb, nt);
+        this.hooks.onMerge?.(nt, this.combo);
       }
       this.hooks.onScore?.(this.score);
     }
@@ -602,5 +653,55 @@ export class MergeGame {
       c.font = '16px "Galmuri11", monospace';
       c.fillText("|| PAUSE?", W / 2, 96);
     }
+  }
+}
+
+/**
+ * 대전: 남의 병을 스냅샷(MergeGame.snapshot)으로 그림 — 미니 화면 · 관전 화면.
+ * 물리 없이 받은 위치 그대로 (0.12초마다 새로 옴 — 그 사이는 그대로 둠)
+ */
+export function drawSnapshot(
+  c: CanvasRenderingContext2D,
+  s: number[] | undefined,
+  imgs: (HTMLImageElement | null)[],
+  scale: number,
+  o: { dead?: boolean; now?: number } = {}
+) {
+  c.setTransform(scale, 0, 0, scale, 0, 0);
+  c.fillStyle = "#120f1c";
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = o.dead ? "#1a1626" : "#221d36";
+  c.fillRect(WALL, 0, W - WALL * 2, H - WALL);
+  c.fillStyle = "#3a3358";
+  c.fillRect(0, 0, WALL, H);
+  c.fillRect(W - WALL, 0, WALL, H);
+  c.fillRect(0, H - WALL, W, WALL);
+  const danger = !!s?.[3] && !o.dead;
+  const blink = danger ? (Math.floor((o.now ?? 0) / 160) % 2 ? 0.95 : 0.35) : 0.25;
+  c.fillStyle = danger ? `rgba(255,77,109,${blink})` : `rgba(155,147,184,${blink})`;
+  for (let x = WALL; x < W - WALL; x += 16) c.fillRect(x, LINE_Y - 1, 9, 3);
+  if (!s) return;
+  const ball = (x: number, y: number, t: number, ang: number, alpha = 1) => {
+    const im = imgs[t];
+    const r = TIERS[t]?.r ?? 13;
+    c.save();
+    c.globalAlpha = alpha;
+    c.translate(x, y);
+    c.rotate(ang);
+    if (im && im.complete && im.naturalWidth)
+      c.drawImage(im, -r * 1.02, -r * 1.02, r * 2.04, r * 2.04);
+    else {
+      c.fillStyle = TIERS[t]?.col ?? "#888";
+      c.beginPath();
+      c.arc(0, 0, r, 0, 7);
+      c.fill();
+    }
+    c.restore();
+  };
+  if (!o.dead) ball(s[2], TOP_Y, s[1], 0, 0.6);
+  for (let i = 4; i + 3 < s.length; i += 4) ball(s[i + 1], s[i + 2], s[i], s[i + 3] / 10);
+  if (o.dead) {
+    c.fillStyle = "rgba(10,8,18,.55)";
+    c.fillRect(0, 0, W, H);
   }
 }
