@@ -212,7 +212,8 @@ export default function EscapeApp() {
     );
   }
 
-  // ── 플레이 ──
+  // ── 플레이 (review = 탈출 뒤 현장 다시 보기) ──
+  const review = s.phase === "review";
   // 사건 메모 = 도입 컷 다시 보기 (도입에만 나오는 단서를 기억력 싸움으로 만들지 않게)
   const close =
     s.open === INTRO
@@ -236,7 +237,14 @@ export default function EscapeApp() {
     <div className="mx-auto max-w-[960px] text-[#e9e4d8]">
       {/* 위 줄 */}
       <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
-        <span className="rounded-md bg-[#1b1a20] px-2.5 py-1 font-mono text-[15px]">⏱ {mmss(Math.max(now, s.t0) - s.t0)}</span>
+        <span className="rounded-md bg-[#1b1a20] px-2.5 py-1 font-mono text-[15px]">
+          ⏱ {mmss((review ? (s.t1 ?? s.t0) : Math.max(now, s.t0)) - s.t0)}
+        </span>
+        {review && (
+          <button onClick={() => setS((x) => ({ ...x, phase: "report", open: null, sel: null }))} className="rounded-md bg-[#e9c46a] px-2.5 py-1 font-bold text-[#1d1a12]">
+            📝 보고서로 돌아가기
+          </button>
+        )}
         <span className="rounded-md bg-[#1b1a20] px-2.5 py-1">
           📍 {ROOM.title} · {wall.name}
         </span>
@@ -244,12 +252,19 @@ export default function EscapeApp() {
         <button onClick={() => ctx.open(s.open === INTRO ? null : INTRO)} className="ml-auto rounded-md border border-[#3a3842] px-2.5 py-1 text-[#cfc8bb]">
           📋 사건 메모
         </button>
-        <button onClick={() => setHintOpen((v) => !v)} className="rounded-md border border-[#5a4a2a] px-2.5 py-1 text-[#e9c46a]">
-          💡 힌트 {hintCount(s) ? `(${hintCount(s)})` : ""}
-        </button>
+        {!review && (
+          <button onClick={() => setHintOpen((v) => !v)} className="rounded-md border border-[#5a4a2a] px-2.5 py-1 text-[#e9c46a]">
+            💡 힌트 {hintCount(s) ? `(${hintCount(s)})` : ""}
+          </button>
+        )}
       </div>
+      {review && (
+        <p className="mb-2 rounded-lg bg-[#211d14] px-3 py-2 text-[13px] text-[#f0dca0]">
+          🔍 현장을 다시 둘러보는 중이에요. 시간은 멈춰 있어요. 다 봤으면 &quot;보고서로 돌아가기&quot;.
+        </p>
+      )}
 
-      {hintOpen && (
+      {hintOpen && !review && (
         <div className="mb-2 rounded-xl border border-[#5a4a2a] bg-[#211d14] p-3 text-[14px]">
           {current ? (
             <>
@@ -404,9 +419,13 @@ function Stat({ k, v }: { k: string; v: string }) {
 /** 탈출 후 보고서: 범인 · 서하의 상태 · 근거 2개 */
 function Report({ s, setS }: { s: State; setS: (fn: (s: State) => State) => void }) {
   const R = ROOM.report;
-  const [culprit, setCulprit] = useState("");
-  const [status, setStatus] = useState("");
-  const [ev, setEv] = useState<string[]>([]);
+  // 쓰다 만 보고서는 State(draft)에 둠 → 현장 다시 보러 갔다 와도 그대로
+  const d = s.draft ?? { culprit: "", status: "", evidence: [] };
+  const { culprit, status, evidence: ev } = d;
+  const put = (p: Partial<typeof d>) => setS((x) => ({ ...x, draft: { ...(x.draft ?? { culprit: "", status: "", evidence: [] }), ...p } }));
+  const setCulprit = (v: string) => put({ culprit: v });
+  const setStatus = (v: string) => put({ status: v });
+  const setEv = (f: (v: string[]) => string[]) => put({ evidence: f(ev) });
   const ready = culprit && status && ev.length === 2;
   const submit = () => {
     const good = ev.every((id) => R.evidence.find((e) => e.id === id)?.good);
@@ -419,6 +438,12 @@ function Report({ s, setS }: { s: State; setS: (fn: (s: State) => State) => void
         <p className="text-center text-[13px] tracking-[0.3em] text-[#b49b6a]">ESCAPED · {mmss((s.t1 ?? s.t0) - s.t0)}</p>
         <h2 className="mt-1 text-center text-[22px] font-black">수사 보고서</h2>
         <p className="mt-1 text-center text-[13px] text-[#a9a29a]">보일러실 뒤 계단으로 빠져나왔다. 무전으로 보고하기 전에 정리하자.</p>
+        <button
+          onClick={() => setS((x) => ({ ...x, phase: "review", open: null, sel: null }))}
+          className="mx-auto mt-3 block rounded-lg border border-[#5a4a2a] px-4 py-1.5 text-[13px] text-[#e9c46a]"
+        >
+          🔍 현장 다시 둘러보기 (시간 안 흐름 · 쓰던 내용 그대로)
+        </button>
 
         <p className="mt-5 mb-2 font-bold">1. 문을 밖에서 잠근 사람은?</p>
         <div className="grid gap-1.5 sm:grid-cols-2">

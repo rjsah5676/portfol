@@ -25,7 +25,10 @@ export interface State {
   t1: number | null;
   /** 퍼즐별로 본 힌트 단계 */
   hint: Record<string, number>;
-  phase: "intro" | "play" | "report" | "end";
+  /** review = 탈출 뒤 보고서 쓰다가 현장 다시 둘러보기 (시간은 멈춤) */
+  phase: "intro" | "play" | "review" | "report" | "end";
+  /** 쓰다 만 보고서 (현장 다시 보러 갔다 와도 남게) */
+  draft?: { culprit: string; status: string; evidence: string[] };
   /** 보고서 결과 */
   result: { culprit: string; status: string; evidence: string[]; truth: boolean } | null;
 }
