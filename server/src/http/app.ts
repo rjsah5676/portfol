@@ -13,6 +13,7 @@ import { noticeRouters } from "./notice";
 import { loveRouters } from "./love";
 import { suspectRouters } from "./suspect";
 import { mysteryProtoRouter } from "./mystery";
+import { craftRouter } from "./craft";
 import { baseballRouter } from "./baseball";
 import { mailAdminRouter, mailRouter } from "./mail";
 import { meRouter } from "./me";
@@ -141,8 +142,10 @@ export function createApp(deps: Deps, { pokerRank, pokerBuyRank, rhythmFiles, ..
   const suspect = suspectRouters(deps);
   app.use("/api/suspect", suspect.pub);
   app.use("/api/admin/suspect", suspect.admin);
-  // 예/아니오 추리 (프로토, 메뉴 미노출)
+  // 예/아니오 추리 (프로토, 2026-11-05 메뉴에서 내림 — 비밀번호 걸린 채로 둠)
   app.use("/api/mystery-proto", mysteryProtoRouter(deps));
+  // 오늘의 조합 (프로토)
+  app.use("/api/craft", craftRouter(deps));
   app.use("/api/admin/economy", adminEconomyRouter(deps));
   app.use("/api/admin/members", adminMembersRouter(deps, mod));
   app.use("/api/admin/reports", socialAdminRouter(deps));
