@@ -110,6 +110,7 @@ async function ensureIndexes({ db }: Database) {
   // 오늘의 용의자: 날짜_난이도별 순위 · 그 사람의 첫 기록 찾기
   idx("suspect_rankings", { case: 1, score: 1 });
   idx("suspect_rankings", { case: 1, uid: 1 });
+  idx("suspect_rankings", { uid: 1, createdAt: -1 });
   idx("casefile_rankings", { case: 1, score: 1 });
   idx("casefile_rankings", { case: 1, uid: 1 });
   idx("pixelmerge_rankings", { board: 1, score: -1 });

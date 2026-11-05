@@ -783,6 +783,30 @@ export function rankingsRouter({ db, auth, users, points }: Deps, captcha?: Capt
       };
     }),
   );
+  // 내가 올린 오늘의 용의자 기록 전부 (회원만 — 다른 기기에서도 푼 사건 · 연속 해결 · 해결 수를 맞추려고). 비회원 · 로그아웃은 빈 목록
+  r.get(
+    "/suspect-mine",
+    h(async (req) => {
+      const user = await userOf(auth, req).catch(() => null);
+      if (!user || user.anonymous) return { rows: [] };
+      const docs = await db
+        .col("suspect_rankings")
+        .find({ uid: user.uid }, { projection: { case: 1, time: 1, miss: 1, hint: 1, score: 1, createdAt: 1 } })
+        .sort({ createdAt: -1 })
+        .limit(2000)
+        .toArray();
+      return {
+        rows: docs.map((d) => ({
+          case: d.case as string,
+          time: d.time as number,
+          miss: d.miss as number,
+          hint: d.hint as number,
+          score: d.score as number,
+          at: ms(d.createdAt as Date),
+        })),
+      };
+    }),
+  );
 
   // 오늘의 사건 파일 (case = YYYYMMDD_난이도)
   r.get(

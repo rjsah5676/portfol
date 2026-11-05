@@ -29,9 +29,11 @@ import {
   onStoreChange,
   saveStore,
   setPlay,
+  syncSuspectMine,
   type PlayState,
   type Store,
 } from "@/lib/suspect/progress";
+import { useNick } from "@/lib/AuthContext";
 import {
   getSound,
   onSoundChange,
@@ -210,17 +212,23 @@ export default function SuspectApp() {
   const { spec: rankSpec, openRank } = useSuspectRank(ready, today, store);
 
   useEffect(prepareRuns, []);
+  const nick = useNick();
 
   // 관리자 초기화(데일리 · 랭킹) 따라가기: 첫 화면에 있을 때 · 탭으로 돌아올 때마다 확인 (http/suspect.ts).
   // 푸는 중엔 안 함 — 지운 판을 보드가 바로 다시 저장해 버려서
+  // 회원이면 그다음 서버의 내 기록으로 채움 (다른 기기에서 푼 사건 · 연속 해결 — 로그인하면 다시)
   useEffect(() => {
     if (!ready || run) return;
-    const go = () => void applySuspectReset().catch(() => {});
+    const go = () =>
+      void applySuspectReset()
+        .catch(() => {})
+        .then(() => (nick ? syncSuspectMine() : false))
+        .catch(() => {});
     go();
     const vis = () => !document.hidden && go();
     document.addEventListener("visibilitychange", vis);
     return () => document.removeEventListener("visibilitychange", vis);
-  }, [ready, run]);
+  }, [ready, run, nick]);
 
   // 자정이 지나면 오늘의 사건이 바뀜 (첫 화면에 있을 때)
   useEffect(() => {

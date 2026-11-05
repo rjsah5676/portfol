@@ -110,6 +110,91 @@ export async function applySuspectReset(): Promise<boolean> {
   return true;
 }
 
+/**
+ * 회원이면 서버에 올라간 내 기록(GET /api/rankings/suspect-mine)으로 이 브라우저 기록을 채움 — 다른 기기에서 푼 것도 보이게.
+ *  - 일주일 안의 오늘의 사건: 이 브라우저에서 안 끝낸 판이면 「다 푼 판」으로 (결과 · 다시 보기만, 판 진행은 기기 따라 안 옮김)
+ *  - 해결 수 · 난이도별 최고 · 연속 해결: 서버 기록과 이 브라우저 기록 중 큰 쪽 (연속은 푼 날을 합쳐서 다시 셈)
+ * 비회원 · 로그아웃이면 서버가 빈 목록 → 그대로. 바뀌었으면 true
+ */
+export async function syncSuspectMine(): Promise<boolean> {
+  const { api } = await import("@/lib/api/http");
+  const r = await api<{
+    rows: { case: string; time: number; miss: number; hint: number; score: number; at: number | null }[];
+  }>("/api/rankings/suspect-mine", { auth: true, timeoutMs: 8000 });
+  if (!r.rows.length) return false;
+  const keep = kstDay(Date.now(), -7);
+  const resetAt = loadStore().resetAt ?? 0;
+  let changed = false;
+  saveStore((s) => {
+    const solvedDays = new Set<string>();
+    for (const d of Object.keys(s.days)) if (Object.values(s.days[d]).some((p) => p?.done)) solvedDays.add(d);
+    for (const row of r.rows) {
+      // 관리자 초기화보다 앞선 기록은 지워졌어야 할 것 (서버도 지우지만 혹시 남은 것)
+      if (row.at && row.at < resetAt) continue;
+      const [day, tier] = row.case.split("_") as [string, TierId];
+      solvedDays.add(day);
+      if (s.best[tier] === undefined || row.score < s.best[tier]) {
+        s.best[tier] = row.score;
+        changed = true;
+      }
+      if (day < keep || s.days[day]?.[tier]?.done) continue;
+      (s.days[day] ??= {})[tier] = {
+        x: [],
+        memo: [],
+        miss: row.miss,
+        hint: row.hint,
+        missed: [],
+        ms: Math.round(row.time * 1000),
+        done: true,
+        submitted: true,
+        score: row.score,
+      };
+      changed = true;
+    }
+    if (r.rows.length > s.solved) {
+      s.solved = r.rows.length;
+      changed = true;
+    }
+    if (!s.tutorial) {
+      s.tutorial = true;
+      changed = true;
+    }
+    // 연속 해결: 푼 날을 합쳐서 가장 최근 날부터 거꾸로 이어진 만큼 · 가장 길었던 것.
+    // 이 브라우저 기록이 더 길면(로그인 전에 푼 날 등 서버에 없는 날) 그쪽을 남김
+    const days = [...solvedDays].sort();
+    let longest = 0;
+    for (let i = 0, k = 0; i < days.length; i++) {
+      k = i && prevDay(days[i]) === days[i - 1] ? k + 1 : 1;
+      longest = Math.max(longest, k);
+    }
+    const last = days[days.length - 1] ?? null;
+    const cur = s.streak;
+    // 가장 최근 날부터 거꾸로 — 이 브라우저의 연속 마지막 날에 닿으면 그 연속 수를 이어 붙임
+    let run = 0;
+    if (last) {
+      run = 1;
+      for (let d = last; ; ) {
+        const p = prevDay(d);
+        if (cur.last && p === cur.last) {
+          run += cur.count;
+          break;
+        }
+        if (!solvedDays.has(p)) break;
+        run++;
+        d = p;
+      }
+      if (last === cur.last) run = Math.max(run, cur.count);
+    }
+    const newer = !!last && (!cur.last || last > cur.last || (last === cur.last && run > cur.count));
+    const best = Math.max(cur.best, longest, newer ? run : cur.count);
+    if (newer || best !== cur.best) {
+      s.streak = newer ? { last: last!, count: run, best } : { ...cur, best };
+      changed = true;
+    }
+  });
+  return changed;
+}
+
 export function onStoreChange(cb: () => void): () => void {
   listeners.add(cb);
   return () => listeners.delete(cb);

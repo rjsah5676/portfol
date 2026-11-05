@@ -573,6 +573,11 @@ describe("랭킹: 오늘의 용의자", () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ gp: 1500 });
     expect((await s.http(`${pathOf(bh)}/summary`)).status).toBe(200);
+    // 내 기록 목록 (다른 기기 동기화용): 회원은 올린 사건이 보이고, 비회원(익명) · 로그아웃은 빈 목록
+    const mine = (await s.http("/api/rankings/suspect-mine", { token })).body;
+    expect(mine.rows).toEqual([expect.objectContaining({ case: `${kstDay()}_bighell`, score: row.score })]);
+    expect((await s.http("/api/rankings/suspect-mine", { token: await s.token("gp4") })).body.rows).toEqual([]);
+    expect((await s.http("/api/rankings/suspect-mine")).body.rows).toEqual([]);
   });
 
   it("사건 요약(푼 사람 · 완벽 · 중간 기록 · 내 순위) · 누적 랭킹(해결 수 · 1위 횟수)", async () => {
