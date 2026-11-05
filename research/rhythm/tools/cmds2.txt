@@ -1,33 +1,33 @@
 fullcombo --bpm-label 180 --boss '{"loud":0.48,"full":0.78}' --levels 3,5,9,13,14
-jilju --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16
+jilju --boss '{}' --tweak '{"hard":{"fill":0.3},"expert":{"fill":0.15}}' --levels 3,5,8,12,16 --favor '{"stair3":2,"anchor":1.6,"split":1.4,"p02":1.6,"p13":1.6}'
 natsukasumi --boss '{}' --tweak '{"hard":{"fill":0.9},"expert":{"fill":1.3}}' --levels 3,4,7,11,14
 newdim --boss '{"loud":0.55,"full":0.85,"burstEvery":8}' --tweak '{"expert":{"fill":0.4}}' --levels 3,5,8,12,15
 monarch --bpm-label 150 --boss '{"burstEvery":2}' --tweak '{"hard":{"fill":0.35},"expert":{"fill":0.3},"nightmare":{"fill":0.4}}' --levels 3,5,8,12,15
-velocity --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --abyss '{}' --levels 3,6,10,14,17,17
-anima --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,13,17,20
+velocity --bpm-label 180 --boss '{"loud":0.45,"full":0.72,"burstEvery":4,"burstSub":6}' --explus '{}' --abyss '{}' --levels 3,6,10,14,17,17 --lift '{"mode":"stream"}'
+anima --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,13,17,20 --lift '{"mode":"chord"}'
 aragami --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,11,14,16,18
-crimsoncadenza --double --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,12,16,17
-hwimori --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,18
-luckyseven --double --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,11,15,17
+crimsoncadenza --double --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,12,16,17 --lift '{"mode":"stream"}'
+hwimori --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,18 --favor '{"anchor":2.5,"jack":2.5,"stair":0.5,"zigzag":0.5,"jackMul":1.6,"p03":2,"p12":0.6}' --lift '{"mode":"chord"}'
+luckyseven --double --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,11,15,17 --lift '{"mode":"chord"}'
 pixelfighting --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,8,13,15,16
-freedomdive --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,13,15,17 --keep nightmare
+freedomdive --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,13,15,17 --keep nightmare --lift '{"mode":"chord"}'
 midnight --single --bpm-label 111 --levels 3,4,7,11
-starlight --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,13,16
-sugarcloud --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,12,15,16
-overload --single --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,11,13,15
-etude --rephase --bpm-label 170 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,17
-highlight --bpm-label 192 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,8,12,15,18
-tomeinauso --bpm-label 149 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,11,15,17
-picopico --rephase --bpm-label 188 --boss '{}' --explus '{"chordScale":1.8}' --abyss '{}' --levels 3,6,9,13,16,16
-neonseaside --single --bpm-label 125 --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,14,16
-riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,14,17
-bladestorm --bpm-label 183 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,14,17,20
-venombloom --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,15,17
-aurora --bpm-label 138 --boss '{}' --explus '{}' --abyss '{"p3":0.45,"share":0.85}' --levels 3,4,7,11,14,15
-rooftop --bpm-label 162 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}'
-colossus --bpm 150 --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}' --levels 3,5,8,12,15,17
-cornercypher --single --bpm-label 92 --boss '{"fullSub":6}' --explus '{"fullSub":6,"full":0.7,"loud":0.4,"chordScale":1.4}' --abyss '{}' --levels 3,5,8,12,15,17
-redline --rephase --bpm-label 160 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.7}' --levels 3,6,9,13,15,18
-hairpin --bpm-label 145 --boss '{}' --explus '{"chordScale":1.4}' --abyss '{"p3":0.3,"share":0.7}' --levels 3,5,8,12,14,17
-moonshine --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.75}' --levels 3,6,9,13,15,17
-kaminari --rephase --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.2,"share":0.6}'
+starlight --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,13,16 --lift '{"mode":"stream"}'
+sugarcloud --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,12,15,16 --favor '{"jump":2,"jumpstream":1.8,"trill":1.5,"stair":0.6,"p01":2,"p23":2}' --lift '{"mode":"stream"}'
+overload --single --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,11,13,15 --lift '{"mode":"stream"}'
+etude --rephase --bpm-label 170 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,17 --lift '{"mode":"chord"}'
+highlight --bpm-label 192 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,8,12,15,18 --lift '{"mode":"stream"}'
+tomeinauso --bpm-label 149 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,11,15,17 --favor '{"stair":2,"zigzag":2,"wave":1.5,"jump":0.5,"jumpstream":0.6,"anchor":0.4,"jackMul":0.6,"p01":1.5,"p23":1.5,"p03":0.6}' --lift '{"mode":"stream"}'
+picopico --rephase --bpm-label 188 --boss '{}' --explus '{"chordScale":1.8}' --abyss '{}' --levels 3,6,9,13,16,16 --lift '{"mode":"stream"}'
+neonseaside --single --bpm-label 125 --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,14,16 --lift '{"mode":"stream"}'
+riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,14,17 --favor '{"jumpstream":2,"jump":1.6,"anchor":1.3,"zigzag":0.6,"p03":2}' --lift '{"mode":"stream"}'
+bladestorm --bpm-label 183 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,14,17,20 --lift '{"mode":"stream"}'
+venombloom --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,15,17 --favor '{"jack":2.5,"trill2":2,"split":1.5,"stair":0.5,"jackMul":1.5,"p02":2,"p13":2}' --lift '{"mode":"stream"}'
+aurora --bpm-label 138 --boss '{}' --explus '{}' --abyss '{"p3":0.45,"share":0.85}' --levels 3,4,7,11,14,15 --favor '{"zigzag":2.5,"wave":2,"stair":1.5,"jump":0.6,"jackMul":0.6,"p12":2}' --lift '{"mode":"stream"}'
+rooftop --bpm-label 162 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}' --favor '{"split":2.5,"wave":2,"zigzag":1.5,"stair":0.5,"p02":2,"p13":2,"p03":1.5}' --lift '{"mode":"stream"}'
+colossus --bpm 150 --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}' --levels 3,5,8,12,15,17 --favor '{"jump":2,"jumpstream":1.5,"anchor":1.5,"jackMul":1.4,"p01":1.6,"p23":1.6,"p03":1.6}' --lift '{"mode":"chord"}'
+cornercypher --single --bpm-label 92 --boss '{"fullSub":6}' --explus '{"fullSub":6,"full":0.7,"loud":0.4,"chordScale":1.4}' --abyss '{}' --levels 3,5,8,12,15,17 --lift '{"mode":"chord"}'
+redline --rephase --bpm-label 160 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.7}' --levels 3,6,9,13,15,18 --favor '{"stair":2.5,"zigzag":2,"wave":1.3,"jump":0.6,"jackMul":0.7,"p03":1.5}' --lift '{"mode":"stream"}'
+hairpin --bpm-label 145 --boss '{}' --explus '{"chordScale":1.4}' --abyss '{"p3":0.3,"share":0.7}' --levels 3,5,8,12,14,17 --favor '{"jack":2.5,"anchor":2,"stair":0.6,"jackMul":1.5,"p01":2,"p23":2}' --lift '{"mode":"stream"}'
+moonshine --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.75}' --levels 3,6,9,13,15,17 --favor '{"wave":2.5,"stair":1.6,"trill":1.5,"jump":0.6,"p02":1.6,"p13":1.6}' --lift '{"mode":"chord"}'
+kaminari --rephase --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.2,"share":0.6}' --favor '{"split":2,"jack":1.5,"anchor":1.5,"stair":0.7,"p03":2}' --levels ,,9 --lift '{"mode":"stream"}'

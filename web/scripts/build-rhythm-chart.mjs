@@ -17,6 +17,8 @@
  *   --single          분석기가 2배 템포로 잘못 볼 때 원래 템포로 강제 (하프타임·시티팝)
  *   --bpm <n>         분석기가 엉뚱한 템포(2배·절반이 아닌)로 잡을 때 n 근처(±4%)에서만 찾음
  *   --rephase         곡 중간에 박이 16분 반 칸 · 한 칸씩 밀리는 곡(AI 곡 이어 붙인 자리)이면 구간마다 위상을 다시 맞춤
+ *   --lift '<json>'   ULTIMA 를 나이트메어 + 3 쪽으로 끌어올림 ({}면 기본, {"target":17} 처럼 직접) — ABYSS 는 끌어올리기 전 ULTIMA 로
+ *   --favor '<json>'  곡 개성: 패턴 계열 배율을 모든 난이도에 (예: '{"stair":2.5,"jack":0.5,"jackMul":1.5}')
  *   --tweak '<json>'  난이도별 AutoTweak 덮어쓰기 (예: '{"expert":{"fill":0.6}}')
  *   --levels a,b,c…   난이도별 목표 레벨 (쉬움부터, 별점×4) — 직접 쳐 보고 정한 레벨에 맞춰 뽑음
  *   --dry             파일은 안 쓰고 난이도별 통계만 출력
@@ -47,7 +49,9 @@ const argv = process.argv.slice(2);
 const id = argv.find(
   (a) =>
     !a.startsWith("--") &&
-    !argv[argv.indexOf(a) - 1]?.match(/^--(bpm-label|bpm|boss|tweak|levels|explus|abyss|keep)$/)
+    !argv[argv.indexOf(a) - 1]?.match(
+      /^--(bpm-label|bpm|boss|tweak|levels|explus|abyss|keep|favor|lift)$/
+    )
 );
 if (!id) {
   console.error(
@@ -147,10 +151,22 @@ if (abyssArg !== undefined) {
   diffs.push("abyss");
   tweaks.abyss = { abyss: JSON.parse(abyssArg) };
 }
+// --lift '<json>': ULTIMA 를 나이트메어 + 3 쪽으로 끌어올림 (autochart UltLift, {}면 기본) — ABYSS 는 끌어올리기 전 ULTIMA 로
+const liftArg = opt("--lift");
+if (liftArg !== undefined && tweaks.explus)
+  tweaks.explus = { ...tweaks.explus, lift: JSON.parse(liftArg) };
 const tweakArg = opt("--tweak");
 if (tweakArg)
   for (const [d, t] of Object.entries(JSON.parse(tweakArg)))
     tweaks[d] = { ...(tweaks[d] ?? {}), ...t };
+// --favor '<json>': 곡 개성 — 모든 난이도에 같은 패턴 계열 배율 (AutoTweak.favor, 예: '{"stair":2.5,"jack":0.5}')
+//   "jackMul" 키는 잭 남기는 확률 배율(AutoTweak.jackMul)로
+const favorArg = opt("--favor");
+if (favorArg) {
+  const { jackMul, ...favor } = JSON.parse(favorArg);
+  for (const d of diffs)
+    tweaks[d] = { ...(tweaks[d] ?? {}), favor, ...(jackMul !== undefined ? { jackMul } : {}) };
+}
 const levelsArg = opt("--levels");
 if (levelsArg)
   levelsArg.split(",").forEach((v, i) => {

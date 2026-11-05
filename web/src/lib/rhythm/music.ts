@@ -642,6 +642,8 @@ const FREEDOMDIVE = audioSong(
  *   kaminari       --rephase --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.2,"share":0.6}'   (자동 목표 3/6/10/13/15/16 · ABYSS 19 — 스트림형은 18 이 천장이라 코드잭형으로 · 1:25~2:00 · 2:30 박이 반 칸 밀려 있어서 --rephase)
  *   (자를 때 주의: 뺀 길이가 마디 길이의 정수배가 아니면 뒤쪽 박이 밀림 — cut.sh 의 30ms 크로스페이드만큼도.
  *    뒤 시작 = 앞 끝 − 0.03 + 마디 수 × 4 × 60 / BPM 으로 잘라야 함. v2.25 Moonshine 첫 판이 37ms 밀려서 앞 30초 어려움 · EX 노트가 비었음)
+ *   v2.27 (2026-11-06 전곡 점검): 곡 개성 --favor(13곡) · ULTIMA 끌어올리기 --lift(25곡) · KAMINARI 어려움 목표 9 가 붙어서
+ *   위 명령보다 research/rhythm/tools/cmds2.txt (= lib.mjs BUILTIN) 가 기준. 결과 레벨은 PatchNotes v2.27 · 프로젝트 문서 참고
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로

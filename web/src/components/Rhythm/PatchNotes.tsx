@@ -17,6 +17,17 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.27",
+    name: "전곡 채보 점검",
+    date: "2026.11.06",
+    lines: [
+      "ULTIMA 가 나이트메어와 1레벨 차이밖에 안 나던 곡 대부분을 2~3레벨 위로 — 빠른 곡은 16분 스트림, 느린 곡은 잭 · 3개 동시치기로",
+      "HARD 에서 같은 키가 한 칸 걸러 돌아오는(A B A) 손 꼬이는 모양을 줄임 — KAMINARI BACHI HARD 는 10 → 9",
+      "13곡에 곡마다 즐겨 쓰는 패턴을 넣음 (휘모리 잭 · 앵커, REDLINE 계단, Aurora 지그재그, Venom Bloom 잭 · 벌림 등)",
+      "모든 곡 HARD 이상 채보를 다시 뽑음 — 기록은 그대로 남아요",
+    ],
+  },
+  {
     ver: "v2.26",
     name: "채보 빈 구간 수정",
     date: "2026.11.05",

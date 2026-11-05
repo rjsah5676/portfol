@@ -479,6 +479,12 @@ export interface AutoTweak {
   onPick?: PatternCtx["onPick"];
   /** ABYSS 손잡이 */
   abyss?: AbyssTweak;
+  /** ULTIMA 끌어올리기 (liftUlt) — explus 에만 */
+  lift?: UltLift;
+  /** 곡 개성: 패턴 계열 가중치 배율 (patterns.ts PatternCtx.favor) */
+  favor?: Partial<Record<string, number>>;
+  /** 곡 개성: 바로 앞 줄과 같은 레인(잭)을 남기는 확률 배율 (규칙의 jackAllow × 이 값, 최대 1) */
+  jackMul?: number;
 }
 
 /**
@@ -504,6 +510,7 @@ export function makeAutoChart(
         : base.chord,
   };
   if (tweak.finePos !== undefined) R.pos[3] = tweak.finePos;
+  if (tweak.jackMul !== undefined) R.jackAllow = Math.min(1, R.jackAllow * tweak.jackMul);
   const beatSec = 60 / an.bpm;
   // 격자 한 칸이 70ms보다 좁은 빠른 곡: 홀수 칸(4/4는 32분, 12/8은 셋잇단 16분 사이)·격자 밖 타격은 안 씀.
   // 바로 옆 칸에 붙어 '살짝 어긋난 동시치기'가 되거나, 일정하던 간격이 갑자기 1.5배가 되는 엇박이 됨
@@ -891,6 +898,7 @@ export function makeAutoChart(
     intensity: (b) => intensity[Math.max(0, Math.min(nBars - 1, b))],
     rnd,
     onPick: tweak.onPick,
+    favor: tweak.favor,
   };
   const patterned = assignPatterns(
     picked.map((o) => ({ t: o.t, cen: o.cen, count: 1 })),
@@ -1181,6 +1189,7 @@ export function makeAutoChart(
           !notes.some((m) => m.t === o.t && m.lane === l),
         recent: chordHist,
         rnd,
+        favor: tweak.favor,
       });
       for (const l2 of ls) {
         notes.push({ t: o.t, lane: l2 });
@@ -1320,7 +1329,11 @@ export function makeAutoChart(
   //      (나이트메어·ULTIMA는 위의 전용 경로에서 패턴으로만 레인을 깔고, 비율도 osu와 비슷해 손대지 않음)
   dejack(notes, beatSec, R, rnd);
   detrill(notes, R.jackGap, 0.1, rnd);
+  // A B A(같은 레인이 한 칸 걸러 돌아옴): 매우 어려움 0.5. 어려움도 0.8 — 2026-11-06 전곡 점검에서 우리 HARD 빠른 단노트 셋 중
+  //  A B A 가 중앙값 11% (osu · Quaver 같은 레벨 · BPM 중앙값 0%, 우리가 p80). 16분이 많은 곡(KAMINARI 29 · Moonshine 39 ·
+  //  Venom Bloom 43%)에서 특히 많아 HARD 치고 손이 꼬였음
   if (diff === "expert") deaba(notes, R.jackGap, 0.5, rnd);
+  if (diff === "hard") deaba(notes, R.jackGap, 0.8, rnd);
   if (diff !== "easy") balanceHands(notes, alignOpts.barOf, R.jackGap);
 
   // (3.8 곡 안 밀도 고르기는 ULTIMA 만 — HARD · EX 에 넣었더니 센 구간 동시치기 · 16분을 덜어낸 만큼
@@ -2228,6 +2241,8 @@ export function makeAutoCharts(
 ): Partial<Record<Difficulty, Chart>> {
   const out: Partial<Record<Difficulty, Chart>> = {};
   let prevLevel = -Infinity;
+  /** 끌어올리기 전 ULTIMA (ABYSS 는 이걸로 — 레벨이 그대로 유지되게) */
+  let ultBase: Chart | null = null;
   // 185 BPM 이상(접어서 120~240): 16분이 81ms 안쪽이라 osu·Quaver는 16분 대신 동시치기로 레벨을 냄
   //  (나이트메어·ULTIMA 16분 자리 osu 23~25% vs 우리 31~45%) → 16분 박을 덜 엶 (레벨은 그만큼 덜 나올 수 있음)
   let foldBpm = displayBpm(an);
@@ -2237,7 +2252,13 @@ export function makeAutoCharts(
   for (const d of diffs) {
     // ABYSS 는 ULTIMA 채보를 다듬어 만듦 (ULTIMA 를 같이 만들 때만)
     if (d === "abyss") {
-      if (out.explus) out.abyss = makeAbyssChart(an, out.explus, tweaks.abyss?.abyss);
+      const ult = ultBase ?? out.explus;
+      if (ult) {
+        out.abyss = makeAbyssChart(an, ult, tweaks.abyss?.abyss);
+        // 끌어올린 ULTIMA 와 1레벨 차이도 안 나면 끌어올린 쪽에서 다시
+        if (out.explus && ultBase && out.abyss.level <= out.explus.level + 1)
+          out.abyss = makeAbyssChart(an, out.explus, tweaks.abyss?.abyss);
+      }
       continue;
     }
     const base = tweaks[d] ?? {};
@@ -2465,8 +2486,65 @@ export function makeAutoCharts(
     }
     out[d] = best!;
     prevLevel = bestRaw;
+    if (d === "explus" && base.lift && out.nightmare && best) {
+      ultBase = best;
+      out.explus = liftUlt(an, best, out.nightmare.level, base.lift, foldBpm);
+      prevLevel = out.explus.level;
+    }
   }
   return out;
+}
+
+/** ULTIMA 끌어올리기 손잡이 */
+export interface UltLift {
+  /** 목표 레벨 (없으면 나이트메어 + 3) */
+  target?: number;
+  /** 스트림형(빠른 곡) / 코드잭형(느린 곡). 없으면 접은 BPM 165 기준 */
+  mode?: "stream" | "chord";
+}
+
+/**
+ * ULTIMA 를 나이트메어보다 한 단계 위로 (2026-11-06 전곡 점검 · 사용자 "오수퀴버랑 비슷한 결로").
+ *  - 우리 ULTIMA 는 27곡 중 19곡이 나이트메어 +1 (NM 의 동시치기만 두껍게 한 꼴) — osu · Quaver 랭크 맵셋(4난이도↑, 맨 위 Lv15~20
+ *    289세트)은 맨 위 두 난이도 간격 중앙값 3 (1: 11% · 2: 20% · 3: 33% · 4: 22%).
+ *  - 같은 BPM 대 osu · Quaver 와 비교하면 어디서 레벨을 더 내야 하는지가 곡 빠르기마다 다름:
+ *      165~200 BPM: 우리 ULT 줄/박 2.62 · 16연타 안 줄(long16) 0.10 · 2개 동시 0.45 ↔ ref Lv17~18 2.66 · 0.27 · 0.33
+ *        → 동시치기는 이미 많고 16분 스트림이 모자람 → ABYSS 스트림형(줄 사이 16분 메우기)을 약하게 (강세 없이)
+ *      125~165 BPM: 우리 ULT 줄/박 3.14 · long16 0.51 · 3개 동시 0.07 · 잭 줄 0.10 ↔ ref Lv17~18 3.18 · 0.34 · 0.12 · 0.19
+ *        → 스트림은 이미 넘침, 잭 · 3개 동시가 모자람 → ABYSS 코드잭형을 약하게 (롱노트는 남김)
+ *  - 목표 레벨(나이트메어 + 3)에 가장 가까운(넘지 않는 쪽 우선) 세기를 고름. 원래 ULTIMA 보다 낮아지지는 않음
+ */
+function liftUlt(an: Analysis, ult: Chart, nmLevel: number, lift: UltLift, foldBpm: number): Chart {
+  const target = lift.target ?? nmLevel + 3;
+  if (ult.level >= target) return ult;
+  const stream = (lift.mode ?? (foldBpm >= 165 ? "stream" : "chord")) === "stream";
+  const tries: AbyssTweak[] = stream
+    ? [
+        [2.6, 2],
+        [2.8, 0.95],
+        [2.9, 0.9],
+        [3.0, 0.85],
+        [3.1, 0.8],
+        [3.2, 0.75],
+      ].map(([rpb, q3]) => ({ mode: "stream" as const, rpb, q4: 0.9, q3 }))
+    : [
+        [0.04, 0.12],
+        [0.08, 0.16],
+        [0.12, 0.2],
+        [0.16, 0.25],
+        [0.2, 0.3],
+      ].map(([p3, p2]) => ({ mode: "chord" as const, q: 0.5, p3, p2, share: 0.7, keepLn: true }));
+  let best = ult;
+  for (const tw of tries) {
+    const c = finishChart(makeAbyssChart(an, ult, tw).notes, "explus");
+    const better =
+      c.level <= target
+        ? c.level > best.level || best.level > target
+        : best.level < target - 1 && c.level - target < target - best.level;
+    if (better) best = c;
+    if (c.level >= target) break;
+  }
+  return best;
 }
 
 /**
@@ -2585,6 +2663,8 @@ export interface AbyssTweak {
   p3?: number;
   p2?: number;
   share?: number;
+  /** 코드잭형에서 롱노트를 남김 (ULTIMA 끌어올리기용 — ABYSS 는 센 마디 롱노트를 탭으로) */
+  keepLn?: boolean;
 }
 
 /**
@@ -2738,7 +2818,8 @@ export function makeAbyssChart(an: Analysis, ult: Chart, tw: AbyssTweak = {}): C
     //  더하는 노트는 대부분 바로 앞 줄 레인(코드잭), 같은 레인 3연타는 피함
     const rs = order();
     const el = rs.filter((r) => rank(Math.floor(r.s / BAR)) >= (tw.q ?? 0.25));
-    for (const r of el) for (const [l, e] of r.lanes) if (e) r.lanes.set(l, undefined);
+    if (!tw.keepLn)
+      for (const r of el) for (const [l, e] of r.lanes) if (e) r.lanes.set(l, undefined);
     const p3 = tw.p3 ?? 0.35;
     const p2 = tw.p2 ?? 0.45;
     const sorted = el

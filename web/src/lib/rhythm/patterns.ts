@@ -384,6 +384,12 @@ export interface PatternCtx {
   rnd: () => number;
   /** 진단용: 조각마다 고른 패턴 */
   onPick?: (name: string, bar: number, len: number) => void;
+  /**
+   * 곡마다 즐겨 쓰는 패턴 계열(family) 가중치 배율 — 곡 개성 (예: 유로비트 { stair: 2.5 }, 국악 { jack: 2, anchor: 2 }).
+   * 2026-11-06 전곡 점검: 우리 EX · NM · ULT 의 계단 · 트릴 · 잭 · 동시치기 모양 비율이 곡끼리 거의 같아서
+   * 곡 사이 퍼짐이 osu · Quaver 같은 레벨 채보 퍼짐의 0.2~0.5배였음 (장르가 달라도 패턴 구성이 같음)
+   */
+  favor?: Partial<Record<string, number>>;
 }
 
 /** 간격 g가 어느 음표쯤인지: 1 = 4분, 2 = 8분, 4 = 16분 이상 */
@@ -557,7 +563,7 @@ function layStream(
       const cands = allowed
         .filter((p) => len >= p.minLen && (!cur || shapeOf(p) !== shapeOf(cur)))
         .map((p) => {
-          let w = p.w * (p.wBy?.[ctx.diff] ?? 1);
+          let w = p.w * (p.wBy?.[ctx.diff] ?? 1) * (ctx.favor?.[p.family] ?? 1);
           if (p.dir && dir && p.dir !== dir) w *= 0.25; // 흐름과 반대 방향은 드물게
           if (p.mood) w *= p.mood[0] + (p.mood[1] - p.mood[0]) * I; // 동시치기는 센 구간에서
           if (p.chord && sub === 4) w *= 0.35; // 16분 동시치기 연타는 드물게
@@ -601,6 +607,7 @@ function layStream(
         ok: (l) => !lanes.includes(l),
         recent: hist.chords,
         rnd: ctx.rnd,
+        favor: ctx.favor,
       });
       out.set(k, [...lanes, ...partners]);
     }
@@ -627,7 +634,14 @@ const PAIR_W: Record<string, number> = {
 export function chordPartners(
   main: number,
   n: number,
-  opts: { avoid: Set<number>; ok: (l: number) => boolean; recent: string[]; rnd: () => number }
+  opts: {
+    avoid: Set<number>;
+    ok: (l: number) => boolean;
+    recent: string[];
+    rnd: () => number;
+    /** 곡 개성: 두 레인 모양 배율 ({ p01: 2 } 이면 D+F · 반대쪽 J+K 처럼 붙은 손 동시치기를 더) — favor 의 p01~p23 키 */
+    favor?: Partial<Record<string, number>>;
+  }
 ): number[] {
   const picked: number[] = [];
   const shapeOf = (ls: number[]) => [...ls].sort((x, y) => x - y).join("");
@@ -642,7 +656,7 @@ export function chordPartners(
         (shape === r[r.length - 1] ? 1.2 : 0) +
         (shape === r[r.length - 2] ? 0.6 : 0) +
         (shape === r[r.length - 3] ? 0.2 : 0) +
-        (1 - (PAIR_W[shape] ?? 0.8)) * 2.5 +
+        (1 - Math.min(1.6, (PAIR_W[shape] ?? 0.8) * (opts.favor?.[`p${shape}`] ?? 1))) * 2.5 +
         opts.rnd() * 1.2
       );
     };
