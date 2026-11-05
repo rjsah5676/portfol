@@ -466,7 +466,7 @@ export default function MysteryProtoApp() {
       setView(r.view);
       setDraft("");
       // 폰에서 키보드가 내려가지 않게 바로 다시 포커스
-      requestAnimationFrame(() => inputRef.current?.focus());
+      requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     } catch (e) {
       setError(errText(e));
     } finally {
