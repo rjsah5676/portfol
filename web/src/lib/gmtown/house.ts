@@ -7,6 +7,7 @@
  * 2층 집(3단계~): 왼쪽 벽을 따라 계단 (앞 → 뒤로 올라감). 1층 계단 자리 · 그 앞 한 줄, 2층 계단 구멍 · 그 뒤 한 줄은 비움.
  * 정원 주택(4단계): 집 앞(+y)에 마당 (1층 칸이 그만큼 더 길어짐). 문 → 마당 대문까지 가운데 길은 비움.
  *   마당엔 정원 가구(where: out)만, 집 안엔 집 가구(in)만, 의자 · 탁자 같은 건(any) 어디든.
+ * 창문(mount): 벽에 거는 것 — 바닥을 차지하지 않음. 벽에 붙은 칸 줄에 놓고 r 이 어느 벽인지 (0 뒤 · 1 오른쪽 · 2 앞 · 3 왼쪽).
  */
 
 export const CELL = 0.5;
@@ -89,7 +90,9 @@ export type FurnKind =
   | "bench"
   | "parasol"
   | "fountain"
-  | "hedge";
+  | "hedge"
+  | "window"
+  | "bigwindow";
 
 export interface Furn {
   id: FurnKind;
@@ -106,6 +109,8 @@ export interface Furn {
   wall?: boolean;
   /** 놓을 수 있는 곳: 집 안(기본) · 마당 · 어디든 */
   where?: "in" | "out" | "any";
+  /** 벽에 거는 것 (창문) — 바닥을 안 차지함, r = 어느 벽 */
+  mount?: boolean;
 }
 
 export const FURNITURE: Furn[] = [
@@ -130,6 +135,9 @@ export const FURNITURE: Furn[] = [
   { id: "parasol", name: "파라솔 탁자", price: 3_500, w: 3, d: 3, icon: "⛱️", where: "out" },
   { id: "fountain", name: "작은 분수", price: 6_000, w: 3, d: 3, icon: "⛲", where: "out" },
   { id: "hedge", name: "생울타리", price: 600, w: 2, d: 1, icon: "🌿", where: "out" },
+  // 벽에 거는 것
+  { id: "window", name: "창문", price: 800, w: 2, d: 1, icon: "🪟", mount: true },
+  { id: "bigwindow", name: "큰 창문", price: 1_500, w: 3, d: 1, icon: "🖼️", mount: true },
 ];
 export const furnById = (id: string) => FURNITURE.find((f) => f.id === id) ?? null;
 
@@ -152,7 +160,25 @@ export const STARTER: Placed[] = [
   { i: "chair", x: 10, y: 2, r: 2 },
   { i: "rug", x: 4, y: 4, r: 0 },
   { i: "plant", x: 11, y: 7, r: 0 },
+  { i: "window", x: 5, y: 0, r: 0 },
+  { i: "window", x: 11, y: 4, r: 1 },
 ];
+/** 창문이 생기기 전에 계약한 집에 넣어 주는 창문 (뒤벽 · 오른쪽 벽) */
+export function defaultWindows(tier: number): Placed[] {
+  const g = houseGeo(tier);
+  return [
+    { i: "window", x: Math.floor(g.w / 2) - 1, y: 0, r: 0 },
+    { i: "window", x: g.w - 1, y: Math.floor(g.d / 2) - 1, r: 1 },
+  ];
+}
+/** 벽에 거는 것: 칸 (cx, cy) 에 붙은 벽 (pref 쪽이 되면 그쪽, 아니면 뒤 → 오른쪽 → 왼쪽 → 앞) — 벽에 안 붙은 칸이면 null */
+export function mountSide(tier: number, cx: number, cy: number, pref = 0): number | null {
+  const g = houseGeo(tier);
+  const ok = [cy === 0, cx === g.w - 1, cy === g.d - 1, cx === 0];
+  if (ok[pref % 4]) return pref % 4;
+  for (const r of [0, 1, 3, 2]) if (ok[r]) return r;
+  return null;
+}
 export const starterInv = (): Record<string, number> => {
   const inv: Record<string, number> = {};
   for (const p of STARTER) inv[p.i] = (inv[p.i] ?? 0) + 1;
@@ -192,6 +218,8 @@ export function checkLayout(tier: number, layout: Placed[], inv: Record<string, 
   const used: Record<string, number> = {};
   const rows = (f: number) => (f ? g.d : g.gd);
   const solid = [new Uint8Array(g.w * g.gd), new Uint8Array(g.w * g.d)];
+  /** 벽에 건 것 (층 · 벽 · 칸) */
+  const hung = new Set<string>();
   const flat = [new Uint8Array(g.w * g.gd), new Uint8Array(g.w * g.d)];
   for (const p of layout) {
     const f = furnById(p.i);
@@ -203,6 +231,20 @@ export function checkLayout(tier: number, layout: Placed[], inv: Record<string, 
     used[p.i] = (used[p.i] ?? 0) + 1;
     if (used[p.i] > (inv[p.i] ?? 0)) return `${f.name}이(가) 모자라요.`;
     const { w, d } = footprint(f, p.r);
+    if (f.mount) {
+      // 벽 줄에 붙어 있어야 하고, 앞벽은 문을 피함
+      const along = p.r % 2 ? p.y : p.x,
+        n = f.w;
+      const okWall = [p.y === 0, p.x === g.w - 1, p.y === g.d - 1, p.x === 0][p.r];
+      if (!okWall || p.x < 0 || p.y < 0 || p.x + w > g.w || p.y + d > g.d) return `${f.name}은(는) 벽에 붙여서 걸어요.`;
+      for (let k = along; k < along + n; k++) {
+        if (p.r === 2 && fl === 0 && k >= g.door.x0 - 1 && k <= g.door.x1 + 1) return "문 옆에는 창문을 달 수 없어요.";
+        const key = `${fl}:${p.r}:${k}`;
+        if (hung.has(key)) return "창문끼리 겹쳐요.";
+        hung.add(key);
+      }
+      continue;
+    }
     if (p.x < 0 || p.y < 0 || p.x + w > g.w || p.y + d > rows(fl)) return `${f.name}이(가) 방 밖으로 나가요.`;
     // 집 안 · 마당 (걸쳐 놓기 안 됨)
     const out = fl === 0 && p.y >= g.d,

@@ -155,6 +155,11 @@ export default function NpcDialog({
   // 숫자 키
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
+      if ((e.code === "Space" || e.key === "Enter") && !skip) {
+        e.preventDefault();
+        setSkip(true);
+        return;
+      }
       const k = Number(e.key);
       if (k >= 1 && k <= opts.length && !opts[k - 1].disabled) {
         e.preventDefault();
@@ -176,7 +181,10 @@ export default function NpcDialog({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-2 flex items-center justify-between px-1">
-            <b className="gmt-lo-title text-[17px]">🏠 마을 부동산 매물</b>
+            <b className="flex items-center gap-1.5">
+              <span className="text-[17px]">🏠</span>
+              <span className="gmt-lo-title text-[17px]">마을 부동산 매물</span>
+            </b>
             <span className="text-[12px] text-white/70">
               내 GP <b className="text-[#FFE6A0]">{house?.gp === null ? "회원만" : fmt(house?.gp ?? 0)}</b>
             </span>
@@ -187,9 +195,12 @@ export default function NpcDialog({
               const isNext = h.tier === tier + 1;
               const sel = pick?.tier === h.tier && view === "confirm";
               return (
-                <div
+                <button
+                  type="button"
                   key={h.tier}
-                  className={`relative flex flex-col items-center rounded-lg border px-1.5 py-2 text-center ${
+                  disabled={!isNext || guest}
+                  onClick={() => (setPick(h), say(`${h.name}, ${fmt(h.price)} GP 예요. 계약할까요?`, "confirm"))}
+                  className={`relative flex flex-col items-center rounded-lg border px-1.5 py-2 text-center enabled:cursor-pointer enabled:hover:bg-[#e9cf8e]/10 ${
                     sel
                       ? "border-[#ffe7a8] bg-[#e9cf8e]/15"
                       : own
@@ -208,62 +219,61 @@ export default function NpcDialog({
                       own ? "bg-[#4FD1A5]/20 text-[#9be7c4]" : isNext ? "bg-[#e9cf8e]/20 text-[#FFE6A0]" : "bg-white/10 text-white/45"
                     }`}
                   >
-                    {own ? (h.tier === tier ? "지금 내 집" : "지난 단계") : isNext ? "계약 가능" : "앞 단계 먼저"}
+                    {own ? (h.tier === tier ? "지금 내 집" : "지난 단계") : isNext ? "눌러서 계약" : "앞 단계 먼저"}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
         </div>
       )}
 
-      {/* 대화판 */}
-      <div
-        className={`gmt-lo gmt-pop relative mb-3 flex w-[min(96%,920px)] items-stretch gap-3 rounded-xl ${phone ? "p-2" : "p-3"}`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* 초상 */}
-        <div className={`relative shrink-0 self-end overflow-hidden rounded-lg border border-[#c9a45c]/40 bg-gradient-to-b from-[#3a5a4a] to-[#14201a] ${phone ? "h-[92px] w-[92px]" : "h-[150px] w-[150px]"}`}>
-          <img src="/gmtown/char/npc_agent.webp" alt={npc.name} className="h-full w-full object-cover object-top" draggable={false} />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col">
-          <div className="flex items-baseline gap-2">
-            <b className="text-[16px] text-[#9BF0C8]">{npc.name}</b>
-            <span className="text-[11.5px] text-[#F2D27A]">&lt;{npc.title}&gt;</span>
+      {/* 고르기 (로아식: 대화판 위 오른쪽에 세로로) + 대화판 */}
+      <div className="relative mb-3 flex w-[min(96%,920px)] flex-col items-end gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className={`gmt-pop flex flex-col gap-1.5 ${phone ? "w-[min(60%,300px)]" : "w-[min(46%,340px)]"}`}>
+          {opts.map((o, i) => (
             <button
+              key={o.label}
               type="button"
-              onClick={onClose}
-              aria-label="대화 닫기"
-              className="ml-auto h-7 w-7 cursor-pointer rounded-md text-[15px] text-white/70 hover:bg-white/10"
+              disabled={o.disabled}
+              onClick={o.on}
+              className={`group flex cursor-pointer items-center gap-2 rounded-lg px-3 text-left font-bold shadow-lg disabled:cursor-not-allowed disabled:opacity-45 ${
+                phone ? "h-9 text-[12.5px]" : "h-10 text-[13.5px]"
+              } ${o.gold ? "gmt-gold-btn" : "gmt-dark-btn"}`}
             >
-              ✕
+              <span className={`flex h-5 min-w-5 items-center justify-center rounded text-[10.5px] ${o.gold ? "bg-black/15" : "bg-white/12 text-white/75"}`}>{i + 1}</span>
+              <span className="min-w-0 flex-1 truncate">{o.label}</span>
+              <span className={`text-[15px] transition-transform group-enabled:group-hover:translate-x-0.5 ${o.gold ? "text-black/45" : "text-white/40"}`}>›</span>
             </button>
+          ))}
+        </div>
+        <div className={`gmt-lo gmt-pop relative flex w-full items-stretch gap-3 rounded-xl ${phone ? "p-2" : "p-3"}`}>
+          {/* 초상 */}
+          <div className={`relative shrink-0 self-end overflow-hidden rounded-lg border border-[#c9a45c]/40 bg-gradient-to-b from-[#3a5a4a] to-[#14201a] ${phone ? "h-[84px] w-[84px]" : "h-[132px] w-[132px]"}`}>
+            <img src="/gmtown/char/npc_agent.webp" alt={npc.name} className="h-full w-full object-cover object-top" draggable={false} />
           </div>
-          <p
-            className={`mt-1 min-h-[3em] flex-1 leading-relaxed text-white/92 ${phone ? "text-[12.5px]" : "text-[14px]"}`}
-            onClick={() => setSkip(true)}
-          >
-            {line.slice(0, shown)}
-            {shown < line.length && <span className="animate-pulse text-white/50">▍</span>}
-          </p>
-          {lack && <p className="text-[11.5px] text-[#ff9b9b]">GP 가 모자라요 — 출석 · 게임으로 모아 오세요!</p>}
-          <div className={`mt-2 grid gap-1.5 ${phone ? "grid-cols-2" : "grid-cols-2"}`}>
-            {opts.map((o, i) => (
+          <div className="flex min-w-0 flex-1 flex-col">
+            <div className="flex items-baseline gap-2">
+              <b className="text-[16px] text-[#9BF0C8]">{npc.name}</b>
+              <span className="text-[11.5px] text-[#F2D27A]">&lt;{npc.title}&gt;</span>
               <button
-                key={o.label}
                 type="button"
-                disabled={o.disabled}
-                onClick={o.on}
-                className={`flex h-9 cursor-pointer items-center gap-2 rounded-lg px-3 text-left text-[12.5px] font-bold disabled:cursor-not-allowed disabled:opacity-45 ${
-                  o.gold ? "gmt-gold-btn" : "gmt-dark-btn"
-                }`}
+                onClick={onClose}
+                aria-label="대화 닫기"
+                className="ml-auto h-7 w-7 cursor-pointer rounded-md text-[15px] text-white/70 hover:bg-white/10"
               >
-                {!phone && (
-                  <span className={`rounded px-1 text-[10px] ${o.gold ? "bg-black/15" : "bg-white/10 text-white/70"}`}>{i + 1}</span>
-                )}
-                <span className="truncate">{o.label}</span>
+                ✕
               </button>
-            ))}
+            </div>
+            <p
+              className={`mt-1 min-h-[3.2em] flex-1 cursor-pointer leading-relaxed text-white/92 ${phone ? "text-[12.5px]" : "text-[15px]"}`}
+              onClick={() => setSkip(true)}
+            >
+              {line.slice(0, shown)}
+              {shown < line.length && <span className="animate-pulse text-white/50">▍</span>}
+            </p>
+            {lack && <p className="text-[11.5px] text-[#ff9b9b]">GP 가 모자라요 — 출석 · 게임으로 모아 오세요!</p>}
+            {!phone && <p className="text-right text-[10.5px] text-white/35">숫자 키로 고르기 · Space 로 말 넘기기 · Esc 닫기</p>}
           </div>
         </div>
       </div>

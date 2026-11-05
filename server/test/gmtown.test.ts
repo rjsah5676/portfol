@@ -338,6 +338,22 @@ describe("광장", () => {
     expect(enterAt(4).y).toBeGreaterThan(g4.oy + g4.dm);
   });
 
+  it("창문: 벽에 붙은 줄에만 · 바닥 가구와 안 겹침 · 앞벽 문 옆 안 됨 · 창문끼리 겹침 안 됨", () => {
+    const inv = { window: 3, bed: 1 };
+    expect(checkLayout(1, [{ i: "window", x: 3, y: 0, r: 0 }], inv)).toBeNull();
+    // 침대 위 벽에 걸어도 됨 (바닥 안 차지)
+    expect(checkLayout(1, [{ i: "bed", x: 3, y: 0, r: 0 }, { i: "window", x: 3, y: 0, r: 0 }], inv)).toBeNull();
+    // 방 가운데 · 벽과 다른 쪽
+    expect(checkLayout(1, [{ i: "window", x: 4, y: 4, r: 0 }], inv)).not.toBeNull();
+    expect(checkLayout(1, [{ i: "window", x: 0, y: 3, r: 1 }], inv)).not.toBeNull();
+    expect(checkLayout(1, [{ i: "window", x: 0, y: 3, r: 3 }], inv)).toBeNull();
+    // 겹침 · 앞벽 문 옆
+    expect(checkLayout(1, [{ i: "window", x: 3, y: 0, r: 0 }, { i: "window", x: 4, y: 0, r: 0 }], inv)).not.toBeNull();
+    const g = houseGeo(1);
+    expect(checkLayout(1, [{ i: "window", x: g.door.x0, y: g.d - 1, r: 2 }], inv)).not.toBeNull();
+    expect(checkLayout(1, [{ i: "window", x: 0, y: g.d - 1, r: 2 }], inv)).toBeNull();
+  });
+
   it("친구 초대: 초대받은 사람만 놀러 감 · 같은 집 사람은 집 안 움직임(층)을 봄 · 주인이 가구를 바꾸면 hlayout", async () => {
     const a = await member();
     const ua = lastUid;

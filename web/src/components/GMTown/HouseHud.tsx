@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from "react";
 import { rpc } from "@/lib/api/socket";
-import { FURNITURE, checkLayout, footprint, furnById, houseGeo, roomOf, type FurnKind, type Placed } from "@/lib/gmtown/house";
+import { FURNITURE, checkLayout, footprint, furnById, houseGeo, mountSide, roomOf, type FurnKind, type Placed } from "@/lib/gmtown/house";
 import type { HouseWire } from "@/lib/gmtown/types";
 import type { TownEngine } from "./engine";
 
@@ -111,26 +111,37 @@ export default function HouseHud({
     [house.inv, house.tier, layout, fl]
   );
 
-  // 미리 보기: 마우스 칸 (가구 가운데가 칸에 오게)
+  // 미리 보기: 마우스 칸 (가구 가운데가 칸에 오게). 벽에 거는 것(창문)은 그 칸에 붙은 벽을 따라 — r 은 어느 벽 (벽에 안 붙은 칸이면 null)
   const anchor = useCallback(
-    (i: FurnKind, r: number, c: Cell): Cell => {
-      const fp = footprint(furnById(i)!, r);
+    (i: FurnKind, r: number, c: Cell): (Cell & { r: number }) | null => {
+      const f = furnById(i)!;
+      if (f.mount) {
+        const side = mountSide(house.tier, c.cx, c.cy, r);
+        if (side === null) return null;
+        const along = side % 2 ? c.cy : c.cx,
+          max = (side % 2 ? geo.d : room.w) - f.w;
+        const a = Math.max(0, Math.min(max, along - Math.floor((f.w - 1) / 2)));
+        return side % 2 ? { cx: c.cx, cy: a, r: side } : { cx: a, cy: c.cy, r: side };
+      }
+      const fp = footprint(f, r);
       return {
         cx: Math.max(0, Math.min(room.w - fp.w, c.cx - Math.floor((fp.w - 1) / 2))),
         cy: Math.max(0, Math.min(rows - fp.d, c.cy - Math.floor((fp.d - 1) / 2))),
+        r,
       };
     },
-    [rows, room.w]
+    [rows, room.w, geo.d, house.tier]
   );
   // 미리 보기 자리 (PC = 마우스 칸, 폰 = 누른 칸)
   const aim = phone ? tapAt : hover;
   const ghost = useMemo(() => {
     if (!placing || !aim) return null;
     const a = anchor(placing.i, placing.r, aim);
-    return { ...a, ok: canPut(placing.i, placing.r, a) };
+    if (!a) return null;
+    return { ...a, ok: canPut(placing.i, a.r, a) };
   }, [placing, aim, anchor, canPut]);
   useEffect(() => {
-    engine.setGhost(placing && ghost ? { i: placing.i, cx: ghost.cx, cy: ghost.cy, r: placing.r, ok: ghost.ok } : null);
+    engine.setGhost(placing && ghost ? { i: placing.i, cx: ghost.cx, cy: ghost.cy, r: ghost.r, ok: ghost.ok } : null);
   }, [engine, placing, ghost]);
 
   // 바닥 칸 누름 (엔진 → GMTownApp → 여기)
@@ -139,10 +150,14 @@ export default function HouseHud({
       if (!build) return;
       if (placing) {
         const a = anchor(placing.i, placing.r, c);
+        if (!a) {
+          if (phone) setTapAt(c);
+          return say("창문은 벽에 붙은 칸을 눌러서 걸어요.");
+        }
         // 폰: 처음 누르면 미리 보기만 옮기고, 같은 곳을 한 번 더 누르면 놓음
         if (phone && (!ghost || ghost.cx !== a.cx || ghost.cy !== a.cy)) return setTapAt(c);
-        if (!canPut(placing.i, placing.r, a)) return say("여기엔 놓을 수 없어요 (겹치거나 문 앞이에요).");
-        save([...layout, { i: placing.i, x: a.cx, y: a.cy, r: placing.r, ...(fl ? { f: fl } : {}) }], "");
+        if (!canPut(placing.i, a.r, a)) return say("여기엔 놓을 수 없어요 (겹치거나 문 앞이에요).");
+        save([...layout, { i: placing.i, x: a.cx, y: a.cy, r: a.r, ...(fl ? { f: fl } : {}) }], "");
         setPlacing(left(placing.i) - 1 > 0 ? placing : null);
         setTapAt(null);
         return;
@@ -153,7 +168,8 @@ export default function HouseHud({
         const f = furnById(p.i);
         if (!f || (p.f ?? 0) !== fl) return;
         const fp = footprint(f, p.r);
-        if (c.cx >= p.x && c.cx < p.x + fp.w && c.cy >= p.y && c.cy < p.y + fp.d) if (hit === null || !f.flat) hit = k;
+        // 단단한 것 > 벽에 건 것 · 러그
+        if (c.cx >= p.x && c.cx < p.x + fp.w && c.cy >= p.y && c.cy < p.y + fp.d) if (hit === null || !(f.flat || f.mount)) hit = k;
       });
       setSel(hit);
     };
@@ -218,7 +234,9 @@ export default function HouseHud({
     const on = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      const k = e.key.toLowerCase();
+      // 한글 입력 상태에서도 (e.key 가 ㄱ · ㄷ 등으로 옴) 자판 자리로
+      const byCode: Record<string, string> = { KeyR: "r", KeyB: "b", KeyE: "e", Space: " " };
+      const k = byCode[e.code] ?? e.key.toLowerCase();
       if (k === "r" && build) {
         e.preventDefault();
         if (placing) setPlacing({ ...placing, r: (placing.r + 1) % 4 });
@@ -356,7 +374,9 @@ export default function HouseHud({
           <div className="mb-1.5 flex items-center justify-between px-1 text-[11.5px] text-white/65">
             <span>
               {placing
-                ? `${furnById(placing.i)!.name} — ${phone ? "놓을 칸을 두 번 누르기" : "놓을 칸 누르기"} · ${phone ? "↻ 로" : "R 로"} 돌리기`
+                ? furnById(placing.i)!.mount
+                  ? `${furnById(placing.i)!.name} — 벽에 붙은 칸을 ${phone ? "두 번 " : ""}누르면 그 벽에 걸어요 (구석은 ${phone ? "↻" : "R"} 로 벽 바꾸기)`
+                  : `${furnById(placing.i)!.name} — ${phone ? "놓을 칸을 두 번 누르기" : "놓을 칸 누르기"} · ${phone ? "↻ 로" : "R 로"} 돌리기`
                 : "가구를 고르면 놓을 수 있어요 · 놓인 가구를 누르면 옮기기 · 돌리기"}
             </span>
             {two && (

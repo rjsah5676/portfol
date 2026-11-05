@@ -313,32 +313,48 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
     })
   );
   const skyM = own(new THREE.MeshBasicMaterial({ map: sky }));
-  /** 뒤벽 창문 (하늘 · 커튼) */
-  const windows = (back: THREE.Group, cur: number) => {
-    const winN = Math.max(1, Math.floor(wm / 3.2));
-    for (let i = 0; i < winN; i++) {
-      const cx = ox + (wm * (i + 0.5)) / winN;
-      const glass = new THREE.Mesh(own(new THREE.PlaneGeometry(1.1, 0.95)), skyM);
-      glass.position.set(cx, 1.55, y0 + 0.005);
-      back.add(glass);
-      back.add(box(1.24, 0.08, 0.06, trim, cx, 1.04, y0 + 0.02, 0.01));
-      back.add(box(1.24, 0.08, 0.06, trim, cx, 1.98, y0 + 0.02, 0.01));
-      back.add(box(0.07, 1.0, 0.06, trim, cx - 0.585, 1.04, y0 + 0.02, 0.01));
-      back.add(box(0.07, 1.0, 0.06, trim, cx + 0.585, 1.04, y0 + 0.02, 0.01));
-      back.add(box(0.05, 0.95, 0.04, trim, cx, 1.06, y0 + 0.02, 0.0));
-      back.add(box(1.4, 0.06, 0.18, trim, cx, 1.0, y0 + 0.09, 0.01));
-      const c = toon(cur);
-      back.add(box(0.26, 1.15, 0.05, c, cx - 0.72, 0.95, y0 + 0.06, 0.015));
-      back.add(box(0.26, 1.15, 0.05, c, cx + 0.72, 0.95, y0 + 0.06, 0.015));
-    }
+  /**
+   * 창문 하나 (벽에 거는 가구) — 원점 = 벽 안쪽 면 바닥 가운데, 방 안쪽이 +z. len = 벽을 따라 차지하는 길이(m)
+   * ghost 면 미리 보기 재질로
+   */
+  const winMesh = (len: number, cur: number, ghost?: THREE.Material) => {
+    const g = new THREE.Group();
+    const gw = len - 0.24,
+      tm = ghost ?? trim;
+    const glass = new THREE.Mesh(own(new THREE.PlaneGeometry(gw, 0.95)), ghost ?? skyM);
+    glass.position.set(0, 1.55, 0.005);
+    g.add(glass);
+    g.add(box(gw + 0.14, 0.08, 0.06, tm, 0, 1.04, 0.02, ghost ? 0 : 0.01));
+    g.add(box(gw + 0.14, 0.08, 0.06, tm, 0, 1.98, 0.02, ghost ? 0 : 0.01));
+    g.add(box(0.07, 1.0, 0.06, tm, -gw / 2 - 0.035, 1.04, 0.02, ghost ? 0 : 0.01));
+    g.add(box(0.07, 1.0, 0.06, tm, gw / 2 + 0.035, 1.04, 0.02, ghost ? 0 : 0.01));
+    for (let k = 1; k < Math.round(gw / 0.55); k++) g.add(box(0.05, 0.95, 0.04, tm, -gw / 2 + (gw * k) / Math.round(gw / 0.55), 1.06, 0.02, 0.0));
+    g.add(box(gw + 0.3, 0.06, 0.18, tm, 0, 1.0, 0.09, ghost ? 0 : 0.01));
+    const c = ghost ?? toon(cur);
+    g.add(box(0.24, 1.15, 0.05, c, -gw / 2 - 0.16, 0.95, 0.06, ghost ? 0 : 0.015));
+    g.add(box(0.24, 1.15, 0.05, c, gw / 2 + 0.16, 0.95, 0.06, ghost ? 0 : 0.015));
+    if (ghost) g.traverse((o) => o instanceof THREE.Mesh && (o.castShadow = false));
+    return g;
   };
+  /** 벽에 건 것을 놓는 자리 (층 기준 · 그 벽 무리 안의 좌표) */
+  const mountAt = (p: { x: number; y: number; r: number }, n: number) => {
+    const along = p.r % 2 ? oy + (p.y + n / 2) * CELL : ox + (p.x + n / 2) * CELL;
+    return [
+      { x: along, z: y0 + 0.005, ry: 0 },
+      { x: x1 - 0.005, z: along, ry: -Math.PI / 2 },
+      { x: along, z: y1 - 0.005, ry: Math.PI },
+      { x: x0 + 0.005, z: along, ry: Math.PI / 2 },
+    ][p.r];
+  };
+  /** 층마다 벽 무리 (0 뒤 · 1 오른쪽 · 2 앞 · 3 왼쪽) — 창문을 벽에 붙여서 같이 낮아지게 */
+  const sideG: THREE.Group[][] = [[], []];
   const dcx0 = ox + geo.door.x0 * CELL,
     dcx1 = ox + (geo.door.x1 + 1) * CELL;
   // 1층 벽
-  windows(mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y0 - WALL_T / 2, x1 + WALL_T / 2, y0 - WALL_T / 2, 0, -1), 0xf4b7c8);
-  mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y0, x0 - WALL_T / 2, y1, -1, 0);
-  mkWall(L0, 0, 0, paper, x1 + WALL_T / 2, y0, x1 + WALL_T / 2, y1, 1, 0);
-  mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y1 + WALL_T / 2, x1 + WALL_T / 2, y1 + WALL_T / 2, 0, 1, [dcx0 - x0 + WALL_T / 2, dcx1 - x0 + WALL_T / 2], !!yard);
+  sideG[0][0] = mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y0 - WALL_T / 2, x1 + WALL_T / 2, y0 - WALL_T / 2, 0, -1);
+  sideG[0][3] = mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y0, x0 - WALL_T / 2, y1, -1, 0);
+  sideG[0][1] = mkWall(L0, 0, 0, paper, x1 + WALL_T / 2, y0, x1 + WALL_T / 2, y1, 1, 0);
+  sideG[0][2] = mkWall(L0, 0, 0, paper, x0 - WALL_T / 2, y1 + WALL_T / 2, x1 + WALL_T / 2, y1 + WALL_T / 2, 0, 1, [dcx0 - x0 + WALL_T / 2, dcx1 - x0 + WALL_T / 2], !!yard);
   // 문 깔개
   L0.add(box(dcx1 - dcx0, 0.02, 0.5, toon(0x9b6b4a), (dcx0 + dcx1) / 2, 0, y1 - 0.3, 0.0));
 
@@ -429,10 +445,10 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
     for (let x = sx0 + 0.1; x <= sx1 + 0.01; x += 0.4) L1.add(box(0.05, 0.9, 0.05, railM, x, FLOOR_H, sy1 + 0.03, 0.01));
     L1.add(box(sx1 - sx0, 0.06, 0.07, railM, (sx0 + sx1) / 2, FLOOR_H + 0.9, sy1 + 0.03, 0.012));
     // 2층 벽 (문 없음 · 연두 벽지)
-    windows(mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y0 - WALL_T / 2, x1 + WALL_T / 2, y0 - WALL_T / 2, 0, -1), 0xa9d8f0);
-    mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y0, x0 - WALL_T / 2, y1, -1, 0);
-    mkWall(L1, 1, FLOOR_H, paper2, x1 + WALL_T / 2, y0, x1 + WALL_T / 2, y1, 1, 0);
-    mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y1 + WALL_T / 2, x1 + WALL_T / 2, y1 + WALL_T / 2, 0, 1, undefined, !!yard);
+    sideG[1][0] = mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y0 - WALL_T / 2, x1 + WALL_T / 2, y0 - WALL_T / 2, 0, -1);
+    sideG[1][3] = mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y0, x0 - WALL_T / 2, y1, -1, 0);
+    sideG[1][1] = mkWall(L1, 1, FLOOR_H, paper2, x1 + WALL_T / 2, y0, x1 + WALL_T / 2, y1, 1, 0);
+    sideG[1][2] = mkWall(L1, 1, FLOOR_H, paper2, x0 - WALL_T / 2, y1 + WALL_T / 2, x1 + WALL_T / 2, y1 + WALL_T / 2, 0, 1, undefined, !!yard);
   }
 
   // ── 가구 ──
@@ -667,6 +683,8 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
       g.add(cyl(0.03, 0.06, 0.25, F.water, 0, 0.98, 0, 8, 0.0));
       return g;
     },
+    window: (w) => winMesh(w, 0xf4b7c8),
+    bigwindow: (w) => winMesh(w, 0xf4b7c8),
     hedge: (w, d) => {
       const g = new THREE.Group();
       g.add(box(w - 0.08, 0.7, d - 0.1, F.greenD, 0, 0, 0, 0.03));
@@ -703,8 +721,12 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
     wrap.position.set(cellX(p.cx) + (fp.w * CELL) / 2, 0, cellY(p.cy) + (fp.d * CELL) / 2);
     return wrap;
   };
+  /** 벽에 건 것 (setLayout 마다 다시) */
+  let hungMeshes: THREE.Object3D[] = [];
   const setLayout = (layout: Placed[]) => {
     for (const g of furnG) for (const c of [...g.children]) g.remove(c);
+    for (const m of hungMeshes) m.removeFromParent();
+    hungMeshes = [];
     cur = layout.map((p) => ({ ...p }));
     occ[0].fill(0);
     occ[1].fill(0);
@@ -713,6 +735,17 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
       const f = furnById(p.i);
       const fl = p.f ?? 0;
       if (!f || (fl && !S)) continue;
+      if (f.mount) {
+        const wall = sideG[fl][p.r];
+        if (!wall) continue;
+        const at = mountAt(p, f.w);
+        const wm2 = winMesh(f.w * CELL, fl ? 0xa9d8f0 : 0xf4b7c8);
+        wm2.position.set(at.x, 0, at.z);
+        wm2.rotation.y = at.ry;
+        wall.add(wm2);
+        hungMeshes.push(wm2);
+        continue;
+      }
       const m = make({ i: p.i, cx: p.x, cy: p.y, r: p.r });
       m.position.y = fl * FLOOR_H;
       furnG[fl].add(m);
@@ -846,6 +879,22 @@ export function buildHouse(tier: number, layout: Placed[]): HouseScene {
         ghostG.visible = false;
         return;
       }
+      const gf = furnById(g.i)!;
+      if (gf.mount) {
+        // 벽에 거는 것: 그 벽 자리에 바로 (벽 무리 밖이라 낮아지지 않음)
+        const key = `m:${g.i}:${g.ok}`;
+        if (key !== ghostKey) {
+          ghostKey = key;
+          for (const c of [...ghostG.children]) ghostG.remove(c);
+          ghostG.add(winMesh(gf.w * CELL, 0, g.ok ? ghostOk : ghostBad));
+        }
+        const at = mountAt({ x: g.cx, y: g.cy, r: g.r }, gf.w);
+        ghostG.position.set(at.x, (S ? view() : 0) * FLOOR_H + 0.01, at.z);
+        ghostG.rotation.y = at.ry;
+        ghostG.visible = true;
+        return;
+      }
+      ghostG.rotation.y = 0;
       const key = `${g.i}:${g.r}:${g.ok}`;
       if (key !== ghostKey) {
         ghostKey = key;

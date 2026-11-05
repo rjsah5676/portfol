@@ -5,7 +5,7 @@ import { AppError, bad } from "../errors";
 import { newId } from "../ids";
 import { CHANNEL_CAP, CHAT_MAX, HOUSE_TIERS, MAX_CHANNELS, RADIUS, RUN_SPEED, SPAWN, WARP_GAP_MS, blocked, houseTier, warpById } from "../../../web/src/lib/gmtown/world";
 import type { ChannelList, CharId, ChatWire, HouseWire, MoveWire, PlayerWire, TownSnap, WalletWire } from "../../../web/src/lib/gmtown/types";
-import { HOME_AT, STARTER, checkLayout, enterAt, fitLayout, furnById, starterInv, type Placed } from "../../../web/src/lib/gmtown/house";
+import { HOME_AT, STARTER, checkLayout, defaultWindows, enterAt, fitLayout, furnById, starterInv, type Placed } from "../../../web/src/lib/gmtown/house";
 import { buildingById, doorFront } from "../../../web/src/lib/gmtown/world";
 import { START_MONEY } from "../../../web/src/lib/poker/rules";
 import { START_CASH } from "../../../web/src/lib/stock/money";
@@ -210,7 +210,14 @@ export function registerGmtown({ gateway, db, points }: Deps, opts: GmtownOption
   const houses = db.col<{ tier: number; at: number; inv?: Record<string, number>; layout?: Placed[] }>("gmtown_house");
   const houseOf = async (uid: string) => (await houses.findOne({ _id: uid }))?.tier ?? 0;
   const houseWire = async (uid: string, guest: boolean): Promise<HouseWire> => {
-    const h = guest ? null : await houses.findOne({ _id: uid });
+    let h = guest ? null : await houses.findOne({ _id: uid });
+    // 창문이 놓는 가구가 되기 전에 계약한 집: 창문 2개를 넣어 주고 벽에 걸어 둠 (한 번만)
+    if (h && h.tier >= 1 && h.inv?.window === undefined) {
+      const inv = { ...(h.inv ?? {}), window: 2 };
+      const layout = fitLayout(h.tier, [...((h.layout ?? []) as Placed[]), ...defaultWindows(h.tier)], inv);
+      await houses.updateOne({ _id: uid, "inv.window": { $exists: false } } as never, { $set: { "inv.window": 2, layout } });
+      h = { ...h, inv, layout };
+    }
     return {
       tier: h?.tier ?? 0,
       gp: guest ? null : ((await points.get(uid))?.points ?? 0),

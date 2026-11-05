@@ -58,10 +58,19 @@ const preload = () => [
         '700 12px "Nanum Gothic"',
         '800 12px "Nanum Gothic"',
       ].map((f) =>
-        typeof document !== "undefined" ? document.fonts.load(f).catch(() => null) : null
+        typeof document !== "undefined"
+          ? // 한글 글꼴은 글자 묶음마다 따로 받음 → 제목에 쓰는 글자를 미리 받아 둠 (늦게 받으면 그 글자만 ■ 로 보임)
+            document.fonts.load(f, f.includes("Black Han Sans") ? TITLE_TEXT : "가나다").catch(() => null)
+          : null
       )
     ),
 ];
+
+/** 제목 글꼴(Black Han Sans)로 쓰는 글자 — 미리 받아 둠 */
+const TITLE_TEXT =
+  "ANIME TOWN 에 오신 걸 환영해요 마을 안내판 둘러보기 전체 지도 캐릭터 선택 부동산 매물 원룸 투룸 2층 집 정원 주택 의 " +
+  BUILDINGS.map((b) => b.sign).join(" ") +
+  NAV_GROUPS.flatMap((g) => g.items.map((i) => i.label)).join(" ");
 
 const STYLE_NAME: Record<BStyle, string> = {
   pixel: "픽셀 건물",
@@ -471,7 +480,7 @@ function Town({
       }
       if (e.key === "Enter" && document.activeElement !== inputRef.current && !cardRef.current && !mapOpen && !picker) {
         e.preventDefault();
-        inputRef.current?.focus();
+        inputRef.current?.focus({ preventScroll: true });
       }
     };
     window.addEventListener("keydown", on);
@@ -485,7 +494,10 @@ function Town({
 
   // 채팅창: 새 줄이 오면 맨 아래로
   useEffect(() => {
-    chatEnd.current?.scrollIntoView({ block: "end" });
+    // scrollIntoView 는 바깥 페이지까지 굴려서 화면이 위로 올라감 → 채팅 목록 상자만 아래로
+    const end = chatEnd.current;
+    const box = end?.parentElement;
+    if (box) box.scrollTop = box.scrollHeight;
   }, [log, sys, tab]);
 
   const enterHome = () => {
@@ -606,11 +618,20 @@ function Town({
           onClick={() => setPicker(true)}
           aria-label="캐릭터 바꾸기"
           title="캐릭터 바꾸기"
-          className="pointer-events-auto relative h-11 w-11 shrink-0 cursor-pointer overflow-hidden rounded-full p-[2px]"
-          style={{ background: "linear-gradient(160deg,#f3d68e,#8a6a2c 45%,#f0cf86)" }}
+          className={`pointer-events-auto relative shrink-0 cursor-pointer ${phone ? "h-12 w-12" : "h-14 w-14"}`}
         >
-          <img src={`/poker/char/${myC}/profile.webp`} alt="" className="h-full w-full rounded-full bg-[#1a1726] object-cover object-center" draggable={false} />
-          <span className="absolute right-0 bottom-0 flex h-4 w-4 items-center justify-center rounded-full bg-[#1a1726] text-[9px] ring-1 ring-[#e9cf8e]">↻</span>
+          <span className="block h-full w-full overflow-hidden rounded-full p-[2px]" style={{ background: "linear-gradient(160deg,#f3d68e,#8a6a2c 45%,#f0cf86)" }}>
+            <img src={`/poker/char/${myC}/profile.webp`} alt="" className="h-full w-full rounded-full bg-[#1a1726] object-cover object-center" draggable={false} />
+          </span>
+          {/* 바꾸기 표시 (글꼴 기호 ↻ 는 자리가 틀어져서 그림으로) */}
+          <span className="absolute -right-0.5 -bottom-0.5 flex h-[19px] w-[19px] items-center justify-center rounded-full bg-[#1a1726] ring-[1.5px] ring-[#e9cf8e]">
+            <svg viewBox="0 0 16 16" className="h-[11px] w-[11px]" fill="none" stroke="#FFE6A0" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M13 6.5A5 5 0 0 0 4 4.5L2.8 5.8" />
+              <path d="M2.5 2.8v3.2h3.2" />
+              <path d="M3 9.5a5 5 0 0 0 9 2l1.2-1.3" />
+              <path d="M13.5 13.2V10h-3.2" />
+            </svg>
+          </span>
         </button>
         <div className="gmt-glass flex h-9 items-center rounded-full px-4 max-[520px]:hidden">
           <span className="gmt-brand text-[18px] leading-none">ANIME TOWN</span>
@@ -635,14 +656,21 @@ function Town({
             title={fs ? "전체화면 끄기" : "전체화면"}
             className="gmt-glass pointer-events-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-full text-[15px]"
           >
-            {fs ? "🗗" : "⛶"}
+            {/* 글꼴에 없는 기호(🗗)는 네모로 나와서 그림으로 */}
+            <svg viewBox="0 0 20 20" className="h-[17px] w-[17px]" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              {fs ? (
+                <path d="M8 3v5H3M12 3v5h5M8 17v-5H3M12 17v-5h5" />
+              ) : (
+                <path d="M3 8V3h5M17 8V3h-5M3 12v5h5M17 12v5h-5" />
+              )}
+            </svg>
           </button>
         )}
       </div>
 
       {/* 왼쪽 위 둘째 줄: 돈 (GP · 포커 칩 · 증권) */}
       {wallet && !house && (
-        <div className={`pointer-events-none absolute left-3 flex items-center gap-1.5 top-[62px]`}>
+        <div className={`pointer-events-none absolute left-3 flex items-center gap-1.5 ${phone ? "top-[66px]" : "top-[74px]"}`}>
           {(
             [
               { k: "gp", icon: "/pixelmerge/balls/gp.webp", label: "GP", v: wallet.gp, tip: `${wallet.gp.toLocaleString("ko-KR")} GP`, c: "#FFE6A0" },

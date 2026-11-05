@@ -783,14 +783,14 @@ export class TownEngine {
     this.canvas.style.height = this.ui.style.height = `${ch}px`;
     this.ui.width = Math.round(cw * dpr);
     this.ui.height = Math.round(ch * dpr);
-    // 세로로 긴 화면(폰)은 시야를 조금 넓히고, 그래도 좌우가 11m 는 보이게 조금 물러섬 (최대 1.7배)
+    // 세로로 긴 화면(폰)은 시야를 조금 넓히고, 그래도 좌우가 8m 는 보이게 조금만 물러섬 (최대 1.2배 — 정사각 창에서 너무 멀어서 줄임)
     const aspect = cw / ch;
     const fov = aspect < 1 ? FOV_TALL : FOV;
     this.camera.fov = fov;
     this.camera.aspect = aspect;
     this.camera.updateProjectionMatrix();
     const halfW = Math.tan((fov * DEG) / 2) * aspect;
-    this.baseDist = CAM_DIST * Math.max(1, Math.min(1.7, 11 / (2 * CAM_DIST * halfW)));
+    this.baseDist = CAM_DIST * Math.max(1, Math.min(1.2, 8 / (2 * CAM_DIST * halfW)));
   }
 
   /** 화면 px → 땅 위 점 */
@@ -835,7 +835,9 @@ export class TownEngine {
     if (e.key === "Shift") this.shift = e.type === "keydown";
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || this.typing) return;
-    const k = e.key.toLowerCase();
+    // 한글 입력 상태면 e.key 가 ㅈ · ㅁ 이나 Process 로 와서 자판 자리(e.code)로 봄
+    const byCode: Record<string, string> = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", KeyE: "e", KeyM: "m", Space: " " };
+    const k = byCode[e.code] ?? e.key.toLowerCase();
     const map: Record<string, string> = {
       w: "u",
       arrowup: "u",
@@ -2277,6 +2279,8 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       if (this.overview && a !== this.me) continue;
       // 카메라 뒤
       if ((a.x - o.x) * fwdX + (a.y - o.z) * fwdY < 0.3) continue;
+      // 다른 사람 · NPC: 멀거나 건물에 가려지면 이름표 안 그림 (건물 너머로 이름만 둥둥 뜨지 않게)
+      if (a !== this.me && !this.house && (far(a) > (a.npc ? 20 : 30) || this.blocker(a.x, a.y))) continue;
       const s = this.screen(a.x, a.y, headH + (this.house ? this.footH(a) - this.hAt(a.x, a.y) : 0));
       if (s.x < -80 || s.x > this.cw + 80 || s.y < -40 || s.y > this.ch + 120) continue;
       const sz = Math.max(0.72, Math.min(1, (this.baseDist * 1.3) / Math.max(1, far(a))));
@@ -2402,18 +2406,25 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       ctx.fillStyle = "#FFFFFF";
       ctx.strokeStyle = "rgba(26,18,42,0.85)";
       ctx.lineWidth = 1.5;
-      rr(ctx, bx, by, bw, bh, 10);
-      ctx.fill();
-      ctx.stroke();
+      // 몸통 + 꼬리를 한 줄로 그림 (따로 그리면 꼬리 위에 몸통 테두리가 가로로 남음)
+      const r = 10,
+        R = bx + bw,
+        B = by + bh;
       ctx.beginPath();
-      ctx.moveTo(px - 6, by + bh - 0.5);
-      ctx.lineTo(px, by + bh + 7);
-      ctx.lineTo(px + 6, by + bh - 0.5);
+      ctx.moveTo(bx + r, by);
+      ctx.lineTo(R - r, by);
+      ctx.arcTo(R, by, R, by + r, r);
+      ctx.lineTo(R, B - r);
+      ctx.arcTo(R, B, R - r, B, r);
+      ctx.lineTo(px + 6, B);
+      ctx.lineTo(px, B + 7);
+      ctx.lineTo(px - 6, B);
+      ctx.lineTo(bx + r, B);
+      ctx.arcTo(bx, B, bx, B - r, r);
+      ctx.lineTo(bx, by + r);
+      ctx.arcTo(bx, by, bx + r, by, r);
+      ctx.closePath();
       ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(px - 6, by + bh);
-      ctx.lineTo(px, by + bh + 7);
-      ctx.lineTo(px + 6, by + bh);
       ctx.stroke();
       ctx.fillStyle = "#1d1a2e";
       b.lines.forEach((l, i) => ctx.fillText(l, px, by + 6 + lh / 2 + i * lh));
@@ -2538,16 +2549,34 @@ function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: n
 
 /** 말풍선 줄바꿈 (글자 단위) */
 function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  // 띄어쓰기에서 먼저 끊고, 한 낱말이 한 줄보다 길 때만 글자 중간에서 끊음 (최대 3줄)
   const out: string[] = [];
   let line = "";
-  for (const ch of text) {
-    if (ctx.measureText(line + ch).width > maxW && line) {
-      out.push(line);
-      line = ch === " " ? "" : ch;
-      if (out.length === 3) break;
-    } else line += ch;
+  const push = (l: string) => out.push(l.trimEnd());
+  for (const word of text.split(/(\s+)/)) {
+    if (!word) continue;
+    if (ctx.measureText(line + word).width <= maxW) {
+      line += word;
+      continue;
+    }
+    if (/^\s+$/.test(word)) {
+      if (line) push(line);
+      line = "";
+      continue;
+    }
+    if (line.trim()) push(line);
+    line = "";
+    for (const ch of word) {
+      if (ctx.measureText(line + ch).width > maxW && line) {
+        push(line);
+        line = ch;
+      } else line += ch;
+    }
   }
-  if (out.length < 3 && line) out.push(line);
-  else if (out.length === 3 && line) out[2] = out[2].slice(0, -1) + "…";
+  if (line.trim()) push(line);
+  if (out.length > 3) {
+    out.length = 3;
+    out[2] = out[2].slice(0, -1) + "…";
+  }
   return out;
 }
