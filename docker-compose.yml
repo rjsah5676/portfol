@@ -55,6 +55,11 @@ services:
       # 익명 랭킹 · 방명록 · 문의의 사람 확인 (Cloudflare Turnstile). 둘 다 있어야 켜짐
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET: ${TURNSTILE_SECRET:-}
+      # 추리게임(/games/mystery-proto) 판정 · 채점 LLM — 무료 티어 키. 둘 다 비면 "판정관이 꺼져 있어요"
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # 추리게임 입장 비밀번호 (테스트 기간). 공개할 때 MYSTERY_GATE= (빈 값) 으로
+      MYSTERY_GATE: ${MYSTERY_GATE-rjsah7}
 
   # 프론트: Next.js 서버 (글·방명록 등을 요청 때 서버에서 그림)
   web:
