@@ -5,13 +5,14 @@ import { api } from "@/lib/api/http";
 import { ApiError } from "@/lib/api/errors";
 
 /*
- * 예/아니오 추리 — 플레이 화면. 판 상태는 서버(/api/mystery-proto)가 들고 있고 화면은 그리기만.
- *  - 목록: 표지 카드 2열 · 이어하기 띠
- *  - PC: [사건 카드 · 진행] [질문 로그 + 입력] [수사 노트(판정별 자동 분류) + 단서]
- *  - 폰: 접히는 사건 머리 · 로그 · 하단 고정 입력 + 단서/노트/제출 단추 → 위아래 왕복 스크롤 없음
- *  - 단서 · 노트 · 정답 제출 · 진상은 시트(폰은 아래에서, PC는 가운데)
+ * 추리게임(예/아니오) — 플레이 화면. 판 상태는 서버(/api/mystery-proto)가 들고 있고 화면은 그리기만.
+ * 탐정 사무소 책상 컨셉 (스타일은 css/mystery.css, mq- 접두사):
+ *  - 목록: 코르크판에 압정으로 박힌 사건 쪽지 + 폴라로이드 표지, 하던 사건은 포스트잇
+ *  - PC: [마닐라 폴더(표지 · 문제 · 진행)] [심문 기록 줄노트 + 입력] [스프링 수사 노트(자동 정리)]
+ *  - 폰: 접히는 폴더 머리 · 줄노트 · 하단 입력 + 단서/노트/보고서 단추 → 위아래 왕복 스크롤 없음
+ *  - 사진은 전부 눌러서 크게 보기 (확대 · 핀치)
+ *  - 판정은 고무도장, 큰 도장은 처음 짚은 중요한 사실 · 흔한 오답에만
  *  - 판정마다 🚩 (오판 신고 → 서버에 모아서 사실 목록 보강)
- * 색은 포커보다 한 단계 어둡게(사건 파일 느낌): 바탕 #07080C · 패널 #0E1015 / #13161E · 금색 #D9B25F
  */
 
 type Verdict = "YES" | "KEY_YES" | "NO" | "KEY_NO" | "UNKNOWN" | "UNRELATED" | "SPLIT" | "INVALID";
@@ -49,26 +50,16 @@ interface View {
   stats: { questions: number; submissions: number; ms: number };
 }
 
-/* ── 색 · 글꼴 ── */
-const GOLD = "#D9B25F";
-const font = "font-['Nanum_Gothic',sans-serif]";
-const mono = "font-mono tracking-wider";
-const display = "font-['Black_Han_Sans',sans-serif]";
-const panel = "rounded-2xl border border-white/[0.07] bg-[#0E1015]";
-const panel2 = "rounded-xl border border-white/[0.06] bg-[#13161E]";
-const btnGold = "rounded-xl bg-[#D9B25F] text-[#15110A] font-bold hover:bg-[#E9C879] disabled:opacity-40 disabled:hover:bg-[#D9B25F]";
-const btnGhost = "rounded-xl border border-white/10 bg-white/[0.04] text-white/80 hover:bg-white/[0.08] disabled:opacity-40";
-
-/** 판정 표시. KEY 는 도장처럼 */
-const BADGE: Record<Verdict, { label: string; short: string; cls: string; note?: string }> = {
-  YES: { label: "네", short: "네", cls: "bg-[#5FD3A0]/10 text-[#7FE3B6] ring-[#5FD3A0]/30" },
-  KEY_YES: { label: "네, 그렇습니다", short: "네!", cls: "bg-[#5FD3A0] text-[#07201A] ring-[#5FD3A0]" },
-  NO: { label: "아니오", short: "아니오", cls: "bg-[#E0657A]/10 text-[#F0919F] ring-[#E0657A]/30" },
-  KEY_NO: { label: "아니오, 그렇지 않습니다", short: "아니오!", cls: "bg-[#E0657A] text-white ring-[#E0657A]" },
-  UNKNOWN: { label: "알 수 없음", short: "?", cls: "bg-[#D9B25F]/10 text-[#E9C879] ring-[#D9B25F]/30", note: "진상만으로는 정할 수 없는 내용이에요." },
-  UNRELATED: { label: "상관없음", short: "무관", cls: "bg-white/[0.05] text-white/50 ring-white/10", note: "사건을 푸는 데 상관없는 방향이에요." },
-  SPLIT: { label: "나눠서 물어보세요", short: "나눠서", cls: "bg-[#F2C14E]/10 text-[#F2C14E] ring-[#F2C14E]/40", note: "참과 거짓이 섞여 있어요. 한 번에 하나씩. (차감 안 됨)" },
-  INVALID: { label: "반려", short: "반려", cls: "bg-white/[0.03] text-white/35 ring-white/10", note: "예/아니오로 답할 수 있는 질문만 받아요. (차감 안 됨)" },
+/** 판정 도장. tone = 잉크색 (mq-stamp.yes/no/maybe/dim) */
+const STAMP: Record<Verdict, { label: string; tone: "yes" | "no" | "maybe" | "dim"; note?: string }> = {
+  YES: { label: "네", tone: "yes" },
+  KEY_YES: { label: "네, 그렇습니다", tone: "yes" },
+  NO: { label: "아니오", tone: "no" },
+  KEY_NO: { label: "아니오, 그렇지 않습니다", tone: "no" },
+  UNKNOWN: { label: "알 수 없음", tone: "maybe", note: "진상만으로는 정할 수 없는 내용이에요." },
+  UNRELATED: { label: "상관없음", tone: "dim", note: "사건을 푸는 데 상관없는 방향이에요." },
+  SPLIT: { label: "나눠서 물어보세요", tone: "maybe", note: "참과 거짓이 섞여 있어요. 한 번에 하나씩. (차감 안 됨)" },
+  INVALID: { label: "반려", tone: "dim", note: "예/아니오로 답할 수 있는 질문만 받아요. (차감 안 됨)" },
 };
 const isKey = (v: Verdict) => v === "KEY_YES" || v === "KEY_NO";
 
@@ -78,11 +69,11 @@ const STATUS_LABEL: Record<FailStatus, string> = {
   wrong: "진상과 다르게 썼어요",
 };
 
-const LEVEL_CLS: Record<string, string> = {
-  쉬움: "bg-[#5FD3A0]/15 text-[#7FE3B6]",
-  보통: "bg-[#D9B25F]/15 text-[#E9C879]",
-  어려움: "bg-[#E0657A]/15 text-[#F0919F]",
-};
+/** 난이도 → 도장 잉크 */
+const LEVEL_TONE: Record<string, "yes" | "maybe" | "no"> = { 쉬움: "yes", 보통: "maybe", 어려움: "no" };
+/** 목록 쪽지 기울기 · 압정 색 (사건마다 조금씩 다르게) */
+const TILT = [-1.4, 0.9, -0.6, 1.3, -1.1, 0.5];
+const PIN = ["", "blue", "green", "gold"];
 
 const STORE = "mysteryProto.play";
 const GATE_STORE = "mysteryProto.gate";
@@ -133,48 +124,86 @@ const fmtTime = (ms: number) => {
 
 /* ── 작은 부품 ── */
 
-function LevelPill({ level, candidate }: { level: string; candidate?: boolean }) {
+/** 사진 확대: 누르면 화면 가득, 한 번 더 누르면 2배(누른 곳 기준), 폰은 손가락으로도 확대 */
+function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+  const [zoomed, setZoomed] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
   return (
-    <>
-      <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-bold ${LEVEL_CLS[level] ?? "bg-white/10 text-white/70"}`}>{level}</span>
-      {candidate && <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[11px] font-bold text-amber-200">후보</span>}
-    </>
-  );
-}
-
-function Bar({ value, max, color = GOLD }: { value: number; max: number; color?: string }) {
-  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-  return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
-      <div className="h-full rounded-full transition-[width] duration-500" style={{ width: `${pct}%`, background: color }} />
-    </div>
-  );
-}
-
-function Cover({ src, className = "" }: { src?: string; className?: string }) {
-  if (src) return <img src={src} alt="" draggable={false} className={`block w-full object-cover ${className}`} />;
-  return (
-    <div className={`flex w-full items-center justify-center bg-[radial-gradient(circle_at_30%_20%,#1B1F2A,#0A0B10)] ${className}`}>
-      <span className={`${display} text-5xl text-white/10`}>?</span>
-    </div>
-  );
-}
-
-function VerdictChip({ v, big }: { v: Verdict; big?: boolean }) {
-  const b = BADGE[v];
-  if (isKey(v))
-    return (
-      <span
-        className={`${display} inline-flex -rotate-2 items-center gap-1 rounded-md px-2.5 py-1 text-sm tracking-wide ring-2 ring-offset-2 ring-offset-[#0E1015] ${b.cls}`}
+    <div ref={box} className="mq-lightbox" onClick={() => (zoomed ? setZoomed(false) : onClose())}>
+      <img
+        src={src}
+        alt=""
+        draggable={false}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (zoomed) return setZoomed(false);
+          // 누른 자리가 화면 가운데 오도록 2배로
+          const r = e.currentTarget.getBoundingClientRect();
+          const fx = (e.clientX - r.left) / r.width;
+          const fy = (e.clientY - r.top) / r.height;
+          setZoomed(true);
+          requestAnimationFrame(() => {
+            const el = box.current;
+            if (!el) return;
+            el.scrollTo({ left: fx * el.scrollWidth - el.clientWidth / 2, top: fy * el.scrollHeight - el.clientHeight / 2 });
+          });
+        }}
+        className={zoomed ? "m-auto max-w-none cursor-zoom-out" : "max-h-[92dvh] max-w-[96vw] cursor-zoom-in rounded-sm shadow-2xl"}
+        style={zoomed ? { width: "min(3000px, max(200vw, 1800px))" } : undefined}
+      />
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+        className="fixed top-3 right-3 flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-xl text-white"
+        aria-label="닫기"
       >
-        {b.label}
-      </span>
-    );
-  return <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 ring-1 ${big ? "text-sm" : "text-xs"} ${b.cls}`}>{b.label}</span>;
+        ✕
+      </button>
+      {!zoomed && <p className="mq-hand pointer-events-none fixed bottom-4 left-0 w-full text-center text-sm text-white/60">사진을 누르면 더 크게 · 바깥을 누르면 닫혀요</p>}
+    </div>
+  );
 }
 
-/** 시트: 폰은 아래에서 올라오고, PC 는 가운데 창. 바깥 · Esc 로 닫힘 */
-function Sheet({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean }) {
+/** 누르면 확대되는 사진. 없으면 빈 사진틀 */
+function Photo({ src, onZoom, className = "" }: { src?: string; onZoom: (src: string) => void; className?: string }) {
+  if (!src)
+    return (
+      <div className={`flex items-center justify-center bg-[radial-gradient(circle_at_30%_25%,#5b4a3a,#2b2018)] ${className}`}>
+        <span className="mq-pen text-6xl text-[#f4ead2]/25">?</span>
+      </div>
+    );
+  return (
+    <img
+      src={src}
+      alt=""
+      draggable={false}
+      onClick={(e) => {
+        e.stopPropagation();
+        onZoom(src);
+      }}
+      className={`mq-zoomable block object-cover ${className}`}
+    />
+  );
+}
+
+function Stamp({ v, big }: { v: Verdict; big?: boolean }) {
+  const s = STAMP[v];
+  return <span className={`mq-stamp ${s.tone} ${big || isKey(v) ? "big" : ""}`}>{s.label}</span>;
+}
+
+function LevelStamp({ level }: { level: string }) {
+  return <span className={`mq-stamp ${LEVEL_TONE[level] ?? "dim"}`} style={{ fontSize: 18, rotate: "-6deg" }}>{level}</span>;
+}
+
+/** 시트: 종이 한 장. 폰은 아래에서 올라오고 PC 는 가운데. 바깥 · Esc 로 닫힘 */
+function Sheet({ open, onClose, title, children, wide, lined }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean; lined?: boolean }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -183,14 +212,14 @@ function Sheet({ open, onClose, title, children, wide }: { open: boolean; onClos
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+    <div className="mq mq-sheet-back" onClick={onClose}>
       <div
-        className={`${font} max-h-[88dvh] w-full ${wide ? "max-w-[720px]" : "max-w-[560px]"} overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0E1015] p-5 text-white shadow-[0_-10px_60px_rgba(0,0,0,.6)] sm:rounded-2xl`}
+        className={`${lined ? "mq-lined" : "mq-paper"} max-h-[90dvh] w-full ${wide ? "max-w-[760px]" : "max-w-[580px]"} overflow-y-auto rounded-t-xl p-5 sm:rounded-md sm:p-6`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className={`${mono} text-[11px] text-[#D9B25F]`}>{title}</h3>
-          <button onClick={onClose} className="rounded-md px-2 py-1 text-white/40 hover:bg-white/10 hover:text-white" aria-label="닫기">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h3 className="mq-pen text-[30px] leading-none text-[var(--ink)]">{title}</h3>
+          <button onClick={onClose} className="mq-btn mq-btn-paper -mt-1 min-h-0 px-2.5 py-1 text-base" aria-label="닫기">
             ✕
           </button>
         </div>
@@ -200,7 +229,7 @@ function Sheet({ open, onClose, title, children, wide }: { open: boolean; onClos
   );
 }
 
-/** 입장 비밀번호 (테스트 기간) */
+/** 입장 비밀번호 (테스트 기간) — 기밀 봉투 */
 function Gate({ onPass }: { onPass: (pw: string) => void }) {
   const [pw, setPw] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -219,38 +248,35 @@ function Gate({ onPass }: { onPass: (pw: string) => void }) {
     }
   };
   return (
-    <div className={`${font} mx-auto max-w-[420px] py-10 text-white`}>
-      <div className={`${panel} overflow-hidden`}>
-        <div className="relative flex h-32 items-center justify-center bg-[radial-gradient(circle_at_50%_0%,#2A2416,#0E1015_70%)]">
-          <span className={`${display} -rotate-6 rounded-md border-[3px] border-[#E0657A]/80 px-3 py-1 text-2xl tracking-widest text-[#E0657A]/80`}>
-            CLASSIFIED
-          </span>
+    <div className="mq mq-desk mx-auto max-w-[920px] px-4 py-12">
+      <form
+        className="mq-manila mx-auto max-w-[420px] -rotate-1 px-6 pt-10 pb-7"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void go();
+        }}
+      >
+        <span className="mq-clip" />
+        <div className="absolute top-5 right-5">
+          <span className="mq-stamp no big">기밀</span>
         </div>
-        <form
-          className="p-5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void go();
-          }}
-        >
-          <p className={`${mono} text-[10px] text-[#D9B25F]`}>RESTRICTED · 테스트 중</p>
-          <h2 className="mt-1 text-lg font-bold">관계자 외 열람 금지</h2>
-          <p className="mt-1.5 text-sm leading-relaxed text-white/55">지금은 초대받은 분들만 들어올 수 있어요. 받은 입장 비밀번호를 넣어 주세요.</p>
-          <input
-            type="password"
-            value={pw}
-            onChange={(e) => setPw(e.target.value)}
-            autoFocus
-            autoComplete="off"
-            placeholder="입장 비밀번호"
-            className="mt-4 w-full rounded-xl border border-white/10 bg-[#13161E] px-3.5 py-3 text-[16px] text-white placeholder:text-white/25 focus:border-[#D9B25F]/60 focus:outline-none"
-          />
-          {err && <p className="mt-2 text-xs text-rose-300">{err}</p>}
-          <button disabled={busy || !pw.trim()} className={`${btnGold} mt-3 w-full py-3 text-sm`}>
-            {busy ? "확인 중…" : "입장"}
-          </button>
-        </form>
-      </div>
+        <p className="mq-type text-[11px] text-[var(--ink3)]">CONFIDENTIAL · 테스트 중</p>
+        <h2 className="mq-pen mt-1 text-[38px] leading-none">관계자 외 열람 금지</h2>
+        <p className="mq-hand mt-3 text-[19px] leading-snug text-[var(--ink2)]">지금은 초대받은 분들만 들어올 수 있어요. 받은 입장 비밀번호를 적어 주세요.</p>
+        <input
+          type="password"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          autoFocus
+          autoComplete="off"
+          placeholder="입장 비밀번호"
+          className="mq-input mt-5"
+        />
+        {err && <p className="mq-hand mt-2 text-[17px] text-[var(--no)]">{err}</p>}
+        <button disabled={busy || !pw.trim()} className="mq-btn mq-btn-wine mt-4 w-full text-base">
+          {busy ? "확인 중…" : "사무소 들어가기"}
+        </button>
+      </form>
     </div>
   );
 }
@@ -282,10 +308,11 @@ function AdminBar({ cases }: { cases: PublicCase[] }) {
       setMsg(errText(e));
     }
   };
+  const sel = "rounded-md border border-[rgba(90,65,40,.4)] bg-[#fffaf0] px-2 py-1.5 text-sm";
   return (
-    <div className={`${panel2} mb-5 flex flex-wrap items-center gap-2 px-3 py-2.5 text-xs`}>
-      <span className={`${mono} text-[10px] text-[#D9B25F]`}>ADMIN · 플레이 기록</span>
-      <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className="rounded-lg border border-white/10 bg-[#0E1015] px-2 py-1.5 text-white/80">
+    <div className="mq-paper mb-6 flex flex-wrap items-center gap-2 px-3 py-2.5 text-sm">
+      <span className="mq-type text-[11px] text-[var(--wine)]">ADMIN · 플레이 기록</span>
+      <select value={caseId} onChange={(e) => setCaseId(e.target.value)} className={sel}>
         <option value="">전체 사건</option>
         {cases.map((c) => (
           <option key={c.id} value={c.id}>
@@ -293,20 +320,20 @@ function AdminBar({ cases }: { cases: PublicCase[] }) {
           </option>
         ))}
       </select>
-      <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="rounded-lg border border-white/10 bg-[#0E1015] px-2 py-1.5 text-white/80">
+      <select value={days} onChange={(e) => setDays(Number(e.target.value))} className={sel}>
         {[1, 7, 30, 365].map((d) => (
           <option key={d} value={d}>
             최근 {d}일
           </option>
         ))}
       </select>
-      <button onClick={() => void pull("download")} className={`${btnGhost} px-3 py-1.5`}>
+      <button onClick={() => void pull("download")} className="mq-btn mq-btn-wood min-h-0 px-3 py-1.5 text-sm">
         JSON 받기
       </button>
-      <button onClick={() => void pull("copy")} className={`${btnGhost} px-3 py-1.5`}>
+      <button onClick={() => void pull("copy")} className="mq-btn mq-btn-wood min-h-0 px-3 py-1.5 text-sm">
         복사
       </button>
-      {msg && <span className="text-white/45">{msg}</span>}
+      {msg && <span className="text-[var(--ink3)]">{msg}</span>}
     </div>
   );
 }
@@ -327,6 +354,7 @@ export default function MysteryProtoApp() {
   const [newClue, setNewClue] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [flagged, setFlagged] = useState<Set<number>>(new Set());
+  const [zoom, setZoom] = useState<string | null>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -344,7 +372,7 @@ export default function MysteryProtoApp() {
         setCases(r.cases);
         setEnabled(r.enabled);
         setAdmin(!!r.admin);
-        // 하던 판이 있으면 "이어하기" 띠로 (바로 들어가지 않음 — 목록을 먼저 보여 줌)
+        // 하던 판이 있으면 "이어하기" 쪽지로 (바로 들어가지 않음 — 목록을 먼저 보여 줌)
         const saved = load();
         if (saved)
           call<View>(`/play/${saved}`)
@@ -386,8 +414,8 @@ export default function MysteryProtoApp() {
         .filter((n): n is HTMLElement => !!n && ["sticky", "fixed"].includes(getComputedStyle(n).position))
         .reduce((m, n) => Math.max(m, (parseFloat(getComputedStyle(n).top) || 0) + n.getBoundingClientRect().height), 0);
       const mobile = window.innerWidth < 1024;
-      if (scroll) window.scrollTo({ top: Math.max(0, top - stuck - (mobile ? 6 : 12)) });
-      setBoxH(mobile ? Math.max(360, Math.round(vh - stuck - 12)) : Math.max(560, Math.min(960, Math.round(vh - stuck - 24))));
+      if (scroll) window.scrollTo({ top: Math.max(0, top - stuck - (mobile ? 4 : 10)) });
+      setBoxH(mobile ? Math.max(380, Math.round(vh - stuck - 8)) : Math.max(600, Math.min(1000, Math.round(vh - stuck - 20))));
     };
     const onResize = () => fit(false);
     fit(true);
@@ -405,7 +433,7 @@ export default function MysteryProtoApp() {
     };
   }, [playing]);
 
-  // 새 질문이 오면 로그 맨 아래로
+  // 새 질문이 오면 기록 맨 아래로
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
   }, [view?.questions.length]);
@@ -451,7 +479,8 @@ export default function MysteryProtoApp() {
       // 폰에서 키보드가 내려가지 않게 바로 다시 포커스
       requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
     } catch (e) {
-      setError(errText(e));
+      if (isGateError(e)) setLocked(true);
+      else setError(errText(e));
     } finally {
       setAsking(false);
     }
@@ -513,9 +542,16 @@ export default function MysteryProtoApp() {
     return g;
   }, [view?.questions]);
 
+  const lightbox = zoom && <Lightbox src={zoom} onClose={() => setZoom(null)} />;
+
   // ── 입장 가림막 ──
   if (locked !== false) {
-    if (locked === null) return <p className={`${font} py-20 text-center text-sm text-white/40`}>사건 파일을 꺼내는 중…</p>;
+    if (locked === null)
+      return (
+        <div className="mq mq-desk mx-auto max-w-[1180px] py-24 text-center">
+          <p className="mq-hand text-xl text-[#f4ead2]/70">사건 파일을 꺼내는 중…</p>
+        </div>
+      );
     return (
       <Gate
         onPass={(pw) => {
@@ -528,88 +564,82 @@ export default function MysteryProtoApp() {
     );
   }
 
-  // ── 사건 목록 ──
+  // ── 사건 목록: 코르크판 ──
   if (!view) {
     return (
-      <div className={`${font} mx-auto max-w-[920px] text-white`}>
+      <div className="mq mq-desk mx-auto max-w-[1180px] sm:p-5">
         {admin && <AdminBar cases={cases ?? []} />}
-        {!enabled && (
-          <p className="mb-4 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-200">
-            판정관이 꺼져 있어요. 잠시 뒤 다시 들어와 주세요.
-          </p>
-        )}
-        {error && <p className="mb-4 text-sm text-rose-300">{error}</p>}
-
-        {resume && (
-          <button
-            onClick={() => enter(resume)}
-            className={`${panel} mb-5 flex w-full items-center gap-4 p-3 text-left transition hover:border-[#D9B25F]/50`}
-          >
-            <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg">
-              <Cover src={resume.case.cover} className="h-full" />
+        <div className="mq-cork">
+          {/* 게시판 머리 */}
+          <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
+            <div className="mq-paper relative -rotate-1 px-5 pt-4 pb-3">
+              <span className="mq-pin" />
+              <p className="mq-type text-[11px] text-[var(--ink3)]">DETECTIVE OFFICE · 사건 의뢰</p>
+              <h2 className="mq-pen text-[34px] leading-none sm:text-[42px]">해결을 기다리는 사건들</h2>
+              <p className="mq-hand mt-1 text-[18px] text-[var(--ink2)]">예 · 아니오로만 묻고, 전말을 맞혀 주세요.</p>
             </div>
-            <div className="min-w-0 flex-1">
-              <div className={`${mono} text-[10px] text-[#D9B25F]`}>CONTINUE · 하던 사건</div>
-              <div className="truncate font-bold">{resume.case.title}</div>
-              <div className="text-xs text-white/45">
-                질문 {resume.used}/{resume.case.questionLimit} · 단서 {resume.clues.length}/{resume.case.clueCount}
-              </div>
-            </div>
-            <span className={`${btnGold} shrink-0 px-4 py-2 text-sm`}>이어하기</span>
-          </button>
-        )}
+            {resume && (
+              <button onClick={() => enter(resume)} className="mq-postit w-[220px] rotate-2 px-4 pt-5 pb-4 text-left transition hover:rotate-0">
+                <span className="mq-tape" />
+                <p className="mq-hand text-[15px] text-[var(--ink2)]">하던 사건이 있어요</p>
+                <p className="mq-pen text-[28px] leading-none">{resume.case.title}</p>
+                <p className="mq-hand mt-1 text-[15px] text-[var(--ink2)]">
+                  질문 {resume.used}/{resume.case.questionLimit} · 단서 {resume.clues.length}/{resume.case.clueCount}
+                </p>
+                <span className="mq-btn mq-btn-wine mt-2 min-h-0 px-3 py-1.5 text-sm">이어서 수사 →</span>
+              </button>
+            )}
+          </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          {(cases ?? []).map((c, i) => (
-            <button
-              key={c.id}
-              disabled={!enabled}
-              onClick={() => start(c.id)}
-              className={`${panel} group overflow-hidden text-left transition hover:-translate-y-0.5 hover:border-[#D9B25F]/50 disabled:opacity-40`}
-            >
-              <div className="relative">
-                <Cover src={c.cover} className="aspect-[3/2]" />
-                <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#0E1015] to-transparent" />
-                <div className="absolute top-2.5 left-2.5 flex gap-1.5">
-                  <LevelPill level={c.level} candidate={c.candidate} />
-                </div>
-                <span className={`${mono} absolute top-2.5 right-2.5 rounded-md bg-black/50 px-1.5 py-0.5 text-[10px] text-white/70`}>
-                  CASE #{String(i + 1).padStart(2, "0")}
-                </span>
-              </div>
-              <div className="px-4 pt-1 pb-4">
-                <div className="text-lg font-bold group-hover:text-[#E9C879]">{c.title}</div>
-                <p className="mt-1.5 line-clamp-3 text-sm leading-relaxed text-white/65">{c.prompt}</p>
-                <div className={`${mono} mt-3 flex gap-3 text-[10px] text-white/35`}>
-                  <span>
-                    질문 <b className="text-white/70">{c.questionLimit}</b>
-                  </span>
-                  <span>
-                    단서 <b className="text-white/70">{c.clueCount}</b>
-                  </span>
-                  <span>
-                    정답 <b className="text-white/70">{c.rubricCount}</b>
-                    {c.bonusCount > 0 && <span className="text-white/30"> +{c.bonusCount}</span>}
-                  </span>
-                </div>
-              </div>
-            </button>
-          ))}
-          {!cases && !error && <p className="text-sm text-white/40">사건 파일을 꺼내는 중…</p>}
-        </div>
+          {!enabled && (
+            <p className="mq-paper mq-hand mb-6 px-4 py-3 text-[18px] text-[var(--no)]">판정관이 자리를 비웠어요. 잠시 뒤 다시 들어와 주세요.</p>
+          )}
+          {error && <p className="mq-paper mq-hand mb-6 px-4 py-3 text-[18px] text-[var(--no)]">{error}</p>}
 
-        <div className={`${mono} mt-8 flex flex-wrap items-center gap-x-3 gap-y-2 text-[10px] text-white/35`}>
-          <span>판정</span>
-          {(["YES", "NO", "UNKNOWN", "UNRELATED"] as Verdict[]).map((v) => (
-            <VerdictChip key={v} v={v} />
-          ))}
-          <span className="text-white/25">· 중요한 걸 짚으면 큰 도장 · 판정이 이상하면 🚩</span>
+          {/* 압정 박힌 사건 쪽지들 */}
+          <div className="grid gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3">
+            {(cases ?? []).map((c, i) => (
+              <button
+                key={c.id}
+                disabled={!enabled}
+                onClick={() => start(c.id)}
+                className="mq-paper group relative px-4 pt-5 pb-4 text-left transition duration-200 hover:z-10 hover:scale-[1.02] hover:rotate-0 disabled:opacity-50"
+                style={{ rotate: `${TILT[i % TILT.length]}deg` }}
+              >
+                <span className={`mq-pin ${PIN[i % PIN.length]}`} />
+                <div className="mq-polaroid relative mx-auto -mt-1 w-[94%]" style={{ rotate: `${-TILT[i % TILT.length] * 0.8}deg` }}>
+                  <Photo src={c.cover} onZoom={setZoom} className="aspect-[3/2] w-full" />
+                </div>
+                <div className="mt-3 flex items-start justify-between gap-2">
+                  <h3 className="mq-pen text-[32px] leading-none group-hover:text-[var(--wine)]">{c.title}</h3>
+                  <LevelStamp level={c.level} />
+                </div>
+                {c.candidate && <span className="mq-type text-[11px] text-[var(--wine)]">후보 사건 (관리자에게만 보임)</span>}
+                <p className="mq-hand mt-2 line-clamp-4 text-[19px] leading-snug text-[var(--ink)]">{c.prompt}</p>
+                <p className="mq-type mt-3 border-t border-dashed border-[var(--line)] pt-2 text-[11px] text-[var(--ink3)]">
+                  CASE #{String(i + 1).padStart(2, "0")} · 질문 {c.questionLimit} · 단서 {c.clueCount} · 핵심 {c.rubricCount}
+                  {c.bonusCount > 0 && ` +${c.bonusCount}`}
+                </p>
+              </button>
+            ))}
+            {!cases && !error && <p className="mq-hand text-xl text-[#3a2718]">사건 파일을 꺼내는 중…</p>}
+          </div>
+
+          {/* 판정 도장 견본 */}
+          <div className="mq-paper mt-10 flex max-w-[640px] -rotate-[0.6deg] flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+            <span className="mq-type text-[11px] text-[var(--ink3)]">판정 도장</span>
+            {(["YES", "NO", "UNKNOWN", "UNRELATED"] as Verdict[]).map((v) => (
+              <Stamp key={v} v={v} />
+            ))}
+            <span className="mq-hand text-[16px] text-[var(--ink2)]">중요한 걸 처음 짚으면 큰 도장 · 판정이 이상하면 🚩</span>
+          </div>
         </div>
+        {lightbox}
       </div>
     );
   }
 
-  // ── 플레이 ──
+  // ── 플레이: 책상 위 ──
   const c = view.case;
   const done = view.status !== "playing";
   const outOfQuestions = view.used >= c.questionLimit;
@@ -621,126 +651,142 @@ export default function MysteryProtoApp() {
     setSheet("clues");
   };
 
-  const caseCard = (
-    <div className={`${panel} overflow-hidden`}>
-      <button className="block w-full text-left lg:pointer-events-none" onClick={() => setExpanded((x) => !x)}>
-        {/* 표지: PC 는 항상, 폰은 펼쳤을 때만 */}
-        <div className={`${expanded ? "" : "hidden lg:block"}`}>
-          <Cover src={c.cover} className="aspect-[3/2]" />
+  /** 진행: 질문 막대(단서 압정) · 다음 단서 · 남은 제출(봉랍) */
+  const progress = (
+    <div className="space-y-1.5 lg:space-y-2.5">
+      <div>
+        <div className="flex items-baseline justify-between">
+          <span className="mq-hand text-[16px] text-[var(--ink2)] lg:text-[17px]">질문</span>
+          <span className="mq-type text-[13px]">
+            <b className="text-[17px]">{view.used}</b>
+            <span className="text-[var(--ink3)]"> / {c.questionLimit}</span>
+          </span>
         </div>
-        <div className="p-3 sm:p-4">
-          <div className="flex items-center gap-2">
-            <LevelPill level={c.level} candidate={c.candidate} />
-            <span className={`${mono} text-[10px] text-white/30`}>CONFIDENTIAL</span>
-            <span className={`${mono} ml-auto text-[10px] text-white/40 lg:hidden`}>{expanded ? "접기 ▲" : "문제 보기 ▼"}</span>
-          </div>
-          <div className="mt-1.5 text-base font-bold sm:text-lg">{c.title}</div>
-          <p className={`mt-1.5 text-sm leading-relaxed text-white/80 ${expanded ? "" : "line-clamp-1 lg:line-clamp-none"}`}>{c.prompt}</p>
-        </div>
-      </button>
-      <div className="space-y-3 border-t border-white/[0.06] px-3 py-3 sm:px-4">
-        {/* 질문 막대 + 단서가 열리는 자리 표시 */}
-        <div>
-          <div className={`${mono} flex items-baseline justify-between text-[10px] text-white/40`}>
-            <span>질문</span>
-            <span>
-              <b className="text-sm text-white">{view.used}</b>
-              <span className="text-white/30">/{c.questionLimit}</span>
-            </span>
-          </div>
-          <div className="relative mt-1.5 h-1.5 rounded-full bg-white/[0.07]">
-            <div className="h-full rounded-full bg-[#D9B25F] transition-[width] duration-500" style={{ width: `${Math.min(100, (view.used / c.questionLimit) * 100)}%` }} />
-            {(c.clueAt ?? []).map((at, i) => {
-              const open = view.used >= at || done;
-              return (
-                <span
-                  key={i}
-                  title={`단서 ${i + 1} · ${at}문`}
-                  className={`absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 ${open ? "border-[#9FB7FF] bg-[#9FB7FF]" : "border-[#9FB7FF]/60 bg-[#0E1015]"}`}
-                  style={{ left: `${(at / c.questionLimit) * 100}%` }}
-                />
-              );
-            })}
-          </div>
-        </div>
-        {/* 다음 단서 · 남은 제출 */}
-        <div className="flex items-center justify-between gap-3">
-          <button onClick={openClues} className="flex min-w-0 items-center gap-2 text-left">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[#9FB7FF]/15 text-xs text-[#BFD0FF]">🔎</span>
-            <span className="min-w-0 text-xs leading-tight">
-              {view.nextClueAt !== null ? (
-                <>
-                  <span className="text-white/45">다음 단서까지 </span>
-                  <b className="text-sm text-[#BFD0FF]">{view.nextClueAt - view.used}</b>
-                  <span className="text-white/45">문</span>
-                </>
-              ) : (
-                <span className="text-white/45">단서 모두 공개</span>
-              )}
-              <span className={`${mono} block text-[10px] text-white/30`}>
-                단서 {view.clues.length}/{c.clueCount}
-              </span>
-            </span>
-          </button>
-          <div className="shrink-0 text-right">
-            <div className="flex justify-end gap-1">
-              {Array.from({ length: c.submitLimit }, (_, i) => (
-                <span key={i} className={`h-3.5 w-2.5 rounded-sm ${i < submitsLeft ? "bg-[#E0657A]" : "border border-white/15 bg-transparent"}`} />
-              ))}
-            </div>
-            <span className={`${mono} mt-1 block text-[10px] text-white/40`}>남은 제출 {submitsLeft}</span>
-          </div>
+        <div className="mq-track mt-1.5">
+          <i style={{ width: `${Math.min(100, (view.used / c.questionLimit) * 100)}%` }} />
+          {(c.clueAt ?? []).map((at, i) => (
+            <span
+              key={i}
+              title={`단서 ${i + 1} · ${at}문`}
+              className={`mq-pin blue ${view.used >= at || done ? "" : "opacity-40 grayscale"}`}
+              style={{ left: `calc(${(at / c.questionLimit) * 100}% - 8px)`, top: -4, width: 16, height: 16 }}
+            />
+          ))}
         </div>
       </div>
-      <p className={`${mono} hidden border-t border-white/[0.06] px-4 py-2.5 text-[10px] text-white/35 lg:block`}>
-        큰 도장 {keyHits} · 정답 항목 {c.rubricCount}
-        {c.bonusCount > 0 && ` · 보너스 ${c.bonusCount}`}
+      <div className="flex items-center justify-between gap-3">
+        <button onClick={openClues} className="min-w-0 text-left">
+          {view.nextClueAt !== null ? (
+            <span className="mq-hand text-[17px] leading-tight lg:text-[18px]">
+              다음 단서까지 <b className="mq-pen text-[24px] text-[var(--navy)] lg:text-[28px]">{view.nextClueAt - view.used}</b>문
+            </span>
+          ) : (
+            <span className="mq-hand text-[18px]">단서 모두 공개</span>
+          )}
+          <span className="mq-type block text-[11px] text-[var(--ink3)]">
+            단서 {view.clues.length}/{c.clueCount} 열림
+          </span>
+        </button>
+        <div className="shrink-0 text-right">
+          <div className="flex justify-end gap-1">
+            {Array.from({ length: c.submitLimit }, (_, i) => (
+              <span key={i} className={`mq-seal ${i < submitsLeft ? "" : "used"}`} />
+            ))}
+          </div>
+          <span className="mq-type mt-1 block text-[11px] text-[var(--ink3)]">남은 보고 {submitsLeft}</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  /** 왼쪽(PC) / 위(폰): 마닐라 폴더 */
+  const folder = (
+    <div className="mq-manila px-3 pt-4 pb-3 sm:px-4">
+      <span className="mq-clip hidden lg:block" />
+      {/* 폰: 접힌 머리 (작은 사진 + 제목) */}
+      <div className="flex items-start gap-3 lg:hidden">
+        {c.cover && (
+          <div className="mq-polaroid w-[84px] shrink-0 -rotate-2 !p-1 !pb-3">
+            <Photo src={c.cover} onZoom={setZoom} className="aspect-[3/2] w-full" />
+          </div>
+        )}
+        <button className="min-w-0 flex-1 text-left" onClick={() => setExpanded((x) => !x)}>
+          <div className="flex items-center gap-2">
+            <h2 className="mq-pen truncate text-[28px] leading-none">{c.title}</h2>
+            <LevelStamp level={c.level} />
+          </div>
+          <p className={`mq-hand mt-1 text-[17px] leading-snug ${expanded ? "" : "line-clamp-2"}`}>{c.prompt}</p>
+          <span className="mq-type text-[10px] text-[var(--ink3)]">{expanded ? "접기 ▲" : "문제 전체 보기 ▼"}</span>
+        </button>
+      </div>
+      {expanded && c.cover && (
+        <div className="mq-polaroid mt-3 lg:hidden">
+          <Photo src={c.cover} onZoom={setZoom} className="aspect-[3/2] w-full" />
+        </div>
+      )}
+      {/* PC: 큰 사진 + 문제 */}
+      <div className="hidden lg:block">
+        <div className="mq-polaroid relative mx-auto mt-1 rotate-[-1.2deg]">
+          <span className="mq-tape" />
+          <Photo src={c.cover} onZoom={setZoom} className="aspect-[3/2] w-full" />
+          <span className="mq-hand absolute right-2 bottom-0.5 text-[13px] text-[var(--ink3)]">🔍 눌러서 크게</span>
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <h2 className="mq-pen text-[38px] leading-none">{c.title}</h2>
+          <LevelStamp level={c.level} />
+          {c.candidate && <span className="mq-type text-[10px] text-[var(--wine)]">후보</span>}
+        </div>
+        <p className="mq-hand mt-2 text-[20px] leading-snug">{c.prompt}</p>
+      </div>
+      <div className="mt-3 border-t border-dashed border-[rgba(90,65,40,.45)] pt-3">{progress}</div>
+      <p className="mq-type mt-3 hidden text-[11px] text-[var(--ink2)] lg:block">
+        큰 도장 {keyHits} · 핵심 {c.rubricCount}가지{c.bonusCount > 0 && ` · 보너스 ${c.bonusCount}`}
       </p>
     </div>
   );
 
-  /** 단서 · 제출 · 포기 (PC 는 사건 카드 아래, 폰은 입력창 아래) */
+  /** 단서 · 노트 · 보고서 · 포기 */
   const actions = (
-    <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
-      <button onClick={openClues} className={`${btnGhost} relative py-2.5 text-sm`}>
-        단서 <span className="text-white/50">{view.clues.length}</span>
-        {newClue && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-[#D9B25F] shadow-[0_0_8px_#D9B25F]" />}
+    <div className="grid grid-cols-3 gap-2 lg:grid-cols-2">
+      <button onClick={openClues} className="mq-btn mq-btn-wood relative">
+        🔎 단서 {view.clues.length}
+        {newClue && <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-[#ffd36b] shadow-[0_0_10px_#ffd36b]" />}
       </button>
-      <button onClick={() => setSheet("notes")} className={`${btnGhost} py-2.5 text-sm lg:hidden`}>
-        노트 <span className="text-white/50">{notes.yes.length + notes.no.length}</span>
+      <button onClick={() => setSheet("notes")} className="mq-btn mq-btn-wood lg:hidden">
+        📒 노트 {notes.yes.length + notes.no.length}
       </button>
       {done ? (
-        <button onClick={() => setSheet("truth")} className={`${btnGold} py-2.5 text-sm`}>
+        <button onClick={() => setSheet("truth")} className="mq-btn mq-btn-wine">
           진상 보기
         </button>
       ) : (
-        <button onClick={() => setSheet("submit")} className={`${btnGold} py-2.5 text-sm`}>
-          정답 제출 <span className="opacity-60">{submitsLeft}</span>
+        <button onClick={() => setSheet("submit")} className="mq-btn mq-btn-wine">
+          <span className="lg:hidden">보고서</span>
+          <span className="hidden lg:inline">보고서 제출</span>
         </button>
       )}
-      <button onClick={done ? leave : giveUp} className={`${btnGhost} hidden py-2.5 text-sm text-white/50 lg:block`}>
-        {done ? "다른 사건" : "포기"}
+      <button onClick={done ? leave : giveUp} className="mq-btn mq-btn-paper hidden text-sm lg:col-span-2 lg:flex">
+        {done ? "다른 사건" : "포기하고 진상 보기"}
       </button>
     </div>
   );
 
-  const noteBlock = (title: string, items: { i: number; text: string; key?: boolean }[], cls: string) => (
+  const noteBlock = (mark: string, title: string, items: { i: number; text: string; key?: boolean }[], color: string) => (
     <div>
-      <div className={`${mono} mb-1.5 flex items-center justify-between text-[10px] ${cls}`}>
-        <span>{title}</span>
-        <span className="opacity-60">{items.length}</span>
+      <div className="flex items-baseline justify-between">
+        <h4 className="mq-pen text-[26px] leading-none" style={{ color }}>
+          {mark} {title}
+        </h4>
+        <span className="mq-type text-[11px] text-[var(--ink3)]">{items.length}</span>
       </div>
       {items.length === 0 ? (
-        <p className="text-xs text-white/20">—</p>
+        <p className="mq-hand mt-0.5 text-[17px] text-[var(--ink3)]">…</p>
       ) : (
-        <ul className="space-y-1">
+        <ul className="mt-0.5">
           {items.map((it) => (
-            <li key={it.i} className={`flex gap-1.5 text-xs leading-snug ${it.key ? "font-bold text-white" : "text-white/70"}`}>
-              <span className={`${mono} shrink-0 text-[10px] text-white/25`}>{String(it.i + 1).padStart(2, "0")}</span>
-              <span>
-                {it.key && <span className="mr-1 text-[#D9B25F]">★</span>}
-                {it.text}
-              </span>
+            <li key={it.i} className="mq-hand flex gap-1.5 text-[18px] leading-[32px]">
+              <span className="mq-type w-6 shrink-0 text-[11px] leading-[32px] text-[var(--ink3)]">{String(it.i + 1).padStart(2, "0")}</span>
+              <span className={it.key ? "font-bold underline decoration-[var(--wine2)] decoration-2 underline-offset-4" : ""}>{it.text}</span>
             </li>
           ))}
         </ul>
@@ -750,11 +796,11 @@ export default function MysteryProtoApp() {
 
   /** 수사 노트 — 판정별 자동 정리 */
   const notesBody = (
-    <div className="space-y-4">
-      {noteBlock("확정 · 그렇다", notes.yes, "text-[#7FE3B6]")}
-      {noteBlock("확정 · 아니다", notes.no, "text-[#F0919F]")}
-      {noteBlock("미확정 · 알 수 없음", notes.unknown, "text-[#E9C879]")}
-      {noteBlock("기각 · 상관없음", notes.unrelated, "text-white/40")}
+    <div className="space-y-3">
+      {noteBlock("✔", "그렇다", notes.yes, "var(--yes)")}
+      {noteBlock("✘", "아니다", notes.no, "var(--no)")}
+      {noteBlock("?", "모르겠다", notes.unknown, "var(--maybe)")}
+      {noteBlock("—", "상관없다", notes.unrelated, "var(--ink3)")}
     </div>
   );
 
@@ -762,83 +808,76 @@ export default function MysteryProtoApp() {
     <div
       ref={boxRef}
       style={{ height: boxH ?? undefined }}
-      className={`${font} mx-auto flex h-[calc(100dvh-10rem)] max-w-[1180px] flex-col gap-2 text-white lg:grid lg:grid-cols-[300px_minmax(0,1fr)_260px] lg:gap-4`}
+      className="mq mq-desk mx-auto flex h-[calc(100dvh-10rem)] max-w-[1240px] flex-col gap-2.5 !p-2 sm:!p-3 lg:grid lg:grid-cols-[380px_minmax(0,1fr)_290px] lg:gap-4 lg:!p-4"
     >
       <style>{"html.mp-playing .quick-menu-fab{display:none}"}</style>
 
-      {/* 왼쪽(PC) / 위(폰): 사건 */}
-      <div className="flex shrink-0 flex-col gap-2 lg:min-h-0 lg:gap-3 lg:overflow-y-auto">
-        <div className="flex items-center justify-between px-0.5">
-          <button onClick={leave} className={`${mono} text-[11px] text-white/40 hover:text-white/80`}>
-            ← 사건 목록
-          </button>
-          <span className={`${mono} text-[10px] text-white/25`}>YES / NO CASE FILE</span>
-        </div>
-        {caseCard}
-        <div className="hidden lg:block">{actions}</div>
+      {/* 왼쪽(PC) / 위(폰): 폴더 */}
+      <div className="flex shrink-0 flex-col gap-2.5 lg:min-h-0 lg:gap-3 lg:overflow-y-auto lg:pt-3 lg:pr-1">
+        <button onClick={leave} className="mq-hand self-start text-[17px] text-[#f4ead2]/75 hover:text-[#f4ead2]">
+          ← 사건 게시판으로
+        </button>
+        {folder}
       </div>
 
-      {/* 가운데: 질문 로그 + 입력 */}
-      <div className={`${panel} flex min-h-0 flex-1 flex-col`}>
-        <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2 sm:px-3">
+      {/* 가운데: 심문 기록 (줄노트) */}
+      <div className="mq-lined flex min-h-0 flex-1 flex-col">
+        <div className="flex items-baseline justify-between border-b border-[rgba(90,65,40,.25)] py-2 pr-3 pl-12">
+          <h3 className="mq-pen text-[28px] leading-none">심문 기록</h3>
+          <span className="mq-type text-[11px] text-[var(--ink3)]">질문 {c.questionLimit - view.used}개 남음</span>
+        </div>
+        <div ref={logRef} className="min-h-0 flex-1 overflow-y-auto pt-1 pr-3 pb-3 pl-2">
           {view.questions.length === 0 && (
-            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-              <div className={`${display} text-4xl text-white/10`}>?</div>
-              <p className="text-sm text-white/50">예/아니오로 답할 수 있는 질문을 던져 보세요.</p>
-              <p className="text-xs leading-relaxed text-white/30">
-                누가 · 왜 · 어떻게 같은 의문사 질문은 반려돼요.
+            <div className="flex h-full flex-col items-center justify-center gap-2 px-6 pl-10 text-center">
+              <p className="mq-pen text-[30px] leading-none text-[var(--ink2)]">무엇이든 물어보세요</p>
+              <p className="mq-hand text-[18px] leading-snug text-[var(--ink2)]">
+                단, 예 · 아니오로 답할 수 있게.
                 <br />
-                예) 범죄가 있나요? · 두 사람은 아는 사이인가요? · 시간이 중요한가요?
+                누가 · 왜 · 어떻게로 물으면 반려돼요.
               </p>
+              <p className="mq-hand text-[16px] text-[var(--ink3)]">예) 범죄가 있나요? · 두 사람은 아는 사이인가요?</p>
             </div>
           )}
           {view.questions.map((q, i) => {
-            const b = BADGE[q.verdict];
-            const key = isKey(q.verdict);
+            const s = STAMP[q.verdict];
             const dead = q.verdict === "INVALID";
             return (
-              <div
-                key={i}
-                className={`group rounded-xl px-2.5 py-2 ${key ? "my-1 bg-white/[0.05] ring-1 ring-white/[0.08]" : ""}`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className={`${mono} w-6 shrink-0 pt-0.5 text-right text-[10px] text-white/25`}>{dead ? "·" : String(i + 1).padStart(2, "0")}</span>
-                  <p className={`min-w-0 flex-1 text-[15px] leading-relaxed ${dead ? "text-white/35 line-through" : "text-white/90"}`}>{q.text}</p>
-                  <button
-                    onClick={() => flag(i)}
-                    disabled={flagged.has(i)}
-                    title="판정이 이상해요"
-                    className={`shrink-0 text-xs transition ${flagged.has(i) ? "opacity-100" : "opacity-25 hover:opacity-90 lg:opacity-0 lg:group-hover:opacity-60"}`}
-                  >
-                    {flagged.has(i) ? "🚩✓" : "🚩"}
-                  </button>
-                </div>
-                <div className={`mt-1.5 flex flex-wrap items-center gap-2 pl-8 ${key ? "py-1" : ""}`}>
-                  <VerdictChip v={q.verdict} />
-                  {b.note && <span className="text-[11px] text-white/35">{b.note}</span>}
+              <div key={i} className="group flex gap-2 py-1">
+                <span className="mq-type w-8 shrink-0 pt-1.5 text-right text-[11px] text-[var(--ink3)]">{dead ? "·" : String(i + 1).padStart(2, "0")}</span>
+                <div className="min-w-0 flex-1 pl-2">
+                  <div className="flex items-start gap-2">
+                    <p className={`mq-hand min-w-0 flex-1 text-[21px] leading-[32px] ${dead ? "text-[var(--ink3)] line-through" : ""}`}>{q.text}</p>
+                    <button
+                      onClick={() => flag(i)}
+                      disabled={flagged.has(i)}
+                      title="판정이 이상해요"
+                      className={`shrink-0 pt-1 text-sm transition ${flagged.has(i) ? "opacity-100" : "opacity-30 hover:opacity-90 lg:opacity-0 lg:group-hover:opacity-60"}`}
+                    >
+                      {flagged.has(i) ? "🚩✓" : "🚩"}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pb-1">
+                    <Stamp v={q.verdict} />
+                    {s.note && <span className="mq-hand text-[15px] text-[var(--ink3)]">{s.note}</span>}
+                  </div>
                 </div>
               </div>
             );
           })}
-          {asking && (
-            <p className={`${mono} flex items-center gap-2 py-2 pl-8 text-[11px] text-white/40`}>
-              <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#D9B25F]" />
-              판정관이 사실을 확인하는 중…
-            </p>
-          )}
+          {asking && <p className="mq-hand animate-pulse py-2 pl-12 text-[18px] text-[var(--ink2)]">판정관이 사실을 확인하는 중…</p>}
         </div>
 
-        <div className="border-t border-white/[0.06] p-2 sm:p-3">
-          {error && <p className="mb-2 px-1 text-xs text-rose-300">{error}</p>}
+        <div className="border-t border-[rgba(90,65,40,.3)] bg-[rgba(234,220,184,.55)] p-2 sm:p-3">
+          {error && <p className="mq-hand mb-1.5 px-1 text-[16px] text-[var(--no)]">{error}</p>}
           {done ? (
-            <div className="flex items-center justify-between rounded-xl bg-white/[0.04] px-3 py-2.5 text-sm">
-              <span className="text-white/60">{view.status === "solved" ? "사건 해결! 진상을 확인해 보세요." : "포기한 사건이에요."}</span>
-              <button onClick={() => setSheet("truth")} className="font-bold text-[#E9C879]">
+            <div className="flex items-center justify-between gap-3 px-1">
+              <span className="mq-hand text-[18px]">{view.status === "solved" ? "사건 해결! 진상을 확인해 보세요." : "덮어 둔 사건이에요."}</span>
+              <button onClick={() => setSheet("truth")} className="mq-btn mq-btn-wine min-h-0 px-3 py-2 text-sm">
                 진상 →
               </button>
             </div>
           ) : outOfQuestions ? (
-            <p className="rounded-xl bg-white/[0.04] px-3 py-2.5 text-center text-sm text-white/60">질문을 다 썼어요. 정답을 제출하거나 포기하세요.</p>
+            <p className="mq-hand px-1 text-center text-[18px]">질문을 다 썼어요. 보고서를 내거나 포기하세요.</p>
           ) : (
             <form
               className="flex gap-2"
@@ -855,11 +894,11 @@ export default function MysteryProtoApp() {
                 disabled={asking}
                 autoComplete="off"
                 enterKeyHint="send"
-                placeholder={`예/아니오 질문 · ${c.questionLimit - view.used}개 남음`}
-                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-[#13161E] px-3.5 py-2.5 text-[16px] text-white placeholder:text-white/25 focus:border-[#D9B25F]/60 focus:outline-none disabled:opacity-60"
+                placeholder="예 · 아니오로 답할 수 있는 질문"
+                className="mq-input min-w-0 flex-1 disabled:opacity-60"
               />
-              <button disabled={asking || !draft.trim()} className={`${btnGold} shrink-0 px-5 text-sm`}>
-                질문
+              <button disabled={asking || !draft.trim()} className="mq-btn mq-btn-wine shrink-0 px-5">
+                묻기
               </button>
             </form>
           )}
@@ -867,139 +906,134 @@ export default function MysteryProtoApp() {
         </div>
       </div>
 
-      {/* 오른쪽(PC): 수사 노트 */}
-      <div className={`${panel} hidden min-h-0 flex-col lg:flex`}>
-        <div className={`${mono} flex items-center justify-between border-b border-white/[0.06] px-4 py-3 text-[11px] text-[#D9B25F]`}>
-          <span>NOTES · 수사 노트</span>
-          <span className="text-white/30">자동 정리</span>
+      {/* 오른쪽(PC): 스프링 수사 노트 */}
+      <div className="mq-lined mq-spiral hidden min-h-0 flex-col lg:flex">
+        <div className="flex items-baseline justify-between pr-3 pb-1 pl-12">
+          <h3 className="mq-pen text-[28px] leading-none text-[var(--wine)]">수사 노트</h3>
+          <span className="mq-type text-[10px] text-[var(--ink3)]">자동 정리</span>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">{notesBody}</div>
-        {!done && (
-          <button onClick={giveUp} className={`${mono} border-t border-white/[0.06] py-2.5 text-[10px] text-white/30 hover:text-white/60`}>
-            포기하고 진상 보기
-          </button>
-        )}
+        <div className="min-h-0 flex-1 overflow-y-auto pr-3 pb-3 pl-12">{notesBody}</div>
+        <div className="border-t border-[rgba(90,65,40,.3)] bg-[rgba(234,220,184,.55)] p-3">{actions}</div>
       </div>
 
-      {/* 단서 */}
-      <Sheet open={sheet === "clues"} onClose={() => setSheet(null)} title={newClue ? "NEW EVIDENCE · 새 단서가 공개됐어요" : "EVIDENCE · 단서"} wide>
+      {/* 단서: 사진 · 쪽지 */}
+      <Sheet open={sheet === "clues"} onClose={() => setSheet(null)} title={newClue ? "새 단서가 도착했어요" : "단서"} wide>
         {view.clues.length === 0 ? (
-          <p className="text-sm text-white/50">
-            아직 공개된 단서가 없어요.{view.nextClueAt !== null && ` 질문 ${view.nextClueAt}개째에 첫 단서가 열려요.`}
+          <p className="mq-hand text-[19px] text-[var(--ink2)]">
+            아직 도착한 단서가 없어요.{view.nextClueAt !== null && ` 질문 ${view.nextClueAt}개째에 첫 단서가 와요.`}
           </p>
         ) : (
-          <ol className="space-y-4">
+          <ol className="space-y-7 pt-2">
             {view.clues.map((cl, i) => (
-              <li key={cl.id} className={`${panel2} overflow-hidden`}>
-                {cl.image && <img src={cl.image} alt="" className="block w-full" />}
-                <div className="p-3">
-                  <div className={`${mono} text-[10px] text-[#D9B25F]`}>단서 {i + 1}</div>
-                  <p className="mt-1 text-sm leading-relaxed text-white/85">{cl.body}</p>
-                </div>
+              <li key={cl.id} className="mq-paper relative px-3 pt-5 pb-3" style={{ rotate: `${i % 2 ? 0.6 : -0.6}deg` }}>
+                <span className={`mq-pin ${PIN[(i + 1) % PIN.length]}`} />
+                <p className="mq-type text-[11px] text-[var(--wine)]">단서 {i + 1}</p>
+                {cl.image && (
+                  <div className="mq-polaroid mt-2">
+                    <Photo src={cl.image} onZoom={setZoom} className="w-full !object-contain" />
+                  </div>
+                )}
+                <p className="mq-hand mt-2 text-[19px] leading-snug">{cl.body}</p>
               </li>
             ))}
           </ol>
         )}
-        {view.nextClueAt !== null && view.clues.length > 0 && <p className="mt-3 text-xs text-white/40">다음 단서는 질문 {view.nextClueAt}개째에 열려요.</p>}
+        {view.nextClueAt !== null && view.clues.length > 0 && <p className="mq-hand mt-4 text-[17px] text-[var(--ink2)]">다음 단서는 질문 {view.nextClueAt}개째에 와요.</p>}
       </Sheet>
 
       {/* 노트 (폰) */}
-      <Sheet open={sheet === "notes"} onClose={() => setSheet(null)} title="NOTES · 수사 노트">
-        {notesBody}
-        {/* 폰엔 포기 단추가 따로 없어서 여기 */}
+      <Sheet open={sheet === "notes"} onClose={() => setSheet(null)} title="수사 노트" lined>
+        <div className="pl-8">{notesBody}</div>
         {!done && (
-          <button onClick={giveUp} className={`${btnGhost} mt-6 w-full py-2.5 text-xs text-white/45`}>
+          <button onClick={giveUp} className="mq-btn mq-btn-paper mt-6 w-full text-sm">
             포기하고 진상 보기
           </button>
         )}
       </Sheet>
 
-      {/* 정답 제출 */}
-      <Sheet open={sheet === "submit"} onClose={() => setSheet(null)} title={`SUBMIT · 남은 제출 ${submitsLeft}회`}>
-        <p className="text-sm leading-relaxed text-white/60">
-          알아낸 전말을 적어 주세요. 핵심 <b className="text-white/85">{c.rubricCount}가지</b>를 모두 맞히면 해결이에요.
+      {/* 수사 보고서 (정답 제출) */}
+      <Sheet open={sheet === "submit"} onClose={() => setSheet(null)} title={`수사 보고서 · 남은 제출 ${submitsLeft}`}>
+        <p className="mq-hand text-[18px] leading-snug text-[var(--ink2)]">
+          알아낸 전말을 적어 주세요. 핵심 <b className="text-[var(--ink)]">{c.rubricCount}가지</b>를 모두 맞히면 해결이에요.
           {c.bonusCount > 0 && ` 세부 사항 ${c.bonusCount}가지는 보너스.`} 말투는 상관없어요.
         </p>
         <textarea
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
           maxLength={1500}
-          rows={6}
+          rows={7}
           placeholder="누가 · 무엇을 · 왜 · 어떻게 — 아는 만큼만 써도 채점돼요"
-          className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-[#13161E] p-3 text-[16px] leading-relaxed text-white placeholder:text-white/25 focus:border-[#D9B25F]/60 focus:outline-none"
+          className="mq-input mt-3 resize-none"
+          style={{ background: "repeating-linear-gradient(180deg, #fffaf0 0 31px, rgba(80,120,170,.2) 31px 32px)", lineHeight: "32px" }}
         />
-        <div className={`${mono} mt-1 text-right text-[10px] text-white/30`}>{answer.length}/1500</div>
-        {error && <p className="mt-1 text-xs text-rose-300">{error}</p>}
-        <button onClick={submit} disabled={submitting || submitsLeft <= 0 || answer.trim().length < 10} className={`${btnGold} mt-2 w-full py-3 text-sm`}>
-          {submitting ? "채점 중…" : submitsLeft <= 0 ? "제출 기회를 다 썼어요" : "제출하기"}
+        <div className="mq-type mt-1 text-right text-[11px] text-[var(--ink3)]">{answer.length}/1500</div>
+        {error && <p className="mq-hand mt-1 text-[16px] text-[var(--no)]">{error}</p>}
+        <button onClick={submit} disabled={submitting || submitsLeft <= 0 || answer.trim().length < 10} className="mq-btn mq-btn-wine mt-2 w-full">
+          {submitting ? "채점 중…" : submitsLeft <= 0 ? "제출 기회를 다 썼어요" : "보고서 제출"}
         </button>
 
         {last && (
-          <div className={`${panel2} mt-5 p-3`}>
-            <div className="flex items-baseline justify-between">
-              <span className={`${mono} text-[10px] text-white/40`}>최근 채점 · {view.submissions.length}번째</span>
-              <span className="text-sm">
-                인정 <b className={last.passed === last.total ? "text-[#7FE3B6]" : "text-[#E9C879]"}>{last.passed}</b>
-                <span className="text-white/40">/{last.total}</span>
-                {last.bonusTotal > 0 && (
-                  <span className="ml-2 text-xs text-white/45">
-                    보너스 {last.bonus.length}/{last.bonusTotal}
-                  </span>
-                )}
+          <div className="mq-paper relative mt-6 px-4 pt-4 pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="mq-type text-[11px] text-[var(--ink3)]">{view.submissions.length}번째 보고서 검토</span>
+              <span className={`mq-stamp big ${last.passed === last.total ? "yes" : "maybe"}`}>
+                인정 {last.passed}/{last.total}
               </span>
             </div>
-            <div className="mt-2">
-              <Bar value={last.passed} max={last.total} color={last.passed === last.total ? "#5FD3A0" : GOLD} />
-            </div>
-            {last.bonus.length > 0 && <p className="mt-2 text-xs text-white/50">세부 사항 인정: {last.bonus.join(" · ")}</p>}
+            {last.bonusTotal > 0 && (
+              <p className="mq-hand mt-2 text-[17px] text-[var(--ink2)]">
+                보너스 {last.bonus.length}/{last.bonusTotal}
+                {last.bonus.length > 0 && ` — ${last.bonus.join(" · ")}`}
+              </p>
+            )}
             {last.failed.length > 0 && (
-              <ul className="mt-2 space-y-1">
+              <ul className="mt-2 space-y-0.5">
                 {last.failed.map((f, i) => (
-                  <li key={i} className="text-sm text-white/75">
-                    · <b>{f.label}</b> <span className="text-white/45">— {STATUS_LABEL[f.status]}</span>
+                  <li key={i} className="mq-hand text-[18px]">
+                    ✘ <b>{f.label}</b> <span className="text-[var(--ink3)]">— {STATUS_LABEL[f.status]}</span>
                   </li>
                 ))}
               </ul>
             )}
-            {last.same && <p className="mt-2 text-xs text-amber-200/80">지난번과 인정 범위가 같아요. 다른 방향을 더 물어보는 게 나을 수 있어요.</p>}
+            {last.same && <p className="mq-hand mt-2 text-[16px] text-[var(--maybe)]">지난번과 인정 범위가 같아요. 다른 방향을 더 물어보는 게 나을 수 있어요.</p>}
           </div>
         )}
         {view.submissions.length > 1 && (
-          <p className={`${mono} mt-2 text-[10px] text-white/35`}>
-            지난 제출 {view.submissions.slice(0, -1).map((s) => `${s.passed}/${s.total}${s.bonusTotal > 0 ? `(+${s.bonus.length})` : ""}`).join(" → ")}
+          <p className="mq-type mt-2 text-[11px] text-[var(--ink3)]">
+            지난 보고서 {view.submissions.slice(0, -1).map((s) => `${s.passed}/${s.total}${s.bonusTotal > 0 ? `(+${s.bonus.length})` : ""}`).join(" → ")}
           </p>
         )}
       </Sheet>
 
       {/* 진상 */}
-      <Sheet open={sheet === "truth" && done} onClose={() => setSheet(null)} title={view.status === "solved" ? "CASE CLOSED" : "UNSOLVED · 진상"} wide>
-        <div className="flex items-center gap-4">
-          <span
-            className={`${display} -rotate-3 rounded-lg border-[3px] px-3 py-1 text-2xl tracking-wide ${view.status === "solved" ? "border-[#5FD3A0] text-[#5FD3A0]" : "border-[#E0657A] text-[#E0657A]"}`}
-          >
+      <Sheet open={sheet === "truth" && done} onClose={() => setSheet(null)} title={c.title} wide>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className={`mq-stamp big ${view.status === "solved" ? "yes" : "no"}`} style={{ fontSize: 34 }}>
             {view.status === "solved" ? "사건 해결" : "미해결"}
           </span>
-          <div className={`${mono} flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-white/50`}>
+          <div className="mq-type flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-[var(--ink2)]">
             <span>질문 {view.stats.questions}</span>
-            <span>도장 {keyHits}</span>
-            <span>제출 {view.stats.submissions}</span>
+            <span>큰 도장 {keyHits}</span>
+            <span>보고서 {view.stats.submissions}</span>
             <span>단서 {view.clues.length}</span>
             <span>{fmtTime(view.stats.ms)}</span>
           </div>
         </div>
         {c.cover && (
-          <div className="mt-4 overflow-hidden rounded-xl">
-            <Cover src={c.cover} className="aspect-[3/2]" />
+          <div className="mq-polaroid mt-5 rotate-[-0.8deg]">
+            <Photo src={c.cover} onZoom={setZoom} className="aspect-[3/2] w-full" />
           </div>
         )}
-        <h4 className="mt-4 text-lg font-bold">{c.title}</h4>
-        <p className="mt-2 text-[15px] leading-relaxed whitespace-pre-line text-white/85">{view.truth}</p>
-        {last && last.bonus.length > 0 && <p className="mt-3 text-xs text-white/50">보너스 인정: {last.bonus.join(" · ")}</p>}
-        {c.credit && <p className={`${mono} mt-3 text-[10px] text-white/35`}>{c.credit}</p>}
-        <button onClick={leave} className={`${btnGold} mt-5 w-full py-3 text-sm`}>
-          다른 사건 하기
+        <h4 className="mq-pen mt-5 text-[30px] leading-none text-[var(--wine)]">사건의 전말</h4>
+        <p className="mt-2 text-[16px] leading-[1.85] whitespace-pre-line">{view.truth}</p>
+        {last && last.bonus.length > 0 && <p className="mq-hand mt-3 text-[17px] text-[var(--ink2)]">보너스 인정: {last.bonus.join(" · ")}</p>}
+        {c.credit && <p className="mq-type mt-3 text-[11px] text-[var(--ink3)]">{c.credit}</p>}
+        <button onClick={leave} className="mq-btn mq-btn-wine mt-6 w-full">
+          다른 사건 맡기
         </button>
       </Sheet>
+
+      {lightbox}
     </div>
   );
 }

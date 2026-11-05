@@ -2,6 +2,7 @@ import Faded from "@/components/Faded";
 import GameHeader from "@/components/GameHeader";
 import MysteryProtoApp from "@/components/MysteryProto/MysteryProtoApp";
 import { pageMeta } from "@/lib/seo";
+import "@/css/mystery.css";
 
 /* 예/아니오 추리 — 사람들과 테스트 중 (검색 · 메뉴 · sitemap 에는 아직 안 보임) */
 export const metadata = pageMeta({
