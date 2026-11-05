@@ -38,6 +38,8 @@ export interface Config {
   groqApiKey: string;
   /** 사건 검수 스크립트 전용 Groq 키 (다른 계정 — 플레이 한도를 안 건드리게). 비우면 플레이 키 사용 */
   groqApiKeyReview: string;
+  /** 예/아니오 추리 입장 비밀번호 (테스트 기간 동안 아는 사람만). 비우면 가림막 없음. 관리자는 비밀번호 없이 들어감 */
+  mysteryGate: string;
 }
 
 const list = (v: string | undefined) =>
@@ -84,5 +86,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     geminiApiKey: mode === "test" ? "" : env.GEMINI_API_KEY?.trim() ?? "",
     groqApiKey: mode === "test" ? "" : env.GROQ_API_KEY?.trim() ?? "",
     groqApiKeyReview: mode === "test" ? "" : env.GROQ_API_KEY_REVIEW?.trim() ?? "",
+    mysteryGate: mode === "test" ? "" : (env.MYSTERY_GATE ?? "rjsah7").trim(),
   };
 }

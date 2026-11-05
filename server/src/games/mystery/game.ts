@@ -111,6 +111,21 @@ export interface LogDoc {
   at: Date;
 }
 
+/** 플레이 기록 (mystery_proto_plays). 관리자가 뽑아서 사건 · 판정 손보는 데 씀 */
+export interface PlayRecord {
+  playId: string;
+  caseId: string;
+  caseVersion: number;
+  level: string;
+  status: Play["status"];
+  startedAt: Date;
+  finishedAt: Date | null;
+  used: number;
+  keyHits: number;
+  questions: { text: string; verdict: Verdict; facts: string[]; beliefs: string[]; model: string; cached: boolean; at: Date }[];
+  submissions: { text: string; passed: number; total: number; items: { id: string; status: GradeStatus }[]; model: string; at: Date }[];
+}
+
 export interface MysteryOptions {
   llm: LlmCall;
   judgeModels: ModelSpec[];
@@ -479,6 +494,32 @@ export function createMystery(opts: MysteryOptions) {
       const q = p.questions[index];
       if (!q) throw notFound("없는 질문이에요.");
       return { caseId: p.c.id, caseVersion: p.c.version, playId: p.id, text: q.text, verdict: q.verdict, raw: q.raw, facts: q.facts, beliefs: q.beliefs, model: q.model, cached: q.cached };
+    },
+
+    /** 플레이 기록 저장용 (진상 · 사실은 안 들어감, 판정 근거 id 만). 질문 · 제출마다 통째로 갱신 */
+    snapshot(id: string): PlayRecord {
+      const p = get(id);
+      const reqIds = new Set(requiredRubric(p.c).map((x) => x.id));
+      return {
+        playId: p.id,
+        caseId: p.c.id,
+        caseVersion: p.c.version,
+        level: p.c.level,
+        status: p.status,
+        startedAt: new Date(p.startedAt),
+        finishedAt: p.finishedAt === null ? null : new Date(p.finishedAt),
+        used: used(p),
+        keyHits: p.questions.filter((q) => q.verdict === "KEY_YES" || q.verdict === "KEY_NO").length,
+        questions: p.questions.map((q) => ({ text: q.text, verdict: q.verdict, facts: q.facts, beliefs: q.beliefs, model: q.model, cached: q.cached, at: new Date(q.at) })),
+        submissions: p.submissions.map((s) => ({
+          text: s.text,
+          passed: s.items.filter((it) => it.status === "passed" && reqIds.has(it.id)).length,
+          total: reqIds.size,
+          items: s.items,
+          model: s.model,
+          at: new Date(s.at),
+        })),
+      };
     },
 
     /** 신고된 판정은 캐시에서 빼서 다음 사람은 새로 판정받게 */

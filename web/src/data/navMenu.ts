@@ -23,6 +23,7 @@ import imgJsonToJava from "@/img/menu/json-to-java.jpg";
 import imgMybatisLog from "@/img/menu/mybatis-log.jpg";
 import imgRegex from "@/img/menu/regex.jpg";
 import imgAnimetown from "@/img/menu/animetown.jpg";
+import imgMystery from "@/img/menu/mystery.jpg";
 
 // 상단 nav 메뉴 정의 — Nav 드롭다운과 대제목 클릭 시 나오는 목록(허브) 페이지가 같이 씀
 
@@ -192,6 +193,15 @@ export const NAV_GROUPS: NavGroup[] = [
         desc: "웹 3D 실험용 놀이터, 3D 캐릭터로 마을을 걷고 같은 채널 사람들과 이야기",
         icon: "🏘️",
         badge: "ALPHA",
+      },
+      {
+        // 이름 미정 — 테스트 기간엔 입장 비밀번호(서버 MYSTERY_GATE)
+        href: "/games/mystery-proto",
+        image: imgMystery,
+        label: "추리게임",
+        desc: "예/아니오로만 묻고 사건의 전말을 맞히는 추리, 판정은 AI 탐정",
+        icon: "🕵️",
+        badge: "BETA",
       },
     ],
   },
