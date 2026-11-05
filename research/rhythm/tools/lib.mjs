@@ -36,10 +36,10 @@ export const BUILTIN = {
   starlight: { boss: {}, explus: {}, abyss: {}, levels: [3, 4, 7, 10, 13, 16] },
   sugarcloud: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 7, 12, 15, 16] },
   overload: { single: true, boss: {}, explus: {}, abyss: {}, levels: [3, 5, 8, 11, 13, 15] },
-  etude: { boss: {}, explus: {}, abyss: {}, levels: [3, 6, 10, 13, 16, 17] },
+  etude: { rephase: true, boss: {}, explus: {}, abyss: {}, levels: [3, 6, 10, 13, 16, 17] },
   highlight: { boss: {}, explus: {}, abyss: {}, levels: [3, 6, 8, 12, 15, 18] },
   tomeinauso: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 7, 11, 15, 17] },
-  picopico: { boss: {}, explus: {}, abyss: {}, levels: [3, 6, 9, 13, 16, 16] },
+  picopico: { rephase: true, boss: {}, explus: { chordScale: 1.8 }, abyss: {}, levels: [3, 6, 9, 13, 16, 16] },
   neonseaside: { single: true, boss: {}, explus: {}, abyss: {}, levels: [3, 4, 7, 10, 14, 16] },
   riseofchampions: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 8, 12, 14, 17] },
   bladestorm: { boss: {}, explus: {}, abyss: {}, levels: [3, 5, 9, 14, 17, 20] },
@@ -48,10 +48,10 @@ export const BUILTIN = {
   rooftop: { boss: {}, explus: {}, abyss: { p3: 0.2, share: 0.6 } },
   colossus: { bpm: 150, boss: {}, explus: {}, abyss: { p3: 0.2, share: 0.6 }, levels: [3, 5, 8, 12, 15, 17] },
   cornercypher: { single: true, boss: { fullSub: 6 }, explus: { fullSub: 6, full: 0.7, loud: 0.4, chordScale: 1.4 }, abyss: {}, levels: [3, 5, 8, 12, 15, 17] },
-  redline: { boss: {}, explus: {}, abyss: { p3: 0.28, share: 0.7 }, levels: [3, 6, 9, 13, 15, 17] },
+  redline: { rephase: true, boss: {}, explus: {}, abyss: { p3: 0.28, share: 0.7 }, levels: [3, 6, 9, 13, 15, 18] },
   hairpin: { boss: {}, explus: { chordScale: 1.4 }, abyss: { p3: 0.3, share: 0.7 }, levels: [3, 5, 8, 12, 14, 17] },
-  moonshine: { boss: {}, explus: {}, abyss: { p3: 0.25, share: 0.7 }, levels: [3, 6, 9, 13, 15, 17] },
-  kaminari: { boss: {}, explus: {}, abyss: { mode: "chord", p3: 0.15, share: 0.6 } },
+  moonshine: { boss: {}, explus: {}, abyss: { p3: 0.28, share: 0.75 }, levels: [3, 6, 9, 13, 15, 17] },
+  kaminari: { rephase: true, boss: {}, explus: {}, abyss: { mode: "chord", p3: 0.2, share: 0.6 } },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];

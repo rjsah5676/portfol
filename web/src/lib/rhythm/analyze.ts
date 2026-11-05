@@ -127,8 +127,15 @@ export async function analyzeAudio(
    *  double: 절반 템포로 잡혀도 2배 템포로 (내장곡 채보 만들 때 직접 지정)
    *  single: 2배 템포 후보를 쓰지 않음 (하프타임 덥스텝·트랩·시티팝처럼 박 사이가 센 곡)
    *  bpm: 템포를 이 근처(±4%)에서만 찾음 — 2배·절반이 아닌 엉뚱한 템포로 잡힐 때 (내장곡 채보 만들 때 직접 지정.
-   *       COLOSSUS 하드스타일 150 BPM 이 120 으로 잡혔음 — 120 쪽에 가중치가 있어서) */
-  opt: { straight?: boolean; double?: boolean; single?: boolean; bpm?: number } = {}
+   *       COLOSSUS 하드스타일 150 BPM 이 120 으로 잡혔음 — 120 쪽에 가중치가 있어서)
+   *  rephase: 구간마다 박 위상을 다시 맞춤 (rephaseBeats — 곡 중간에 박이 밀리는 AI 곡. 내장곡 채보 만들 때 직접 지정) */
+  opt: {
+    straight?: boolean;
+    double?: boolean;
+    single?: boolean;
+    bpm?: number;
+    rephase?: boolean;
+  } = {}
 ): Promise<Analysis> {
   progress(0.02, "모노로 변환 중");
   const len = Math.ceil(buffer.duration * SR);
@@ -409,6 +416,14 @@ export async function analyzeAudio(
     // 2배 템포가 셋잇단(12/8)으로 읽히면 원래 템포가 맞는 것 — 아니면 2배 쪽을 씀
     const fast = alignToGrid(doubled, kept, opt.straight);
     if (opt.double || fast.div !== DIV_TRIPLET) aligned = fast;
+  }
+  if (opt.rephase && aligned.div === DIV && aligned.beats.length > 8) {
+    const b = aligned.beats;
+    const beatSec = (b[b.length - 1] - b[0]) / (b.length - 1);
+    aligned = {
+      ...alignWithBeats(rephaseBeats(b, kept, beatSec), kept, beatSec, DIV),
+      bpm: aligned.bpm,
+    };
   }
   return { duration: buffer.duration, ...aligned, rms };
 }
@@ -703,6 +718,65 @@ function fitGrid(strong: Onset[], period: number) {
     if (v > bestLow) ((bestLow = v), (bestOff = j));
   }
   return { period: best.period, phase: best.phase + bestOff * q };
+}
+
+/**
+ * 구간별 박 위상 맞춤 (opt.rephase). 박 추적은 곡 전체를 한 템포 직선으로 펴는데(straighten), AI 곡은 구간을 이어 붙인
+ * 자리에서 박이 16분 반 칸 · 한 칸씩 밀리는 일이 있음 (KAMINARI BACHI 1:25~2:00 · 2:30 이 32분 칸에 몰려서
+ * 어려움 · 매우 어려움에서 노트가 거의 비고, 나이트메어 위로는 소리 없는 칸 채우기가 반 칸 어긋남).
+ * 박마다 앞뒤 4박 안 센 타격의 16분 위상을 원형 평균으로 재서(반 칸 어긋남도 ±로 흔들리지 않게) 그만큼 옮기고,
+ * 16분 칸 단위로도 정박(저음 센 타격이 오는 자리)이 확실히 더 잘 맞는 쪽이 있으면 거기로.
+ * 위상이 고르지 않은 박(R < 0.6 — 구간 경계 · 엇박 위주)은 안 옮김
+ */
+export function rephaseBeats(beats: number[], raw: Onset[], beatSec: number): number[] {
+  const sub = beatSec / 4;
+  const strong = raw.filter((o) => o.s > 0.35);
+  const W = 4;
+  const shift = beats.map(() => 0);
+  let j0 = 0;
+  for (let i = 0; i < beats.length; i++) {
+    const lo = beats[Math.max(0, i - W)] - sub / 2;
+    const hi = beats[Math.min(beats.length - 1, i + W)] + sub / 2;
+    while (j0 < strong.length && strong[j0].t < lo) j0++;
+    let c = 0;
+    let s = 0;
+    let n = 0;
+    const win: Onset[] = [];
+    for (let j = j0; j < strong.length && strong[j].t <= hi; j++) {
+      const o = strong[j];
+      const a = (2 * Math.PI * (o.t - beats[i])) / sub;
+      c += Math.cos(a) * o.s;
+      s += Math.sin(a) * o.s;
+      n += o.s;
+      win.push(o);
+    }
+    if (win.length < 12 || Math.hypot(c, s) / n < 0.6) continue;
+    const m = (Math.atan2(s, c) / (2 * Math.PI)) * sub;
+    const beatScore = (off: number) => {
+      let v = 0;
+      for (const o of win) {
+        const q = (((Math.round((o.t - beats[i] - off) / sub) % 4) + 4) % 4) as 0 | 1 | 2 | 3;
+        v += o.s * (0.3 + o.low) * (q === 0 ? 1 : q === 2 ? 0.5 : 0);
+      }
+      return v;
+    };
+    let best = m;
+    const v0 = beatScore(m);
+    let bestV = v0;
+    for (const k of [-1, 1, 2]) {
+      const v = beatScore(m + k * sub);
+      if (v > bestV) ((bestV = v), (best = m + k * sub));
+    }
+    // 정박 칸을 바꾸는 건 확실히 나을 때만 (싱커페이션 구간에서 함부로 안 옮기게)
+    if (best !== m && bestV < v0 * 1.4) best = m;
+    if (best > sub * 2) best -= beatSec;
+    shift[i] = Math.abs(best) < 0.008 ? 0 : best;
+  }
+  // 앞뒤 2박 중앙값으로 고름 (한 박만 튀는 것 방지)
+  return beats.map((b, i) => {
+    const w = shift.slice(Math.max(0, i - 2), i + 3).sort((x, y) => x - y);
+    return b + w[w.length >> 1];
+  });
 }
 
 function alignWithBeats(beats: number[], raw: Onset[], beatSec: number, div: number) {

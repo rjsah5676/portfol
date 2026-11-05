@@ -624,10 +624,10 @@ const FREEDOMDIVE = audioSong(
  *   starlight      --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,13,16   (ULT 14)   (ABYSS 19)
  *   sugarcloud     --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,12,15,16   (NM 14 · ULT 15)   (ABYSS 19)
  *   overload       --single --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,11,13,15   (ULT 14) (하프타임이라 280으로 잡혀서 --single)   (ABYSS 19)
- *   etude          --bpm-label 170 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,17   (NM 15 · ULT 16)   (ABYSS 17)
+ *   etude          --rephase --bpm-label 170 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,17   (NM 15 · ULT 16)   (ABYSS 17) (v2.25: 1:10~1:40 박이 반 칸 밀려 있어서 --rephase)
  *   highlight      --bpm-label 192 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,8,12,15,18   (ULT 16)   (ABYSS 19)
  *   tomeinauso     --bpm-label 149 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,11,15,17   (NM 14 · ULT 15)   (ABYSS 20)
- *   picopico       --bpm-label 188 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,13,16,16   (NM 14) (나이트메어 14 · ULTIMA 16 이 천장 — 그 위는 타격이 모자람)   (ABYSS 19)
+ *   picopico       --rephase --bpm-label 188 --boss '{}' --explus '{"chordScale":1.8}' --abyss '{}' --levels 3,6,9,13,16,16   (NM 14) (나이트메어 14 · ULTIMA 16 이 천장 — 그 위는 타격이 모자람)   (ABYSS 19) (v2.25: 1:00 근처 박 밀림 → --rephase, 그러면 ULT 15 라 chordScale 1.8)
  *   neonseaside    --single --bpm-label 125 --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,14,16   (NM 12 · ULT 14 — 2배 템포 250으로 잡혀서 --single)   (ABYSS 18)
  *   riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,14,17   (ULT 16 — NM 은 매우 어려움 12 위로 14 가 천장)   (ABYSS 20)
  *   bladestorm     --bpm-label 183 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,14,17,20   (NM 16 · ULT 17 — 183 BPM 천장 · ABYSS 19 스트림형)
@@ -636,10 +636,12 @@ const FREEDOMDIVE = audioSong(
  *   rooftop        --bpm-label 162 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}'   (자동 목표 3/5/8/13/15/16 · ABYSS 20 — 기본 코드잭은 22, 스트림형은 18)
  *   colossus       --bpm 150 --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 20 — 템포가 120 으로 잡혀서 --bpm 150 · 기본 코드잭은 22)
  *   cornercypher   --single --bpm-label 92 --boss '{"fullSub":6}' --explus '{"fullSub":6,"full":0.7,"loud":0.4,"chordScale":1.4}' --abyss '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 19 — 2배 184 로 잡혀서 --single · 스윙 16분(박의 1/6 · 2/3)이라 셋잇단 격자 → 빽빽한 마디는 16분 셋잇단(fullSub 6), 곡 내내 꽉 차서 full 문턱을 올려 쉬는 마디를 둠)
- *   redline        --bpm-label 160 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.7}' --levels 3,6,9,13,15,17   (ULT 16 · ABYSS 20 — 기본 코드잭은 21, 스트림형은 17)
+ *   redline        --rephase --bpm-label 160 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.7}' --levels 3,6,9,13,15,18   (ULT 16 · ABYSS 20 — 기본 코드잭은 21, 스트림형은 17) (v2.25: 1:20~1:40 박 밀림 → --rephase, ULT 목표 18 이어야 16)
  *   hairpin        --bpm-label 145 --boss '{}' --explus '{"chordScale":1.4}' --abyss '{"p3":0.3,"share":0.7}' --levels 3,5,8,12,14,17   (ULT 15 · ABYSS 19 — 기본 ULT 는 NM 과 같은 14)
- *   moonshine      --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.25,"share":0.7}' --levels 3,6,9,13,15,17   (NM 14 · ULT 15 · ABYSS 20 — 기본 코드잭은 22)
- *   kaminari       --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.15,"share":0.6}'   (자동 목표 3/6/10/13/15/16 · ABYSS 19 — 스트림형은 18 이 천장이라 코드잭형으로)
+ *   moonshine      --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.75}' --levels 3,6,9,13,15,17   (NM 14 · ULT 15 · ABYSS 20 — 기본 코드잭은 22)
+ *   kaminari       --rephase --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.2,"share":0.6}'   (자동 목표 3/6/10/13/15/16 · ABYSS 19 — 스트림형은 18 이 천장이라 코드잭형으로 · 1:25~2:00 · 2:30 박이 반 칸 밀려 있어서 --rephase)
+ *   (자를 때 주의: 뺀 길이가 마디 길이의 정수배가 아니면 뒤쪽 박이 밀림 — cut.sh 의 30ms 크로스페이드만큼도.
+ *    뒤 시작 = 앞 끝 − 0.03 + 마디 수 × 4 × 60 / BPM 으로 잘라야 함. v2.25 Moonshine 첫 판이 37ms 밀려서 앞 30초 어려움 · EX 노트가 비었음)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로

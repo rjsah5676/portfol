@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.26",
+    name: "채보 빈 구간 수정",
+    date: "2026.11.05",
+    lines: [
+      "Moonshine Stampede — 앞 30초 HARD · EX 노트가 비던 것 (곡을 줄인 자리에서 박이 살짝 밀려 있었음 — 다시 잘랐음)",
+      "KAMINARI BACHI — 1:25~2:00 노트가 비던 것 (곡 중간에 박이 반 칸 밀리는 구간을 따로 맞춤)",
+      "같은 문제가 있던 Étude(1:10~1:40) · PIKO PIKO OVERKILL(1:00 근처) · REDLINE FEVER(1:20~1:40) 채보도 다시 뽑음 — 레벨은 그대로",
+    ],
+  },
+  {
     ver: "v2.25",
     name: "새 곡 2곡",
     date: "2026.11.05",

@@ -15,10 +15,10 @@ midnight --single --bpm-label 111 --levels 3,4,7,11
 starlight --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,13,16
 sugarcloud --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,12,15,16
 overload --single --bpm-label 140 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,11,13,15
-etude --bpm-label 170 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,17
+etude --rephase --bpm-label 170 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,10,13,16,17
 highlight --bpm-label 192 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,8,12,15,18
 tomeinauso --bpm-label 149 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,7,11,15,17
-picopico --bpm-label 188 --boss '{}' --explus '{}' --abyss '{}' --levels 3,6,9,13,16,16
+picopico --rephase --bpm-label 188 --boss '{}' --explus '{"chordScale":1.8}' --abyss '{}' --levels 3,6,9,13,16,16
 neonseaside --single --bpm-label 125 --boss '{}' --explus '{}' --abyss '{}' --levels 3,4,7,10,14,16
 riseofchampions --bpm-label 150 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,8,12,14,17
 bladestorm --bpm-label 183 --boss '{}' --explus '{}' --abyss '{}' --levels 3,5,9,14,17,20
@@ -27,7 +27,7 @@ aurora --bpm-label 138 --boss '{}' --explus '{}' --abyss '{"p3":0.45,"share":0.8
 rooftop --bpm-label 162 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}'
 colossus --bpm 150 --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.2,"share":0.6}' --levels 3,5,8,12,15,17
 cornercypher --single --bpm-label 92 --boss '{"fullSub":6}' --explus '{"fullSub":6,"full":0.7,"loud":0.4,"chordScale":1.4}' --abyss '{}' --levels 3,5,8,12,15,17
-redline --bpm-label 160 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.7}' --levels 3,6,9,13,15,17
+redline --rephase --bpm-label 160 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.7}' --levels 3,6,9,13,15,18
 hairpin --bpm-label 145 --boss '{}' --explus '{"chordScale":1.4}' --abyss '{"p3":0.3,"share":0.7}' --levels 3,5,8,12,14,17
-moonshine --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.25,"share":0.7}' --levels 3,6,9,13,15,17
-kaminari --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.15,"share":0.6}'
+moonshine --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.75}' --levels 3,6,9,13,15,17
+kaminari --rephase --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.2,"share":0.6}'

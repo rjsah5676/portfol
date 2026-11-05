@@ -16,6 +16,7 @@
  *   --double          분석기가 절반 템포로 잘못 볼 때 2배 템포로 강제
  *   --single          분석기가 2배 템포로 잘못 볼 때 원래 템포로 강제 (하프타임·시티팝)
  *   --bpm <n>         분석기가 엉뚱한 템포(2배·절반이 아닌)로 잡을 때 n 근처(±4%)에서만 찾음
+ *   --rephase         곡 중간에 박이 16분 반 칸 · 한 칸씩 밀리는 곡(AI 곡 이어 붙인 자리)이면 구간마다 위상을 다시 맞춤
  *   --tweak '<json>'  난이도별 AutoTweak 덮어쓰기 (예: '{"expert":{"fill":0.6}}')
  *   --levels a,b,c…   난이도별 목표 레벨 (쉬움부터, 별점×4) — 직접 쳐 보고 정한 레벨에 맞춰 뽑음
  *   --dry             파일은 안 쓰고 난이도별 통계만 출력
@@ -66,6 +67,8 @@ const double = argv.includes("--double");
 const single = argv.includes("--single");
 // --bpm <n>: 분석기가 엉뚱한 템포(2배·절반이 아닌)로 잡을 때 n 근처(±4%)에서만 템포를 찾음
 const bpmHint = opt("--bpm") ? Number(opt("--bpm")) : undefined;
+// --rephase: 구간마다 박 위상을 다시 맞춤 (곡 중간에 박이 16분 반 칸 · 한 칸씩 밀리는 AI 곡 — analyze.ts rephaseBeats)
+const rephase = argv.includes("--rephase");
 const dry = argv.includes("--dry");
 
 // ── src/lib/rhythm의 TS를 임시 폴더에 JS로 옮겨서 불러옴 ──
@@ -73,7 +76,10 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "rhythm-chart-"));
 for (const n of ["analyze", "autochart", "chart", "patterns", "stars"]) {
   const src = fs.readFileSync(path.join(ROOT, "src/lib/rhythm", `${n}.ts`), "utf8");
   let out = ts.transpileModule(src, {
-    compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
   }).outputText;
   out = out.replace(/from "\.\/(\w+)"/g, 'from "./$1.mjs"');
   fs.writeFileSync(path.join(tmp, `${n}.mjs`), out);
@@ -110,6 +116,7 @@ const a = await analyzeAudio({ duration: pcm.length / SR }, () => {}, {
   double,
   single,
   bpm: bpmHint,
+  rephase,
 });
 console.log(
   `분석: ${a.bpm.toFixed(2)} BPM (표시 ${displayBpm(a).toFixed(1)}), 비트 ${a.beats.length}, 타격 ${a.onsets.length}, ${a.duration.toFixed(1)}초`
