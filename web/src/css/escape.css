@@ -18,3 +18,13 @@
 .esc-shake {
   animation: esc-shake 0.35s ease;
 }
+
+/* 대사 창 ▼ 깜빡임 */
+@keyframes esc-blink {
+  50% {
+    opacity: 0.2;
+  }
+}
+.esc-blink {
+  animation: esc-blink 1s steps(2) infinite;
+}

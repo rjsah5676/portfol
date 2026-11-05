@@ -43,6 +43,14 @@ const say = (c: Ctx, m: string) => c.say(m);
 export const B02: Room = {
   id: "b02",
   title: "반지하 B02호",
+  card: {
+    emoji: "🔦",
+    tag: "체험판",
+    blurb: "실종된 대학생의 반지하 방. 수색 중에 현관이 밖에서 잠겼다.",
+    time: "10~15분",
+    level: 2,
+    fear: 1,
+  },
   items: {
     coin: { name: "동전", icon: "🪙", desc: "500원짜리. 납작하고 단단하다." },
     battery: { name: "건전지", icon: "🔋", desc: "AA 건전지 두 개. 리모컨에서 뺐다." },

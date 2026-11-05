@@ -6,8 +6,8 @@ import "@/css/escape.css";
 
 /* 방탈출 — 프로토 (이름 미정, 검색 · sitemap 에는 아직 안 보임) */
 export const metadata = pageMeta({
-  title: "방탈출 · 반지하 B02호",
-  description: "잠긴 반지하 방에서 단서를 맞대어 보며 탈출하고, 사라진 세입자에게 무슨 일이 있었는지 밝혀내는 픽셀 추리 방탈출.",
+  title: "방탈출 · 추리 방탈출 게임",
+  description: "잠긴 방에서 기록과 단서를 맞대어 보며 탈출하고, 그 방에서 무슨 일이 있었는지 보고서로 밝혀내는 추리 방탈출. 숨진 사진사의 암실, 실종된 세입자의 반지하 방.",
   path: "/games/escape/",
   noindex: true,
 });
@@ -19,10 +19,10 @@ export default function Page() {
         <GameHeader
           icon="🔐"
           title="방탈출"
-          en="ESCAPE · CASE B02"
+          en="ESCAPE ROOM"
           accent="#E9C46A"
           desc="잠긴 방에서 기록들을 맞대어 보며 탈출하고, 이 방에서 무슨 일이 있었는지 밝혀내세요."
-          tags={["방탈출", "추리", "픽셀"]}
+          tags={["방탈출", "추리", "스토리"]}
           badge="BETA"
         />
       </div>
