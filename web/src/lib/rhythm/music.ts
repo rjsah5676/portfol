@@ -32,6 +32,8 @@ import neonseasideData from "@/data/rhythm/neonseaside.json";
 import riseofchampionsData from "@/data/rhythm/riseofchampions.json";
 import bladestormData from "@/data/rhythm/bladestorm.json";
 import venombloomData from "@/data/rhythm/venombloom.json";
+import moonshineData from "@/data/rhythm/moonshine.json";
+import kaminariData from "@/data/rhythm/kaminari.json";
 import redlineData from "@/data/rhythm/redline.json";
 import hairpinData from "@/data/rhythm/hairpin.json";
 import colossusData from "@/data/rhythm/colossus.json";
@@ -490,6 +492,23 @@ const VENOMBLOOM = audioSong("venombloom", "Venom Bloom", "/audio/venombloom.mp3
   desc: "140 BPM · GIRL-CRUSH K-POP TRAP · AI 자작곡 (tunee.ai)",
 });
 
+// 2분 56초 → 2분 31초: 0:31~0:57(16마디)을 덜어 냄 (유사도 0.95)
+const MOONSHINE = audioSong(
+  "moonshine",
+  "Moonshine Stampede",
+  "/audio/moonshine.mp3",
+  moonshineData,
+  {
+    color: "#D97706",
+    desc: "150 BPM · BLUEGRASS BANJO STOMP · AI 자작곡 (tunee.ai)",
+  }
+);
+
+const KAMINARI = audioSong("kaminari", "KAMINARI BACHI", "/audio/kaminari.mp3", kaminariData, {
+  color: "#38BDF8",
+  desc: "171 BPM · TSUGARU SHAMISEN ROCK · AI 자작곡 (tunee.ai)",
+});
+
 // 3분 22초 → 2분 34초: 1:41~2:29(32마디)를 덜어 냄 (유사도 0.88)
 const REDLINE = audioSong("redline", "REDLINE FEVER", "/audio/redline.mp3", redlineData, {
   color: "#EF4444",
@@ -619,6 +638,8 @@ const FREEDOMDIVE = audioSong(
  *   cornercypher   --single --bpm-label 92 --boss '{"fullSub":6}' --explus '{"fullSub":6,"full":0.7,"loud":0.4,"chordScale":1.4}' --abyss '{}' --levels 3,5,8,12,15,17   (NM 14 · ULT 15 · ABYSS 19 — 2배 184 로 잡혀서 --single · 스윙 16분(박의 1/6 · 2/3)이라 셋잇단 격자 → 빽빽한 마디는 16분 셋잇단(fullSub 6), 곡 내내 꽉 차서 full 문턱을 올려 쉬는 마디를 둠)
  *   redline        --bpm-label 160 --boss '{}' --explus '{}' --abyss '{"p3":0.28,"share":0.7}' --levels 3,6,9,13,15,17   (ULT 16 · ABYSS 20 — 기본 코드잭은 21, 스트림형은 17)
  *   hairpin        --bpm-label 145 --boss '{}' --explus '{"chordScale":1.4}' --abyss '{"p3":0.3,"share":0.7}' --levels 3,5,8,12,14,17   (ULT 15 · ABYSS 19 — 기본 ULT 는 NM 과 같은 14)
+ *   moonshine      --bpm-label 150 --boss '{}' --explus '{}' --abyss '{"p3":0.25,"share":0.7}' --levels 3,6,9,13,15,17   (NM 14 · ULT 15 · ABYSS 20 — 기본 코드잭은 22)
+ *   kaminari       --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.15,"share":0.6}'   (자동 목표 3/6/10/13/15/16 · ABYSS 19 — 스트림형은 18 이 천장이라 코드잭형으로)
  */
 // ───────────────────────── 연습곡 ─────────────────────────
 // 박자만 또렷한 신스 반주(킥·스네어·하이햇·베이스·패드) 위에 패턴 구간(practice.ts)을 차례로
@@ -667,6 +688,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  MOONSHINE,
+  KAMINARI,
   REDLINE,
   HAIRPIN,
   COLOSSUS,

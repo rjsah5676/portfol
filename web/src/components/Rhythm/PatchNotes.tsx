@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.25",
+    name: "새 곡 2곡",
+    date: "2026.11.05",
+    lines: [
+      "Moonshine Stampede — 150 BPM 블루그래스 밴조 (EASY 3 ~ ABYSS 20)",
+      "KAMINARI BACHI — 171 BPM 쓰가루 샤미센 록 (EASY 3 ~ ABYSS 19)",
+      "둘 다 AI 자작곡(tunee.ai), Moonshine Stampede 는 2분 31초로 줄임",
+    ],
+  },
+  {
     ver: "v2.24",
     name: "자동 싱크 고정",
     date: "2026.11.04",

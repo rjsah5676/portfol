@@ -28,6 +28,8 @@ import neonseasideCover from "@/img/rhythm/neonseaside.jpg";
 import riseofchampionsCover from "@/img/rhythm/riseofchampions.jpg";
 import bladestormCover from "@/img/rhythm/bladestorm.jpg";
 import venombloomCover from "@/img/rhythm/venombloom.jpg";
+import moonshineCover from "@/img/rhythm/moonshine.jpg";
+import kaminariCover from "@/img/rhythm/kaminari.jpg";
 import redlineCover from "@/img/rhythm/redline.jpg";
 import hairpinCover from "@/img/rhythm/hairpin.jpg";
 import colossusCover from "@/img/rhythm/colossus.jpg";
@@ -61,6 +63,8 @@ export const COVERS: Record<string, StaticImageData> = {
   riseofchampions: riseofchampionsCover,
   bladestorm: bladestormCover,
   venombloom: venombloomCover,
+  moonshine: moonshineCover,
+  kaminari: kaminariCover,
   redline: redlineCover,
   hairpin: hairpinCover,
   colossus: colossusCover,

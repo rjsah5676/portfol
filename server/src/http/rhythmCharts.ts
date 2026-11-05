@@ -23,6 +23,8 @@ import neonseaside from "../../../web/src/data/rhythm/neonseaside.json";
 import riseofchampions from "../../../web/src/data/rhythm/riseofchampions.json";
 import bladestorm from "../../../web/src/data/rhythm/bladestorm.json";
 import venombloom from "../../../web/src/data/rhythm/venombloom.json";
+import moonshine from "../../../web/src/data/rhythm/moonshine.json";
+import kaminari from "../../../web/src/data/rhythm/kaminari.json";
 import redline from "../../../web/src/data/rhythm/redline.json";
 import hairpin from "../../../web/src/data/rhythm/hairpin.json";
 import colossus from "../../../web/src/data/rhythm/colossus.json";
@@ -69,6 +71,8 @@ const SONGS: Record<string, SongData> = {
   riseofchampions,
   bladestorm,
   venombloom,
+  moonshine,
+  kaminari,
   redline,
   hairpin,
   colossus,
