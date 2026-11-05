@@ -325,7 +325,10 @@ export default function EscapeApp() {
               >
                 <span className="text-[18px]">{it.icon}</span>
                 {it.name}
-                {id === "uv" && s.flags.uvOn && <span className="text-[10px] text-[#cdb4ff]">ON</span>}
+                {(() => {
+                  const b = it.badge?.(s);
+                  return b ? <span className={`text-[10px] ${b.on ? "text-[#cdb4ff]" : "text-[#8a8580]"}`}>{b.text}</span> : null;
+                })()}
               </button>
             );
           })}
@@ -340,7 +343,7 @@ export default function EscapeApp() {
               onClick={() => {
                 const it = ROOM.items[s.sel!];
                 if (it.view) ctx.open(it.view);
-                else setItemInfo(it.desc);
+                else setItemInfo(typeof it.desc === "function" ? it.desc(s) : it.desc);
               }}
               className="ml-auto rounded-md bg-[#2b2a30] px-2 py-1"
             >

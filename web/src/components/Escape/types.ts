@@ -60,7 +60,10 @@ export interface Wall {
 export interface Item {
   name: string;
   icon: string;
-  desc: string;
+  /** 상태에 따라 바뀌는 설명은 함수로 */
+  desc: string | ((s: State) => string);
+  /** 인벤토리 이름 옆 작은 표시 (예: 손전등 ON/OFF) */
+  badge?: (s: State) => { text: string; on: boolean } | null;
   /** 자세히 볼 때 열 확대 장면 (없으면 설명 글) */
   view?: string;
 }

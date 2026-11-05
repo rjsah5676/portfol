@@ -46,7 +46,15 @@ export const B02: Room = {
   items: {
     coin: { name: "동전", icon: "🪙", desc: "500원짜리. 납작하고 단단하다." },
     battery: { name: "건전지", icon: "🔋", desc: "AA 건전지 두 개. 리모컨에서 뺐다." },
-    uv: { name: "UV 손전등", icon: "🔦", desc: "보랏빛이 나오는 손전등. 숨은 글씨나 자국을 비춰 볼 수 있다." },
+    uv: {
+      name: "UV 손전등",
+      icon: "🔦",
+      desc: (s) =>
+        s.flags.uvOn
+          ? "보랏빛이 나오는 손전등. 고른 채로 여기저기 보면 숨은 글씨나 자국이 드러난다."
+          : "보랏빛이 나오는 손전등. 지금은 꺼져 있다 — 건전지 칸이 비어 있다.",
+      badge: (s) => (s.flags.uvOn ? { text: "ON", on: true } : { text: "꺼짐", on: false }),
+    },
     lace: { name: "빨간 신발끈 조각", icon: "🧵", desc: "침대 밑에서 나온 빨간 신발끈 끄트머리. 흙이 묻어 있다." },
     ice: { name: "얼음 덩어리", icon: "🧊", desc: "얼음 안에 접힌 종이가 갇혀 있다." },
     d1: { name: "일기 조각 ①", icon: "📄", desc: "찢긴 일기장 윗부분.", view: "diary" },
@@ -146,6 +154,7 @@ export const B02: Room = {
           label: "침대 밑",
           rect: [160, 124, 140, 14],
           click: (c) => {
+            if (c.s.sel === "uv" && !c.flag("uvOn")) return say(c, "손전등을 비춰 보려 했지만 꺼져 있다. 건전지가 없다.");
             if (!uvOn(c.s)) return say(c, "너무 어두워서 안이 안 보인다. 불빛이 있으면 좋겠다.");
             c.open("underbed");
           },
@@ -365,7 +374,7 @@ export const B02: Room = {
                   onClick={() => {
                     c.setFlag("gotUv");
                     c.give("uv");
-                    c.say("UV 손전등을 챙겼다. 켜 보니 건전지가 없다.");
+                    c.say("UV 손전등을 챙겼다. 스위치를 눌러 봐도 켜지지 않는다 — 건전지가 없다.");
                   }}
                   className="rounded-lg bg-[#2b2a30] px-3 py-2 text-[15px] text-[#eee]"
                 >
