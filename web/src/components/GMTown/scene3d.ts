@@ -1097,7 +1097,7 @@ diffuseColor.rgb *= col;`
       { x: 144.2, y: 51.6, to: [["언덕 위 학교", 137, 40], ["광장", 100, 100]] },
       { x: 84.6, y: 104.6, to: [["주택가", 30, 130], ["탐정사무소", 44, 90], ["광장", 100, 100]] },
       { x: 115.6, y: 104.6, to: [["강 건너", 175, 100], ["호수 공원", 179, 150], ["광장", 100, 100]] },
-      { x: 106.4, y: 142, to: [["광장", 100, 100], ["마을 역", 100, 158]] },
+      { x: 105.6, y: 140.6, to: [["광장", 100, 100], ["마을 역", 100, 158]] },
     ];
     {
       const pole = toon(0x7a4f33);
@@ -1462,34 +1462,119 @@ if ( vFade > 0.01 ) {
     beam.position.y = ARCH.h - 0.25;
     beam.castShadow = true;
     if (oldArch) withInk(g, beam, 0.1);
-    const sign = canvasTex(640, 110, (c, W, H) => {
+    // 글씨는 판 안쪽(별 사이)에 꽉 차게: 글자 실제 너비 · 높이를 재서 가운데 맞춤
+    const SW = 1024,
+      SH = 200;
+    const sign = canvasTex(SW, SH, (c, W, H) => {
+      c.clearRect(0, 0, W, H);
       if (oldArch) {
         c.fillStyle = "#1b2a66";
         c.fillRect(0, 0, W, H);
       }
-      c.font = '400 70px "Black Han Sans", sans-serif';
+      const T = "ANIME TOWN";
+      c.font = '400 100px "Black Han Sans", sans-serif';
+      const m0 = c.measureText(T);
+      const fs = Math.min(
+        (100 * (W - 40)) / Math.max(1, m0.width),
+        (100 * (H - 56)) / Math.max(1, m0.actualBoundingBoxAscent + m0.actualBoundingBoxDescent)
+      );
+      c.font = `400 ${fs}px "Black Han Sans", sans-serif`;
+      const m = c.measureText(T);
       c.textAlign = "center";
-      c.textBaseline = "middle";
-      c.lineWidth = 10;
+      c.textBaseline = "alphabetic";
+      // 글자 위아래 가운데가 판 가운데에 오게
+      const by = H / 2 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
+      c.lineJoin = "round";
+      c.lineWidth = fs * 0.16;
       c.strokeStyle = "#0b1030";
-      c.strokeText("ANIME TOWN", W / 2, H / 2 + 4);
-      const gr = c.createLinearGradient(0, 10, 0, H - 10);
+      c.strokeText(T, W / 2, by);
+      const gr = c.createLinearGradient(0, by - m.actualBoundingBoxAscent, 0, by + m.actualBoundingBoxDescent);
       gr.addColorStop(0, "#fff1b8");
       gr.addColorStop(1, "#f2b33e");
       c.fillStyle = gr;
-      c.fillText("ANIME TOWN", W / 2, H / 2 + 4);
+      c.fillText(T, W / 2, by);
     });
     own(sign);
-    // 모델 아치는 간판 판이 더 크고 높음 (남색 판 가운데 · 앞면)
-    const sp = new THREE.Mesh(
-      own(oldArch ? new THREE.PlaneGeometry(ARCH.w, 1.0) : new THREE.PlaneGeometry(8.6, 8.6 * (110 / 640))),
-      own(new THREE.MeshBasicMaterial({ map: sign, transparent: !oldArch }))
-    );
-    if (oldArch) sp.position.set(0, ARCH.h - 0.25, 0.26);
-    else sp.position.set(0, 4.86, 0.42);
-    g.add(sp);
+    // 모델 아치: 남색 판 안쪽 x ±4.2 · 높이 4.1~5.4(양끝)/5.5(가운데), 별은 x ±3.3 바깥 → 글씨 폭 5.6m · 가운데 4.74m
+    // 판 앞뒤 면은 z ±0.224 → 바로 앞에 (역 쪽 · 광장 쪽 둘 다)
+    const PW = oldArch ? ARCH.w : 5.6;
+    const sgeo = own(new THREE.PlaneGeometry(PW, oldArch ? 1.0 : PW * (SH / SW)));
+    const smat = own(new THREE.MeshBasicMaterial({ map: sign, transparent: !oldArch }));
+    for (const back of oldArch ? [false] : [false, true]) {
+      const sp = new THREE.Mesh(sgeo, smat);
+      if (oldArch) sp.position.set(0, ARCH.h - 0.25, 0.26);
+      else {
+        sp.position.set(0, 4.74, back ? -0.245 : 0.245);
+        if (back) sp.rotation.y = Math.PI;
+      }
+      g.add(sp);
+    }
     g.position.set(ARCH.x, heightAt(ARCH.x, ARCH.y), ARCH.y);
     scene.add(g);
+
+    // 광장 정면 대형 전광판: 증권거래소 지붕 위 (광장 · 분수 쪽을 봄) — 세 캐릭터 소개 영상 반복
+    if (typeof document !== "undefined") {
+      const J = { x: 100, y: 69.6, w: 15, bottom: 9.3 };
+      const jh = (J.w * 9) / 16;
+      const base = heightAt(J.x, J.y);
+      const jg = new THREE.Group();
+      jg.position.set(J.x, base, J.y);
+      const video = document.createElement("video");
+      // VP9 webm 우선 (H.264 없는 브라우저도) · 안 되면 mp4
+      video.src = video.canPlayType('video/webm; codecs="vp9"') ? "/gmtown/pv.webm" : "/gmtown/pv.mp4";
+      video.muted = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.autoplay = true;
+      video.preload = "auto";
+      video.crossOrigin = "anonymous";
+      const kick = () => void video.play().catch(() => {});
+      kick();
+      // 자동 재생이 막힌 브라우저: 처음 누를 때 시작
+      window.addEventListener("pointerdown", kick, { once: true });
+      const vt = own(new THREE.VideoTexture(video));
+      vt.colorSpace = THREE.SRGBColorSpace;
+      own({
+        dispose() {
+          window.removeEventListener("pointerdown", kick);
+          video.pause();
+          video.removeAttribute("src");
+          video.load();
+        },
+      });
+      const frameM = toon(0x1b2140),
+        trimM = toon(0xf2c14e),
+        legM = toon(0x3a3f55);
+      const cy = J.bottom + jh / 2;
+      const bez = new THREE.Mesh(own(new THREE.BoxGeometry(J.w + 0.7, jh + 0.7, 0.45)), frameM);
+      bez.position.set(0, cy, -0.05);
+      bez.castShadow = true;
+      withInk(jg, bez, 0.08);
+      // 금색 테 (위 · 아래 줄)
+      for (const sy of [1, -1]) {
+        const tr = new THREE.Mesh(own(new THREE.BoxGeometry(J.w + 0.9, 0.16, 0.5)), trimM);
+        tr.position.set(0, cy + sy * (jh / 2 + 0.38), -0.05);
+        withInk(jg, tr, 0.04);
+      }
+      const scr = new THREE.Mesh(
+        own(new THREE.PlaneGeometry(J.w, jh)),
+        own(new THREE.MeshBasicMaterial({ map: vt, toneMapped: false }))
+      );
+      scr.position.set(0, cy, 0.18);
+      jg.add(scr);
+      // 지붕에 박힌 다리 둘 + 뒤 버팀대
+      const roof = 8.3;
+      for (const sx of [-1, 1]) {
+        const lg = new THREE.Mesh(own(new THREE.BoxGeometry(0.45, J.bottom - roof + 0.5, 0.45)), legM);
+        lg.position.set(sx * J.w * 0.3, roof + (J.bottom - roof + 0.5) / 2 - 0.25, -0.15);
+        withInk(jg, lg, 0.05);
+        const br = new THREE.Mesh(own(new THREE.BoxGeometry(0.25, 0.25, 2.4)), legM);
+        br.position.set(sx * J.w * 0.3, roof + 0.4, -1.1);
+        br.rotation.x = -0.55;
+        withInk(jg, br, 0.04);
+      }
+      scene.add(jg);
+    }
 
     // 안내판
     const bd = new THREE.Group();
