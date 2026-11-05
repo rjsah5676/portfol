@@ -128,6 +128,29 @@ describe("예/아니오 추리 — 판 진행 (가짜 AI)", () => {
     expect(v.submissions[0]).toMatchObject({ passed: 3, total: 3, bonus: [] });
   });
 
+  it("누적 인정: 앞 보고서에서 맞힌 항목은 다음 보고서에서 흔들려도 유지, 합쳐서 다 맞으면 해결", async () => {
+    const req = boxes.rubric.filter((r) => !r.bonus);
+    let round = 0;
+    // 1차: 정답 항목 앞 2개만 passed / 2차: 마지막 항목만 passed (앞 2개는 wrong 으로 흔들림)
+    const flaky: LlmCall = async () => {
+      round++;
+      return JSON.stringify({
+        items: boxes.rubric.map((r) => {
+          const k = req.findIndex((x) => x.id === r.id);
+          const ok = round === 1 ? k === 0 || k === 1 : k === req.length - 1;
+          return { id: r.id, status: ok ? "passed" : round === 1 ? "missing" : "wrong" };
+        }),
+      });
+    };
+    const g = createMystery({ llm: flaky, judgeModels: [M("j")], gradeModels: [M("g")] });
+    const { id } = g.start("boxes");
+    const s1 = await g.submit(id, "첫 보고서 — 두 개는 맞게 씀");
+    expect(s1.submissions[0].passed).toBe(2);
+    const s2 = await g.submit(id, "첫 보고서 — 두 개는 맞게 씀, 거기에 설명을 길게 덧붙임");
+    expect(s2.submissions[1]).toMatchObject({ passed: 3, failed: [] });
+    expect(s2.status).toBe("solved");
+  });
+
   it("포기하면 진상 · 단서 전부, 모델이 전부 죽으면 503 이고 차감 없음", async () => {
     const g = make();
     const { id } = g.start("window");

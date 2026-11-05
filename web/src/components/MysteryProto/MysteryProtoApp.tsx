@@ -202,6 +202,91 @@ function LevelStamp({ level }: { level: string }) {
   return <span className={`mq-stamp ${LEVEL_TONE[level] ?? "dim"}`} style={{ fontSize: 14, rotate: "-6deg" }}>{level}</span>;
 }
 
+/**
+ * 단서 넘기기: 한 장씩 옆으로 (밀거나 ‹ › / 점). 열면 가장 최근 단서부터.
+ * 아직 안 열린 단서는 봉인된 봉투로 자리만 보여 줌 (질문 몇 개째에 오는지)
+ */
+function ClueDeck({ clues, clueAt, used, onZoom }: { clues: View["clues"]; clueAt: number[]; used: number; onZoom: (src: string) => void }) {
+  const total = Math.max(clueAt.length, clues.length);
+  const [idx, setIdx] = useState(Math.max(0, clues.length - 1));
+  const strip = useRef<HTMLDivElement>(null);
+  const go = (i: number, smooth = true) => {
+    const el = strip.current;
+    const n = Math.max(0, Math.min(total - 1, i));
+    setIdx(n);
+    el?.scrollTo({ left: n * el.clientWidth, behavior: smooth ? "smooth" : "auto" });
+  };
+  // 열 때 · 새 단서가 올 때 가장 최근 장으로
+  useEffect(() => {
+    const n = Math.max(0, clues.length - 1);
+    // idx 는 스크롤 이벤트(onScroll)가 맞춰 줌
+    requestAnimationFrame(() => {
+      const el = strip.current;
+      if (el) el.scrollTo({ left: n * el.clientWidth });
+    });
+  }, [clues.length]);
+  if (total === 0) return <p className="mq-hand text-[16px] text-[var(--ink2)]">이 사건엔 단서가 없어요.</p>;
+  return (
+    <div>
+      <div
+        ref={strip}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          const n = Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+          if (n !== idx) setIdx(n);
+        }}
+        className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {Array.from({ length: total }, (_, i) => {
+          const cl = clues[i];
+          return (
+            <div key={i} className="w-full shrink-0 snap-center px-1 pt-3 pb-2">
+              {cl ? (
+                <div className="mq-paper relative px-3 pt-5 pb-3">
+                  <span className={`mq-pin ${PIN[(i + 1) % PIN.length]}`} />
+                  <p className="mq-type text-[11px] text-[var(--wine)]">단서 {i + 1}</p>
+                  {cl.image && (
+                    <div className="mq-polaroid mt-2">
+                      <Photo src={cl.image} onZoom={onZoom} className="max-h-[56dvh] w-full !object-contain" />
+                    </div>
+                  )}
+                  <p className="mq-hand mt-2 text-[16px] leading-snug">{cl.body}</p>
+                </div>
+              ) : (
+                <div className="mq-manila flex min-h-[260px] flex-col items-center justify-center gap-3 px-4 py-8 text-center">
+                  <span className="mq-stamp no big">봉인</span>
+                  <p className="mq-pen text-[24px] leading-none">단서 {i + 1}</p>
+                  <p className="mq-hand text-[16px] text-[var(--ink2)]">
+                    질문 <b>{clueAt[i]}</b>개째에 도착해요 · 앞으로 {Math.max(0, clueAt[i] - used)}개
+                  </p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-3">
+        <button onClick={() => go(idx - 1)} disabled={idx === 0} className="mq-btn mq-btn-paper min-h-0 px-3 py-1.5 text-sm">
+          ‹ 이전
+        </button>
+        <div className="flex items-center gap-2">
+          {Array.from({ length: total }, (_, i) => (
+            <button
+              key={i}
+              onClick={() => go(i)}
+              aria-label={`단서 ${i + 1}`}
+              className={`h-2.5 rounded-full transition-all ${i === idx ? "w-6 bg-[var(--wine)]" : i < clues.length ? "w-2.5 bg-[var(--ink2)]" : "w-2.5 bg-[var(--ink3)]/40"}`}
+            />
+          ))}
+        </div>
+        <button onClick={() => go(idx + 1)} disabled={idx >= total - 1} className="mq-btn mq-btn-paper min-h-0 px-3 py-1.5 text-sm">
+          다음 ›
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** 시트: 종이 한 장. 폰은 아래에서 올라오고 PC 는 가운데. 바깥 · Esc 로 닫힘 */
 function Sheet({ open, onClose, title, children, wide, lined }: { open: boolean; onClose: () => void; title: string; children: ReactNode; wide?: boolean; lined?: boolean }) {
   useEffect(() => {
@@ -946,27 +1031,7 @@ export default function MysteryProtoApp() {
 
       {/* 단서: 사진 · 쪽지 */}
       <Sheet open={sheet === "clues"} onClose={() => setSheet(null)} title={newClue ? "새 단서가 도착했어요" : "단서"} wide>
-        {view.clues.length === 0 ? (
-          <p className="mq-hand text-[16px] text-[var(--ink2)]">
-            아직 도착한 단서가 없어요.{view.nextClueAt !== null && ` 질문 ${view.nextClueAt}개째에 첫 단서가 와요.`}
-          </p>
-        ) : (
-          <ol className="space-y-7 pt-2">
-            {view.clues.map((cl, i) => (
-              <li key={cl.id} className="mq-paper relative px-3 pt-5 pb-3" style={{ rotate: `${i % 2 ? 0.6 : -0.6}deg` }}>
-                <span className={`mq-pin ${PIN[(i + 1) % PIN.length]}`} />
-                <p className="mq-type text-[11px] text-[var(--wine)]">단서 {i + 1}</p>
-                {cl.image && (
-                  <div className="mq-polaroid mt-2">
-                    <Photo src={cl.image} onZoom={setZoom} className="w-full !object-contain" />
-                  </div>
-                )}
-                <p className="mq-hand mt-2 text-[16px] leading-snug">{cl.body}</p>
-              </li>
-            ))}
-          </ol>
-        )}
-        {view.nextClueAt !== null && view.clues.length > 0 && <p className="mq-hand mt-4 text-[14px] text-[var(--ink2)]">다음 단서는 질문 {view.nextClueAt}개째에 와요.</p>}
+        <ClueDeck clues={view.clues} clueAt={c.clueAt ?? []} used={view.used} onZoom={setZoom} />
       </Sheet>
 
       {/* 노트 (폰) */}
@@ -1024,6 +1089,9 @@ export default function MysteryProtoApp() {
               </ul>
             )}
             {last.same && <p className="mq-hand mt-2 text-[13px] text-[var(--maybe)]">지난번과 인정 범위가 같아요. 다른 방향을 더 물어보는 게 나을 수 있어요.</p>}
+            {last.passed > 0 && last.passed < last.total && (
+              <p className="mq-type mt-2 text-[11px] text-[var(--ink3)]">한 번 인정된 항목은 다음 보고서에서 다시 안 써도 인정돼요.</p>
+            )}
           </div>
         )}
         {view.submissions.length > 1 && (
