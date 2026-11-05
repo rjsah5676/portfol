@@ -353,6 +353,24 @@ export default function CaseBoard({
     setSel(-1);
   }
 
+  /** 연필 메모 한 번에 지우기 — 처음 누르면 2.5초 동안 「한 번 더」, 그 안에 다시 누르면 지움 */
+  const memoCount = memo.reduce((n, v, i) => n + (v && x[i] < 0 ? 1 : 0), 0);
+  const [wipeArmed, setWipeArmed] = useState(false);
+  const wipeTimer = useRef(0);
+  useEffect(() => () => clearTimeout(wipeTimer.current), []);
+  function wipeMemo() {
+    playSfx("sfx-tap");
+    clearTimeout(wipeTimer.current);
+    if (!wipeArmed) {
+      setWipeArmed(true);
+      wipeTimer.current = window.setTimeout(() => setWipeArmed(false), 2500);
+      return;
+    }
+    setWipeArmed(false);
+    setMemo((m) => m.map(() => 0));
+    setSel(-1);
+  }
+
   function accuse(v: Verdict) {
     const i = sel;
     if (i < 0 || x[i] >= 0) return;
@@ -577,6 +595,17 @@ export default function CaseBoard({
           >
             ✎ 연필 메모 {memoMode ? "켜짐" : "꺼짐"}
           </button>
+          {memoCount > 0 && (
+            <button
+              type="button"
+              className={`sp-btn sp-btn-sm ${wipeArmed ? "sp-btn-crim" : "sp-btn-ghost"}`}
+              onClick={wipeMemo}
+              disabled={!!guideStep}
+              title="연필 메모를 한 번에 지워요 (실수로 안 지워지게 두 번 눌러요)"
+            >
+              {wipeArmed ? "한 번 더 누르면 지워요" : `메모 지우기 ${memoCount}`}
+            </button>
+          )}
           <span className="sp-chip ml-auto">남은 {left}명</span>
         </div>
       )}
