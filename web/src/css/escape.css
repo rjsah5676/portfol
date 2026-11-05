@@ -1,0 +1,20 @@
+/* 방탈출 — 문서 · 일기 글씨체, 틀렸을 때 흔들림 */
+@import url("https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&display=swap");
+
+@keyframes esc-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+.esc-shake {
+  animation: esc-shake 0.35s ease;
+}

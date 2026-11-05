@@ -23,7 +23,7 @@ import imgJsonToJava from "@/img/menu/json-to-java.jpg";
 import imgMybatisLog from "@/img/menu/mybatis-log.jpg";
 import imgRegex from "@/img/menu/regex.jpg";
 import imgAnimetown from "@/img/menu/animetown.jpg";
-import imgCraft from "@/img/menu/craft.jpg";
+import imgEscape from "@/img/menu/escape.jpg";
 
 // 상단 nav 메뉴 정의 — Nav 드롭다운과 대제목 클릭 시 나오는 목록(허브) 페이지가 같이 씀
 
@@ -195,12 +195,12 @@ export const NAV_GROUPS: NavGroup[] = [
         badge: "ALPHA",
       },
       {
-        // 이름 미정 (프로토). 추리게임(/games/mystery-proto)은 2026-11-05 메뉴에서 내림
-        href: "/games/craft",
-        image: imgCraft,
-        label: "오늘의 조합",
-        desc: "재료 두 개를 합치면 AI가 결과를 정하는 조합 퍼즐, 오늘의 목표 · 최초 발견",
-        icon: "⚗️",
+        // 프로토. 추리게임(/games/mystery-proto) · 오늘의 조합(/games/craft)은 2026-11-05 메뉴에서 내림
+        href: "/games/escape",
+        image: imgEscape,
+        label: "방탈출",
+        desc: "잠긴 방에서 기록들을 맞대어 보며 탈출하고 진상까지 밝히는 픽셀 추리 방탈출",
+        icon: "🔐",
         badge: "BETA",
       },
     ],
