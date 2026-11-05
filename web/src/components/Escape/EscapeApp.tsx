@@ -13,6 +13,8 @@ import { DIRS, H, W, type Ctx, type Dir, type Room, type State } from "./types";
 
 const ROOM: Room = B02;
 const KEY = `escape.${ROOM.id}`;
+/** 확대 장면 자리에 띄우는 도입 다시 보기 */
+const INTRO = "__intro";
 
 const fresh = (): State => ({
   view: "N",
@@ -211,17 +213,38 @@ export default function EscapeApp() {
   }
 
   // ── 플레이 ──
-  const close = ROOM.closeups[s.open ?? ""];
+  // 사건 메모 = 도입 컷 다시 보기 (도입에만 나오는 단서를 기억력 싸움으로 만들지 않게)
+  const close =
+    s.open === INTRO
+      ? {
+          title: "사건 메모",
+          render: () => (
+            <div className="space-y-3">
+              {ROOM.introPaint && (
+                <div className="mx-auto max-w-[520px] overflow-hidden rounded-lg border-2 border-[#2b2930]">
+                  <Canvas paint={ROOM.introPaint} />
+                </div>
+              )}
+              <div className="text-[15px] leading-relaxed" style={{ fontFamily: "'Gowun Batang', serif" }}>
+                {ROOM.intro}
+              </div>
+            </div>
+          ),
+        }
+      : ROOM.closeups[s.open ?? ""];
   return (
     <div className="mx-auto max-w-[960px] text-[#e9e4d8]">
       {/* 위 줄 */}
-      <div className="mb-2 flex items-center gap-2 text-[13px]">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-[13px]">
         <span className="rounded-md bg-[#1b1a20] px-2.5 py-1 font-mono text-[15px]">⏱ {mmss(Math.max(now, s.t0) - s.t0)}</span>
         <span className="rounded-md bg-[#1b1a20] px-2.5 py-1">
           📍 {ROOM.title} · {wall.name}
         </span>
         {uv && <span className="rounded-md bg-[#3a2a5a] px-2.5 py-1 text-[#e1cfff]">🔦 UV 켜짐</span>}
-        <button onClick={() => setHintOpen((v) => !v)} className="ml-auto rounded-md border border-[#5a4a2a] px-2.5 py-1 text-[#e9c46a]">
+        <button onClick={() => ctx.open(s.open === INTRO ? null : INTRO)} className="ml-auto rounded-md border border-[#3a3842] px-2.5 py-1 text-[#cfc8bb]">
+          📋 사건 메모
+        </button>
+        <button onClick={() => setHintOpen((v) => !v)} className="rounded-md border border-[#5a4a2a] px-2.5 py-1 text-[#e9c46a]">
           💡 힌트 {hintCount(s) ? `(${hintCount(s)})` : ""}
         </button>
       </div>
@@ -415,8 +438,8 @@ function Report({ s, setS }: { s: State; setS: (fn: (s: State) => State) => void
           ))}
         </div>
 
-        <p className="mt-4 mb-1 font-bold">3. 결정적인 근거 두 개</p>
-        <p className="mb-2 text-[12px] text-[#8f8676]">수색하면서 본 것만 고를 수 있어요.</p>
+        <p className="mt-4 mb-1 font-bold">3. 1번에 고른 사람이 범인이라는 근거 두 개</p>
+        <p className="mb-2 text-[12px] text-[#8f8676]">수색하면서 본 것만 고를 수 있어요. 다른 사람을 지우는 근거가 아니라, 그 사람을 직접 가리키는 근거로.</p>
         <div className="grid gap-1.5 sm:grid-cols-2">
           {R.evidence.map((e) => {
             const seen = e.seen(s);
