@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Song } from "@/lib/rhythm/music";
 import { buildPlayLog, type PlayLog } from "@/lib/rhythm/playLog";
 import type { Chart, Difficulty } from "@/lib/rhythm/chart";
-import { Engine, HP_MAX, rankOf, type Judge } from "@/lib/rhythm/engine";
+import { Engine, HP_MAX, rankOf, WINDOW, type Judge } from "@/lib/rhythm/engine";
 import {
   AUTO_SYNC,
   AutoSyncTracker,
@@ -260,6 +260,31 @@ const JUDGE_STYLE: Record<Judge, { text: string; color: string }> = {
   miss: { text: "MISS", color: "#F87171" },
 };
 
+/** 판정 분포 바 눈금이 사라지는 시간(초) */
+const TICK_LIFE = 4;
+/** 일시정지 화면 판정 분포: 5ms 칸, GOOD 창(±130ms) 안 */
+const HIST_MS = 5;
+const HIST_N = Math.round((WINDOW.good * 2000) / HIST_MS);
+interface HitSummary {
+  hist: number[];
+  /** 가운데 80% 평균(ms, +면 늦게 침) — 5개 미만이면 null */
+  mean: number | null;
+  n: number;
+}
+/** 친 타이밍(초, +면 늦게 침) → 분포 칸 · 평균 */
+function hitSummary(ds: number[]): HitSummary {
+  const hist = new Array<number>(HIST_N).fill(0);
+  for (const d of ds) {
+    const i = Math.floor((d * 1000 + WINDOW.good * 1000) / HIST_MS);
+    hist[Math.max(0, Math.min(HIST_N - 1, i))]++;
+  }
+  if (ds.length < 5) return { hist, mean: null, n: ds.length };
+  const s = [...ds].sort((a, b) => a - b);
+  const cut = Math.floor(s.length * 0.1);
+  const mid = s.slice(cut, s.length - cut);
+  return { hist, mean: (mid.reduce((a, x) => a + x, 0) / mid.length) * 1000, n: ds.length };
+}
+
 /** 스크롤 속도 1.0 → 노트가 2.4초 동안 내려옴 */
 export const visibleSec = (speed: number) => 2.4 / speed;
 
@@ -346,6 +371,8 @@ interface Props {
   online?: OnlineStage;
   /** 레인 키 4개 (e.code, 설정에서 바꿈) */
   keys?: string[];
+  /** 판정 분포 바: 친 타이밍이 빠른 쪽 · 느린 쪽 어디에 몰리는지 (화면 빈 곳에) */
+  hitBar?: boolean;
 }
 
 export default function Stage({
@@ -377,6 +404,7 @@ export default function Stage({
   fps = "60",
   online,
   keys = KEY_CODES,
+  hitBar = true,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -408,22 +436,36 @@ export default function Stage({
     combo: number;
     /** 판정 받은 노트 수 (0이면 정확도·랭크를 아직 안 보여 줌) */
     judged: number;
+    /** 판정 분포 (판정 싱크를 바꾼 뒤부터) */
+    hits: HitSummary;
   }>({
     score: 0,
     acc: 0,
     combo: 0,
     judged: 0,
+    hits: { hist: [], mean: null, n: 0 },
   });
+  // 일시정지 화면의 판정 싱크(ms) — 자동 싱크를 끄면 여기서 바로 조절
+  const [judgeUi, setJudgeUi] = useState(() => Math.round(auto.judge));
   // 일시정지·재개를 effect 밖(버튼)에서도 부르기 위해
   const ctrl = useRef<{
     pause: () => void;
     resume: () => void;
     apply: (p: Partial<LiveSettings>) => void;
+    setJudge: (v: number) => void;
   }>({
     pause: () => {},
     resume: () => {},
     apply: () => {},
+    setJudge: () => {},
   });
+  const changeJudge = (v: number) => {
+    const j = clamp(Math.round(v), -400, 400);
+    setJudgeUi(j);
+    ctrl.current.setJudge(j);
+    // 바꾼 뒤 친 것만 다시 모음
+    setPauseStats((p) => ({ ...p, hits: { hist: [], mean: null, n: 0 } }));
+  };
   // 일시정지 화면에서 보여줄 현재 설정값
   const [liveUi, setLiveUi] = useState<LiveSettings>({
     speed,
@@ -864,6 +906,10 @@ export default function Stage({
     let fast = 0;
     let slow = 0;
     const diffs: number[] = [];
+    /** 판정 분포(일시정지 화면): 판정 싱크를 바꾼 뒤부터 다시 모음 */
+    const hitLog: number[] = [];
+    /** 판정 분포 바 눈금 (최근 80개) */
+    const hitTicks: { d: number; at: number; j: Judge }[] = [];
     // 자동 싱크: 레인별 노트 시각(정렬) + 입력마다 같은 레인 가장 가까운 노트와의 차이(초, 타격 싱크 적용 후)
     const laneNotes: number[][] = [[], [], [], []];
     for (const n of chart.notes) laneNotes[n.lane].push(n.t);
@@ -1580,6 +1626,90 @@ export default function Stage({
       g.drawImage(c, miniBox.x, miniBox.y, miniBox.w, miniBox.h);
     };
 
+    // 판정 분포 바: 가로 화면은 점수판 아래 빈 곳에 판으로, 세로 화면 · 온라인 미니 화면이 있을 땐 판정선 위에 얇게
+    const hitPanel =
+      !portrait && !minis
+        ? { x: scoreBox.x, y: scoreBox.y + scoreBox.h + 28, w: scoreBox.w }
+        : null;
+    const drawHitBar = (t: number) => {
+      let cx: number, cy: number, half: number, barH: number, tickH: number;
+      let px = 0;
+      let pw = 0;
+      if (hitPanel) {
+        pw = Math.min(hitPanel.w, 420);
+        px = hitPanel.x + (hitPanel.w - pw) / 2;
+        g.fillStyle = "rgba(4,3,12,0.55)";
+        g.fillRect(px, hitPanel.y, pw, 66);
+        g.fillStyle = "rgba(255,255,255,0.5)";
+        g.font = `700 12px ${mono}`;
+        g.textBaseline = "top";
+        g.textAlign = "left";
+        g.fillText("FAST", px + 12, hitPanel.y + 48);
+        g.textAlign = "right";
+        g.fillText("SLOW", px + pw - 12, hitPanel.y + 48);
+        cx = px + pw / 2;
+        cy = hitPanel.y + 30;
+        half = pw / 2 - 16;
+        barH = 8;
+        tickH = 26;
+      } else {
+        cx = gx + W / 2;
+        cy = judgeY - 84;
+        half = W * 0.36;
+        barH = 5;
+        tickH = 18;
+      }
+      const xOf = (d: number) => cx + Math.max(-1, Math.min(1, d / WINDOW.good)) * half;
+      // 판정 구간 띠 (GOOD · GREAT · PERFECT)
+      g.globalAlpha = hitPanel ? 0.55 : 0.4;
+      for (const [w, j] of [
+        [WINDOW.good, "good"],
+        [WINDOW.great, "great"],
+        [WINDOW.perfect, "perfect"],
+      ] as const) {
+        g.fillStyle = JUDGE_STYLE[j].color;
+        g.fillRect(xOf(-w), cy - barH / 2, xOf(w) - xOf(-w), barH);
+      }
+      // 친 자리 눈금: 방금 친 것일수록 진하고 TICK_LIFE 초에 걸쳐 사라짐
+      let sum = 0;
+      let cnt = 0;
+      for (let i = hitTicks.length - 1; i >= 0; i--) {
+        const h = hitTicks[i];
+        const age = t - h.at;
+        if (age < 0 || age > TICK_LIFE) continue;
+        if (cnt < 20) {
+          sum += h.d;
+          cnt++;
+        }
+        g.globalAlpha = (1 - age / TICK_LIFE) * 0.9;
+        g.fillStyle = JUDGE_STYLE[h.j].color;
+        g.fillRect(xOf(h.d) - 1, cy - tickH / 2, 2, tickH);
+      }
+      g.globalAlpha = 1;
+      g.fillStyle = "#fff";
+      g.fillRect(cx - 1, cy - tickH / 2 - 3, 2, tickH + 6);
+      // 최근 20개 평균 자리에 ▼
+      if (cnt >= 4) {
+        const m = sum / cnt;
+        const ax = xOf(m);
+        const ay = cy - tickH / 2 - 5;
+        g.beginPath();
+        g.moveTo(ax - 6, ay - 8);
+        g.lineTo(ax + 6, ay - 8);
+        g.lineTo(ax, ay);
+        g.closePath();
+        g.fill();
+        if (hitPanel) {
+          const ms = Math.round(m * 1000);
+          g.font = `700 12px ${mono}`;
+          g.textAlign = "center";
+          g.textBaseline = "top";
+          g.fillStyle = "rgba(255,255,255,0.85)";
+          g.fillText(`${ms > 0 ? "+" : ""}${ms}ms`, cx, hitPanel.y + 48);
+        }
+      }
+    };
+
     const draw = (t: number) => {
       const laneW = W / 4;
       // 마디 위상 (0: 마디 첫 박) → 판정선이 마디마다 한 번 살짝 번쩍
@@ -1952,6 +2082,7 @@ export default function Stage({
         g.restore();
       }
       g.restore();
+      if (hitBar) drawHitBar(t);
       if (introImg || cheerImg) drawCutins(t);
     };
 
@@ -2161,7 +2292,12 @@ export default function Stage({
           comboAt = e.at;
           continue;
         }
-        if (e.diff !== undefined && e.judge !== "miss") diffs.push(e.diff);
+        if (e.diff !== undefined && e.judge !== "miss") {
+          diffs.push(e.diff);
+          hitLog.push(e.diff);
+          hitTicks.push({ d: e.diff, at: e.at, j: e.judge });
+          if (hitTicks.length > 80) hitTicks.shift();
+        }
         if (e.diff !== undefined && e.judge !== "miss" && Math.abs(e.diff * 1000) > FAST_SLOW_MS) {
           if (e.diff < 0) fast++;
           else slow++;
@@ -2391,7 +2527,9 @@ export default function Stage({
           acc: engine.accuracy,
           combo: engine.maxCombo,
           judged: judgedCount(),
+          hits: hitSummary(hitLog),
         });
+        setJudgeUi(Math.round(tracker.judge));
         setPaused(true);
         return;
       }
@@ -2409,7 +2547,9 @@ export default function Stage({
         acc: engine.accuracy,
         combo: engine.maxCombo,
         judged: judgedCount(),
+        hits: hitSummary(hitLog),
       });
+      setJudgeUi(Math.round(tracker.judge));
       setPaused(true);
     };
     const resume = () => {
@@ -2458,7 +2598,17 @@ export default function Stage({
       if (p.music !== undefined) musicGain.gain.value = live.music * musicFit;
       if (p.hit !== undefined) hitGain.gain.value = live.hit * 0.9 * LEVEL.rhythm.hit;
     };
-    ctrl.current = { pause, resume, apply };
+    /** 일시정지 화면 판정 싱크 (자동 싱크 끔일 때만) — 설정 창 판정 싱크처럼 '맞춰진' 값으로 저장 */
+    const setJudge = (v: number) => {
+      if (autoSync || autoplay) return;
+      tracker.judge = v;
+      hitLog.length = 0;
+      hitTicks.length = 0;
+      const next: AutoSyncState = { judge: v, offset: autoOffset, ready: true };
+      reported = next;
+      onAutoSync(next);
+    };
+    ctrl.current = { pause, resume, apply, setJudge };
 
     const onKeyDown = (e: KeyboardEvent) => {
       // 레인 키가 먼저 — 사용자가 스페이스 · R · 화살표 등을 레인 키로 정했으면 그 키는 치기로만 씀
@@ -2744,7 +2894,30 @@ export default function Stage({
                 </span>
               </div>
             </div>
+            {!autoplay && (
+              <HitHist
+                hits={pauseStats.hits}
+                onFit={
+                  !autoSync && pauseStats.hits.mean !== null && pauseStats.hits.n >= 20
+                    ? () => changeJudge(judgeUi + pauseStats.hits.mean!)
+                    : undefined
+                }
+              />
+            )}
             <div className="pru-win w-full px-[1.4cqw] py-[0.8cqw] [--wf:#17132f]">
+              {!autoplay && (
+                <PauseRow
+                  label="판정 싱크"
+                  value={
+                    autoSync
+                      ? `${judgeUi > 0 ? "+" : ""}${judgeUi}ms 자동`
+                      : `${judgeUi > 0 ? "+" : ""}${judgeUi}ms`
+                  }
+                  onMinus={() => changeJudge(judgeUi - 1)}
+                  onPlus={() => changeJudge(judgeUi + 1)}
+                  disabled={autoSync}
+                />
+              )}
               <PauseRow
                 label="노트 속도"
                 value={`x${liveUi.speed.toFixed(1)}`}
@@ -3105,6 +3278,90 @@ function PauseSlider({
       <span className="w-[3.4cqw] text-right font-mono text-[1.1cqw] text-white">
         {value === 0 ? "끔" : Math.round(value * 100)}
       </span>
+    </div>
+  );
+}
+
+/** 일시정지 화면: 이번 판 친 타이밍 분포 (가운데 = 딱 맞음, 왼쪽 = 빠름, 오른쪽 = 느림) */
+function HitHist({ hits, onFit }: { hits: HitSummary; onFit?: () => void }) {
+  const G = WINDOW.good * 1000;
+  const VW = HIST_N * HIST_MS; // 1칸 = 5ms → 가로 260
+  const max = Math.max(1, ...hits.hist);
+  const zone = (ms: number) =>
+    Math.abs(ms) <= WINDOW.perfect * 1000
+      ? JUDGE_STYLE.perfect.color
+      : Math.abs(ms) <= WINDOW.great * 1000
+        ? JUDGE_STYLE.great.color
+        : JUDGE_STYLE.good.color;
+  const m = hits.mean;
+  const mr = m === null ? 0 : Math.round(m);
+  const msg =
+    m === null
+      ? hits.n === 0
+        ? "치면 여기에 타이밍이 모여요"
+        : "조금 더 쳐 봐야 알 수 있어요"
+      : Math.abs(m) < 3
+        ? `평균 ${mr > 0 ? "+" : ""}${mr}ms · 잘 맞아요`
+        : m > 0
+          ? `평균 +${mr}ms · 늦게 치는 편`
+          : `평균 ${mr}ms · 일찍 치는 편`;
+  return (
+    <div className="pru-win w-full px-[1.4cqw] py-[0.7cqw] [--wf:#17132f]">
+      <div className="flex items-center justify-between gap-[0.8cqw] text-[1.05cqw]">
+        <span className="font-mono text-white/55">판정 분포</span>
+        <span className="flex-1 text-right text-white/80">{msg}</span>
+        {onFit && Math.abs(mr) >= 2 && (
+          <button
+            type="button"
+            className="pru-btn cursor-pointer px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] text-white [--c:rgba(124,58,237,0.6)]"
+            onClick={onFit}
+            title="판정 싱크를 평균만큼 옮겨서 가운데로"
+          >
+            판정 싱크 {mr > 0 ? "+" : ""}
+            {mr}
+          </button>
+        )}
+      </div>
+      <svg
+        viewBox={`0 0 ${VW} 44`}
+        className="mt-[0.4cqw] block h-[4.2cqw] w-full"
+        preserveAspectRatio="none"
+      >
+        {[WINDOW.good, WINDOW.great, WINDOW.perfect].map((w, i) => (
+          <rect
+            key={i}
+            x={G - w * 1000}
+            y={36}
+            width={w * 2000}
+            height={6}
+            fill={zone(w * 1000)}
+            opacity={0.5}
+          />
+        ))}
+        {hits.hist.map((c, i) =>
+          c > 0 ? (
+            <rect
+              key={i}
+              x={i * HIST_MS + 0.5}
+              y={34 - (30 * c) / max}
+              width={HIST_MS - 1}
+              height={(30 * c) / max}
+              fill={zone(i * HIST_MS - G + HIST_MS / 2)}
+            />
+          ) : null
+        )}
+        <rect x={G - 0.5} y={0} width={1} height={44} fill="rgba(255,255,255,0.6)" />
+        {m !== null && (
+          <path
+            d={`M${G + Math.max(-G, Math.min(G, m)) - 4} 0 L${G + Math.max(-G, Math.min(G, m)) + 4} 0 L${G + Math.max(-G, Math.min(G, m))} 5 Z`}
+            fill="#fff"
+          />
+        )}
+      </svg>
+      <div className="mt-[0.2cqw] flex justify-between font-mono text-[0.85cqw] text-white/40">
+        <span>FAST</span>
+        <span>SLOW</span>
+      </div>
     </div>
   );
 }

@@ -240,7 +240,8 @@ export default function RhythmGame() {
   const [settings, setSettings] = useState<Settings>({
     speed: 3,
     sync: 0,
-    autoSync: true,
+    autoSync: false,
+    hitBar: true,
     hit: 1,
     music: 1,
     sfx: 0.7,
@@ -591,7 +592,9 @@ export default function RhythmGame() {
         setSettings({
           speed: clamp(Number(s.speed) || 3, 1, 8),
           sync: clamp(Number(s.sync) || 0, -400, 400),
-          autoSync: s.autoSync !== false,
+          // v2.29 부터 자동 싱크 기본 끔 — 그 전에 저장된 '켜짐'은 대부분 그냥 기본값이라 한 번 끔 (asv 없음)
+          autoSync: Number(s.asv) >= 1 ? s.autoSync === true : false,
+          hitBar: s.hitBar !== false,
           hit: typeof s.hit === "number" ? clamp(s.hit, 0, 1) : 1,
           music: typeof s.music === "number" ? clamp(s.music, 0, 1) : 1,
           sfx: typeof s.sfx === "number" ? clamp(s.sfx, 0, 1) : 0.7,
@@ -633,7 +636,7 @@ export default function RhythmGame() {
     try {
       localStorage.setItem(
         SETTINGS_KEY,
-        JSON.stringify({ ...settings, songId: builtinSong.id, diff, v: SETTINGS_VER })
+        JSON.stringify({ ...settings, songId: builtinSong.id, diff, v: SETTINGS_VER, asv: 1 })
       );
     } catch {}
   }, [hydrated, settings, builtinSong.id, diff]);
@@ -1431,6 +1434,7 @@ export default function RhythmGame() {
               auto={auto}
               onAutoSync={onAutoSync}
               autoSync={settings.autoSync}
+              hitBar={settings.hitBar}
               hitVolume={settings.hit}
               musicVolume={settings.music}
               onSettings={onLiveSettings}

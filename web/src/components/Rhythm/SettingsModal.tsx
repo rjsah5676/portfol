@@ -54,10 +54,12 @@ export interface Settings {
    */
   sync: number;
   /**
-   * 자동 싱크 켜짐(기본): 처음엔 치는 동안 맞추고, 맞춰진 뒤엔 판 도중엔 고정 · 판 끝마다 조금씩.
+   * 자동 싱크 켜짐(v2.29 부터 기본은 끔): 처음엔 치는 동안 맞추고, 맞춰진 뒤엔 판 도중엔 고정 · 판 끝마다 조금씩.
    * 끄면 지금까지 맞춘 값 그대로 고정 (직접 맞추는 사람용)
    */
   autoSync: boolean;
+  /** 판정 분포 바: 플레이 중 친 타이밍이 빠른 쪽 · 느린 쪽 어디에 몰리는지 화면 빈 곳에 */
+  hitBar: boolean;
   /** 타격음 볼륨 0~1 */
   hit: number;
   /** 음악 볼륨 0~1 */
@@ -579,6 +581,29 @@ export default function SettingsModal({
                   onChange={onJudge}
                 />
               )}
+              <Row
+                label="판정 분포 바"
+                hint="플레이 중 친 타이밍이 빠른 쪽 · 느린 쪽 어디에 몰리는지 화면 빈 곳에 보여 줘요 (일시정지 화면엔 항상)"
+              >
+                <div className="flex gap-[0.6cqw]">
+                  {[
+                    { on: true, label: "보기" },
+                    { on: false, label: "숨기기" },
+                  ].map((o) => (
+                    <button
+                      key={o.label}
+                      type="button"
+                      className={chip(settings.hitBar === o.on)}
+                      onClick={() => {
+                        set({ hitBar: o.on });
+                        sfx("ui-move", 0.5);
+                      }}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </Row>
               {onResetAuto && (
                 <div className="flex items-center justify-between gap-[1cqw] border-t border-white/[0.06] py-[1cqw]">
                   <p className=" text-[1cqw] leading-relaxed text-white/40">
