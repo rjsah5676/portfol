@@ -256,6 +256,8 @@ let noteH = 16;
 export function setNoteSize(k: NoteSize) {
   noteH = NOTE_SIZES.find((n) => n.key === k)?.h ?? 16;
 }
+/** 노트 두께 절반 — 플레이 화면은 노트 아래 끝이 판정선에 닿는 순간을 0ms 로 그리려고 이만큼 올려 그림 */
+export const noteHalf = () => noteH / 2;
 
 /** 노트 머리 그림 캐시: 같은 스킨·색·폭·배율이면 한 번 그려 둔 그림을 찍음 (매 프레임 그라데이션·그림자 계산 없이) */
 const headCache = new Map<string, HTMLCanvasElement>();

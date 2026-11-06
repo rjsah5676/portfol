@@ -21,6 +21,7 @@ import {
   drawHoldBody,
   laneColors,
   makeHitSound,
+  noteHalf,
   SKIN_THEME,
   type SkinTheme,
   hitSoundBuffer,
@@ -129,6 +130,8 @@ export interface Result {
   auto?: boolean;
   /** 노트별 판정 · 입력 기록 (관리자 결과 화면에서 내보내기) */
   log?: PlayLog;
+  /** 판정 분포 (결과 화면 그래프) */
+  hits?: HitSummary;
 }
 
 /**
@@ -265,7 +268,7 @@ const TICK_LIFE = 4;
 /** 일시정지 화면 판정 분포: 5ms 칸, GOOD 창(±130ms) 안 */
 const HIST_MS = 5;
 const HIST_N = Math.round((WINDOW.good * 2000) / HIST_MS);
-interface HitSummary {
+export interface HitSummary {
   hist: number[];
   /** 가운데 80% 평균(ms, +면 늦게 침) — 5개 미만이면 null */
   mean: number | null;
@@ -1712,12 +1715,8 @@ export default function Stage({
 
     const draw = (t: number) => {
       const laneW = W / 4;
-      // 마디 위상 (0: 마디 첫 박) → 판정선이 마디마다 한 번 살짝 번쩍
-      // (박마다 판정선·배경이 번쩍이던 건 눈에 거슬려서 마디마다로 줄이고 배경 번쩍임은 뺌)
-      const bt = t - (song.beatOffset ?? 0);
+      // (판정선이 마디마다 번쩍이던 건 v2.30 에서 뺌 — 판정선은 얇은 줄 하나로 가만히)
       const barSec = beatSec * 4;
-      const barPh = bt > 0 ? (((bt % barSec) + barSec) % barSec) / beatSec : 4;
-      const pulse = t > 0 ? Math.exp(-barPh * 5) : 0;
       shownScore += (engine.score - shownScore) * 0.18;
       drawBackdrop(t, 0);
       if (idol) drawIdol(t);
@@ -1761,6 +1760,8 @@ export default function Stage({
         return r < 0.3 ? 0 : Math.min(1, (r - 0.3) / 0.1);
       };
       while (drawFrom < engine.notes.length && engine.notes[drawFrom].t < t - 4) drawFrom++;
+      // 0ms = 노트 아래 끝이 판정선에 닿는 순간 (노트 가운데 기준이면 두께만큼 일찍 닿아 보여서 — 두께 설정을 바꿔도 타이밍이 그대로)
+      const nh = noteHalf();
       for (let i = drawFrom; i < engine.notes.length; i++) {
         const n = engine.notes[i];
         if (n.t > t + vis + 0.1) break;
@@ -1771,8 +1772,8 @@ export default function Stage({
           // 머리는 쳤는데 일찍 뗀 롱노트: 남은 몸통은 바로 없앰 (회색으로 계속 내려오면 남아 있는 느낌)
           if (n.head && n.head !== "miss" && n.tail === "miss") continue;
           const dead = n.head === "miss" || n.tail === "miss";
-          const yHead = n.holding ? judgeY : yOf(n.t);
-          const yTail = Math.max(-20, yOf(n.end));
+          const yHead = (n.holding ? judgeY : yOf(n.t)) - nh;
+          const yTail = Math.max(-20, yOf(n.end) - nh);
           if (yTail > judgeY + 6) continue;
           const bc = dead ? "#555555" : c;
           const ca = n.holding ? 1 : coverAlpha(yHead);
@@ -1784,7 +1785,7 @@ export default function Stage({
           g.globalAlpha = 1;
         } else {
           if (n.head && n.head !== "miss") continue;
-          const y = yOf(n.t);
+          const y = yOf(n.t) - nh;
           if (y > judgeY + 30) continue;
           const ca = n.head === "miss" ? 0.3 : coverAlpha(y);
           if (ca <= 0) continue;
@@ -1798,19 +1799,10 @@ export default function Stage({
 
       // 레인 틀 (기둥·패드)
       if (gearLayer) g.drawImage(gearLayer, gearX, gearY, gearW, gearH);
-      // 판정선: 틀의 네온 줄 위에 박자마다 번쩍
-      g.save();
-      g.globalCompositeOperation = "lighter";
-      g.globalAlpha = 0.25 + 0.3 * pulse;
-      g.fillStyle = cachedGrad("judge", () => {
-        const jl = g.createLinearGradient(0, judgeY - 10, 0, judgeY + 10);
-        jl.addColorStop(0, "rgba(255,255,255,0)");
-        jl.addColorStop(0.5, "rgba(255,255,255,0.9)");
-        jl.addColorStop(1, "rgba(255,255,255,0)");
-        return jl;
-      });
-      g.fillRect(gx, judgeY - 10, W, 20);
-      g.restore();
+      // 판정선(0ms): 틀의 네온 줄 가운데에 얇은 흰 줄 하나 — 노트 아래 끝이 여기 닿을 때 치면 딱 맞음
+      // (예전엔 20px 흰 빛이 마디마다 번쩍였는데 눈에 거슬리고 어디가 기준인지 흐려서 뺌)
+      g.fillStyle = "rgba(255,255,255,0.75)";
+      g.fillRect(gx, judgeY - 1, W, 2);
       // 패드: 누르면 빛남 + 키 글자
       for (let l = 0; l < 4; l++) {
         const q = GEAR.pads[l];
@@ -2144,6 +2136,7 @@ export default function Stage({
         fast,
         slow,
         ...timingOf(diffs),
+        hits: hitSummary(diffs),
       };
     };
     const finish = (failed = false) => {
@@ -3282,8 +3275,17 @@ function PauseSlider({
   );
 }
 
-/** 일시정지 화면: 이번 판 친 타이밍 분포 (가운데 = 딱 맞음, 왼쪽 = 빠름, 오른쪽 = 느림) */
-function HitHist({ hits, onFit }: { hits: HitSummary; onFit?: () => void }) {
+/** 일시정지 · 결과 화면: 이번 판 친 타이밍 분포 (가운데 = 딱 맞음, 왼쪽 = 빠름, 오른쪽 = 느림) */
+export function HitHist({
+  hits,
+  onFit,
+  wrap = "pru-win w-full px-[1.4cqw] py-[0.7cqw] [--wf:#17132f]",
+}: {
+  hits: HitSummary;
+  onFit?: () => void;
+  /** 바깥 상자 class (결과 화면은 결과 화면 상자 모양으로) */
+  wrap?: string;
+}) {
   const G = WINDOW.good * 1000;
   const VW = HIST_N * HIST_MS; // 1칸 = 5ms → 가로 260
   const max = Math.max(1, ...hits.hist);
@@ -3306,7 +3308,7 @@ function HitHist({ hits, onFit }: { hits: HitSummary; onFit?: () => void }) {
           ? `평균 +${mr}ms · 늦게 치는 편`
           : `평균 ${mr}ms · 일찍 치는 편`;
   return (
-    <div className="pru-win w-full px-[1.4cqw] py-[0.7cqw] [--wf:#17132f]">
+    <div className={wrap}>
       <div className="flex items-center justify-between gap-[0.8cqw] text-[1.05cqw]">
         <span className="font-mono text-white/55">판정 분포</span>
         <span className="flex-1 text-right text-white/80">{msg}</span>

@@ -6,7 +6,7 @@ import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { bpOf } from "@/lib/rhythm/bp";
 import { sfx, tick } from "@/lib/rhythm/sfx";
 import { coverOf } from "./SongCarousel";
-import { RankEmblem, type Result } from "./Stage";
+import { HitHist, RankEmblem, type Result } from "./Stage";
 import { SubmitRanking } from "./RankingBoard";
 import type { SkinTheme } from "@/lib/rhythm/fx";
 import { downloadPlayLog } from "@/lib/rhythm/playLog";
@@ -242,6 +242,12 @@ export default function ResultScreen({
             </span>
           )}
         </div>
+        {!result.auto && result.hits && result.hits.n > 0 && (
+          <HitHist
+            hits={result.hits}
+            wrap="pru-in px-[1.2cqw] py-[0.6cqw] [--if:rgba(12,7,24,0.72)]"
+          />
+        )}
       </div>
 
       {/* 오른쪽: 랭킹 등록 */}

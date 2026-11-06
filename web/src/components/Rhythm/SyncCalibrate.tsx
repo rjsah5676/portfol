@@ -155,13 +155,8 @@ export default function SyncCalibrate({
               g.fillStyle = colors[n.lane];
               g.globalAlpha = Math.abs(dt) < 0.04 ? 1 : 0.9;
               g.beginPath();
-              g.roundRect(
-                x0 + n.lane * laneW + laneW * 0.06,
-                y - noteH / 2,
-                laneW * 0.88,
-                noteH,
-                6
-              );
+              // 플레이 화면과 같게 노트 아래 끝이 판정선에 닿는 순간이 0ms
+              g.roundRect(x0 + n.lane * laneW + laneW * 0.06, y - noteH, laneW * 0.88, noteH, 6);
               g.fill();
               g.globalAlpha = 1;
             }
