@@ -2,7 +2,7 @@ import { CURSOR } from "./cursors";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneRig } from "three/examples/jsm/utils/SkeletonUtils.js";
-import { CHARS, CHAR_TALL, IDLE_MS, WALK_MS, sheetOf, type Sheet } from "@/lib/gmtown/chars";
+import { CHARS, CHAR_TALL } from "@/lib/gmtown/chars";
 import type { CharId, ChatWire, ModelId, MoveWire, PlayerWire, TownSnap } from "@/lib/gmtown/types";
 import {
   BOARD,
@@ -30,7 +30,6 @@ import {
   isLot,
   riverX,
   RIVER,
-  toCam,
   type Building,
 } from "@/lib/gmtown/world";
 import { buildTown, type TownScene } from "./scene3d";
@@ -94,8 +93,8 @@ interface AvatarView {
   mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   ghost: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   shadow: THREE.Mesh;
-  /** 시트별 이 사람 전용 그림 (같은 그림 파일을 나눠 씀 — 넘기는 칸만 다름) */
-  tex: Map<string, THREE.Texture>;
+  /** 얼굴 동그라미 둘레에서 도는 고리 (3D 받는 중) */
+  ring: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
 }
 
 /** 3D 캐릭터 한 명 (모델을 뼈까지 복제 — 그림 · 모양 데이터는 나눠 씀) */
@@ -250,6 +249,64 @@ type RigMats = {
   eyeOver?: THREE.Material;
 };
 
+/** 3D 받는 동안 띄우는 얼굴 동그라미: 프로필 그림을 동그랗게 자르고 흰 테 + 남색 테 */
+function tokenTex(src: string, top = false): THREE.Texture {
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  const img = new Image();
+  img.onload = () => {
+    const g = c.getContext("2d")!;
+    g.clearRect(0, 0, S, S);
+    g.beginPath();
+    g.arc(S / 2, S / 2, S / 2 - 4, 0, Math.PI * 2);
+    g.fillStyle = "#1b2140";
+    g.fill();
+    g.save();
+    g.beginPath();
+    g.arc(S / 2, S / 2, S / 2 - 22, 0, Math.PI * 2);
+    g.clip();
+    g.fillStyle = "#2a2440";
+    g.fillRect(0, 0, S, S);
+    const k = Math.max(S / img.width, S / img.height);
+    const w = img.width * k,
+      h = img.height * k;
+    g.drawImage(img, (S - w) / 2, top ? 0 : (S - h) / 2, w, h);
+    g.restore();
+    g.beginPath();
+    g.arc(S / 2, S / 2, S / 2 - 16, 0, Math.PI * 2);
+    g.lineWidth = 10;
+    g.strokeStyle = "#ffffff";
+    g.stroke();
+    t.needsUpdate = true;
+  };
+  img.src = src;
+  return t;
+}
+/** 얼굴 동그라미 둘레 고리 (3/4 원, 끝으로 갈수록 흐려짐) — 돌려서 「받는 중」 */
+function ringTex(): THREE.Texture {
+  const S = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const g = c.getContext("2d")!;
+  g.lineCap = "round";
+  const n = 48;
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 1.5,
+      a1 = ((i + 1.2) / n) * Math.PI * 1.5;
+    g.beginPath();
+    g.arc(S / 2, S / 2, S / 2 - 12, a0, a1);
+    g.lineWidth = 12;
+    g.strokeStyle = `rgba(255, 214, 107, ${(0.15 + 0.85 * (i / n)).toFixed(3)})`;
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 /** GLB 안의 눈 조각 (bake 에서 "eyes" 로 만든 것) */
 function isEyes(o: THREE.Object3D) {
   return o.name.startsWith("eyes") || (o.parent?.name.startsWith("eyes") ?? false);
@@ -359,7 +416,11 @@ export class TownEngine {
   /** 누른 곳이 멀어서 뛰어가는 중 */
   private runPath = false;
 
-  private sheets = new Map<string, THREE.Texture>();
+  /** 3D 받는 동안 띄우는 동그란 얼굴 (캐릭터마다) */
+  private tokens = new Map<string, THREE.Texture>();
+  private tokenGeo = new THREE.PlaneGeometry(0.62, 0.62);
+  private ringGeo = new THREE.PlaneGeometry(0.86, 0.86);
+  private ringTex: THREE.Texture | null = null;
   private models = new Map<string, RigModel>();
   /** 3D 캐릭터 공용 재질 (툰 · 외곽선 · 가려졌을 때) — 캐릭터 종류마다 하나 */
   private rigMats = new Map<string, RigMats>();
@@ -367,7 +428,6 @@ export class TownEngine {
   /** 외곽선: 깊이 1m 에서의 두께(m) — 화면 px × (그 깊이에서 1px 의 크기) */
   private inkU = { uInk: { value: 0.001 } };
   private sky: THREE.Mesh | null = null;
-  private sheetGeo = new Map<string, THREE.BufferGeometry>();
   /** 발밑 접지 그림자 (해 그림자는 몸이 따로 드리움) — 가운데 진하고 가장자리로 흐려짐 */
   private shadowGeo = new THREE.CircleGeometry(0.36, 24);
   private shadowMat = new THREE.MeshBasicMaterial({
@@ -413,17 +473,9 @@ export class TownEngine {
         this.walk[gy * this.gw + gx] = blocked((gx + 0.5) * GRID, (gy + 0.5) * GRID, RADIUS + 0.06)
           ? 0
           : 1;
-    // 캐릭터 그림
-    const tl = new THREE.TextureLoader();
-    for (const [c, def] of Object.entries(CHARS))
-      for (const d of Object.values(def.dirs))
-        for (const sh of [d.walk, d.idle]) {
-          const t = tl.load(`${def.base}/${sh.file}`);
-          t.colorSpace = THREE.SRGBColorSpace;
-          t.magFilter = THREE.LinearFilter;
-          t.repeat.set(1 / sh.n, 1);
-          this.sheets.set(`${c}/${sh.file}`, t);
-        }
+    // 3D 받는 동안 띄울 얼굴 동그라미 + 도는 고리
+    for (const [c, def] of Object.entries(CHARS)) this.tokens.set(c, tokenTex(def.token, c === "agent"));
+    this.ringTex = ringTex();
     // 3D 캐릭터: 마을에 그 캐릭터가 처음 나올 때 받음 (에이미는 바로) — 못 받으면 판으로
     this.needModel("amy");
     buildTown().then(
@@ -475,8 +527,10 @@ export class TownEngine {
     this.canvas.removeEventListener("wheel", this.onWheel);
     this.canvas.removeEventListener("contextmenu", this.onMenu);
     for (const a of [...this.others.values(), ...(this.me ? [this.me] : [])]) this.dropView(a);
-    for (const t of this.sheets.values()) t.dispose();
-    for (const g of this.sheetGeo.values()) g.dispose();
+    for (const t of this.tokens.values()) t.dispose();
+    this.ringTex?.dispose();
+    this.tokenGeo.dispose();
+    this.ringGeo.dispose();
     for (const m of this.rigMats.values()) {
       const { byMap, ...rest } = m;
       for (const x of Object.values(rest)) x?.dispose();
@@ -1621,21 +1675,6 @@ export class TownEngine {
 
   // ───────────── 사람 그리기 ─────────────
 
-  /** 시트 하나의 판 (발이 원점) */
-  private geoOf(def: (typeof CHARS)[keyof typeof CHARS], sh: Sheet) {
-    const key = `${def.base}/${sh.file}`;
-    let g = this.sheetGeo.get(key);
-    if (!g) {
-      const hs = (CHAR_TALL * sh.h) / def.tall,
-        ws = (hs * sh.w) / sh.h;
-      const hp = hs;
-      g = new THREE.PlaneGeometry(ws, hp);
-      g.translate(ws * (0.5 - sh.ax / sh.w), hp / 2 - ((sh.h - sh.ay) / sh.h) * hp, 0);
-      this.sheetGeo.set(key, g);
-    }
-    return g;
-  }
-
   private viewOf(a: Avatar): AvatarView | null {
     if (a.view) return a.view;
     const town = this.town;
@@ -1652,8 +1691,17 @@ export class TownEngine {
       depthWrite: false,
       side: THREE.DoubleSide,
     });
-    const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
-    const ghost = new THREE.Mesh(new THREE.BufferGeometry(), gmat);
+    mat.map = gmat.map = this.tokens.get(a.c) ?? null;
+    const mesh = new THREE.Mesh(this.tokenGeo, mat);
+    const ghost = new THREE.Mesh(this.tokenGeo, gmat);
+    const rmat = new THREE.MeshBasicMaterial({ map: this.ringTex?.clone() ?? null, transparent: true, depthWrite: false });
+    if (rmat.map) {
+      rmat.map.center.set(0.5, 0.5);
+      rmat.map.needsUpdate = true;
+    }
+    const ring = new THREE.Mesh(this.ringGeo, rmat);
+    ring.position.z = -0.01;
+    mesh.add(ring);
     mesh.rotation.y = ghost.rotation.y = this.camYaw;
     mesh.renderOrder = 3;
     ghost.renderOrder = 10;
@@ -1662,7 +1710,7 @@ export class TownEngine {
     shadow.scale.y = 0.62;
     shadow.renderOrder = 1;
     town.scene.add(mesh, ghost, shadow);
-    a.view = { mesh, ghost, shadow, tex: new Map() };
+    a.view = { mesh, ghost, shadow, ring };
     return a.view;
   }
   private dropView(a: Avatar) {
@@ -1681,7 +1729,8 @@ export class TownEngine {
     v.shadow.removeFromParent();
     v.mesh.material.dispose();
     v.ghost.material.dispose();
-    for (const t of v.tex.values()) t.dispose();
+    v.ring.material.map?.dispose();
+    v.ring.material.dispose();
     a.view = undefined;
   }
   // ───────────── 3D 캐릭터 ─────────────
@@ -2095,36 +2144,17 @@ diffuseColor.a *= 0.95 * max( max( 1.0 - smoothstep( 0.03, 0.08, eLum ), eWhite 
       const r = this.rigOf(a);
       if (r) return this.placeRig(a, r, dt);
     }
+    // 3D 받는 동안: 머리 높이에 얼굴 동그라미가 둥실 + 둘레 고리가 돎 (예전 판 그림 대신)
     const v = this.viewOf(a);
     if (!v) return;
-    const def = CHARS[a.c];
-    // 판: 땅 기준 방향 → 내 화면에서 보이는 방향으로
-    const { dir, flip } = sheetOf(dir8(...toCam(...dirVec(a.d), this.camYaw)));
-    v.mesh.rotation.y = v.ghost.rotation.y = this.camYaw;
-    const ds = def.dirs[dir];
-    const sh = a.moving ? ds.walk : ds.idle;
-    const key = `${a.c}/${sh.file}`;
-    let t = v.tex.get(key);
-    if (!t) {
-      const base = this.sheets.get(key);
-      if (!base) return;
-      t = base.clone();
-      v.tex.set(key, t);
-    }
-    const fi = a.moving
-      ? (ds.start + Math.floor(a.phase / WALK_MS)) % sh.n
-      : Math.floor(a.phase / IDLE_MS) % sh.n;
-    t.offset.x = fi / sh.n;
-    const geo = this.geoOf(def, sh);
+    const tt = performance.now() / 1000;
+    const bob = Math.sin(tt * 2.4 + a.x) * 0.05;
     for (const m of [v.mesh, v.ghost]) {
-      if (m.geometry !== geo) m.geometry = geo;
-      if (m.material.map !== t) {
-        m.material.map = t;
-        m.material.needsUpdate = true;
-      }
-      m.position.set(a.x, this.footH(a) + 0.05, a.y);
-      m.scale.x = flip ? -1 : 1;
+      m.rotation.y = this.camYaw;
+      m.position.set(a.x, this.footH(a) + 1.05 + bob, a.y);
     }
+    const rm = v.ring.material.map;
+    if (rm) rm.rotation = -tt * 3.2;
     v.shadow.position.set(a.x, this.footH(a) + 0.06, a.y);
   }
 

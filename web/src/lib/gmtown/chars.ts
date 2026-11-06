@@ -27,6 +27,8 @@ export interface CharDef {
   model?: string;
   /** 눈 덧그림(앞머리 위로 비침)을 쓰는 눈 그림 세로 범위 (UV v, 위가 0). 없으면 에이미 눈 줄만 [0.44, 0.64] */
   eyeBand?: [number, number];
+  /** 3D 를 받는 동안 · 못 받을 때 머리 위에 띄우는 동그란 얼굴 그림 */
+  token: string;
   dirs: Record<SheetDir, { walk: Sheet; idle: Sheet; start: number }>;
 }
 
@@ -40,12 +42,12 @@ const AMY_DIRS: CharDef["dirs"] = {
 };
 
 export const CHARS: Record<ModelId, CharDef> = {
-  amy: { name: "에이미", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/amy3d.glb", dirs: AMY_DIRS },
-  mio: { name: "미오", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/mio3d.glb", dirs: AMY_DIRS },
+  amy: { name: "에이미", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/amy3d.glb", token: "/poker/char/amy/profile.webp", dirs: AMY_DIRS },
+  mio: { name: "미오", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/mio3d.glb", token: "/poker/char/mio/profile.webp", dirs: AMY_DIRS },
   // 세라: 얼굴 비워서 뽑은 모델 + 그려 넣은 눈 · 눈썹 → 눈썹도 앞머리 위로 비침
-  sera: { name: "세라", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/sera3d.glb", eyeBand: [0.37, 0.7], dirs: AMY_DIRS },
+  sera: { name: "세라", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/sera3d.glb", eyeBand: [0.37, 0.7], token: "/poker/char/sera/profile.webp", dirs: AMY_DIRS },
   // NPC: 부동산 중개인 민트 (고르는 캐릭터 아님)
-  agent: { name: "민트", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/agent3d.glb", dirs: AMY_DIRS },
+  agent: { name: "민트", base: "/gmtown/char/amy", tall: 168, model: "/gmtown/char/agent3d.glb", token: "/gmtown/char/npc_agent.webp", dirs: AMY_DIRS },
 };
 
 /** 방향 0~7 → 시트 · 반전 */
@@ -56,10 +58,7 @@ export function sheetOf(d: number): { dir: SheetDir; flip: boolean } {
 }
 
 /** 이 캐릭터가 쓰는 그림 주소 전부 (미리 받기) */
-export const charFiles = (c: CharId) => [
-  ...Object.values(CHARS[c].dirs).flatMap((d) => [`${CHARS[c].base}/${d.walk.file}`, `${CHARS[c].base}/${d.idle.file}`]),
-  ...(CHARS[c].model ? [CHARS[c].model!] : []),
-];
+export const charFiles = (c: CharId) => [CHARS[c].token, ...(CHARS[c].model ? [CHARS[c].model!] : [])];
 
 /** 화면에서 캐릭터 키 (칸) — 건물 · 나무 크기는 이걸 기준으로 맞춤 */
 export const CHAR_TALL = 1.65;
