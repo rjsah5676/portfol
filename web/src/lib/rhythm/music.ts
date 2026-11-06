@@ -34,6 +34,8 @@ import bladestormData from "@/data/rhythm/bladestorm.json";
 import venombloomData from "@/data/rhythm/venombloom.json";
 import moonshineData from "@/data/rhythm/moonshine.json";
 import kaminariData from "@/data/rhythm/kaminari.json";
+import plushamenData from "@/data/rhythm/plushamen.json";
+import kirakiraData from "@/data/rhythm/kirakira.json";
 import redlineData from "@/data/rhythm/redline.json";
 import hairpinData from "@/data/rhythm/hairpin.json";
 import colossusData from "@/data/rhythm/colossus.json";
@@ -492,6 +494,17 @@ const VENOMBLOOM = audioSong("venombloom", "Venom Bloom", "/audio/venombloom.mp3
   desc: "140 BPM · GIRL-CRUSH K-POP TRAP · AI 자작곡 (tunee.ai)",
 });
 
+// 3분 14초 → 2분 31초: 2:05~2:48(32마디)를 덜어 냄 (유사도 0.89)
+const PLUSHAMEN = audioSong("plushamen", "PLUSH AMEN", "/audio/plushamen.mp3", plushamenData, {
+  color: "#F9A8D4",
+  desc: "180 BPM · KAWAII BREAKCORE · AI 자작곡 (tunee.ai)",
+});
+
+const KIRAKIRA = audioSong("kirakira", "Kira Kira Error", "/audio/kirakira.mp3", kirakiraData, {
+  color: "#C084FC",
+  desc: "172 BPM · HYPERPOP BUBBLEGUM BASS · AI 자작곡 (tunee.ai)",
+});
+
 // 2분 56초 → 2분 31초: 0:31~0:57(16마디)을 덜어 냄 (유사도 0.95)
 const MOONSHINE = audioSong(
   "moonshine",
@@ -642,6 +655,7 @@ const FREEDOMDIVE = audioSong(
  *   kaminari       --rephase --bpm-label 171 --boss '{}' --explus '{}' --abyss '{"mode":"chord","p3":0.2,"share":0.6}'   (자동 목표 3/6/10/13/15/16 · ABYSS 19 — 스트림형은 18 이 천장이라 코드잭형으로 · 1:25~2:00 · 2:30 박이 반 칸 밀려 있어서 --rephase)
  *   (자를 때 주의: 뺀 길이가 마디 길이의 정수배가 아니면 뒤쪽 박이 밀림 — cut.sh 의 30ms 크로스페이드만큼도.
  *    뒤 시작 = 앞 끝 − 0.03 + 마디 수 × 4 × 60 / BPM 으로 잘라야 함. v2.25 Moonshine 첫 판이 37ms 밀려서 앞 30초 어려움 · EX 노트가 비었음)
+ *   (v2.28 부터는 명령을 cmds2.txt 에만 적음)
  *   v2.27 (2026-11-06 전곡 점검): 곡 개성 --favor(13곡) · ULTIMA 끌어올리기 --lift(25곡) · KAMINARI 어려움 목표 9 가 붙어서
  *   위 명령보다 research/rhythm/tools/cmds2.txt (= lib.mjs BUILTIN) 가 기준. 결과 레벨은 PatchNotes v2.27 · 프로젝트 문서 참고
  */
@@ -692,6 +706,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  PLUSHAMEN,
+  KIRAKIRA,
   MOONSHINE,
   KAMINARI,
   REDLINE,

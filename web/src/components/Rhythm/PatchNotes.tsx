@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.28",
+    name: "새 곡 2곡",
+    date: "2026.11.06",
+    lines: [
+      "PLUSH AMEN — 180 BPM 카와이 브레이크코어 (EASY 3 ~ ABYSS 19) — 잘게 썬 드럼을 따라 빠른 트릴 · 엇박 연타 · 잭",
+      "Kira Kira Error — 172 BPM 하이퍼팝 (EASY 3 ~ ABYSS 20) — 글리치 계단 · 동시치기, ABYSS 는 베이스 따라 코드잭",
+      "둘 다 AI 자작곡(tunee.ai), PLUSH AMEN 은 2분 31초로 줄임",
+    ],
+  },
+  {
     ver: "v2.27",
     name: "전곡 채보 점검",
     date: "2026.11.06",

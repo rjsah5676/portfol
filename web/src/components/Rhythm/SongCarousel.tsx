@@ -30,6 +30,8 @@ import bladestormCover from "@/img/rhythm/bladestorm.jpg";
 import venombloomCover from "@/img/rhythm/venombloom.jpg";
 import moonshineCover from "@/img/rhythm/moonshine.jpg";
 import kaminariCover from "@/img/rhythm/kaminari.jpg";
+import plushamenCover from "@/img/rhythm/plushamen.jpg";
+import kirakiraCover from "@/img/rhythm/kirakira.jpg";
 import redlineCover from "@/img/rhythm/redline.jpg";
 import hairpinCover from "@/img/rhythm/hairpin.jpg";
 import colossusCover from "@/img/rhythm/colossus.jpg";
@@ -65,6 +67,8 @@ export const COVERS: Record<string, StaticImageData> = {
   venombloom: venombloomCover,
   moonshine: moonshineCover,
   kaminari: kaminariCover,
+  plushamen: plushamenCover,
+  kirakira: kirakiraCover,
   redline: redlineCover,
   hairpin: hairpinCover,
   colossus: colossusCover,
