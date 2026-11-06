@@ -35,19 +35,20 @@ function getWorker(): Worker | null {
   return worker;
 }
 
-const local = (seed: number, tier: TierId) =>
+const local = (seed: number, tier: TierId, rules: number) =>
   new Promise<Puzzle>((ok, fail) =>
     setTimeout(() => {
       try {
-        ok(generate(seed, tier));
+        ok(generate(seed, tier, rules));
       } catch (e) {
         fail(e);
       }
     }, 30)
   );
 
-export function makePuzzle(seed: number, tier: TierId): Promise<Puzzle> {
-  const key = `${seed}:${tier}`;
+/** rules: 오늘의 사건은 rulesFor(날짜) — 날짜마다 그때 규칙으로 (engine.ts generate) */
+export function makePuzzle(seed: number, tier: TierId, rules = 2): Promise<Puzzle> {
+  const key = `${seed}:${tier}:${rules}`;
   let p = cache.get(key);
   if (!p) {
     const w = getWorker();
@@ -55,9 +56,9 @@ export function makePuzzle(seed: number, tier: TierId): Promise<Puzzle> {
       ? new Promise<Puzzle>((ok, fail) => {
           const id = ++seq;
           waiting.set(id, { ok, fail });
-          w.postMessage({ id, seed, tier });
-        }).catch(() => local(seed, tier))
-      : local(seed, tier);
+          w.postMessage({ id, seed, tier, rules });
+        }).catch(() => local(seed, tier, rules))
+      : local(seed, tier, rules);
     cache.set(key, p);
     p.catch(() => cache.delete(key));
   }

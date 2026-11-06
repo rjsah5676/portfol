@@ -14,6 +14,7 @@ import {
   ALL_FACES,
   kstDay,
   RANKED_TIERS,
+  rulesFor,
   scoreOf,
   TIERS,
   type Puzzle,
@@ -245,7 +246,7 @@ export default function SuspectApp() {
     let chain = Promise.resolve();
     for (const t of RANKED_TIERS)
       chain = chain.then(() =>
-        makePuzzle(dailySeed(today, t), t).then(
+        makePuzzle(dailySeed(today, t), t, rulesFor(today)).then(
           () => {},
           () => {}
         )
@@ -275,7 +276,7 @@ export default function SuspectApp() {
       });
       setPhase("result");
     } else setPhase("play");
-    makePuzzle(r.seed, r.tier).then(
+    makePuzzle(r.seed, r.tier, rulesFor(r.day)).then(
       (p) => setPuzzle(p),
       () => setGenErr(true)
     );

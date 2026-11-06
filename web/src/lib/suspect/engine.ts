@@ -83,6 +83,11 @@ export interface TierSpec {
   perRound: number;
   /** 단서 하나만 보고는 못 푸는 "조합 추론" 단계 수 범위 */
   combo: [number, number];
+  /**
+   * 한 단계 깊이 상한 (규칙 2): [엮어야 하는 단서 최대 수, 그중 3개짜리 단계 최대 횟수]. 없으면 제한 없음(지옥).
+   * 조합 추론 횟수만 보면 단서 4개를 엮는 단계도 1번으로 세서 어려움이 지옥보다 어려운 날이 있었음 (2026-11-06)
+   */
+  depth?: [number, number];
   /** 단서 종류별 가중치 (없는 종류는 안 나옴) */
   weights: Partial<Record<ClueType, number>>;
   /** 일일 랭킹이 있는 난이도인지 (입문은 연습용) */
@@ -134,6 +139,7 @@ export const TIERS: Record<TierId, TierSpec> = {
     crim: [7, 10],
     perRound: 2,
     combo: [2, 4],
+    depth: [2, 0],
     weights: {
       nb: 24,
       otherNb: 6,
@@ -160,6 +166,7 @@ export const TIERS: Record<TierId, TierSpec> = {
     crim: [7, 11],
     perRound: 1.5,
     combo: [5, 9],
+    depth: [3, 1],
     weights: {
       nb: 18,
       otherNb: 10,
@@ -214,6 +221,7 @@ export const TIERS: Record<TierId, TierSpec> = {
     crim: [11, 16],
     perRound: 2,
     combo: [8, 14],
+    depth: [3, 1],
     weights: {
       nb: 18,
       otherNb: 10,
@@ -745,8 +753,11 @@ export interface Puzzle {
   crimCount: number;
 }
 
-/** 시드와 난이도로 퍼즐 생성. 같은 시드면 어디서든 같은 퍼즐 (오늘의 사건) */
-export function generate(seed: number, tierId: TierId): Puzzle {
+/**
+ * 시드와 난이도로 퍼즐 생성. 같은 시드 · 규칙이면 어디서든 같은 퍼즐 (오늘의 사건).
+ * rules 1 = 처음 규칙(조합 추론 횟수만 봄), 2 = 단계 깊이 상한도 봄 (RULES_V2_FROM 날짜부터 오늘의 사건 · 연습은 늘 2)
+ */
+export function generate(seed: number, tierId: TierId, rules = 2): Puzzle {
   const T = TIERS[tierId];
   const r = rng(seed);
   const b = new Board(T.cols, T.rows);
@@ -841,14 +852,54 @@ export function generate(seed: number, tierId: TierId): Puzzle {
     };
     const gap =
       combos < T.combo[0] ? T.combo[0] - combos : combos > T.combo[1] ? combos - T.combo[1] : 0;
-    if (gap === 0) return puzzle;
-    if (gap < bestGap) {
-      bestGap = gap;
+    // 규칙 2: 조합 추론 횟수가 맞아도 한 단계가 너무 깊으면(단서를 많이 엮어야 하면) 다시 — 어려움이 지옥보다 어려워지지 않게.
+    // 못 찾으면 조합 수가 맞는 깊은 판(25) > 조합 수가 어긋난 판(차이 × 10) 순으로 고름
+    const bad = gap ? gap * 10 : rules >= 2 && T.depth && !depthOk(puzzle, T.depth) ? 25 : 0;
+    if (bad === 0) return puzzle;
+    if (bad < bestGap) {
+      bestGap = bad;
       best = puzzle;
     }
   }
   if (!best) throw new Error("퍼즐을 만들지 못했어요");
   return best;
+}
+
+/**
+ * 한 단계를 풀 때 엮어야 하는 단서 수가 상한 안인지 — 단계마다 「새로 확정되는 사람이 나오는 가장 작은 단서 묶음」 크기를 잼.
+ * depth = [최대 깊이(2 또는 3), 깊이 3 단계 최대 횟수]. 4개 이상 엮어야 하는 단계는 늘 안 됨
+ */
+export function depthOk(p: Puzzle, depth: [number, number]): boolean {
+  const [cap, threeMax] = depth;
+  const x = new Array<number>(p.people.length).fill(-1);
+  x[p.start] = 0;
+  let threes = 0;
+  for (let guard = 0; guard < 80 && x.some((v) => v < 0); guard++) {
+    const cs = p.clues.filter((_, i) => x[i] >= 0);
+    const all = forcedAll(x, cs);
+    if (!all.length) return false;
+    let k = 0;
+    for (let size = 1; size <= Math.min(3, cap) && !k; size++)
+      if (someSubset(cs.length, size, (ix) => forcedAll(x, ix.map((i) => cs[i])).length > 0)) k = size;
+    if (!k) return false;
+    if (k === 3 && ++threes > threeMax) return false;
+    for (const f of all) x[f.i] = f.v;
+  }
+  return true;
+}
+/** n개 중 k개 고르는 묶음 중 하나라도 ok 면 true (찾으면 바로 멈춤) */
+function someSubset(n: number, k: number, ok: (ix: number[]) => boolean): boolean {
+  const a: number[] = [];
+  const rec = (s: number): boolean => {
+    if (a.length === k) return ok(a);
+    for (let i = s; i <= n - (k - a.length); i++) {
+      a.push(i);
+      if (rec(i + 1)) return true;
+      a.pop();
+    }
+    return false;
+  };
+  return rec(0);
 }
 
 // ───────────────────────── 오늘의 사건 · 기록 ─────────────────────────
@@ -868,6 +919,10 @@ export function kstDay(now = Date.now(), offsetDays = 0): string {
   const d = new Date(now + 9 * 3600e3 + offsetDays * 864e5);
   return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`;
 }
+
+/** 오늘의 사건에 규칙 2(단계 깊이 상한)를 쓰기 시작한 날 — 그 전 날짜는 처음 규칙 그대로(이미 푼 판 · 랭킹이 바뀌지 않게) */
+export const RULES_V2_FROM = "20261107";
+export const rulesFor = (day: string | null) => (!day || day >= RULES_V2_FROM ? 2 : 1);
 
 /** 사건 #1 날짜 (처음 연 날) — 랭킹 달력은 이날부터 */
 export const FIRST_CASE_DAY = "20261031";
