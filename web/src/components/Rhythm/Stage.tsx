@@ -397,6 +397,15 @@ export interface ClockDiag {
   aheadHi: number | null;
   /** 프레임 함수가 화면 시각(ts)보다 늦게 돈 정도 */
   lag: number;
+  /** 프레임 간격 중앙값 · 90% (ms) — 화면이 밀리면 늘어남 */
+  dt: number;
+  dt90: number;
+  /** 지금 그리는 간격(1 매 프레임 · 2 한 칸 건너) · 효과 단계(3 → 0) · 재킷 배경을 HTML 로 깔았는지 */
+  pace: number;
+  quality: number;
+  domBg: boolean;
+  /** 10초 구간별 판정 평균(ms, + 늦게) — 곡 내내 고르게 밀렸는지 · 초반만인지 */
+  seg: (number | null)[];
 }
 const medOf = (a: number[]) => {
   if (!a.length) return null;
@@ -952,6 +961,8 @@ export default function Stage({
     const hitLog: number[] = [];
     /** 판정 분포 바 눈금 (최근 80개) */
     const hitTicks: { d: number; at: number; j: Judge }[] = [];
+    /** 이 판 전체 타이밍 (시계 진단의 10초 구간별 평균) */
+    const hitTicksAll: { d: number; at: number }[] = [];
     // 자동 싱크: 레인별 노트 시각(정렬) + 입력마다 같은 레인 가장 가까운 노트와의 차이(초, 타격 싱크 적용 후)
     const laneNotes: number[][] = [[], [], [], []];
     for (const n of chart.notes) laneNotes[n.lane].push(n.t);
@@ -2216,10 +2227,15 @@ export default function Stage({
       live: [] as number[],
       ahead: [] as number[],
       lag: [] as number[],
+      dt: [] as number[],
     };
     let clkAt = 0;
+    let clkTs = 0;
     const sampleClock = (ts: number) => {
       const pn = performance.now();
+      if (clkTs && ts - clkTs < 200) clk.dt.push(ts - clkTs);
+      clkTs = ts;
+      if (clk.dt.length > 4000) clk.dt.splice(0, 2000);
       if (pn - clkAt < 250) return;
       clkAt = pn;
       clk.lag.push(pn - ts);
@@ -2233,7 +2249,8 @@ export default function Stage({
         const game = pn / 1000 + clockBase + offsetSec();
         clk.ahead.push((game - heard) * 1000);
       }
-      if (clk.lag.length > 2000) for (const a of Object.values(clk)) a.splice(0, 1000);
+      if (clk.lag.length > 2000)
+        for (const a of [clk.lat, clk.live, clk.ahead, clk.lag]) a.splice(0, 1000);
     };
     // 개발 서버: 콘솔에서 __rhythmClock() 으로 지금 판 시계 진단
     if (process.env.NODE_ENV !== "production")
@@ -2247,6 +2264,25 @@ export default function Stage({
         aheadLo: s.length ? Math.round(s[Math.floor(s.length * 0.05)]) : null,
         aheadHi: s.length ? Math.round(s[Math.floor(s.length * 0.95)]) : null,
         lag: medOf(clk.lag) ?? 0,
+        dt: medOf(clk.dt) ?? 0,
+        dt90: (() => {
+          const d = [...clk.dt].sort((a, b) => a - b);
+          return d.length ? Math.round(d[Math.floor(d.length * 0.9)] * 10) / 10 : 0;
+        })(),
+        pace,
+        quality,
+        domBg,
+        seg: (() => {
+          const out: (number | null)[] = [];
+          for (const h of hitTicksAll) {
+            const k = Math.max(0, Math.floor(h.at / 10));
+            while (out.length <= k) out.push(null);
+          }
+          return out.map((_, k) => {
+            const s = hitTicksAll.filter((h) => Math.floor(h.at / 10) === k).map((h) => h.d * 1000);
+            return s.length >= 5 ? Math.round(s.reduce((a, x) => a + x, 0) / s.length) : null;
+          });
+        })(),
       };
     };
     let prevCombo = 0;
@@ -2375,6 +2411,7 @@ export default function Stage({
           diffs.push(e.diff);
           hitLog.push(e.diff);
           hitTicks.push({ d: e.diff, at: e.at, j: e.judge });
+          hitTicksAll.push({ d: e.diff, at: e.at });
           if (hitTicks.length > 80) hitTicks.shift();
         }
         if (e.diff !== undefined && e.judge !== "miss" && Math.abs(e.diff * 1000) > FAST_SLOW_MS) {
@@ -3486,6 +3523,10 @@ export function ClockLine({ c }: { c: ClockDiag }) {
       시계 진단 · 출력 지연 {Math.round(c.lat)}ms (브라우저{" "}
       {c.live === null ? "?" : Math.round(c.live)}) · 화면이 소리보다 {f(c.ahead)}ms ({f(c.aheadLo)}
       ~{f(c.aheadHi)}) · 프레임 늦음 {Math.round(c.lag)}ms
+      <br />
+      프레임 {c.dt}ms (90% {c.dt90}) · 간격 x{c.pace} · 효과 {c.quality} ·{" "}
+      {c.domBg ? "재킷 배경" : "무대 배경"} · 10초 구간 평균{" "}
+      {c.seg.map((v) => (v === null ? "·" : f(v))).join(" ")}
     </p>
   );
 }
