@@ -241,6 +241,55 @@ const loadImg = (src: string, onload: () => void) => {
 };
 const ready = (im: HTMLImageElement | null) => !!im && im.complete && im.naturalWidth > 0;
 
+/**
+ * 재킷 배경을 캔버스 바닥 그림에 (예전 HTML + CSS blur 와 같은 모양).
+ * 곡 전용 가로 배경(wide)은 꽉 채움. 재킷만 있으면 뒤는 1.1배로 꽉 채워 아주 흐리고 어둡게 + 앞은 잘리지 않게 살짝 흐리게.
+ * 흐림은 작게 줄였다가 키우는 방식 (ctx.filter 가 없는 사파리도 같게)
+ */
+function paintCoverBg(
+  b: CanvasRenderingContext2D,
+  img: HTMLImageElement,
+  wide: boolean,
+  CW: number,
+  CH: number
+) {
+  const iw = img.naturalWidth;
+  const ih = img.naturalHeight;
+  b.save();
+  b.imageSmoothingEnabled = true;
+  b.imageSmoothingQuality = "high";
+  if (wide) {
+    const sc = Math.max(CW / iw, CH / ih);
+    b.drawImage(img, (CW - iw * sc) / 2, (CH - ih * sc) / 2, iw * sc, ih * sc);
+    b.restore();
+    return;
+  }
+  // 뒤: 가로 40칸으로 줄였다 키움 (CSS blur 28px 정도) + 밝기 0.7
+  const sc = Math.max(CW / iw, CH / ih) * 1.1;
+  const tiny = document.createElement("canvas");
+  tiny.width = 40;
+  tiny.height = Math.max(1, Math.round((40 * CH) / CW));
+  const s = tiny.width / CW;
+  const tb = tiny.getContext("2d")!;
+  tb.imageSmoothingQuality = "high";
+  tb.drawImage(img, ((CW - iw * sc) / 2) * s, ((CH - ih * sc) / 2) * s, iw * sc * s, ih * sc * s);
+  b.drawImage(tiny, 0, 0, CW, CH);
+  b.fillStyle = "rgba(0,0,0,0.3)";
+  b.fillRect(0, 0, CW, CH);
+  // 앞: 잘리지 않게(contain), 1/3 로 줄였다 키워 살짝 흐리게
+  const fs = Math.min(CW / iw, CH / ih);
+  const fw = iw * fs;
+  const fh = ih * fs;
+  const mid = document.createElement("canvas");
+  mid.width = Math.max(1, Math.round(fw / 3));
+  mid.height = Math.max(1, Math.round(fh / 3));
+  const mb = mid.getContext("2d")!;
+  mb.imageSmoothingQuality = "high";
+  mb.drawImage(img, 0, 0, mid.width, mid.height);
+  b.drawImage(mid, (CW - fw) / 2, (CH - fh) / 2, fw, fh);
+  b.restore();
+}
+
 /** 플레이 화면에서 뒤로가기를 잡으려고 쌓는 히스토리 표시 */
 export const PLAY_HISTORY_KEY = "__rhythmPlay";
 
@@ -448,21 +497,25 @@ export default function Stage({
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  // 커버·뮤비 배경은 캔버스 뒤 HTML 요소로 (재킷은 CSS blur — 캔버스로 흐리면 화질이 깨지고 사파리는 filter가 안 됨).
-  // 데스크탑(마우스)·가로 화면에서만 — 캔버스가 투명해져 합성 부담이 조금 늘어서 폰은 무대 그림 그대로. 뮤비는 프레임이 떨어지면 자동으로 끔
+  // 재킷 · 뮤비 배경: 데스크탑(마우스) · 가로 화면에서만 — 폰은 무대 그림 그대로. 뮤비는 프레임이 떨어지면 자동으로 끔
   // 내 음악인데 파일에 재킷이 없으면(기본 그림) 무대 그림 그대로
   const hasCover = !song.custom || (!!song.cover && song.cover !== CUSTOM_COVER);
   // 테마 스킨(SKIN_THEME)은 재킷 대신 스킨의 무대 그림 (뮤비가 있는 곡은 뮤비 그대로)
   const theme = SKIN_THEME[skin];
   /** 정보판 테두리 · 진행 막대 · 박자 빛 색 — 테마 스킨은 스킨 색, 아니면 곡 색 */
   const accent = theme?.accent ?? song.color;
-  const domBg =
+  /** 재킷 · 뮤비 배경 (데스크탑 가로 화면) */
+  const coverBg =
     bg === "cover" &&
     (theme ? !!song.video : hasCover || !!song.video) &&
     !portrait &&
     typeof window !== "undefined" &&
     window.matchMedia("(pointer: fine)").matches;
-  const useVideo = domBg && !!song.video;
+  const useVideo = coverBg && !!song.video;
+  // 캔버스 뒤에 HTML 을 까는 건 뮤비만. 재킷은 캔버스 안 바닥 그림에 직접 (v2.32) —
+  // 투명 캔버스 + CSS blur 재킷을 브라우저가 합성하면 화면이 모니터에 뜨기까지의 지연이 판마다 달라져서
+  // 보고 치는 판정 평균이 -40 ~ +34ms 로 튐 (무대 배경은 ±15 안). 불투명 캔버스 한 장이면 합성이 단순해짐
+  const domBg = useVideo;
   const [paused, setPaused] = useState(false);
   /** 온라인: 나가기 버튼을 한 번 누른 상태 */
   const [leaveArm, setLeaveArm] = useState(false);
@@ -655,6 +708,9 @@ export default function Stage({
         (warm(song.color) ? "/rhythm/px/stage-pink.webp" : "/rhythm/px/stage-blue.webp"),
       () => buildStatic()
     );
+    // 재킷 배경 (뮤비 아님): 곡 전용 가로 배경이 있으면 그것, 없으면 재킷을 흐려서
+    const coverBgImg =
+      coverBg && !useVideo ? loadImg(song.bg ?? coverOf(song), () => buildStatic()) : null;
     const gearImg = loadImg(theme?.gear ?? "/rhythm/px/gear.webp", () => buildGear());
     // 테마 스킨의 무대 위 도트 캐릭터: 정보판 반대쪽이 아닌 바깥 아래 구석에 서서 박자마다 노래(sing 두 장 번갈아),
     // 50콤보 링이 뜨면 잠깐 환호(cheer). 그림 한 장 찍기라 가벼움. 세로 화면 · 온라인 미니 화면이 있으면 안 나옴
@@ -771,8 +827,14 @@ export default function Stage({
     const buildStatic = () => {
       const { c, b } = layer(CW, CH);
       if (domBg) {
-        // 재킷·영상은 뒤의 HTML 요소가 보여 주고, 여기엔 어두운 막만
-        b.fillStyle = useVideo ? "rgba(4,5,14,0.5)" : "rgba(4,5,14,0.36)";
+        // 뮤비는 뒤의 HTML 영상이 보여 주고, 여기엔 어두운 막만
+        b.fillStyle = "rgba(4,5,14,0.5)";
+        b.fillRect(0, 0, CW, CH);
+      } else if (coverBgImg) {
+        b.fillStyle = "#070814";
+        b.fillRect(0, 0, CW, CH);
+        if (ready(coverBgImg)) paintCoverBg(b, coverBgImg, !!song.bg, CW, CH);
+        b.fillStyle = "rgba(4,5,14,0.36)";
         b.fillRect(0, 0, CW, CH);
       } else {
         if (ready(bgImg)) {
@@ -2271,7 +2333,7 @@ export default function Stage({
         })(),
         pace,
         quality,
-        domBg,
+        domBg: coverBg,
         seg: (() => {
           const out: (number | null)[] = [];
           for (const h of hitTicksAll) {
@@ -2887,46 +2949,7 @@ export default function Stage({
       ref={wrapRef}
       className={`absolute inset-0 overflow-hidden ${portrait ? "flex items-center justify-center bg-black" : ""}`}
     >
-      {domBg && !useVideo && song.bg && (
-        /* 배경 전용 가로 그림: 그대로 꽉 채움 */
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0"
-          style={{
-            backgroundImage: `url(${JSON.stringify(song.bg)})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-          }}
-        />
-      )}
-      {domBg && !useVideo && !song.bg && (
-        <>
-          {/* 뒤: 화면을 꽉 채우는 짙게 흐린 사본 (재킷이 정사각이라 옆이 비는 자리 메움) */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              backgroundImage: `url(${JSON.stringify(coverOf(song))})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              transform: "scale(1.1)",
-              filter: "blur(28px) brightness(0.7)",
-            }}
-          />
-          {/* 앞: 재킷 전체가 잘리지 않게 (contain) 살짝만 흐림 */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0"
-            style={{
-              backgroundImage: `url(${JSON.stringify(coverOf(song))})`,
-              backgroundSize: "contain",
-              backgroundRepeat: "no-repeat",
-              backgroundPosition: "center",
-              filter: "blur(4px) saturate(1.1)",
-            }}
-          />
-        </>
-      )}
+      {/* 재킷 배경은 캔버스 바닥 그림(paintCoverBg) — HTML 로 까는 건 뮤비만 */}
       {useVideo && (
         <video
           ref={videoRef}
