@@ -17,6 +17,16 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.34",
+    name: "새 곡 2곡",
+    date: "2026.11.07",
+    lines: [
+      "Hibana no Chikai — 137 BPM 애니송 J-ROCK (EASY 3 ~ ABYSS 19) — 기타 리프 따라 지그재그 · 벌림 · 연타",
+      "꼬리별 — 152 BPM K-POP 록 발라드 (EASY 3 ~ ABYSS 20) — 물결 · 트릴로 흐르는 멜로디, 후렴은 동시치기",
+      "둘 다 AI 자작곡(tunee.ai), Hibana no Chikai 는 2분 27초 · 꼬리별은 2분 38초로 줄임",
+    ],
+  },
+  {
     ver: "v2.33",
     name: "마디선이 노트와 어긋나던 곡",
     date: "2026.11.07",

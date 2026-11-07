@@ -27,6 +27,8 @@ import moonshine from "../../../web/src/data/rhythm/moonshine.json";
 import kaminari from "../../../web/src/data/rhythm/kaminari.json";
 import plushamen from "../../../web/src/data/rhythm/plushamen.json";
 import kirakira from "../../../web/src/data/rhythm/kirakira.json";
+import chikai from "../../../web/src/data/rhythm/chikai.json";
+import kkoribyeol from "../../../web/src/data/rhythm/kkoribyeol.json";
 import redline from "../../../web/src/data/rhythm/redline.json";
 import hairpin from "../../../web/src/data/rhythm/hairpin.json";
 import colossus from "../../../web/src/data/rhythm/colossus.json";
@@ -77,6 +79,8 @@ const SONGS: Record<string, SongData> = {
   kaminari,
   plushamen,
   kirakira,
+  chikai,
+  kkoribyeol,
   redline,
   hairpin,
   colossus,

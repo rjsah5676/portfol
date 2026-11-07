@@ -32,6 +32,8 @@ import moonshineCover from "@/img/rhythm/moonshine.jpg";
 import kaminariCover from "@/img/rhythm/kaminari.jpg";
 import plushamenCover from "@/img/rhythm/plushamen.jpg";
 import kirakiraCover from "@/img/rhythm/kirakira.jpg";
+import chikaiCover from "@/img/rhythm/chikai.jpg";
+import kkoribyeolCover from "@/img/rhythm/kkoribyeol.jpg";
 import redlineCover from "@/img/rhythm/redline.jpg";
 import hairpinCover from "@/img/rhythm/hairpin.jpg";
 import colossusCover from "@/img/rhythm/colossus.jpg";
@@ -69,6 +71,8 @@ export const COVERS: Record<string, StaticImageData> = {
   kaminari: kaminariCover,
   plushamen: plushamenCover,
   kirakira: kirakiraCover,
+  chikai: chikaiCover,
+  kkoribyeol: kkoribyeolCover,
   redline: redlineCover,
   hairpin: hairpinCover,
   colossus: colossusCover,

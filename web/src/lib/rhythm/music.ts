@@ -36,6 +36,8 @@ import moonshineData from "@/data/rhythm/moonshine.json";
 import kaminariData from "@/data/rhythm/kaminari.json";
 import plushamenData from "@/data/rhythm/plushamen.json";
 import kirakiraData from "@/data/rhythm/kirakira.json";
+import chikaiData from "@/data/rhythm/chikai.json";
+import kkoribyeolData from "@/data/rhythm/kkoribyeol.json";
 import redlineData from "@/data/rhythm/redline.json";
 import hairpinData from "@/data/rhythm/hairpin.json";
 import colossusData from "@/data/rhythm/colossus.json";
@@ -494,6 +496,18 @@ const VENOMBLOOM = audioSong("venombloom", "Venom Bloom", "/audio/venombloom.mp3
   desc: "140 BPM · GIRL-CRUSH K-POP TRAP · AI 자작곡 (tunee.ai)",
 });
 
+// 3분 37초 → 2분 27초: 1:05~1:55(28마디, 유사도 0.84) + 2:17~2:38(12마디, 0.87)을 덜어 냄
+const CHIKAI = audioSong("chikai", "Hibana no Chikai", "/audio/chikai.mp3", chikaiData, {
+  color: "#DC2626",
+  desc: "137 BPM · ANIME J-ROCK · AI 자작곡 (tunee.ai)",
+});
+
+// 3분 35초 → 2분 38초: 2:21~3:18(36마디)을 덜어 냄 (유사도 0.92)
+const KKORIBYEOL = audioSong("kkoribyeol", "꼬리별", "/audio/kkoribyeol.mp3", kkoribyeolData, {
+  color: "#60A5FA",
+  desc: "152 BPM · K-POP ROCK BALLAD · AI 자작곡 (tunee.ai)",
+});
+
 // 3분 14초 → 2분 31초: 2:05~2:48(32마디)를 덜어 냄 (유사도 0.89)
 const PLUSHAMEN = audioSong("plushamen", "PLUSH AMEN", "/audio/plushamen.mp3", plushamenData, {
   color: "#F9A8D4",
@@ -706,6 +720,8 @@ const PRACTICE: Song = {
 
 /** 새 곡은 항상 맨 앞에 (연습곡은 맨 끝) */
 export const SONGS: Song[] = [
+  CHIKAI,
+  KKORIBYEOL,
   PLUSHAMEN,
   KIRAKIRA,
   MOONSHINE,

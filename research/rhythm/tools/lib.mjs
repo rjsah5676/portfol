@@ -54,6 +54,8 @@ export const BUILTIN = {
   kaminari: { rephase: true, boss: {}, explus: {}, abyss: { mode: "chord", p3: 0.2, share: 0.6 }, levels: [, , 9], favor: { split: 2, jack: 1.5, anchor: 1.5, stair: 0.7, p03: 2 }, lift: { mode: "stream" } },
   plushamen: { boss: {}, explus: {}, abyss: { rpb: 3.4, q3: 0.7 }, levels: [3, 6, 8, 12, 15, 18], favor: { trill2: 3, alt: 2.5, jack: 1.6, split: 1.5, stair: 0.4, zigzag: 0.5, jackMul: 1.5, p12: 2.5 }, lift: { mode: "stream" } },
   kirakira: { boss: {}, explus: {}, abyss: { mode: "chord", p3: 0.25, share: 0.65 }, favor: { stair3: 2.2, jump: 1.6, zigzag: 1.4, trill: 1.3, wave: 0.6, jackMul: 0.8, p03: 1.5, p12: 1.5 }, lift: { mode: "chord" } },
+  chikai: { rephase: true, boss: {}, explus: {}, abyss: {}, favor: { zigzag: 1.8, split: 1.8, jumpstream: 1.4, anchor: 0.6, jackMul: 0.9, p02: 1.5, p13: 1.5 }, lift: { mode: "chord" } },
+  kkoribyeol: { boss: {}, explus: {}, abyss: { p3: 0.3, share: 0.6 }, levels: [3, 5, 8, 12, 14, 17], favor: { wave: 2.2, trill: 1.6, stair: 1.3, jack: 0.4, jackMul: 0.6, p01: 1.5, p23: 1.5 }, lift: { mode: "chord" } },
 };
 export function builtinArgs(c) {
   const diffs = ["easy", "normal", "hard", "expert"];
