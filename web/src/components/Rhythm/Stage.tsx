@@ -1176,6 +1176,33 @@ export default function Stage({
       for (let p = 1; p < 4; p++) if (score[p] > score[best] * 1.1) best = p;
       return off + best * beatSec;
     })();
+    // 마디선 자리 보정: 곧은 박 격자 그대로 그리면, 곡 중간에 박이 밀린 음원(--rephase 곡 · 재즈 · 템포가 조금 흔들리는 곡)은
+    // 노트가 격자보다 최대 ±35ms 어긋나 있어서 마디선이 노트와 따로 놂 (2026-11-07 전곡 검사: picopico · etude · kaminari ·
+    // redline · rooftop · freedomdive) → 마디마다 그 마디 정박(박에서 0.2박 안) 노트들이 박 격자에서 어긋난 만큼(중앙값) 옮겨 그림.
+    // 16분 격자 기준이면 반 칸(±40ms) 밀린 곳에서 방향을 헷갈려서 박 기준. 정박 노트 2개 안 되면 앞 마디 값
+    // (시뮬레이션: 마디선 ↔ 가장 가까운 정박 노트 차이 p90 picopico 56 → 12ms · etude 37 → 3 · kaminari 39 → 3 · 나머지 곡 3ms 안 그대로)
+    const barShift: number[] = (() => {
+      const tol = beatSec * 0.2;
+      const res: number[][] = Array.from(
+        { length: Math.max(0, Math.ceil((song.duration - barStart) / barSec) + 2) },
+        () => []
+      );
+      for (const n of chart.notes) {
+        const x = (n.t - barStart) / beatSec;
+        const r = (x - Math.round(x)) * beatSec;
+        if (Math.abs(r) >= tol) continue;
+        const k = Math.floor((n.t - barStart + tol) / barSec);
+        if (k >= 0 && k < res.length) res[k].push(r);
+      }
+      let prev = 0;
+      return res.map((a) => {
+        if (a.length >= 2) {
+          const s = [...a].sort((p, q) => p - q);
+          prev = s[s.length >> 1];
+        }
+        return prev;
+      });
+    })();
     const diffInfo = DIFFICULTIES.find((d) => d.key === diff)!;
     const secName = (t: number) => {
       const bar = Math.floor((t - (song.beatOffset ?? 0)) / barSec);
@@ -1862,8 +1889,13 @@ export default function Stage({
       const yOf = (time: number) => judgeY - ((time - t) / vis) * (judgeY - laneTop);
       // 마디선(osu처럼): 마디 첫 박마다 가로줄이 노트와 같이 내려와서 박자 읽기 쉽게
       g.fillStyle = "rgba(255,255,255,0.38)";
-      for (let kk = Math.ceil((t - barStart) / barSec); barStart + kk * barSec < t + vis; kk++) {
-        const bt0 = barStart + kk * barSec;
+      for (
+        let kk = Math.ceil((t - barStart) / barSec) - 1;
+        barStart + kk * barSec < t + vis;
+        kk++
+      ) {
+        if (kk < 0) continue;
+        const bt0 = barStart + kk * barSec + (barShift[kk] ?? 0);
         if (bt0 < 0) continue;
         const y = yOf(bt0);
         if (y < judgeY) g.fillRect(0, y - 1, W, 2);

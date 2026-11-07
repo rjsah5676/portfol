@@ -17,6 +17,15 @@ export interface Patch {
 
 export const PATCHES: Patch[] = [
   {
+    ver: "v2.33",
+    name: "마디선이 노트와 어긋나던 곡",
+    date: "2026.11.07",
+    lines: [
+      "PIKO PIKO OVERKILL · Étude · KAMINARI BACHI · REDLINE FEVER · Rooftop BreakDown · FREEDOM DiVE 에서 마디선(내려오는 가로줄)이 구간에 따라 노트보다 최대 30~50ms 앞이나 뒤로 어긋나 보이던 것 — 곡 중간에 박이 살짝 밀리는 구간에서도 마디선이 노트를 따라가게",
+      "판정 · 노트 위치는 그대로 (마디선 그림만)",
+    ],
+  },
+  {
     ver: "v2.32",
     name: "재킷 배경에서 판정이 판마다 튀던 것",
     date: "2026.11.07",
