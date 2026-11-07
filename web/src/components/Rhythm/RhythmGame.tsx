@@ -287,6 +287,15 @@ export default function RhythmGame() {
     if (autoKey.current) saveAutoSync(autoKey.current, next);
     setAuto(next);
   }, []);
+  // 결과 화면 「적용」: 방금 친 판 평균만큼 판정 싱크를 옮김 (늦게 쳤으면 +, 일찍 쳤으면 −)
+  const fitJudge = useCallback(
+    (d: number) => {
+      const judge = clamp(Math.round(auto.judge + d), -400, 400);
+      onAutoSync({ ...auto, judge, ready: true });
+      return judge;
+    },
+    [auto, onAutoSync]
+  );
   // 설정 창의 판정 싱크: 이 기기 프로필의 자동 싱크 값을 보여 줌 (자동 싱크를 끄면 거기서부터 직접 조절)
   const [judgeView, setJudgeView] = useState<number | null>(null);
   const judgeKey = useRef("");
@@ -1514,6 +1523,8 @@ export default function RhythmGame() {
               onSelect={toSelect}
               starting={loading}
               theme={SKIN_THEME[wornSkin]}
+              autoSync={settings.autoSync}
+              onFitJudge={fitJudge}
             />
           )}
           {shopOpen && (

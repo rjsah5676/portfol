@@ -26,6 +26,8 @@ export default function ResultScreen({
   onSelect,
   starting,
   theme,
+  autoSync = false,
+  onFitJudge,
 }: {
   result: Result & { newBest: boolean };
   song: Song;
@@ -34,8 +36,14 @@ export default function ResultScreen({
   starting: boolean;
   /** 착용한 테마 스킨 — 무대 배경 + 캐릭터가 결과에 맞춰 한마디 */
   theme?: SkinTheme;
+  /** 자동 싱크 켜짐이면 판정 싱크 안내 · 적용 버튼 없음 */
+  autoSync?: boolean;
+  /** 판정 싱크를 ms 만큼 옮기고 바뀐 값을 돌려줌 */
+  onFitJudge?: (deltaMs: number) => number;
 }) {
   const { admin } = useAuth();
+  /** 결과 화면에서 판정 싱크를 맞춘 뒤 값 (한 번만) */
+  const [fitted, setFitted] = useState<number | null>(null);
   const d = DIFFICULTIES.find((x) => x.key === result.diff)!;
   // BP: 내장곡(랭킹 있는 곡)을 끝까지 쳤을 때만 — 곡별 최고 BP 상위 20곡 합이 회원 랭킹
   const level = song.charts?.[result.diff]?.level;
@@ -235,16 +243,21 @@ export default function ResultScreen({
         <div className="flex flex-wrap gap-x-[1.2cqw] font-mono text-[1.05cqw]">
           <span className="text-[#60A5FA]">FAST {result.fast}</span>
           <span className="text-[#FB923C]">SLOW {result.slow}</span>
-          {result.avgMs !== null && (
-            <span className="text-white/50">
-              평균 {signed(result.avgMs)}ms{" "}
-              {result.avgMs > 0 ? "늦음" : result.avgMs < 0 ? "빠름" : ""}
-            </span>
-          )}
         </div>
         {!result.auto && result.hits && result.hits.n > 0 && (
           <HitHist
             hits={result.hits}
+            fitHint={!autoSync}
+            onFit={
+              !autoSync && onFitJudge && result.hits.mean !== null
+                ? () => setFitted(onFitJudge(result.hits!.mean!))
+                : undefined
+            }
+            note={
+              fitted !== null
+                ? `판정 싱크를 ${signed(fitted)}ms 로 맞췄어요 — 다음 판부터`
+                : undefined
+            }
             wrap="pru-in px-[1.2cqw] py-[0.6cqw] [--if:rgba(12,7,24,0.72)]"
           />
         )}

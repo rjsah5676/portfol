@@ -1708,7 +1708,12 @@ export default function Stage({
           g.textAlign = "center";
           g.textBaseline = "top";
           g.fillStyle = "rgba(255,255,255,0.85)";
-          g.fillText(`${ms > 0 ? "+" : ""}${ms}ms`, cx, hitPanel.y + 48);
+          // 부호 대신 말로 (+/− 가 싱크를 어느 쪽으로 옮기라는 건지 헷갈려서)
+          g.fillText(
+            Math.abs(ms) < 3 ? "딱 맞음" : ms > 0 ? `${ms}ms 늦게` : `${-ms}ms 일찍`,
+            cx,
+            hitPanel.y + 48
+          );
         }
       }
     };
@@ -2890,6 +2895,7 @@ export default function Stage({
             {!autoplay && (
               <HitHist
                 hits={pauseStats.hits}
+                fitHint={!autoSync}
                 onFit={
                   !autoSync && pauseStats.hits.mean !== null && pauseStats.hits.n >= 20
                     ? () => changeJudge(judgeUi + pauseStats.hits.mean!)
@@ -3279,10 +3285,17 @@ function PauseSlider({
 export function HitHist({
   hits,
   onFit,
+  fitHint = false,
+  note,
   wrap = "pru-win w-full px-[1.4cqw] py-[0.7cqw] [--wf:#17132f]",
 }: {
   hits: HitSummary;
+  /** 판정 싱크를 평균만큼 옮기기 (자동 싱크 끔일 때만 넘김) */
   onFit?: () => void;
+  /** "판정 싱크를 −12 하면 가운데로" 안내 줄 (자동 싱크 끔일 때) */
+  fitHint?: boolean;
+  /** 안내 줄 대신 보여 줄 글 (적용한 뒤 등) */
+  note?: string;
   /** 바깥 상자 class (결과 화면은 결과 화면 상자 모양으로) */
   wrap?: string;
 }) {
@@ -3302,28 +3315,34 @@ export function HitHist({
       ? hits.n === 0
         ? "치면 여기에 타이밍이 모여요"
         : "조금 더 쳐 봐야 알 수 있어요"
-      : Math.abs(m) < 3
-        ? `평균 ${mr > 0 ? "+" : ""}${mr}ms · 잘 맞아요`
-        : m > 0
-          ? `평균 +${mr}ms · 늦게 치는 편`
-          : `평균 ${mr}ms · 일찍 치는 편`;
+      : Math.abs(mr) < 3
+        ? `거의 딱 맞아요 (평균 ${Math.abs(mr)}ms 차이)`
+        : mr > 0
+          ? `평균 ${mr}ms 늦게 쳤어요`
+          : `평균 ${-mr}ms 일찍 쳤어요`;
+  // 늦게 치면 판정 싱크 +, 일찍 치면 − (부호를 헷갈리지 않게 할 일로 적음)
+  const fit = m !== null && hits.n >= 20 && Math.abs(mr) >= 3;
+  const fitTxt = `판정 싱크를 ${mr > 0 ? "+" : "−"}${Math.abs(mr)} 하면 가운데로 모여요`;
   return (
     <div className={wrap}>
       <div className="flex items-center justify-between gap-[0.8cqw] text-[1.05cqw]">
         <span className="font-mono text-white/55">판정 분포</span>
         <span className="flex-1 text-right text-white/80">{msg}</span>
-        {onFit && Math.abs(mr) >= 2 && (
-          <button
-            type="button"
-            className="pru-btn cursor-pointer px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] text-white [--c:rgba(124,58,237,0.6)]"
-            onClick={onFit}
-            title="판정 싱크를 평균만큼 옮겨서 가운데로"
-          >
-            판정 싱크 {mr > 0 ? "+" : ""}
-            {mr}
-          </button>
-        )}
       </div>
+      {(note || (fit && (fitHint || onFit))) && (
+        <div className="mt-[0.3cqw] flex items-center justify-end gap-[0.8cqw] text-[0.95cqw]">
+          <span className="text-[#C4B5FD]">{note ?? `→ ${fitTxt}`}</span>
+          {!note && fit && onFit && (
+            <button
+              type="button"
+              className="pru-btn cursor-pointer px-[0.7cqw] py-[0.15cqw] text-[0.95cqw] text-white [--c:rgba(124,58,237,0.6)]"
+              onClick={onFit}
+            >
+              적용
+            </button>
+          )}
+        </div>
+      )}
       <svg
         viewBox={`0 0 ${VW} 44`}
         className="mt-[0.4cqw] block h-[4.2cqw] w-full"
