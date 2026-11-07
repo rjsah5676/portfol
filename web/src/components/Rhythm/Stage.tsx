@@ -3374,7 +3374,10 @@ export function HitHist({
   fitHint = false,
   note,
   wrap = "pru-win w-full px-[1.4cqw] py-[0.7cqw] [--wf:#17132f]",
+  compact = false,
 }: {
+  /** 결과 화면: 아래 버튼 줄에 안 가리게 그래프 · 글자를 낮게 */
+  compact?: boolean;
   hits: HitSummary;
   /** 판정 싱크를 평균만큼 옮기기 (자동 싱크 끔일 때만 넘김) */
   onFit?: () => void;
@@ -3431,7 +3434,7 @@ export function HitHist({
       )}
       <svg
         viewBox={`0 0 ${VW} 44`}
-        className="mt-[0.4cqw] block h-[4.2cqw] w-full"
+        className={`block w-full ${compact ? "mt-[0.2cqw] h-[2.6cqw]" : "mt-[0.4cqw] h-[4.2cqw]"}`}
         preserveAspectRatio="none"
       >
         {[WINDOW.good, WINDOW.great, WINDOW.perfect].map((w, i) => (
@@ -3465,7 +3468,9 @@ export function HitHist({
           />
         )}
       </svg>
-      <div className="mt-[0.2cqw] flex justify-between font-mono text-[0.85cqw] text-white/40">
+      <div
+        className={`flex justify-between font-mono text-white/40 ${compact ? "text-[0.75cqw] leading-none" : "mt-[0.2cqw] text-[0.85cqw]"}`}
+      >
         <span>FAST</span>
         <span>SLOW</span>
       </div>

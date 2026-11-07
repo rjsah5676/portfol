@@ -6,7 +6,7 @@ import { DIFFICULTIES } from "@/lib/rhythm/chart";
 import { bpOf } from "@/lib/rhythm/bp";
 import { sfx, tick } from "@/lib/rhythm/sfx";
 import { coverOf } from "./SongCarousel";
-import { ClockLine, HitHist, RankEmblem, type Result } from "./Stage";
+import { HitHist, RankEmblem, type Result } from "./Stage";
 import { SubmitRanking } from "./RankingBoard";
 import type { SkinTheme } from "@/lib/rhythm/fx";
 import { downloadPlayLog } from "@/lib/rhythm/playLog";
@@ -258,10 +258,10 @@ export default function ResultScreen({
                 ? `판정 싱크를 ${signed(fitted)}ms 로 맞췄어요 — 다음 판부터`
                 : undefined
             }
-            wrap="pru-in px-[1.2cqw] py-[0.6cqw] [--if:rgba(12,7,24,0.72)]"
+            wrap="pru-in px-[1.2cqw] py-[0.4cqw] [--if:rgba(12,7,24,0.72)]"
+            compact
           />
         )}
-        {admin && result.clock && <ClockLine c={result.clock} />}
       </div>
 
       {/* 오른쪽: 랭킹 등록 */}
@@ -307,7 +307,11 @@ export default function ResultScreen({
               sfx("ui-select", 0.6);
               downloadPlayLog(result.log!);
             }}
-            title={`노트마다 판정 · 친 시각과 누르고 뗀 기록을 JSON 으로 (관리자)${result.outLatMs !== undefined ? ` · 이 판 출력 지연 ${result.outLatMs}ms` : ""}`}
+            title={`노트마다 판정 · 친 시각과 누르고 뗀 기록을 JSON 으로 (관리자)${
+              result.clock
+                ? `\n시계 진단 · 출력 지연 ${Math.round(result.clock.lat)}ms · 화면이 소리보다 ${result.clock.ahead ?? "?"}ms (${result.clock.aheadLo ?? "?"}~${result.clock.aheadHi ?? "?"}) · 프레임 늦음 ${Math.round(result.clock.lag)}ms`
+                : ""
+            }`}
             className="pru-btn pru-cyan cursor-pointer px-[1.4cqw] py-[0.55cqw] text-[1.1cqw] font-bold"
           >
             플레이 데이터 ⤓
