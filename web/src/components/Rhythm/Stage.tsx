@@ -134,6 +134,8 @@ export interface Result {
   hits?: HitSummary;
   /** 이 판 시계에 쓴 출력 지연(ms) — 판마다 다르게 읽히면 판정 평균이 튀어서 확인용 */
   outLatMs?: number;
+  /** 시계 진단 (관리자 결과 화면) */
+  clock?: ClockDiag;
 }
 
 /**
@@ -378,7 +380,29 @@ interface Props {
   keys?: string[];
   /** 판정 분포 바: 친 타이밍이 빠른 쪽 · 느린 쪽 어디에 몰리는지 (화면 빈 곳에) */
   hitBar?: boolean;
+  /** 관리자: 일시정지 화면에 시계 진단(출력 지연 · 화면 시계 vs 실제 소리 · 프레임 늦음) */
+  debug?: boolean;
 }
+
+/** 시계 진단 (판마다 판정 평균이 튀는 원인 찾기용) — 모두 ms, 판 동안 중앙값 */
+export interface ClockDiag {
+  /** 시계에 쓴 출력 지연 */
+  lat: number;
+  /** 브라우저가 지금 알려 주는 출력 지연 */
+  live: number | null;
+  /** 화면 시계가 스피커에서 실제로 나오는 소리보다 앞선 정도 (getOutputTimestamp 기준, + 면 노트가 소리보다 먼저 옴) */
+  ahead: number | null;
+  /** 화면 시계 앞섬의 최소~최대 (판 도중 움직였는지) */
+  aheadLo: number | null;
+  aheadHi: number | null;
+  /** 프레임 함수가 화면 시각(ts)보다 늦게 돈 정도 */
+  lag: number;
+}
+const medOf = (a: number[]) => {
+  if (!a.length) return null;
+  const s = [...a].sort((x, y) => x - y);
+  return Math.round(s[s.length >> 1] * 10) / 10;
+};
 
 export default function Stage({
   song,
@@ -410,6 +434,7 @@ export default function Stage({
   online,
   keys = KEY_CODES,
   hitBar = true,
+  debug = false,
 }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -443,6 +468,7 @@ export default function Stage({
     judged: number;
     /** 판정 분포 (판정 싱크를 바꾼 뒤부터) */
     hits: HitSummary;
+    clock?: ClockDiag;
   }>({
     score: 0,
     acc: 0,
@@ -2156,6 +2182,7 @@ export default function Stage({
         ...timingOf(diffs),
         hits: hitSummary(diffs),
         outLatMs: Math.round(outLat * 1000),
+        clock: clockDiag(),
       };
     };
     const finish = (failed = false) => {
@@ -2182,6 +2209,45 @@ export default function Stage({
         clockBase = audioT - perfT; // 처음·일시정지 재개 등 크게 어긋나면 바로 맞춤
       else clockBase += (audioT - perfT - clockBase) * (1 - Math.exp(-dt / 0.3));
       return perfT + clockBase;
+    };
+    // 시계 진단: 0.25초마다 출력 지연 · 화면 시계 vs 스피커에서 실제로 나오는 소리(getOutputTimestamp) · 프레임 늦음
+    const clk = {
+      lat: [] as number[],
+      live: [] as number[],
+      ahead: [] as number[],
+      lag: [] as number[],
+    };
+    let clkAt = 0;
+    const sampleClock = (ts: number) => {
+      const pn = performance.now();
+      if (pn - clkAt < 250) return;
+      clkAt = pn;
+      clk.lag.push(pn - ts);
+      clk.lat.push(outLat * 1000);
+      const live = (ctx as AudioContext & { outputLatency?: number }).outputLatency;
+      if (live !== undefined) clk.live.push(live * 1000);
+      const ots = typeof ctx.getOutputTimestamp === "function" ? ctx.getOutputTimestamp() : null;
+      if (ots?.contextTime && ots.performanceTime && clockBase !== null) {
+        // 지금 스피커에서 나오는 소리의 곡 위치 vs 화면 시계(수동 싱크 빼기 전) — + 면 화면이 소리보다 앞섬
+        const heard = ots.contextTime + (pn - ots.performanceTime) / 1000 - startAt;
+        const game = pn / 1000 + clockBase + offsetSec();
+        clk.ahead.push((game - heard) * 1000);
+      }
+      if (clk.lag.length > 2000) for (const a of Object.values(clk)) a.splice(0, 1000);
+    };
+    // 개발 서버: 콘솔에서 __rhythmClock() 으로 지금 판 시계 진단
+    if (process.env.NODE_ENV !== "production")
+      (window as unknown as { __rhythmClock?: () => ClockDiag }).__rhythmClock = () => clockDiag();
+    const clockDiag = (): ClockDiag => {
+      const s = [...clk.ahead].sort((a, b) => a - b);
+      return {
+        lat: medOf(clk.lat) ?? Math.round(outLat * 1000),
+        live: medOf(clk.live),
+        ahead: medOf(clk.ahead),
+        aheadLo: s.length ? Math.round(s[Math.floor(s.length * 0.05)]) : null,
+        aheadHi: s.length ? Math.round(s[Math.floor(s.length * 0.95)]) : null,
+        lag: medOf(clk.lag) ?? 0,
+      };
     };
     let prevCombo = 0;
     // 프레임 시간 측정 → 무거우면 효과를 한 단계씩 내림 (quality: 3 전부 · 2 박자 빛은 유지 · 1 박자 빛 끔·불꽃 절반·그림자 끔 · 0 해상도도 낮춤)
@@ -2285,6 +2351,7 @@ export default function Stage({
       }
       const workStart = performance.now();
       const t = smoothNow(ts);
+      sampleClock(ts);
       if (video && !videoOff) syncVideo(t);
       if (autoplay) {
         autoSfxSchedule();
@@ -2540,6 +2607,7 @@ export default function Stage({
           combo: engine.maxCombo,
           judged: judgedCount(),
           hits: hitSummary(hitLog),
+          clock: clockDiag(),
         });
         setJudgeUi(Math.round(tracker.judge));
         setPaused(true);
@@ -2560,6 +2628,7 @@ export default function Stage({
         combo: engine.maxCombo,
         judged: judgedCount(),
         hits: hitSummary(hitLog),
+        clock: clockDiag(),
       });
       setJudgeUi(Math.round(tracker.judge));
       setPaused(true);
@@ -2919,6 +2988,7 @@ export default function Stage({
                 }
               />
             )}
+            {debug && pauseStats.clock && <ClockLine c={pauseStats.clock} />}
             <div className="pru-win w-full px-[1.4cqw] py-[0.8cqw] [--wf:#17132f]">
               {!autoplay && (
                 <PauseRow
@@ -3400,6 +3470,18 @@ export function HitHist({
         <span>SLOW</span>
       </div>
     </div>
+  );
+}
+
+/** 관리자: 시계 진단 한 줄 (일시정지 · 결과 화면) */
+export function ClockLine({ c }: { c: ClockDiag }) {
+  const f = (v: number | null) => (v === null ? "?" : `${v > 0 ? "+" : ""}${Math.round(v)}`);
+  return (
+    <p className="w-full font-mono text-[0.85cqw] leading-snug text-white/45">
+      시계 진단 · 출력 지연 {Math.round(c.lat)}ms (브라우저{" "}
+      {c.live === null ? "?" : Math.round(c.live)}) · 화면이 소리보다 {f(c.ahead)}ms ({f(c.aheadLo)}
+      ~{f(c.aheadHi)}) · 프레임 늦음 {Math.round(c.lag)}ms
+    </p>
   );
 }
 

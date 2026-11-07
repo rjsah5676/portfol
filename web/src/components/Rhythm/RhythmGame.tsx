@@ -1444,6 +1444,7 @@ export default function RhythmGame() {
               onAutoSync={onAutoSync}
               autoSync={settings.autoSync}
               hitBar={settings.hitBar}
+              debug={admin}
               hitVolume={settings.hit}
               musicVolume={settings.music}
               onSettings={onLiveSettings}
