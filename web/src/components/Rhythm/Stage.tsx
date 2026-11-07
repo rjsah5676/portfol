@@ -132,6 +132,8 @@ export interface Result {
   log?: PlayLog;
   /** 판정 분포 (결과 화면 그래프) */
   hits?: HitSummary;
+  /** 이 판 시계에 쓴 출력 지연(ms) — 판마다 다르게 읽히면 판정 평균이 튀어서 확인용 */
+  outLatMs?: number;
 }
 
 /**
@@ -899,8 +901,19 @@ export default function Stage({
       beeps.push(o);
     }
 
-    const now = () =>
-      ctx.currentTime - startAt - (outputLatency ?? 0) - (ctx.baseLatency ?? 0) - offsetSec();
+    // 출력 지연(스피커까지): 크롬은 컨텍스트를 막 깨운 직후(일시정지 · 다른 창 갔다 온 뒤 다시 시작 등) 0 으로 읽히다가
+    // 0.15초쯤 뒤에 제 값(이 PC 40ms)이 됨 → 마운트 때 한 번 읽으면 그 판만 시계가 40ms 어긋나서 판정 평균이 확 튐.
+    // 처음 1.2초(카운트다운 READY 동안, 노트는 3.5초부터) · 재개 직후 1초 동안 계속 읽어 0 이 아닌 값을 쓰고 그 뒤로 고정
+    let outLat = outputLatency ?? 0;
+    let latUntil = ctx.currentTime + 1.2;
+    const readLat = () => {
+      const v = (ctx as AudioContext & { outputLatency?: number }).outputLatency;
+      if (v !== undefined && v > 0) outLat = v;
+    };
+    const now = () => {
+      if (ctx.currentTime < latUntil) readLat();
+      return ctx.currentTime - startAt - outLat - (ctx.baseLatency ?? 0) - offsetSec();
+    };
 
     // 화면 효과용 상태
     let lastJudge: { judge: Judge; at: number; diff?: number; tick?: boolean } | null = null;
@@ -2142,6 +2155,7 @@ export default function Stage({
         slow,
         ...timingOf(diffs),
         hits: hitSummary(diffs),
+        outLatMs: Math.round(outLat * 1000),
       };
     };
     const finish = (failed = false) => {
@@ -2581,6 +2595,8 @@ export default function Stage({
             resuming = false;
             running = true;
             lastFrameAt = 0;
+            // 다시 깨운 직후엔 출력 지연이 0 으로 읽혀서 1초 동안 다시 읽음 (0 은 무시 — 값이 그대로면 아무 변화 없음)
+            latUntil = ctx.currentTime + 1;
             raf = requestAnimationFrame(frame);
           });
           return;

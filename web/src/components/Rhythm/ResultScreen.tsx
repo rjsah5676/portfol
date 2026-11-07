@@ -306,7 +306,7 @@ export default function ResultScreen({
               sfx("ui-select", 0.6);
               downloadPlayLog(result.log!);
             }}
-            title="노트마다 판정 · 친 시각과 누르고 뗀 기록을 JSON 으로 (관리자)"
+            title={`노트마다 판정 · 친 시각과 누르고 뗀 기록을 JSON 으로 (관리자)${result.outLatMs !== undefined ? ` · 이 판 출력 지연 ${result.outLatMs}ms` : ""}`}
             className="pru-btn pru-cyan cursor-pointer px-[1.4cqw] py-[0.55cqw] text-[1.1cqw] font-bold"
           >
             플레이 데이터 ⤓
